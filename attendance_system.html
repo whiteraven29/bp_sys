@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EduTrack — Attendance Management System</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #181c27;
+    --surface2: #1e2335;
+    --border: #2a3050;
+    --accent: #4f8ef7;
+    --accent2: #7c3aed;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --text: #e8eaf0;
+    --muted: #7a8299;
+    --font-mono: 'Space Mono', monospace;
+    --font-sans: 'DM Sans', sans-serif;
+    --radius: 12px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── GRID BG ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(79,142,247,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,142,247,.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(15,17,23,.88);
+    backdrop-filter: blur(18px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px; height: 64px;
+  }
+  .logo { font-family: var(--font-mono); font-size: 1.1rem; color: var(--accent); letter-spacing: .04em; }
+  .logo span { color: var(--text); }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .chip { font-size: .72rem; font-family: var(--font-mono); padding: 4px 10px; border-radius: 999px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); }
+
+  /* ── LAYOUT ── */
+  .app { position: relative; z-index: 1; display: flex; height: calc(100vh - 64px); }
+
+  /* ── SIDEBAR ── */
+  aside {
+    width: 240px; flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 20px 12px;
+    gap: 4px;
+    overflow-y: auto;
+  }
+  .aside-label { font-size: .65rem; font-family: var(--font-mono); color: var(--muted); letter-spacing: .12em; text-transform: uppercase; padding: 8px 12px 4px; }
+  .nav-btn {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: 8px;
+    border: none; background: transparent; color: var(--muted);
+    cursor: pointer; font-family: var(--font-sans); font-size: .88rem; font-weight: 500;
+    text-align: left; width: 100%; transition: all .18s;
+  }
+  .nav-btn:hover { background: var(--surface2); color: var(--text); }
+  .nav-btn.active { background: rgba(79,142,247,.15); color: var(--accent); border-left: 2px solid var(--accent); padding-left: 10px; }
+  .nav-btn .icon { font-size: 1rem; width: 20px; text-align: center; }
+  .sidebar-subject {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; border-radius: 8px;
+    cursor: pointer; font-size: .82rem; color: var(--muted);
+    transition: all .15s;
+  }
+  .sidebar-subject:hover { background: var(--surface2); color: var(--text); }
+  .sidebar-subject.active { color: var(--accent); background: rgba(79,142,247,.08); }
+  .sub-badge { font-size: .65rem; background: var(--surface2); padding: 2px 7px; border-radius: 99px; color: var(--muted); }
+
+  /* ── MAIN ── */
+  main { flex: 1; overflow-y: auto; padding: 32px; }
+
+  /* ── PAGES ── */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── PAGE HEADER ── */
+  .page-title { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
+  .page-sub { color: var(--muted); font-size: .9rem; margin-bottom: 28px; }
+
+  /* ── STAT CARDS ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+    position: relative; overflow: hidden;
+  }
+  .stat-card::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--c, var(--accent));
+  }
+  .stat-card .label { font-size: .72rem; color: var(--muted); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+  .stat-card .value { font-size: 2rem; font-weight: 700; font-family: var(--font-mono); color: var(--c, var(--accent)); }
+  .stat-card .sublabel { font-size: .75rem; color: var(--muted); margin-top: 4px; }
+
+  /* ── CARD ── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 24px; }
+  .card-title { font-size: 1rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+  /* ── FORM ── */
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 16px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: .78rem; color: var(--muted); font-weight: 500; }
+  .field input, .field select {
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px;
+    padding: 9px 12px; font-family: var(--font-sans); font-size: .88rem;
+    transition: border .15s;
+    outline: none;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field select option { background: var(--surface2); }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 9px 18px; border-radius: 8px; border: none;
+    font-family: var(--font-sans); font-size: .88rem; font-weight: 600;
+    cursor: pointer; transition: all .18s; text-decoration: none;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #3a7de8; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(79,142,247,.3); }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: rgba(239,68,68,.15); color: var(--red); border: 1px solid rgba(239,68,68,.25); }
+  .btn-danger:hover { background: rgba(239,68,68,.25); }
+  .btn-green { background: rgba(34,197,94,.15); color: var(--green); border: 1px solid rgba(34,197,94,.25); }
+  .btn-green:hover { background: rgba(34,197,94,.25); }
+  .btn-sm { padding: 5px 11px; font-size: .78rem; }
+
+  /* ── TABLE ── */
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  thead tr { background: var(--surface2); }
+  th { padding: 12px 14px; text-align: left; font-size: .7rem; font-family: var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 11px 14px; border-bottom: 1px solid rgba(42,48,80,.5); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: rgba(79,142,247,.04); }
+
+  /* ── BADGE ── */
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 99px; font-size: .7rem; font-weight: 600; font-family: var(--font-mono); }
+  .badge-green { background: rgba(34,197,94,.15); color: var(--green); }
+  .badge-red { background: rgba(239,68,68,.15); color: var(--red); }
+  .badge-yellow { background: rgba(245,158,11,.15); color: var(--yellow); }
+  .badge-blue { background: rgba(79,142,247,.15); color: var(--accent); }
+
+  /* ── PROGRESS ── */
+  .progress-bar { height: 6px; background: var(--surface2); border-radius: 99px; overflow: hidden; width: 100%; min-width: 80px; }
+  .progress-fill { height: 100%; border-radius: 99px; transition: width .4s; }
+
+  /* ── ATTENDANCE TOGGLE ── */
+  .att-toggle {
+    display: inline-flex; align-items: center; gap: 0;
+    border-radius: 6px; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .att-toggle button {
+    border: none; background: var(--bg); color: var(--muted);
+    padding: 4px 10px; font-size: .75rem; font-family: var(--font-mono);
+    cursor: pointer; transition: all .12s;
+  }
+  .att-toggle button.on { background: rgba(34,197,94,.18); color: var(--green); }
+  .att-toggle button.off { background: rgba(239,68,68,.18); color: var(--red); }
+
+  /* ── TABS ── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--surface2); padding: 4px; border-radius: 10px; width: fit-content; }
+  .tab { padding: 7px 16px; border-radius: 7px; border: none; background: transparent; color: var(--muted); font-family: var(--font-sans); font-size: .85rem; font-weight: 500; cursor: pointer; transition: all .15s; }
+  .tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+
+  /* ── UPLOAD ZONE ── */
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 36px; text-align: center; cursor: pointer;
+    transition: all .2s;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(79,142,247,.05); }
+  .upload-zone .uz-icon { font-size: 2.2rem; margin-bottom: 10px; }
+  .upload-zone .uz-title { font-weight: 600; margin-bottom: 4px; }
+  .upload-zone .uz-sub { font-size: .8rem; color: var(--muted); }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 28px; right: 28px; z-index: 9999;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 20px;
+    font-size: .85rem; color: var(--text);
+    transform: translateY(80px); opacity: 0;
+    transition: all .28s cubic-bezier(.34,1.56,.64,1);
+    pointer-events: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 500;
+    background: rgba(0,0,0,.65); backdrop-filter: blur(4px);
+    display: none; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px; width: 90%; max-width: 520px;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 20px; }
+
+  /* ── EMPTY ── */
+  .empty { text-align: center; padding: 48px 20px; color: var(--muted); }
+  .empty .ei { font-size: 2.4rem; margin-bottom: 10px; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+  /* ── DIVIDER ── */
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+  /* ── SESSION MARKER ── */
+  .session-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  @media (max-width: 700px) {
+    aside { display: none; }
+    main { padding: 20px 14px; }
+    .form-grid { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Edu<span>Track</span></div>
+  <div class="header-right">
+    <span class="chip" id="current-teacher-chip">No subject selected</span>
+  </div>
+</header>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside>
+    <div class="aside-label">Navigation</div>
+    <button class="nav-btn active" data-page="dashboard" onclick="showPage('dashboard',this)">
+      <span class="icon">📊</span> Dashboard
+    </button>
+    <button class="nav-btn" data-page="subjects" onclick="showPage('subjects',this)">
+      <span class="icon">📚</span> Subjects
+    </button>
+    <button class="nav-btn" data-page="students" onclick="showPage('students',this)">
+      <span class="icon">🎓</span> Students
+    </button>
+    <button class="nav-btn" data-page="attendance" onclick="showPage('attendance',this)">
+      <span class="icon">✅</span> Take Attendance
+    </button>
+    <button class="nav-btn" data-page="reports" onclick="showPage('reports',this)">
+      <span class="icon">📈</span> Reports
+    </button>
+
+    <div class="aside-label" style="margin-top:12px;">Subjects</div>
+    <div id="sidebar-subjects"></div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main>
+
+    <!-- ── DASHBOARD ── -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-title">Dashboard</div>
+      <div class="page-sub">Overview of all attendance activity</div>
+
+      <div class="stats-grid">
+        <div class="stat-card" style="--c:var(--accent)">
+          <div class="label">Total Subjects</div>
+          <div class="value" id="stat-subjects">0</div>
+          <div class="sublabel">registered</div>
+        </div>
+        <div class="stat-card" style="--c:var(--green)">
+          <div class="label">Total Students</div>
+          <div class="value" id="stat-students">0</div>
+          <div class="sublabel">enrolled</div>
+        </div>
+        <div class="stat-card" style="--c:var(--yellow)">
+          <div class="label">Sessions Today</div>
+          <div class="value" id="stat-sessions">0</div>
+          <div class="sublabel">conducted</div>
+        </div>
+        <div class="stat-card" style="--c:var(--accent2)">
+          <div class="label">Avg Attendance</div>
+          <div class="value" id="stat-avg">—</div>
+          <div class="sublabel">overall rate</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📋 Recent Sessions</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Subject</th><th>Date</th><th>Present</th><th>Absent</th><th>Rate</th></tr></thead>
+            <tbody id="recent-sessions-tbody">
+              <tr><td colspan="5"><div class="empty"><div class="ei">🗓️</div>No sessions yet</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SUBJECTS ── -->
+    <div class="page" id="page-subjects">
+      <div class="page-title">Subjects</div>
+      <div class="page-sub">Register and manage subjects</div>
+
+      <div class="card">
+        <div class="card-title">➕ Register New Subject</div>
+        <div class="form-grid">
+          <div class="field">
+            <label>Subject Name *</label>
+            <input id="sub-name" placeholder="e.g. Mathematics" />
+          </div>
+          <div class="field">
+            <label>Subject Code *</label>
+            <input id="sub-code" placeholder="e.g. MATH101" />
+          </div>
+          <div class="field">
+            <label>Teacher Name *</label>
+            <input id="sub-teacher" placeholder="e.g. Mr. Mwangi" />
+          </div>
+          <div class="field">
+            <label>Total Required Sessions *</label>
+            <input id="sub-sessions" type="number" min="1" placeholder="e.g. 40" />
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="addSubject()">➕ Add Subject</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📚 All Subjects</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Code</th><th>Subject</th><th>Teacher</th><th>Required Sessions</th><th>Students</th><th>Actions</th></tr></thead>
+            <tbody id="subjects-tbody">
+              <tr><td colspan="6"><div class="empty"><div class="ei">📚</div>No subjects registered yet</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STUDENTS ── -->
+    <div class="page" id="page-students">
+      <div class="page-title">Students</div>
+      <div class="page-sub">Manage student enrollment per subject</div>
+
+      <div class="card">
+        <div class="card-title">📤 Upload Students via Excel</div>
+        <div style="margin-bottom:12px;font-size:.83rem;color:var(--muted);">
+          Excel file must have columns: <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;">StudentID, Name, Class</code>
+        </div>
+        <div class="form-grid" style="align-items:end;">
+          <div class="field">
+            <label>Select Subject</label>
+            <select id="upload-subject-select"><option value="">— select subject —</option></select>
+          </div>
+        </div>
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('excel-upload').click()">
+          <div class="uz-icon">📊</div>
+          <div class="uz-title">Click to upload Excel file</div>
+          <div class="uz-sub">.xlsx or .xls · StudentID, Name, Class columns required</div>
+          <input type="file" id="excel-upload" accept=".xlsx,.xls" style="display:none" onchange="handleExcelUpload(event)" />
+        </div>
+        <div id="upload-preview" style="margin-top:14px;display:none;">
+          <div style="font-size:.82rem;color:var(--muted);margin-bottom:8px;" id="upload-count"></div>
+          <button class="btn btn-green" onclick="confirmUpload()">✅ Confirm & Import Students</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">➕ Add Student Manually</div>
+        <div class="form-grid">
+          <div class="field">
+            <label>Select Subject *</label>
+            <select id="stu-subject"><option value="">— select subject —</option></select>
+          </div>
+          <div class="field">
+            <label>Student ID *</label>
+            <input id="stu-id" placeholder="e.g. STU001" />
+          </div>
+          <div class="field">
+            <label>Full Name *</label>
+            <input id="stu-name" placeholder="e.g. Amina Hassan" />
+          </div>
+          <div class="field">
+            <label>Class / Stream</label>
+            <input id="stu-class" placeholder="e.g. Form 3A" />
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="addStudent()">➕ Add Student</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🎓 Student List</div>
+        <div class="form-grid" style="margin-bottom:14px;">
+          <div class="field">
+            <label>Filter by Subject</label>
+            <select id="stu-filter-subject" onchange="renderStudentTable()">
+              <option value="">All Subjects</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Student ID</th><th>Name</th><th>Class</th><th>Subject</th><th>Sessions Attended</th><th>% Attendance</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="students-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ATTENDANCE ── -->
+    <div class="page" id="page-attendance">
+      <div class="page-title">Take Attendance</div>
+      <div class="page-sub">Mark present / absent for a session</div>
+
+      <div class="card">
+        <div class="form-grid" style="align-items:end;">
+          <div class="field">
+            <label>Select Subject *</label>
+            <select id="att-subject" onchange="loadAttendanceSheet()">
+              <option value="">— select subject —</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Session Date *</label>
+            <input type="date" id="att-date" />
+          </div>
+          <div class="field">
+            <label>Session Label</label>
+            <input id="att-label" placeholder="e.g. Lecture 5, Lab 2" />
+          </div>
+        </div>
+        <button class="btn btn-secondary" onclick="loadAttendanceSheet()">🔄 Load Students</button>
+      </div>
+
+      <div id="att-sheet-wrap" style="display:none;">
+        <div class="card">
+          <div class="card-title" id="att-sheet-title">Attendance Sheet</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+            <button class="btn btn-sm btn-green" onclick="markAll('P')">✅ Mark All Present</button>
+            <button class="btn btn-sm btn-danger" onclick="markAll('A')">❌ Mark All Absent</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>#</th><th>Student ID</th><th>Name</th><th>Class</th><th>Attendance</th></tr></thead>
+              <tbody id="att-tbody"></tbody>
+            </table>
+          </div>
+          <div style="margin-top:18px;">
+            <button class="btn btn-primary" onclick="saveAttendance()">💾 Save Session</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── REPORTS ── -->
+    <div class="page" id="page-reports">
+      <div class="page-title">Reports & Export</div>
+      <div class="page-sub">Detailed attendance analytics and export tools</div>
+
+      <div class="form-grid" style="margin-bottom:20px;">
+        <div class="field">
+          <label>Select Subject</label>
+          <select id="rep-subject" onchange="renderReport()">
+            <option value="">All Subjects</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="stats-grid" id="report-stats"></div>
+
+      <div class="card">
+        <div class="card-title">📋 Detailed Attendance Report</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+          <button class="btn btn-sm btn-secondary" onclick="exportReport()">📥 Export to Excel</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Student ID</th><th>Name</th><th>Class</th><th>Subject</th><th>Required</th><th>Attended</th><th>Absent</th><th>%</th><th>Status</th></tr></thead>
+            <tbody id="report-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📅 Session History</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Subject</th><th>Label</th><th>Present</th><th>Absent</th><th>Rate</th></tr></thead>
+            <tbody id="session-history-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- TOAST -->
+<div id="toast">⚡ Action completed</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">Modal</div>
+    <div id="modal-body"></div>
+    <div style="margin-top:20px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="modal-confirm-btn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ──────────────────────────────────────────────
+//  STATE
+// ──────────────────────────────────────────────
+let state = {
+  subjects: [],      // { id, name, code, teacher, requiredSessions }
+  students: [],      // { id, studentId, name, class, subjectId }
+  sessions: [],      // { id, subjectId, date, label, records: [{studentId, status}] }
+};
+let pendingUpload = null; // { subjectId, rows }
+
+// ──────────────────────────────────────────────
+//  UTILS
+// ──────────────────────────────────────────────
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function toast(msg, icon='⚡') {
+  const el = document.getElementById('toast');
+  el.textContent = icon + ' ' + msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function showPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (name === 'reports') renderReport();
+  if (name === 'dashboard') renderDashboard();
+}
+
+function getPct(attended, required) {
+  if (!required || required === 0) return 0;
+  return Math.round((attended / required) * 100);
+}
+
+function pctBadge(pct) {
+  if (pct >= 75) return `<span class="badge badge-green">${pct}%</span>`;
+  if (pct >= 50) return `<span class="badge badge-yellow">${pct}%</span>`;
+  return `<span class="badge badge-red">${pct}%</span>`;
+}
+
+function progressBar(pct) {
+  const color = pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--red)';
+  return `<div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${color}"></div></div>`;
+}
+
+function getStudentAttendance(studentId, subjectId) {
+  const subject = state.subjects.find(s => s.id === subjectId);
+  const required = subject ? subject.requiredSessions : 0;
+  let attended = 0;
+  state.sessions.filter(s => s.subjectId === subjectId).forEach(sess => {
+    const rec = sess.records.find(r => r.studentId === studentId);
+    if (rec && rec.status === 'P') attended++;
+  });
+  return { attended, required, pct: getPct(attended, required) };
+}
+
+// ──────────────────────────────────────────────
+//  POPULATE SELECTS
+// ──────────────────────────────────────────────
+function populateSelects() {
+  const selects = ['stu-subject','att-subject','rep-subject','upload-subject-select','stu-filter-subject'];
+  selects.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const hasAll = id === 'rep-subject' || id === 'stu-filter-subject';
+    el.innerHTML = hasAll ? '<option value="">All Subjects</option>' : '<option value="">— select subject —</option>';
+    state.subjects.forEach(s => {
+      el.innerHTML += `<option value="${s.id}">${s.name} (${s.code})</option>`;
+    });
+  });
+  // Sidebar subjects
+  const sb = document.getElementById('sidebar-subjects');
+  sb.innerHTML = state.subjects.length ? '' : '<div style="padding:8px 12px;font-size:.78rem;color:var(--muted)">No subjects yet</div>';
+  state.subjects.forEach(s => {
+    const stuCount = state.students.filter(st => st.subjectId === s.id).length;
+    sb.innerHTML += `<div class="sidebar-subject" onclick="filterBySubject('${s.id}')">
+      <span>${s.name}</span>
+      <span class="sub-badge">${stuCount}</span>
+    </div>`;
+  });
+}
+
+function filterBySubject(subjectId) {
+  document.getElementById('stu-filter-subject').value = subjectId;
+  showPage('students', document.querySelector('[data-page="students"]'));
+  renderStudentTable();
+}
+
+// ──────────────────────────────────────────────
+//  SUBJECTS
+// ──────────────────────────────────────────────
+function addSubject() {
+  const name = document.getElementById('sub-name').value.trim();
+  const code = document.getElementById('sub-code').value.trim().toUpperCase();
+  const teacher = document.getElementById('sub-teacher').value.trim();
+  const sessions = parseInt(document.getElementById('sub-sessions').value);
+  if (!name || !code || !teacher || !sessions || sessions < 1) {
+    toast('Please fill all subject fields', '⚠️'); return;
+  }
+  if (state.subjects.find(s => s.code === code)) {
+    toast('Subject code already exists', '⚠️'); return;
+  }
+  state.subjects.push({ id: uid(), name, code, teacher, requiredSessions: sessions });
+  ['sub-name','sub-code','sub-teacher','sub-sessions'].forEach(id => document.getElementById(id).value = '');
+  populateSelects();
+  renderSubjectsTable();
+  renderDashboard();
+  toast(`Subject "${name}" registered`, '📚');
+}
+
+function deleteSubject(id) {
+  const sub = state.subjects.find(s => s.id === id);
+  if (!confirm(`Delete subject "${sub?.name}"? This will remove all related students and sessions.`)) return;
+  state.subjects = state.subjects.filter(s => s.id !== id);
+  state.students = state.students.filter(s => s.subjectId !== id);
+  state.sessions = state.sessions.filter(s => s.subjectId !== id);
+  populateSelects();
+  renderSubjectsTable();
+  renderStudentTable();
+  renderDashboard();
+  toast('Subject deleted', '🗑️');
+}
+
+function renderSubjectsTable() {
+  const tbody = document.getElementById('subjects-tbody');
+  if (!state.subjects.length) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="ei">📚</div>No subjects registered yet</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = state.subjects.map(s => {
+    const stuCount = state.students.filter(st => st.subjectId === s.id).length;
+    return `<tr>
+      <td><span class="badge badge-blue">${s.code}</span></td>
+      <td><strong>${s.name}</strong></td>
+      <td>${s.teacher}</td>
+      <td>${s.requiredSessions}</td>
+      <td>${stuCount}</td>
+      <td>
+        <button class="btn btn-sm btn-danger" onclick="deleteSubject('${s.id}')">🗑️ Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ──────────────────────────────────────────────
+//  STUDENTS
+// ──────────────────────────────────────────────
+function addStudent() {
+  const subjectId = document.getElementById('stu-subject').value;
+  const studentId = document.getElementById('stu-id').value.trim().toUpperCase();
+  const name = document.getElementById('stu-name').value.trim();
+  const cls = document.getElementById('stu-class').value.trim();
+  if (!subjectId || !studentId || !name) { toast('Subject, ID and Name are required', '⚠️'); return; }
+  if (state.students.find(s => s.studentId === studentId && s.subjectId === subjectId)) {
+    toast('Student already enrolled in this subject', '⚠️'); return;
+  }
+  state.students.push({ id: uid(), studentId, name, class: cls, subjectId });
+  ['stu-id','stu-name','stu-class'].forEach(id => document.getElementById(id).value = '');
+  populateSelects();
+  renderStudentTable();
+  renderSubjectsTable();
+  renderDashboard();
+  toast(`${name} added`, '🎓');
+}
+
+function deleteStudent(id) {
+  const st = state.students.find(s => s.id === id);
+  if (!confirm(`Remove student "${st?.name}"?`)) return;
+  state.students = state.students.filter(s => s.id !== id);
+  renderStudentTable();
+  renderSubjectsTable();
+  renderDashboard();
+  toast('Student removed', '🗑️');
+}
+
+function renderStudentTable() {
+  const tbody = document.getElementById('students-tbody');
+  const filter = document.getElementById('stu-filter-subject').value;
+  const list = filter ? state.students.filter(s => s.subjectId === filter) : state.students;
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="ei">🎓</div>No students found</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(st => {
+    const sub = state.subjects.find(s => s.id === st.subjectId);
+    const { attended, required, pct } = getStudentAttendance(st.studentId, st.subjectId);
+    const statusLabel = pct >= 75 ? `<span class="badge badge-green">Good</span>` : pct >= 50 ? `<span class="badge badge-yellow">At Risk</span>` : `<span class="badge badge-red">Critical</span>`;
+    return `<tr>
+      <td><code>${st.studentId}</code></td>
+      <td>${st.name}</td>
+      <td>${st.class || '—'}</td>
+      <td>${sub ? sub.name : '—'}</td>
+      <td>${attended} / ${required}</td>
+      <td style="min-width:120px">${progressBar(pct)}<div style="font-size:.72rem;color:var(--muted);margin-top:3px">${pct}%</div></td>
+      <td>${statusLabel}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="deleteStudent('${st.id}')">🗑️</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ──────────────────────────────────────────────
+//  EXCEL UPLOAD
+// ──────────────────────────────────────────────
+function handleExcelUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const subjectId = document.getElementById('upload-subject-select').value;
+  if (!subjectId) { toast('Select a subject first', '⚠️'); event.target.value=''; return; }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const data = new Uint8Array(e.target.result);
+    const wb = XLSX.read(data, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+    if (!rows.length) { toast('Excel file is empty', '⚠️'); return; }
+
+    // Normalize headers
+    const normalized = rows.map(r => {
+      const keys = Object.keys(r);
+      const findKey = (patterns) => keys.find(k => patterns.some(p => k.toLowerCase().includes(p.toLowerCase())));
+      return {
+        studentId: String(r[findKey(['studentid','student_id','id','regno','reg no']) || keys[0]] || '').trim().toUpperCase(),
+        name: String(r[findKey(['name','fullname','full_name','student name']) || keys[1]] || '').trim(),
+        class: String(r[findKey(['class','stream','form','grade']) || keys[2]] || '').trim(),
+      };
+    }).filter(r => r.studentId && r.name);
+
+    if (!normalized.length) { toast('No valid rows found. Check column headers.', '⚠️'); return; }
+
+    pendingUpload = { subjectId, rows: normalized };
+    const countEl = document.getElementById('upload-count');
+    countEl.textContent = `✅ ${normalized.length} student(s) ready to import`;
+    document.getElementById('upload-preview').style.display = 'block';
+    toast(`${normalized.length} rows parsed from Excel`, '📊');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function confirmUpload() {
+  if (!pendingUpload) return;
+  let added = 0, skipped = 0;
+  pendingUpload.rows.forEach(r => {
+    if (state.students.find(s => s.studentId === r.studentId && s.subjectId === pendingUpload.subjectId)) {
+      skipped++;
+    } else {
+      state.students.push({ id: uid(), studentId: r.studentId, name: r.name, class: r.class, subjectId: pendingUpload.subjectId });
+      added++;
+    }
+  });
+  pendingUpload = null;
+  document.getElementById('upload-preview').style.display = 'none';
+  document.getElementById('excel-upload').value = '';
+  populateSelects();
+  renderStudentTable();
+  renderSubjectsTable();
+  renderDashboard();
+  toast(`Imported ${added} students (${skipped} skipped as duplicates)`, '📥');
+}
+
+// ──────────────────────────────────────────────
+//  ATTENDANCE
+// ──────────────────────────────────────────────
+function loadAttendanceSheet() {
+  const subjectId = document.getElementById('att-subject').value;
+  if (!subjectId) { document.getElementById('att-sheet-wrap').style.display='none'; return; }
+
+  const subject = state.subjects.find(s => s.id === subjectId);
+  const students = state.students.filter(s => s.subjectId === subjectId);
+  const date = document.getElementById('att-date').value || new Date().toISOString().split('T')[0];
+  const label = document.getElementById('att-label').value.trim() || `Session`;
+
+  document.getElementById('att-sheet-title').textContent = `${subject.name} — ${date} (${label})`;
+  document.getElementById('att-sheet-wrap').style.display = 'block';
+
+  if (!students.length) {
+    document.getElementById('att-tbody').innerHTML = '<tr><td colspan="5"><div class="empty"><div class="ei">🎓</div>No students enrolled in this subject</div></td></tr>';
+    return;
+  }
+
+  document.getElementById('att-tbody').innerHTML = students.map((st, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td><code>${st.studentId}</code></td>
+      <td>${st.name}</td>
+      <td>${st.class || '—'}</td>
+      <td>
+        <div class="att-toggle">
+          <button id="btn-P-${st.studentId}" class="on" onclick="setAtt('${st.studentId}','P')">✅ Present</button>
+          <button id="btn-A-${st.studentId}" onclick="setAtt('${st.studentId}','A')">❌ Absent</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function setAtt(studentId, status) {
+  const pBtn = document.getElementById('btn-P-' + studentId);
+  const aBtn = document.getElementById('btn-A-' + studentId);
+  pBtn.className = status === 'P' ? 'on' : '';
+  aBtn.className = status === 'A' ? 'off' : '';
+}
+
+function markAll(status) {
+  const subjectId = document.getElementById('att-subject').value;
+  state.students.filter(s => s.subjectId === subjectId).forEach(st => setAtt(st.studentId, status));
+}
+
+function saveAttendance() {
+  const subjectId = document.getElementById('att-subject').value;
+  const date = document.getElementById('att-date').value || new Date().toISOString().split('T')[0];
+  const label = document.getElementById('att-label').value.trim() || `Session ${state.sessions.filter(s=>s.subjectId===subjectId).length + 1}`;
+
+  const students = state.students.filter(s => s.subjectId === subjectId);
+  if (!students.length) { toast('No students to record', '⚠️'); return; }
+
+  const records = students.map(st => {
+    const pBtn = document.getElementById('btn-P-' + st.studentId);
+    const status = pBtn && pBtn.classList.contains('on') ? 'P' : 'A';
+    return { studentId: st.studentId, status };
+  });
+
+  state.sessions.push({ id: uid(), subjectId, date, label, records });
+  document.getElementById('att-label').value = '';
+  renderStudentTable();
+  renderDashboard();
+  toast(`Session "${label}" saved`, '💾');
+}
+
+// ──────────────────────────────────────────────
+//  REPORTS
+// ──────────────────────────────────────────────
+function renderReport() {
+  const filter = document.getElementById('rep-subject').value;
+  const students = filter ? state.students.filter(s => s.subjectId === filter) : state.students;
+
+  // Stats
+  let totalPresent = 0, totalRequired = 0, atRisk = 0, critical = 0;
+  students.forEach(st => {
+    const { attended, required, pct } = getStudentAttendance(st.studentId, st.subjectId);
+    totalPresent += attended; totalRequired += required;
+    if (pct < 75 && pct >= 50) atRisk++;
+    if (pct < 50) critical++;
+  });
+  const avgPct = totalRequired ? Math.round((totalPresent / totalRequired) * 100) : 0;
+
+  document.getElementById('report-stats').innerHTML = `
+    <div class="stat-card" style="--c:var(--accent)"><div class="label">Students</div><div class="value">${students.length}</div><div class="sublabel">in selection</div></div>
+    <div class="stat-card" style="--c:var(--green)"><div class="label">Avg Attendance</div><div class="value">${avgPct}%</div><div class="sublabel">overall</div></div>
+    <div class="stat-card" style="--c:var(--yellow)"><div class="label">At Risk</div><div class="value">${atRisk}</div><div class="sublabel">50–74%</div></div>
+    <div class="stat-card" style="--c:var(--red)"><div class="label">Critical</div><div class="value">${critical}</div><div class="sublabel">below 50%</div></div>
+  `;
+
+  // Table
+  const tbody = document.getElementById('report-tbody');
+  if (!students.length) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty"><div class="ei">📈</div>No data</div></td></tr>';
+  } else {
+    tbody.innerHTML = students.map(st => {
+      const sub = state.subjects.find(s => s.id === st.subjectId);
+      const { attended, required, pct } = getStudentAttendance(st.studentId, st.subjectId);
+      const absent = state.sessions.filter(s => s.subjectId === st.subjectId).length - attended;
+      const status = pct >= 75 ? `<span class="badge badge-green">Good</span>` : pct >= 50 ? `<span class="badge badge-yellow">At Risk</span>` : `<span class="badge badge-red">Critical</span>`;
+      return `<tr>
+        <td><code>${st.studentId}</code></td>
+        <td>${st.name}</td>
+        <td>${st.class || '—'}</td>
+        <td>${sub ? sub.name : '—'}</td>
+        <td>${required}</td>
+        <td>${attended}</td>
+        <td>${absent}</td>
+        <td>${pctBadge(pct)}</td>
+        <td>${status}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Session history
+  const sessions = filter ? state.sessions.filter(s => s.subjectId === filter) : state.sessions;
+  const shTbody = document.getElementById('session-history-tbody');
+  if (!sessions.length) {
+    shTbody.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="ei">🗓️</div>No sessions</div></td></tr>';
+  } else {
+    shTbody.innerHTML = [...sessions].reverse().map(sess => {
+      const sub = state.subjects.find(s => s.id === sess.subjectId);
+      const present = sess.records.filter(r => r.status === 'P').length;
+      const absent = sess.records.filter(r => r.status === 'A').length;
+      const pct = sess.records.length ? Math.round((present/sess.records.length)*100) : 0;
+      return `<tr>
+        <td>${sess.date}</td>
+        <td>${sub ? sub.name : '—'}</td>
+        <td>${sess.label}</td>
+        <td><span class="badge badge-green">${present}</span></td>
+        <td><span class="badge badge-red">${absent}</span></td>
+        <td>${pctBadge(pct)}</td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+function exportReport() {
+  const filter = document.getElementById('rep-subject').value;
+  const students = filter ? state.students.filter(s => s.subjectId === filter) : state.students;
+  if (!students.length) { toast('No data to export', '⚠️'); return; }
+
+  const rows = students.map(st => {
+    const sub = state.subjects.find(s => s.id === st.subjectId);
+    const { attended, required, pct } = getStudentAttendance(st.studentId, st.subjectId);
+    const absent = state.sessions.filter(s => s.subjectId === st.subjectId).length - attended;
+    return {
+      'Student ID': st.studentId,
+      'Name': st.name,
+      'Class': st.class || '',
+      'Subject': sub ? sub.name : '',
+      'Subject Code': sub ? sub.code : '',
+      'Teacher': sub ? sub.teacher : '',
+      'Required Sessions': required,
+      'Sessions Attended': attended,
+      'Sessions Absent': absent,
+      'Attendance %': pct + '%',
+      'Status': pct >= 75 ? 'Good' : pct >= 50 ? 'At Risk' : 'Critical',
+    };
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = Object.keys(rows[0]).map(() => ({ wch: 20 }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Attendance Report');
+
+  // Session history sheet
+  const allSessions = filter ? state.sessions.filter(s => s.subjectId === filter) : state.sessions;
+  if (allSessions.length) {
+    const sessRows = [];
+    allSessions.forEach(sess => {
+      const sub = state.subjects.find(s => s.id === sess.subjectId);
+      sess.records.forEach(r => {
+        const stu = state.students.find(s => s.studentId === r.studentId && s.subjectId === sess.subjectId);
+        sessRows.push({
+          Date: sess.date,
+          Label: sess.label,
+          Subject: sub ? sub.name : '',
+          'Student ID': r.studentId,
+          'Student Name': stu ? stu.name : '',
+          Status: r.status === 'P' ? 'Present' : 'Absent',
+        });
+      });
+    });
+    const ws2 = XLSX.utils.json_to_sheet(sessRows);
+    XLSX.utils.book_append_sheet(wb, ws2, 'Session Records');
+  }
+
+  const date = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `EduTrack_Attendance_${date}.xlsx`);
+  toast('Report exported to Excel', '📥');
+}
+
+// ──────────────────────────────────────────────
+//  DASHBOARD
+// ──────────────────────────────────────────────
+function renderDashboard() {
+  document.getElementById('stat-subjects').textContent = state.subjects.length;
+  document.getElementById('stat-students').textContent = state.students.length;
+
+  const today = new Date().toISOString().split('T')[0];
+  const todaySessions = state.sessions.filter(s => s.date === today).length;
+  document.getElementById('stat-sessions').textContent = todaySessions;
+
+  // Avg attendance
+  let total = 0, count = 0;
+  state.students.forEach(st => {
+    const { pct } = getStudentAttendance(st.studentId, st.subjectId);
+    total += pct; count++;
+  });
+  document.getElementById('stat-avg').textContent = count ? Math.round(total/count) + '%' : '—';
+
+  // Recent sessions
+  const tbody = document.getElementById('recent-sessions-tbody');
+  const recent = [...state.sessions].reverse().slice(0, 8);
+  if (!recent.length) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="ei">🗓️</div>No sessions yet</div></td></tr>';
+  } else {
+    tbody.innerHTML = recent.map(sess => {
+      const sub = state.subjects.find(s => s.id === sess.subjectId);
+      const present = sess.records.filter(r => r.status === 'P').length;
+      const absent = sess.records.filter(r => r.status === 'A').length;
+      const pct = sess.records.length ? Math.round((present/sess.records.length)*100) : 0;
+      return `<tr>
+        <td>${sub ? sub.name : '—'}</td>
+        <td>${sess.date}</td>
+        <td><span class="badge badge-green">${present}</span></td>
+        <td><span class="badge badge-red">${absent}</span></td>
+        <td>${pctBadge(pct)}</td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+// Modal helpers
+function openModal(title, body, onConfirm) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = body;
+  document.getElementById('modal-confirm-btn').onclick = onConfirm;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+
+// ──────────────────────────────────────────────
+//  INIT
+// ──────────────────────────────────────────────
+document.getElementById('att-date').value = new Date().toISOString().split('T')[0];
+populateSelects();
+renderDashboard();
+renderSubjectsTable();
+renderStudentTable();
+
+// Drag and drop
+const uz = document.getElementById('upload-zone');
+uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('drag'); });
+uz.addEventListener('dragleave', () => uz.classList.remove('drag'));
+uz.addEventListener('drop', e => {
+  e.preventDefault(); uz.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const inp = document.getElementById('excel-upload');
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    inp.files = dt.files;
+    handleExcelUpload({ target: inp });
+  }
+});
+</script>
+</body>
+</html>
