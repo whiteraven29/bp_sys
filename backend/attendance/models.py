@@ -97,8 +97,22 @@ class Session(models.Model):
     PRACTICAL = 'P'
     TYPE_CHOICES = [(THEORY, 'Theory'), (PRACTICAL, 'Practical')]
 
+    CAT1 = 'C1'
+    CAT2 = 'C2'
+    GENERAL = 'GN'
+    PERIOD_CHOICES = [
+        (CAT1, 'CAT 1'),
+        (CAT2, 'CAT 2'),
+        (GENERAL, 'General'),
+    ]
+
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='sessions')
     session_type = models.CharField(max_length=1, choices=TYPE_CHOICES, default=THEORY, verbose_name='Session Type')
+    exam_period = models.CharField(
+        max_length=2, choices=PERIOD_CHOICES, default=GENERAL,
+        verbose_name='Exam Period',
+        help_text='Tag this session to a specific assessment period for eligibility tracking.',
+    )
     date = models.DateField()
     label = models.CharField(max_length=200)
     topic = models.CharField(max_length=300, blank=True, verbose_name='Topic Taught')
@@ -124,6 +138,8 @@ class AttendanceRecord(models.Model):
     session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='records')
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='attendance_records')
     status = models.CharField(max_length=1, choices=STATUS_CHOICES, default=PRESENT)
+    sick_note = models.CharField(max_length=300, blank=True, verbose_name='Sick Note / Reason')
+    certificate_submitted = models.BooleanField(default=False, verbose_name='Certificate Submitted')
 
     class Meta:
         unique_together = ('session', 'student')

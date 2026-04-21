@@ -245,6 +245,42 @@
     .stats-grid { grid-template-columns: 1fr; }
     header { padding: 0 14px; }
   }
+
+  /* ── PERIOD BADGES ── */
+  .badge-cat1 { background: rgba(34,197,94,.15); color: var(--green); }
+  .badge-cat2 { background: rgba(124,58,237,.15); color: var(--accent2); }
+  .badge-gen  { background: rgba(79,142,247,.1);  color: var(--muted); }
+
+  /* ── SICK INLINE INPUT ── */
+  .sick-input {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 5px 9px; font-size: .78rem; outline: none;
+    width: 100%; min-width: 140px; transition: border .13s;
+  }
+  .sick-input:focus { border-color: var(--orange); }
+
+  /* ── ELIGIBILITY ELIGIBLE / NOT ── */
+  .elig-yes { color: var(--green); font-weight: 700; }
+  .elig-no  { color: var(--red);   font-weight: 700; }
+  .elig-na  { color: var(--muted); font-size: .78rem; }
+
+  /* ── PRINT STYLES ── */
+  @media print {
+    header, aside, .sidebar-overlay, #toast, .modal-overlay,
+    .btn, .form-grid, .form-grid-3, .card:not(#elig-print-area),
+    .stats-grid, .page-sub, #page-eligibility > .card:first-child { display: none !important; }
+    body, main { background: #fff !important; color: #000 !important; }
+    main { margin-left: 0 !important; padding: 0 !important; }
+    #page-eligibility { display: block !important; }
+    #elig-print-area { display: block !important; border: none !important; }
+    #elig-print-area .card-title { font-size: 1rem; margin-bottom: 8px; }
+    table { font-size: .78rem; }
+    th, td { padding: 6px 8px; border: 1px solid #ccc; }
+    thead tr { background: #eee !important; }
+    .badge { border: 1px solid currentColor; }
+    .print-header { display: block !important; text-align: center; margin-bottom: 12px; }
+  }
+  .print-header { display: none; }
 </style>
 </head>
 <body>
@@ -276,6 +312,8 @@
     <button class="nav-btn" data-page="students" onclick="showPage('students',this)"><span class="icon">🎓</span> Students</button>
     <button class="nav-btn" data-page="attendance" onclick="showPage('attendance',this)"><span class="icon">✅</span> Take Attendance</button>
     <button class="nav-btn" data-page="reports" onclick="showPage('reports',this)"><span class="icon">📈</span> Reports</button>
+    <button class="nav-btn" data-page="eligibility" onclick="showPage('eligibility',this)"><span class="icon">🎫</span> Eligibility</button>
+    <button class="nav-btn" data-page="sick" onclick="showPage('sick',this)"><span class="icon">🤒</span> Sick Records</button>
     <div class="aside-label" style="margin-top:10px;">My Modules</div>
     <div id="sidebar-levels"></div>
   </aside>
@@ -413,6 +451,20 @@
             </label>
           </div>
         </div>
+        <div class="field" style="margin-bottom:14px;">
+          <label>Exam Period *</label>
+          <div class="type-toggle">
+            <label>
+              <input type="radio" name="att-period" value="C1"> CAT 1
+            </label>
+            <label>
+              <input type="radio" name="att-period" value="C2"> CAT 2
+            </label>
+            <label>
+              <input type="radio" name="att-period" value="GN" checked> General
+            </label>
+          </div>
+        </div>
         <div class="field field-full" style="margin-bottom:0;">
           <label>Topic Taught</label>
           <input id="att-topic" placeholder="e.g. Introduction to Financial Statements" />
@@ -430,13 +482,88 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>#</th><th>Reg. No.</th><th>Name</th><th>Attendance</th></tr></thead>
+            <thead><tr><th>#</th><th>Reg. No.</th><th>Name</th><th>Attendance</th><th>Sick Note (if S)</th></tr></thead>
             <tbody id="att-roster-tbody"></tbody>
           </table>
         </div>
         <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <button class="btn btn-primary" onclick="submitAttendance()">💾 Save Session</button>
           <span id="att-count-info" style="font-size:.82rem;color:var(--muted);"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ELIGIBILITY -->
+    <div class="page" id="page-eligibility">
+      <div class="page-title">Exam Eligibility</div>
+      <div class="page-sub">Students require ≥90% attendance per period to sit for each exam</div>
+      <div class="card">
+        <div class="card-title">Filters &amp; Exam Type</div>
+        <div class="form-grid-3">
+          <div class="field"><label>Semester</label><select id="elig-flt-sem" onchange="onEligFilterChange()"><option value="">All Semesters</option></select></div>
+          <div class="field"><label>Class Level</label><select id="elig-flt-level" onchange="onEligFilterChange()"><option value="">All Levels</option></select></div>
+          <div class="field"><label>Module</label><select id="elig-flt-module" onchange="loadEligibility()"><option value="">All Modules</option></select></div>
+        </div>
+        <div class="field" style="margin-bottom:14px;">
+          <label>Exam Type</label>
+          <div class="type-toggle">
+            <label><input type="radio" name="elig-exam-type" value="cat1" checked onchange="renderEligibilityTable()"> CAT 1</label>
+            <label><input type="radio" name="elig-exam-type" value="cat2" onchange="renderEligibilityTable()"> CAT 2</label>
+            <label><input type="radio" name="elig-exam-type" value="end" onchange="renderEligibilityTable()"> End of Semester</label>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="loadEligibility()">🔍 Apply</button>
+          <button class="btn btn-primary btn-sm" onclick="printEligibility()">🖨 Print List</button>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card" style="--c:var(--accent)"><div class="label">Total Students</div><div class="value" id="elig-stat-total">—</div></div>
+        <div class="stat-card" style="--c:var(--green)"><div class="label">Eligible</div><div class="value" id="elig-stat-eligible">—</div><div class="sublabel">≥90%</div></div>
+        <div class="stat-card" style="--c:var(--red)"><div class="label">Not Eligible</div><div class="value" id="elig-stat-ineligible">—</div><div class="sublabel">&lt;90%</div></div>
+        <div class="stat-card" style="--c:var(--muted)"><div class="label">No Period Data</div><div class="value" id="elig-stat-na">—</div></div>
+      </div>
+      <div class="card" id="elig-print-area">
+        <div class="print-header" id="elig-print-header"></div>
+        <div class="card-title" id="elig-table-title">📋 Eligibility List</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Reg. No.</th><th>Name</th><th>Module</th><th>Level</th><th>Semester</th><th>Sessions</th><th>Attended</th><th>%</th><th>Eligibility</th></tr>
+            </thead>
+            <tbody id="elig-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SICK RECORDS -->
+    <div class="page" id="page-sick">
+      <div class="page-title">Sick Management</div>
+      <div class="page-sub">View all sick records, add notes, and track medical certificate submissions</div>
+      <div class="card">
+        <div class="card-title">Filters</div>
+        <div class="form-grid-3">
+          <div class="field"><label>Semester</label><select id="sick-flt-sem" onchange="onSickFilterChange()"><option value="">All Semesters</option></select></div>
+          <div class="field"><label>Class Level</label><select id="sick-flt-level" onchange="onSickFilterChange()"><option value="">All Levels</option></select></div>
+          <div class="field"><label>Module</label><select id="sick-flt-module" onchange="loadSickRecords()"><option value="">All Modules</option></select></div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadSickRecords()">🔍 Apply</button>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card" style="--c:var(--orange)"><div class="label">Total Sick Records</div><div class="value" id="sick-stat-total">—</div></div>
+        <div class="stat-card" style="--c:var(--green)"><div class="label">Certificate Submitted</div><div class="value" id="sick-stat-cert">—</div></div>
+        <div class="stat-card" style="--c:var(--yellow)"><div class="label">Pending Certificate</div><div class="value" id="sick-stat-pending">—</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🤒 Sick Records</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Date</th><th>Reg. No.</th><th>Student</th><th>Module</th><th>Level</th><th>Session</th><th>Period</th><th>Note / Reason</th><th>Certificate</th><th></th></tr>
+            </thead>
+            <tbody id="sick-tbody"></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -590,6 +717,8 @@ function showPage(name, btn) {
   if (name === 'students') loadStudents();
   if (name === 'attendance') loadAttendanceModuleSelect();
   if (name === 'reports') loadReport();
+  if (name === 'eligibility') loadEligibility();
+  if (name === 'sick') loadSickRecords();
 }
 
 // ── BOOT ───────────────────────────────────────────────────────────────────────
@@ -713,6 +842,10 @@ function populateAllSelects() {
   buildLevelOptions(document.getElementById('att-flt-level'), true);
   buildSemOptions(document.getElementById('rpt-flt-sem'), true);
   buildLevelOptions(document.getElementById('rpt-flt-level'), true);
+  buildSemOptions(document.getElementById('elig-flt-sem'), true);
+  buildLevelOptions(document.getElementById('elig-flt-level'), true);
+  buildSemOptions(document.getElementById('sick-flt-sem'), true);
+  buildLevelOptions(document.getElementById('sick-flt-level'), true);
   buildSemOptions(document.getElementById('profile-flt-sem'), true);
   buildLevelOptions(document.getElementById('profile-flt-level'), true);
 }
@@ -921,7 +1054,7 @@ async function loadAttendanceRoster() {
   if (!modId) { document.getElementById('att-roster-card').style.display = 'none'; return; }
   try {
     const data = await api('GET', `/students/?module_id=${modId}`);
-    rosterStudents = (data.results ?? data).map(s => ({ ...s, status: 'P' }));
+    rosterStudents = (data.results ?? data).map(s => ({ ...s, status: 'P', sick_note: '' }));
     renderRoster();
     document.getElementById('att-roster-card').style.display = 'block';
     updateSessionTypeLabel();
@@ -941,7 +1074,7 @@ document.querySelectorAll('input[name="att-type"]').forEach(r => r.addEventListe
 function renderRoster() {
   const tbody = document.getElementById('att-roster-tbody');
   if (!rosterStudents.length) {
-    tbody.innerHTML = '<tr><td colspan="4"><div class="empty"><div class="ei">🎓</div>No students in this module</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="ei">🎓</div>No students in this module</div></td></tr>';
     return;
   }
   tbody.innerHTML = rosterStudents.map((s, i) =>
@@ -956,6 +1089,12 @@ function renderRoster() {
           <button onclick="setStatus(${i},'A')" class="${s.status==='A'?'st-a':''}">A</button>
         </div>
       </td>
+      <td>
+        <input id="note-${i}" class="sick-input" type="text" placeholder="Reason (optional)"
+          style="display:${s.status==='S'?'block':'none'}"
+          value="${(s.sick_note||'').replace(/"/g,'&quot;')}"
+          oninput="setSickNote(${i},this.value)">
+      </td>
     </tr>`
   ).join('');
 }
@@ -966,11 +1105,17 @@ function setStatus(i, status) {
   const btns = row.querySelectorAll('.att-toggle button');
   btns.forEach(b => b.className = '');
   btns[status === 'P' ? 0 : status === 'S' ? 1 : 2].className = `st-${status.toLowerCase()}`;
+  const noteInput = document.getElementById('note-' + i);
+  if (noteInput) noteInput.style.display = status === 'S' ? 'block' : 'none';
   updateAttCount();
 }
 
+function setSickNote(i, value) {
+  rosterStudents[i].sick_note = value;
+}
+
 function markAll(status) {
-  rosterStudents.forEach(s => s.status = status);
+  rosterStudents.forEach(s => { s.status = status; if (status !== 'S') s.sick_note = ''; });
   renderRoster();
   updateAttCount();
 }
@@ -989,10 +1134,15 @@ async function submitAttendance() {
   const label = document.getElementById('att-label').value.trim();
   const topic = document.getElementById('att-topic').value.trim();
   const sessionType = document.querySelector('input[name="att-type"]:checked')?.value || 'T';
+  const examPeriod = document.querySelector('input[name="att-period"]:checked')?.value || 'GN';
   if (!modId || !date || !label) { toast('Module, date and label are required', 'var(--red)'); return; }
-  const records = rosterStudents.map(s => ({ nactvet_reg_no: s.nactvet_reg_no, status: s.status }));
+  const records = rosterStudents.map(s => ({
+    nactvet_reg_no: s.nactvet_reg_no,
+    status: s.status,
+    sick_note: s.status === 'S' ? (s.sick_note || '') : '',
+  }));
   try {
-    await api('POST', '/sessions/', { module: parseInt(modId), session_type: sessionType, date, label, topic, records });
+    await api('POST', '/sessions/', { module: parseInt(modId), session_type: sessionType, exam_period: examPeriod, date, label, topic, records });
     toast('Session saved!', 'var(--green)');
     document.getElementById('att-date').value = '';
     document.getElementById('att-label').value = '';
@@ -1124,6 +1274,186 @@ async function toggleClaim(id, el) {
     el.classList.toggle('claimed');
     buildSidebarModules();
   } catch(e) { toast(e?.detail || 'Error', 'var(--red)'); }
+}
+
+// ── ELIGIBILITY PAGE ───────────────────────────────────────────────────────────
+let eligibilityData = { stats: {}, rows: [], threshold: 90 };
+
+async function onEligFilterChange() {
+  const semId = document.getElementById('elig-flt-sem').value;
+  const lvlId = document.getElementById('elig-flt-level').value;
+  await refreshModuleDropdowns(semId, lvlId, 'elig-flt-module');
+  loadEligibility();
+}
+
+async function loadEligibility() {
+  const semId = document.getElementById('elig-flt-sem').value;
+  const lvlId = document.getElementById('elig-flt-level').value;
+  const modId = document.getElementById('elig-flt-module').value;
+  let url = '/eligibility/?';
+  if (modId) url += `module_id=${modId}&`;
+  if (lvlId) url += `class_level_id=${lvlId}&`;
+  if (semId) url += `semester_id=${semId}&`;
+  try {
+    eligibilityData = await api('GET', url);
+    renderEligibilityTable();
+  } catch(e) { toast('Failed to load eligibility data', 'var(--red)'); }
+}
+
+function renderEligibilityTable() {
+  const examType = document.querySelector('input[name="elig-exam-type"]:checked')?.value || 'cat1';
+  const examLabels = { cat1: 'CAT 1', cat2: 'CAT 2', end: 'End of Semester' };
+  const label = examLabels[examType];
+  const s = eligibilityData.stats;
+
+  const eligKey   = `${examType}_eligible`;
+  const ineligKey = `${examType}_ineligible`;
+  const naKey     = `${examType}_na`;
+  document.getElementById('elig-stat-total').textContent = s.total_students ?? '—';
+  document.getElementById('elig-stat-eligible').textContent = s[eligKey] ?? '—';
+  document.getElementById('elig-stat-ineligible').textContent = s[ineligKey] ?? '—';
+  document.getElementById('elig-stat-na').textContent = s[naKey] ?? '—';
+
+  const pctKey  = `${examType}_pct`;
+  const attKey  = `${examType}_attended`;
+  const sesKey  = `${examType}_sessions`;
+  const eligBool = `${examType}_eligible`;
+
+  document.getElementById('elig-table-title').textContent = `📋 ${label} Eligibility List`;
+  document.getElementById('elig-print-header').textContent =
+    `${label} Exam Eligibility — Threshold: ${eligibilityData.threshold}%`;
+
+  const rows = eligibilityData.rows || [];
+  document.getElementById('elig-tbody').innerHTML = rows.length ? rows.map((r, i) => {
+    const elig = r[eligBool];
+    const pct  = r[pctKey];
+    const att  = r[attKey];
+    const ses  = r[sesKey];
+    let eligCell;
+    if (elig === null || elig === undefined) {
+      eligCell = '<span class="elig-na">N/A — no sessions</span>';
+    } else if (elig) {
+      eligCell = '<span class="elig-yes">✔ ELIGIBLE</span>';
+    } else {
+      eligCell = '<span class="elig-no">✘ NOT ELIGIBLE</span>';
+    }
+    return `<tr>
+      <td>${i+1}</td>
+      <td><span style="font-family:var(--font-mono);font-size:.78rem">${r.nactvet_reg_no}</span></td>
+      <td>${r.name}</td>
+      <td>${r.module}</td>
+      <td>${r.class_level}</td>
+      <td style="font-size:.75rem;color:var(--muted)">${r.semester}</td>
+      <td>${ses ?? '—'}</td>
+      <td>${att ?? '—'}</td>
+      <td>${pctBadge(pct, pct === null)}</td>
+      <td>${eligCell}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="10"><div class="empty"><div class="ei">📋</div>No data — apply filters or take attendance first</div></td></tr>';
+}
+
+function printEligibility() {
+  const examType = document.querySelector('input[name="elig-exam-type"]:checked')?.value || 'cat1';
+  const examLabels = { cat1: 'CAT 1', cat2: 'CAT 2', end: 'End of Semester' };
+  // Temporarily activate eligibility page for print
+  document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+  document.getElementById('page-eligibility').style.display = 'block';
+  document.getElementById('elig-print-header').textContent =
+    `${examLabels[examType]} Exam Eligibility — Threshold: ${eligibilityData.threshold}% — Printed: ${new Date().toLocaleDateString()}`;
+  window.print();
+  // Restore display
+  document.querySelectorAll('.page').forEach(p => p.style.display = '');
+  document.getElementById('page-eligibility').classList.add('active');
+}
+
+// ── SICK RECORDS PAGE ──────────────────────────────────────────────────────────
+let sickRecordsData = [];
+
+function periodBadge(period) {
+  if (period === 'C1') return '<span class="badge badge-cat1">CAT 1</span>';
+  if (period === 'C2') return '<span class="badge badge-cat2">CAT 2</span>';
+  return '<span class="badge badge-gen">General</span>';
+}
+
+async function onSickFilterChange() {
+  const semId = document.getElementById('sick-flt-sem').value;
+  const lvlId = document.getElementById('sick-flt-level').value;
+  await refreshModuleDropdowns(semId, lvlId, 'sick-flt-module');
+  loadSickRecords();
+}
+
+async function loadSickRecords() {
+  const semId = document.getElementById('sick-flt-sem').value;
+  const lvlId = document.getElementById('sick-flt-level').value;
+  const modId = document.getElementById('sick-flt-module').value;
+  let url = '/sick-records/?';
+  if (modId) url += `module_id=${modId}&`;
+  if (lvlId) url += `class_level_id=${lvlId}&`;
+  if (semId) url += `semester_id=${semId}&`;
+  try {
+    sickRecordsData = await api('GET', url);
+    const cert = sickRecordsData.filter(r => r.certificate_submitted).length;
+    document.getElementById('sick-stat-total').textContent = sickRecordsData.length;
+    document.getElementById('sick-stat-cert').textContent = cert;
+    document.getElementById('sick-stat-pending').textContent = sickRecordsData.length - cert;
+    const tbody = document.getElementById('sick-tbody');
+    if (!sickRecordsData.length) {
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty"><div class="ei">🤒</div>No sick records found</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = sickRecordsData.map(r =>
+      `<tr id="sick-row-${r.id}">
+        <td>${r.session_date}</td>
+        <td><span style="font-family:var(--font-mono);font-size:.78rem">${r.student_reg_no}</span></td>
+        <td>${r.student_name}</td>
+        <td>${r.module}</td>
+        <td>${r.class_level}</td>
+        <td style="font-size:.78rem;color:var(--muted)">${r.session_label}</td>
+        <td>${periodBadge(r.exam_period)}</td>
+        <td>
+          <input type="text" class="sick-input" placeholder="Add note…"
+            value="${(r.sick_note||'').replace(/"/g,'&quot;')}"
+            id="sick-note-${r.id}"
+            style="min-width:160px;"
+            onblur="saveSickNote(${r.id})">
+        </td>
+        <td>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.82rem;">
+            <input type="checkbox" id="sick-cert-${r.id}" ${r.certificate_submitted ? 'checked' : ''}
+              onchange="saveSickCert(${r.id}, this.checked)">
+            <span>${r.certificate_submitted ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-yellow">No</span>'}</span>
+          </label>
+        </td>
+        <td></td>
+      </tr>`
+    ).join('');
+  } catch(e) { toast('Failed to load sick records', 'var(--red)'); }
+}
+
+async function saveSickNote(id) {
+  const note = document.getElementById(`sick-note-${id}`)?.value || '';
+  try {
+    await api('PATCH', `/sick-records/${id}/`, { sick_note: note });
+    toast('Note saved', 'var(--green)');
+  } catch(e) { toast('Failed to save note', 'var(--red)'); }
+}
+
+async function saveSickCert(id, checked) {
+  try {
+    await api('PATCH', `/sick-records/${id}/`, { certificate_submitted: checked });
+    // Update badge in cell
+    const row = document.getElementById(`sick-row-${id}`);
+    if (row) {
+      const span = row.querySelector(`#sick-cert-${id}`)?.nextElementSibling;
+      if (span) span.innerHTML = checked ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-yellow">No</span>';
+    }
+    // Refresh stats
+    const cert = sickRecordsData.filter(r => (r.id === id ? checked : r.certificate_submitted)).length;
+    document.getElementById('sick-stat-cert').textContent = cert;
+    document.getElementById('sick-stat-pending').textContent = sickRecordsData.length - cert;
+    const rec = sickRecordsData.find(r => r.id === id);
+    if (rec) rec.certificate_submitted = checked;
+  } catch(e) { toast('Failed to update certificate status', 'var(--red)'); }
 }
 
 // ── ADVANCE SEMESTER ───────────────────────────────────────────────────────────

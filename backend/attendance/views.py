@@ -506,3 +506,167 @@ def all_modules(request):
             'claimed': m.id in my_ids,
         })
     return Response(data)
+
+
+# ── ELIGIBILITY ────────────────────────────────────────────────────────────────
+
+ELIGIBILITY_THRESHOLD = 90
+
+
+@api_view(['GET'])
+@login_required
+def eligibility(request):
+    my_modules = user_modules(request.user)
+    module_id = request.query_params.get('module_id')
+    class_level_id = request.query_params.get('class_level_id')
+    semester_id = request.query_params.get('semester_id')
+
+    students = (
+        Student.objects.filter(module__in=my_modules)
+        .select_related('module__class_level', 'module__semester__academic_year')
+        .prefetch_related('attendance_records__session')
+    )
+    if module_id:
+        students = students.filter(module_id=module_id)
+    if class_level_id:
+        students = students.filter(module__class_level_id=class_level_id)
+    if semester_id:
+        students = students.filter(module__semester_id=semester_id)
+
+    _mod_cache = {}
+
+    def _period_counts(mid):
+        if mid not in _mod_cache:
+            cat1 = Session.objects.filter(module_id=mid, exam_period=Session.CAT1).count()
+            cat2 = Session.objects.filter(module_id=mid, exam_period=Session.CAT2).count()
+            total = Session.objects.filter(module_id=mid).count()
+            _mod_cache[mid] = {'cat1': cat1, 'cat2': cat2, 'total': total}
+        return _mod_cache[mid]
+
+    rows = []
+    for st in students:
+        mc = _period_counts(st.module_id)
+        all_records = list(st.attendance_records.all())
+
+        cat1_eff = sum(1 for r in all_records if r.session.exam_period == Session.CAT1 and r.status in ('P', 'S'))
+        cat2_eff = sum(1 for r in all_records if r.session.exam_period == Session.CAT2 and r.status in ('P', 'S'))
+        total_eff = sum(1 for r in all_records if r.status in ('P', 'S'))
+
+        cat1_pct = round((cat1_eff / mc['cat1']) * 100) if mc['cat1'] else None
+        cat2_pct = round((cat2_eff / mc['cat2']) * 100) if mc['cat2'] else None
+        end_pct = round((total_eff / mc['total']) * 100) if mc['total'] else None
+
+        rows.append({
+            'id': st.id,
+            'nactvet_reg_no': st.nactvet_reg_no,
+            'name': st.name,
+            'module': st.module.name,
+            'module_code': st.module.code,
+            'class_level': st.module.class_level.name,
+            'semester': st.module.semester.label,
+            'cat1_sessions': mc['cat1'],
+            'cat1_attended': cat1_eff,
+            'cat1_pct': cat1_pct,
+            'cat1_eligible': (cat1_pct >= ELIGIBILITY_THRESHOLD) if mc['cat1'] else None,
+            'cat2_sessions': mc['cat2'],
+            'cat2_attended': cat2_eff,
+            'cat2_pct': cat2_pct,
+            'cat2_eligible': (cat2_pct >= ELIGIBILITY_THRESHOLD) if mc['cat2'] else None,
+            'end_sessions': mc['total'],
+            'end_attended': total_eff,
+            'end_pct': end_pct,
+            'end_eligible': (end_pct >= ELIGIBILITY_THRESHOLD) if mc['total'] else None,
+        })
+
+    stats = {
+        'total_students': len(rows),
+        'cat1_eligible': sum(1 for r in rows if r['cat1_eligible'] is True),
+        'cat1_ineligible': sum(1 for r in rows if r['cat1_eligible'] is False),
+        'cat1_na': sum(1 for r in rows if r['cat1_eligible'] is None),
+        'cat2_eligible': sum(1 for r in rows if r['cat2_eligible'] is True),
+        'cat2_ineligible': sum(1 for r in rows if r['cat2_eligible'] is False),
+        'cat2_na': sum(1 for r in rows if r['cat2_eligible'] is None),
+        'end_eligible': sum(1 for r in rows if r['end_eligible'] is True),
+        'end_ineligible': sum(1 for r in rows if r['end_eligible'] is False),
+        'end_na': sum(1 for r in rows if r['end_eligible'] is None),
+    }
+
+    return Response({'stats': stats, 'rows': rows, 'threshold': ELIGIBILITY_THRESHOLD})
+
+
+# ── SICK RECORDS ───────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@login_required
+def sick_records(request):
+    my_modules = user_modules(request.user)
+    module_id = request.query_params.get('module_id')
+    semester_id = request.query_params.get('semester_id')
+    class_level_id = request.query_params.get('class_level_id')
+
+    records = (
+        AttendanceRecord.objects.filter(
+            status='S',
+            student__module__in=my_modules,
+        )
+        .select_related(
+            'student__module__class_level',
+            'student__module__semester__academic_year',
+            'session',
+        )
+        .order_by('-session__date')
+    )
+
+    if module_id:
+        records = records.filter(student__module_id=module_id)
+    if semester_id:
+        records = records.filter(student__module__semester_id=semester_id)
+    if class_level_id:
+        records = records.filter(student__module__class_level_id=class_level_id)
+
+    data = [
+        {
+            'id': r.id,
+            'student_id': r.student.id,
+            'student_name': r.student.name,
+            'student_reg_no': r.student.nactvet_reg_no,
+            'module': r.student.module.name,
+            'module_code': r.student.module.code,
+            'class_level': r.student.module.class_level.name,
+            'semester': r.student.module.semester.label,
+            'session_date': str(r.session.date),
+            'session_label': r.session.label,
+            'exam_period': r.session.exam_period,
+            'exam_period_display': r.session.get_exam_period_display(),
+            'sick_note': r.sick_note,
+            'certificate_submitted': r.certificate_submitted,
+        }
+        for r in records
+    ]
+
+    return Response(data)
+
+
+@api_view(['PATCH'])
+@login_required
+def update_sick_record(request, pk):
+    try:
+        record = AttendanceRecord.objects.select_related('student__module').get(pk=pk, status='S')
+    except AttendanceRecord.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    my_mod_ids = set(user_modules(request.user).values_list('id', flat=True))
+    if record.student.module_id not in my_mod_ids:
+        return Response({'detail': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if 'sick_note' in request.data:
+        record.sick_note = str(request.data['sick_note']).strip()
+    if 'certificate_submitted' in request.data:
+        record.certificate_submitted = bool(request.data['certificate_submitted'])
+    record.save()
+
+    return Response({
+        'id': record.id,
+        'sick_note': record.sick_note,
+        'certificate_submitted': record.certificate_submitted,
+    })

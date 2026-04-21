@@ -53,8 +53,8 @@ class AttendanceRecordInline(admin.TabularInline):
 
 @admin.register(Session)
 class SessionAdmin(admin.ModelAdmin):
-    list_display = ['module', 'session_type', 'date', 'label', 'topic', 'get_class_level']
-    list_filter = ['session_type', 'module__class_level', 'module__semester', 'date']
+    list_display = ['module', 'session_type', 'exam_period', 'date', 'label', 'topic', 'get_class_level']
+    list_filter = ['session_type', 'exam_period', 'module__class_level', 'module__semester', 'date']
     search_fields = ['topic', 'label']
     inlines = [AttendanceRecordInline]
 
@@ -65,5 +65,6 @@ class SessionAdmin(admin.ModelAdmin):
 
 @admin.register(AttendanceRecord)
 class AttendanceRecordAdmin(admin.ModelAdmin):
-    list_display = ['session', 'student', 'status']
-    list_filter = ['status', 'session__module__class_level', 'session__module']
+    list_display = ['session', 'student', 'status', 'certificate_submitted', 'sick_note']
+    list_filter = ['status', 'certificate_submitted', 'session__module__class_level', 'session__module']
+    search_fields = ['sick_note', 'student__name', 'student__nactvet_reg_no']

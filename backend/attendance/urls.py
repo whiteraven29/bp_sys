@@ -15,4 +15,7 @@ urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
     path('report/', views.report, name='report'),
     path('all-modules/', views.all_modules, name='all-modules'),
+    path('eligibility/', views.eligibility, name='eligibility'),
+    path('sick-records/', views.sick_records, name='sick-records'),
+    path('sick-records/<int:pk>/', views.update_sick_record, name='update-sick-record'),
 ]

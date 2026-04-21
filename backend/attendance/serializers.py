@@ -126,12 +126,13 @@ class StudentSerializer(serializers.ModelSerializer):
 class AttendanceRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttendanceRecord
-        fields = ['id', 'student', 'status']
+        fields = ['id', 'student', 'status', 'sick_note', 'certificate_submitted']
 
 
 class SessionSerializer(serializers.ModelSerializer):
     module_name = serializers.CharField(source='module.name', read_only=True)
     session_type_display = serializers.CharField(source='get_session_type_display', read_only=True)
+    exam_period_display = serializers.CharField(source='get_exam_period_display', read_only=True)
     records = AttendanceRecordSerializer(many=True, read_only=True)
     present_count = serializers.SerializerMethodField()
     sick_count = serializers.SerializerMethodField()
@@ -143,6 +144,7 @@ class SessionSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'module', 'module_name',
             'session_type', 'session_type_display',
+            'exam_period', 'exam_period_display',
             'date', 'label', 'topic',
             'records', 'present_count', 'sick_count', 'absent_count',
             'attendance_pct', 'created_at',
@@ -170,7 +172,7 @@ class SessionCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Session
-        fields = ['id', 'module', 'session_type', 'date', 'label', 'topic', 'records']
+        fields = ['id', 'module', 'session_type', 'exam_period', 'date', 'label', 'topic', 'records']
         read_only_fields = ['id']
 
     def create(self, validated_data):
@@ -181,9 +183,12 @@ class SessionCreateSerializer(serializers.ModelSerializer):
             status = rec.get('status', 'P')
             if status not in ('P', 'A', 'S'):
                 status = 'P'
+            sick_note = str(rec.get('sick_note', '')).strip() if status == 'S' else ''
             try:
                 student = Student.objects.get(nactvet_reg_no=reg_no, module=session.module)
-                AttendanceRecord.objects.create(session=session, student=student, status=status)
+                AttendanceRecord.objects.create(
+                    session=session, student=student, status=status, sick_note=sick_note
+                )
             except Student.DoesNotExist:
                 pass
         return session
