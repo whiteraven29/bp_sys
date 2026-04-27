@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord, TeacherProfile
+from .models import AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord, TeacherProfile, StudentResult
 
 
 @admin.register(AcademicYear)
@@ -30,8 +30,8 @@ class TeacherProfileAdmin(admin.ModelAdmin):
 
 @admin.register(Module)
 class ModuleAdmin(admin.ModelAdmin):
-    list_display = ['code', 'name', 'teacher', 'class_level', 'semester']
-    list_filter = ['class_level', 'semester__academic_year']
+    list_display = ['code', 'name', 'teacher', 'has_practical', 'class_level', 'semester']
+    list_filter = ['has_practical', 'class_level', 'semester__academic_year']
     search_fields = ['name', 'code', 'teacher']
 
 
@@ -68,3 +68,11 @@ class AttendanceRecordAdmin(admin.ModelAdmin):
     list_display = ['session', 'student', 'status', 'certificate_submitted', 'sick_note']
     list_filter = ['status', 'certificate_submitted', 'session__module__class_level', 'session__module']
     search_fields = ['sick_note', 'student__name', 'student__nactvet_reg_no']
+
+
+@admin.register(StudentResult)
+class StudentResultAdmin(admin.ModelAdmin):
+    list_display = ['student', 'assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical', 'updated_at']
+    list_filter  = ['student__module__class_level', 'student__module__semester', 'student__module__has_practical']
+    search_fields = ['student__name', 'student__nactvet_reg_no']
+    readonly_fields = ['updated_at']

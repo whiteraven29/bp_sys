@@ -1,4 +1,7 @@
+from decimal import Decimal
+
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 
@@ -27,6 +30,11 @@ class Semester(models.Model):
     academic_year = models.ForeignKey(AcademicYear, on_delete=models.CASCADE, related_name='semesters')
     number = models.PositiveSmallIntegerField(choices=NUMBER_CHOICES)
     is_active = models.BooleanField(default=False)
+
+    # Attendance cutoff dates — teachers cannot record attendance after each date
+    cat1_cutoff = models.DateField(null=True, blank=True, verbose_name='CAT 1 Attendance Cutoff')
+    cat2_cutoff = models.DateField(null=True, blank=True, verbose_name='CAT 2 Attendance Cutoff')
+    end_cutoff  = models.DateField(null=True, blank=True, verbose_name='End-of-Semester Attendance Cutoff')
 
     class Meta:
         unique_together = ('academic_year', 'number')
@@ -65,6 +73,11 @@ class Module(models.Model):
     teacher = models.CharField(max_length=200)
     class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, related_name='modules')
     semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='modules')
+    has_practical = models.BooleanField(
+        default=False,
+        verbose_name='Has Practical Component',
+        help_text='Enable for modules assessed with both theory and practical components.',
+    )
     teachers = models.ManyToManyField(
         settings.AUTH_USER_MODEL, related_name='modules_taught', blank=True
     )
@@ -146,3 +159,51 @@ class AttendanceRecord(models.Model):
 
     def __str__(self):
         return f"{self.student.nactvet_reg_no} @ {self.session} = {self.get_status_display()}"
+
+
+def _mark_field(**kwargs):
+    """Raw mark field: 0–100, nullable (not yet entered)."""
+    validators = [MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))]
+    return models.DecimalField(
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        validators=validators,
+        **kwargs,
+    )
+
+
+class StudentResult(models.Model):
+    """
+    CA + End-of-Semester marks for one student.
+
+    CA weights (40 % total):
+        Theory-only : A1→5% A2→5% CAT1→15% CAT2→15%
+        Theory+Prac : A1→2% A2→2% CAT1-T→8% CAT2-T→8% P1→10% P2→10%
+
+    End-of-Semester exam weights (60 % total):
+        Theory-only : end_theory → 60 %
+        Theory+Prac : end_theory → 30 %   end_practical → 30 %
+
+    CA eligibility (50 % of 40):
+        Theory-only : total_ca ≥ 20
+        Theory+Prac : theory_ca ≥ 10  AND  practical_ca ≥ 10
+
+    Final total = total_ca + end exam weighted  (max 100)
+    """
+
+    student        = models.OneToOneField(Student, on_delete=models.CASCADE, related_name='result')
+    assign1        = _mark_field(verbose_name='Assignment 1 (raw /100)')
+    assign2        = _mark_field(verbose_name='Assignment 2 (raw /100)')
+    cat1_theory    = _mark_field(verbose_name='CAT 1 – Theory (raw /100)')
+    cat2_theory    = _mark_field(verbose_name='CAT 2 – Theory (raw /100)')
+    cat1_practical = _mark_field(verbose_name='Practical Test 1 (raw /100)')
+    cat2_practical = _mark_field(verbose_name='Practical Test 2 (raw /100)')
+    end_theory     = _mark_field(verbose_name='End of Semester – Theory/Written (raw /100)')
+    end_practical  = _mark_field(verbose_name='End of Semester – Practical (raw /100)')
+    updated_at     = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['student__name']
+
+    def __str__(self):
+        return f'Result: {self.student}'

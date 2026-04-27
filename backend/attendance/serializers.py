@@ -1,15 +1,27 @@
 from rest_framework import serializers
-from .models import AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord
+from .models import AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord, StudentResult
+
+
+# ── Weighted-mark helper ───────────────────────────────────────────────────────
+
+def _wt(raw, weight):
+    """Convert a raw /100 mark to its weighted contribution. None if not entered."""
+    if raw is None:
+        return None
+    return round(float(raw) / 100 * weight, 2)
 
 
 class SemesterSerializer(serializers.ModelSerializer):
-    year_name = serializers.CharField(source='academic_year.name', read_only=True)
-    label = serializers.CharField(read_only=True)
+    year_name    = serializers.CharField(source='academic_year.name', read_only=True)
+    label        = serializers.CharField(read_only=True)
     module_count = serializers.SerializerMethodField()
 
     class Meta:
-        model = Semester
-        fields = ['id', 'academic_year', 'year_name', 'number', 'label', 'is_active', 'module_count']
+        model  = Semester
+        fields = [
+            'id', 'academic_year', 'year_name', 'number', 'label', 'is_active', 'module_count',
+            'cat1_cutoff', 'cat2_cutoff', 'end_cutoff',
+        ]
         read_only_fields = ['id']
 
     def get_module_count(self, obj):
@@ -48,7 +60,7 @@ class ModuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Module
         fields = [
-            'id', 'name', 'code', 'teacher',
+            'id', 'name', 'code', 'teacher', 'has_practical',
             'class_level', 'class_level_name',
             'semester', 'semester_label',
             'student_count', 'session_count', 'theory_count', 'practical_count',
@@ -192,6 +204,120 @@ class SessionCreateSerializer(serializers.ModelSerializer):
             except Student.DoesNotExist:
                 pass
         return session
+
+
+class StudentResultSerializer(serializers.ModelSerializer):
+    student_name   = serializers.CharField(source='student.name',           read_only=True)
+    student_reg_no = serializers.CharField(source='student.nactvet_reg_no', read_only=True)
+    module_id      = serializers.IntegerField(source='student.module.id',   read_only=True)
+    has_practical  = serializers.BooleanField(source='student.module.has_practical', read_only=True)
+
+    # Weighted marks (read-only, computed)
+    assign1_w      = serializers.SerializerMethodField()
+    assign2_w      = serializers.SerializerMethodField()
+    cat1_theory_w  = serializers.SerializerMethodField()
+    cat2_theory_w  = serializers.SerializerMethodField()
+    cat1_prac_w    = serializers.SerializerMethodField()
+    cat2_prac_w    = serializers.SerializerMethodField()
+
+    # Totals & eligibility
+    theory_ca          = serializers.SerializerMethodField()
+    practical_ca       = serializers.SerializerMethodField()
+    total_ca           = serializers.SerializerMethodField()
+    theory_eligible    = serializers.SerializerMethodField()
+    practical_eligible = serializers.SerializerMethodField()
+    ca_eligible        = serializers.SerializerMethodField()
+
+    # End-of-semester exam (weighted, read-only)
+    end_theory_w  = serializers.SerializerMethodField()
+    end_prac_w    = serializers.SerializerMethodField()
+    final_total   = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = StudentResult
+        fields = [
+            'id', 'student', 'student_name', 'student_reg_no', 'module_id', 'has_practical',
+            'assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical',
+            'assign1_w', 'assign2_w', 'cat1_theory_w', 'cat2_theory_w', 'cat1_prac_w', 'cat2_prac_w',
+            'theory_ca', 'practical_ca', 'total_ca',
+            'theory_eligible', 'practical_eligible', 'ca_eligible',
+            'end_theory', 'end_practical',
+            'end_theory_w', 'end_prac_w', 'final_total',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'updated_at']
+
+    def _hp(self, obj):
+        return obj.student.module.has_practical
+
+    # ── Individual weighted fields ──────────────────────────────────────────────
+    def get_assign1_w(self, obj):     return _wt(obj.assign1,        2 if self._hp(obj) else 5)
+    def get_assign2_w(self, obj):     return _wt(obj.assign2,        2 if self._hp(obj) else 5)
+    def get_cat1_theory_w(self, obj): return _wt(obj.cat1_theory,    8 if self._hp(obj) else 15)
+    def get_cat2_theory_w(self, obj): return _wt(obj.cat2_theory,    8 if self._hp(obj) else 15)
+    def get_cat1_prac_w(self, obj):   return _wt(obj.cat1_practical, 10) if self._hp(obj) else None
+    def get_cat2_prac_w(self, obj):   return _wt(obj.cat2_practical, 10) if self._hp(obj) else None
+
+    # ── Sub-totals ──────────────────────────────────────────────────────────────
+    def get_theory_ca(self, obj):
+        vals = [self.get_assign1_w(obj), self.get_assign2_w(obj),
+                self.get_cat1_theory_w(obj), self.get_cat2_theory_w(obj)]
+        filled = [v for v in vals if v is not None]
+        return round(sum(filled), 2) if filled else None
+
+    def get_practical_ca(self, obj):
+        if not self._hp(obj):
+            return None
+        vals = [self.get_cat1_prac_w(obj), self.get_cat2_prac_w(obj)]
+        filled = [v for v in vals if v is not None]
+        return round(sum(filled), 2) if filled else None
+
+    def get_total_ca(self, obj):
+        t = self.get_theory_ca(obj)
+        p = self.get_practical_ca(obj)
+        if t is None and p is None:
+            return None
+        return round((t or 0) + (p or 0), 2)
+
+    # ── Eligibility (only set when all required marks are present) ──────────────
+    def get_theory_eligible(self, obj):
+        if any(v is None for v in [obj.assign1, obj.assign2, obj.cat1_theory, obj.cat2_theory]):
+            return None
+        t = self.get_theory_ca(obj)
+        return t >= (10 if self._hp(obj) else 20) if t is not None else None
+
+    def get_practical_eligible(self, obj):
+        if not self._hp(obj):
+            return None
+        if obj.cat1_practical is None or obj.cat2_practical is None:
+            return None
+        p = self.get_practical_ca(obj)
+        return p >= 10 if p is not None else None
+
+    def get_ca_eligible(self, obj):
+        t_elig = self.get_theory_eligible(obj)
+        if not self._hp(obj):
+            return t_elig
+        p_elig = self.get_practical_eligible(obj)
+        if t_elig is None or p_elig is None:
+            return None
+        return t_elig and p_elig
+
+    # ── End-of-semester exam ───────────────────────────────────────────────────
+    def get_end_theory_w(self, obj):
+        weight = 30 if self._hp(obj) else 60
+        return _wt(obj.end_theory, weight)
+
+    def get_end_prac_w(self, obj):
+        return _wt(obj.end_practical, 30) if self._hp(obj) else None
+
+    def get_final_total(self, obj):
+        ca = self.get_total_ca(obj)
+        et = self.get_end_theory_w(obj)
+        ep = self.get_end_prac_w(obj)
+        if ca is None and et is None and ep is None:
+            return None
+        return round((ca or 0) + (et or 0) + (ep or 0), 2)
 
 
 class BulkStudentSerializer(serializers.Serializer):

@@ -226,6 +226,30 @@
   .staff-only { display: none; }
   .staff-only.visible { display: block; }
 
+  /* admin-only hides nav buttons (flex) and block elements until body.is-admin is set */
+  .admin-only { display: none !important; }
+  body.is-admin .admin-only { display: flex !important; }
+  body.is-admin .admin-only.card,
+  body.is-admin .admin-only.form-grid,
+  body.is-admin .admin-only.form-grid-3 { display: grid !important; }
+  body.is-admin .admin-only.card { display: block !important; }
+
+  /* role badge in header */
+  .role-badge {
+    font-size: .65rem; font-family: var(--font-mono); font-weight: 700;
+    padding: 2px 8px; border-radius: 99px; letter-spacing: .06em;
+  }
+  .role-badge.admin  { background: rgba(239,68,68,.15);  color: var(--red);    border: 1px solid rgba(239,68,68,.3); }
+  .role-badge.teacher{ background: rgba(79,142,247,.15); color: var(--accent); border: 1px solid rgba(79,142,247,.3); }
+
+  /* teacher notice card */
+  .teacher-notice {
+    background: rgba(79,142,247,.06); border: 1px solid rgba(79,142,247,.2);
+    border-radius: var(--radius); padding: 14px 18px; margin-bottom: 20px;
+    font-size: .84rem; color: var(--muted); display: none;
+  }
+  body:not(.is-admin) .teacher-notice { display: flex; align-items: flex-start; gap: 10px; }
+
   /* ── MOBILE ── */
   @media (max-width: 768px) {
     .hamburger { display: flex; }
@@ -266,19 +290,69 @@
 
   /* ── PRINT STYLES ── */
   @media print {
-    header, aside, .sidebar-overlay, #toast, .modal-overlay,
-    .btn, .form-grid, .form-grid-3, .card:not(#elig-print-area),
-    .stats-grid, .page-sub, #page-eligibility > .card:first-child { display: none !important; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+    /* Hide all chrome */
+    header, aside, .sidebar-overlay, #toast, .modal-overlay { display: none !important; }
+    .btn, .form-grid, .form-grid-3, .stats-grid, .page-sub { display: none !important; }
+
+    /* All pages hidden; each body class shows exactly one */
+    .page { display: none !important; }
+
+    /* White canvas */
     body, main { background: #fff !important; color: #000 !important; }
-    main { margin-left: 0 !important; padding: 0 !important; }
-    #page-eligibility { display: block !important; }
-    #elig-print-area { display: block !important; border: none !important; }
-    #elig-print-area .card-title { font-size: 1rem; margin-bottom: 8px; }
-    table { font-size: .78rem; }
-    th, td { padding: 6px 8px; border: 1px solid #ccc; }
-    thead tr { background: #eee !important; }
-    .badge { border: 1px solid currentColor; }
-    .print-header { display: block !important; text-align: center; margin-bottom: 12px; }
+    main { margin-left: 0 !important; padding: 8px 20px !important; }
+
+    /* Clean table: white fill, visible borders */
+    table { font-size: .8rem; width: 100%; border-collapse: collapse; }
+    th, td { padding: 5px 8px; border: 1px solid #bbb !important;
+              background: #fff !important; color: #000 !important; }
+    thead th { font-weight: 700; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
+
+    /* Inputs inside table cells: render as plain values */
+    input[type=number] { border: none !important; background: transparent !important;
+                         box-shadow: none !important; width: auto !important;
+                         padding: 0 !important; font-size: .8rem; text-align: center; color: #000 !important; }
+
+    /* Status colours — text only, no fills */
+    .elig-yes { color: #16a34a !important; font-weight: 700 !important; }
+    .elig-no  { color: #dc2626 !important; font-weight: 700 !important; }
+    .elig-na  { color: #666 !important; }
+
+    /* Badges: text colour only */
+    .badge { background: transparent !important; border: none !important;
+             padding: 0 !important; font-weight: 700 !important; font-size: .78rem !important; }
+    .badge-green  { color: #16a34a !important; }
+    .badge-red    { color: #dc2626 !important; }
+    .badge-yellow { color: #b45309 !important; }
+    .badge-blue   { color: #1d4ed8 !important; }
+    .badge-purple { color: #6d28d9 !important; }
+    .badge-orange { color: #c2410c !important; }
+
+    /* Print header */
+    .print-header { display: block !important; text-align: center; margin-bottom: 14px;
+      padding-bottom: 8px; font-size: 1rem; font-weight: 700; color: #000;
+      border-bottom: 2px solid #000; }
+
+    /* ── Eligibility print ── */
+    body.print-elig #page-eligibility { display: block !important; }
+    body.print-elig .card:not(#elig-print-area) { display: none !important; }
+    body.print-elig #elig-print-area { display: block !important; border: none !important;
+                                       box-shadow: none !important; padding: 0 !important; }
+
+    /* ── CA Results print ── */
+    body.print-ca #page-results    { display: block !important; }
+    body.print-ca #res-module-info { display: block !important; }
+    body.print-ca .card:not(#res-ca-print-area) { display: none !important; }
+    body.print-ca #res-ca-print-area { display: block !important; border: none !important;
+                                       box-shadow: none !important; padding: 0 !important; }
+
+    /* ── Final Results print ── */
+    body.print-final #page-results    { display: block !important; }
+    body.print-final #res-module-info { display: block !important; }
+    body.print-final .card:not(#end-exam-card) { display: none !important; }
+    body.print-final #end-exam-card { display: block !important; border: none !important;
+                                      box-shadow: none !important; padding: 0 !important; }
   }
   .print-header { display: none; }
 </style>
@@ -297,6 +371,7 @@
     <div class="user-chip" onclick="openProfileModal()" title="My modules">
       <div class="user-avatar" id="user-avatar">👤</div>
       <span class="uname" id="user-name">Me</span>
+      <span class="role-badge" id="role-badge">—</span>
     </div>
     <a href="{% url 'logout' %}" class="logout-btn"><span>Sign out</span> ↩</a>
   </div>
@@ -308,12 +383,13 @@
   <aside id="sidebar">
     <div class="aside-label">Navigation</div>
     <button class="nav-btn active" data-page="dashboard" onclick="showPage('dashboard',this)"><span class="icon">📊</span> Dashboard</button>
-    <button class="nav-btn" data-page="modules" onclick="showPage('modules',this)"><span class="icon">📚</span> Modules</button>
-    <button class="nav-btn" data-page="students" onclick="showPage('students',this)"><span class="icon">🎓</span> Students</button>
+    <button class="nav-btn admin-only" data-page="modules" onclick="showPage('modules',this)"><span class="icon">📚</span> Modules</button>
+    <button class="nav-btn admin-only" data-page="students" onclick="showPage('students',this)"><span class="icon">🎓</span> Students</button>
     <button class="nav-btn" data-page="attendance" onclick="showPage('attendance',this)"><span class="icon">✅</span> Take Attendance</button>
+    <button class="nav-btn" data-page="results" onclick="showPage('results',this)"><span class="icon">📝</span> Results / CA</button>
     <button class="nav-btn" data-page="reports" onclick="showPage('reports',this)"><span class="icon">📈</span> Reports</button>
-    <button class="nav-btn" data-page="eligibility" onclick="showPage('eligibility',this)"><span class="icon">🎫</span> Eligibility</button>
-    <button class="nav-btn" data-page="sick" onclick="showPage('sick',this)"><span class="icon">🤒</span> Sick Records</button>
+    <button class="nav-btn admin-only" data-page="eligibility" onclick="showPage('eligibility',this)"><span class="icon">🎫</span> Eligibility</button>
+    <button class="nav-btn admin-only" data-page="sick" onclick="showPage('sick',this)"><span class="icon">🤒</span> Sick Records</button>
     <div class="aside-label" style="margin-top:10px;">My Modules</div>
     <div id="sidebar-levels"></div>
   </aside>
@@ -324,6 +400,16 @@
     <div class="page active" id="page-dashboard">
       <div class="page-title">Dashboard</div>
       <div class="page-sub" id="dash-sub">Overview of your attendance activity</div>
+
+      <!-- Teacher-only notice -->
+      <div class="teacher-notice">
+        <span style="font-size:1.2rem;flex-shrink:0;">ℹ️</span>
+        <div>
+          <strong style="color:var(--text);">Teacher access</strong> — You can take attendance for your assigned modules and view attendance reports.
+          Contact the administrator to add/remove modules, enrol or remove students, or manage eligibility lists.
+        </div>
+      </div>
+
       <div class="stats-grid">
         <div class="stat-card" style="--c:var(--accent)"><div class="label">My Modules</div><div class="value" id="stat-modules">—</div><div class="sublabel">registered</div></div>
         <div class="stat-card" style="--c:var(--green)"><div class="label">Total Students</div><div class="value" id="stat-students">—</div><div class="sublabel">enrolled</div></div>
@@ -331,6 +417,31 @@
         <div class="stat-card" style="--c:var(--accent2)"><div class="label">Avg Attendance</div><div class="value" id="stat-avg">—</div><div class="sublabel">P + Sick</div></div>
       </div>
       <div class="stats-grid" id="level-stats"></div>
+
+      <!-- Staff: Attendance cutoff dates -->
+      <div class="card staff-only" id="cutoff-card">
+        <div class="card-title">🔒 Attendance Cutoff Dates
+          <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— teachers cannot record attendance after each date</span>
+        </div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field">
+            <label>CAT 1 Cutoff</label>
+            <input type="date" id="cutoff-cat1">
+            <span id="cutoff-cat1-status" style="font-size:.72rem;margin-top:3px;"></span>
+          </div>
+          <div class="field">
+            <label>CAT 2 Cutoff</label>
+            <input type="date" id="cutoff-cat2">
+            <span id="cutoff-cat2-status" style="font-size:.72rem;margin-top:3px;"></span>
+          </div>
+          <div class="field">
+            <label>End of Semester Cutoff</label>
+            <input type="date" id="cutoff-end">
+            <span id="cutoff-end-status" style="font-size:.72rem;margin-top:3px;"></span>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="saveCutoffDates()">💾 Save Cutoff Dates</button>
+      </div>
 
       <!-- Staff: Advance semester -->
       <div class="card staff-only" id="advance-semester-card">
@@ -365,6 +476,10 @@
           <div class="field"><label>Module Code *</label><input id="mod-code" placeholder="e.g. BM401" /></div>
           <div class="field"><label>Your Display Name *</label><input id="mod-teacher" placeholder="e.g. Mr. Mwangi" /></div>
         </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;margin-bottom:14px;cursor:pointer;">
+          <input type="checkbox" id="mod-has-practical" style="width:16px;height:16px;">
+          <span>Has Practical Component <span style="color:var(--muted);font-size:.78rem;">(theory + practical CA weighting)</span></span>
+        </label>
         <button class="btn btn-primary" onclick="createModule()">➕ Add Module</button>
       </div>
       <div class="card">
@@ -493,6 +608,75 @@
       </div>
     </div>
 
+    <!-- RESULTS / CA MARKS -->
+    <div class="page" id="page-results">
+      <div class="page-title">Results — Continuous Assessment</div>
+      <div class="page-sub">Enter raw marks out of 100 per student — weighted totals &amp; eligibility calculated automatically</div>
+
+      <!-- Module selector -->
+      <div class="card">
+        <div class="card-title">Select Module</div>
+        <div class="form-grid-3">
+          <div class="field"><label>Semester</label><select id="res-flt-sem" onchange="onResFilterChange()"><option value="">All Semesters</option></select></div>
+          <div class="field"><label>Class Level</label><select id="res-flt-level" onchange="onResFilterChange()"><option value="">All Levels</option></select></div>
+          <div class="field"><label>Module *</label><select id="res-flt-module" onchange="loadResultsModule()"><option value="">— select module —</option></select></div>
+        </div>
+      </div>
+
+      <!-- Module info + download (shown after module selected) -->
+      <div id="res-module-info" style="display:none">
+        <div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 20px;">
+          <div>
+            <div style="font-weight:700;font-size:.95rem;" id="res-mod-name">—</div>
+            <div style="font-size:.78rem;color:var(--muted);" id="res-mod-meta">—</div>
+          </div>
+          <div id="res-mod-type-badge" style="margin-left:auto;"></div>
+          <div class="admin-only" style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="downloadResultsExcel()">⬇ CA Results</button>
+            <button class="btn btn-green btn-sm" onclick="downloadFinalExcel()">⬇ Final Results</button>
+          </div>
+        </div>
+
+        <!-- Weighting legend -->
+        <div class="card" style="padding:12px 20px;font-size:.8rem;color:var(--muted);" id="res-weight-legend"></div>
+
+        <!-- CA Marks table -->
+        <div class="card" id="res-ca-print-area">
+          <div class="print-header" id="ca-print-header"></div>
+          <div class="card-title">
+            📝 CA Marks <span style="font-size:.75rem;font-weight:400;color:var(--muted);">(Assignments + CATs — 40%)</span>
+            <div style="display:flex;gap:6px;margin-left:auto;">
+              <button class="btn btn-secondary btn-sm" onclick="printCAResults()">🖨 Print</button>
+              <button class="btn btn-primary btn-sm" onclick="saveAllResults()">💾 Save</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="res-table">
+              <thead id="res-thead"></thead>
+              <tbody id="res-tbody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:.78rem;color:var(--muted);margin-top:10px;" id="res-save-info"></div>
+        </div>
+
+        <!-- End-of-Semester Exam (admin only, shown by JS) -->
+        <div class="card" id="end-exam-card" style="display:none;">
+          <div class="print-header" id="final-print-header"></div>
+          <div class="card-title">
+            🎓 End of Semester Exam <span id="end-exam-weight-label" style="font-size:.75rem;font-weight:400;color:var(--muted);"></span>
+            <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="printFinalResults()">🖨 Print</button>
+          </div>
+          <div class="table-wrap">
+            <table id="end-exam-table">
+              <thead id="end-exam-thead"></thead>
+              <tbody id="end-exam-tbody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:.78rem;color:var(--muted);margin-top:10px;" id="end-exam-save-info"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- ELIGIBILITY -->
     <div class="page" id="page-eligibility">
       <div class="page-title">Exam Eligibility</div>
@@ -514,7 +698,8 @@
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" onclick="loadEligibility()">🔍 Apply</button>
-          <button class="btn btn-primary btn-sm" onclick="printEligibility()">🖨 Print List</button>
+          <button class="btn btn-primary btn-sm" onclick="printEligibility()">🖨 Print</button>
+          <button class="btn btn-green btn-sm" onclick="downloadEligibilityExcel()">⬇ Download Excel</button>
         </div>
       </div>
       <div class="stats-grid">
@@ -715,8 +900,9 @@ function showPage(name, btn) {
   closeSidebar();
   if (name === 'modules') loadModules();
   if (name === 'students') loadStudents();
-  if (name === 'attendance') loadAttendanceModuleSelect();
+  if (name === 'attendance') { loadAttendanceModuleSelect(); updatePeriodLocks(); }
   if (name === 'reports') loadReport();
+  if (name === 'results') loadResultsModule();
   if (name === 'eligibility') loadEligibility();
   if (name === 'sick') loadSickRecords();
 }
@@ -748,8 +934,13 @@ async function boot() {
       document.querySelectorAll('.staff-only').forEach(el => el.classList.add('visible'));
       if (state.activeSem) {
         document.getElementById('advance-sem-info').textContent = `Active: ${state.activeSem.label}`;
+        document.getElementById('cutoff-cat1').value = state.activeSem.cat1_cutoff || '';
+        document.getElementById('cutoff-cat2').value = state.activeSem.cat2_cutoff || '';
+        document.getElementById('cutoff-end').value  = state.activeSem.end_cutoff  || '';
+        updateCutoffStatuses(state.activeSem);
       }
     }
+    updatePeriodLocks();
 
     // Dashboard stats
     document.getElementById('stat-modules').textContent = dash.modules;
@@ -842,6 +1033,8 @@ function populateAllSelects() {
   buildLevelOptions(document.getElementById('att-flt-level'), true);
   buildSemOptions(document.getElementById('rpt-flt-sem'), true);
   buildLevelOptions(document.getElementById('rpt-flt-level'), true);
+  buildSemOptions(document.getElementById('res-flt-sem'), true);
+  buildLevelOptions(document.getElementById('res-flt-level'), true);
   buildSemOptions(document.getElementById('elig-flt-sem'), true);
   buildLevelOptions(document.getElementById('elig-flt-level'), true);
   buildSemOptions(document.getElementById('sick-flt-sem'), true);
@@ -909,16 +1102,18 @@ async function loadModules() {
 async function createModule() {
   const semId = document.getElementById('mod-semester').value;
   const lvlId = document.getElementById('mod-level').value;
-  const name = document.getElementById('mod-name').value.trim();
-  const code = document.getElementById('mod-code').value.trim().toUpperCase();
+  const name  = document.getElementById('mod-name').value.trim();
+  const code  = document.getElementById('mod-code').value.trim().toUpperCase();
   const teacher = document.getElementById('mod-teacher').value.trim();
+  const has_practical = document.getElementById('mod-has-practical').checked;
   if (!semId || !lvlId || !name || !code || !teacher) {
     toast('Please fill in all required fields', 'var(--red)'); return;
   }
   try {
-    await api('POST', '/modules/', { semester: semId, class_level: lvlId, name, code, teacher });
+    await api('POST', '/modules/', { semester: semId, class_level: lvlId, name, code, teacher, has_practical });
     toast('Module added!', 'var(--green)');
     ['mod-name','mod-code','mod-teacher'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('mod-has-practical').checked = false;
     loadModules(); buildSidebarModules();
   } catch(e) { toast(e?.detail || JSON.stringify(e), 'var(--red)'); }
 }
@@ -1276,6 +1471,440 @@ async function toggleClaim(id, el) {
   } catch(e) { toast(e?.detail || 'Error', 'var(--red)'); }
 }
 
+// ── RESULTS / CA MARKS PAGE ────────────────────────────────────────────────────
+let resModuleInfo = null;   // {id, name, code, has_practical, class_level, semester}
+let resData = [];           // array of result objects from API
+
+async function onResFilterChange() {
+  const semId = document.getElementById('res-flt-sem').value;
+  const lvlId = document.getElementById('res-flt-level').value;
+  await refreshModuleDropdowns(semId, lvlId, 'res-flt-module');
+  resModuleInfo = null;
+  document.getElementById('res-module-info').style.display = 'none';
+  const endCard = document.getElementById('end-exam-card');
+  if (endCard) endCard.style.display = 'none';
+}
+
+async function loadResultsModule() {
+  const modId = document.getElementById('res-flt-module').value;
+  if (!modId) {
+    document.getElementById('res-module-info').style.display = 'none';
+    const endCard = document.getElementById('end-exam-card');
+    if (endCard) endCard.style.display = 'none';
+    return;
+  }
+  try {
+    const data = await api('GET', `/results/module/?module_id=${modId}`);
+    resModuleInfo = data.module;
+    resData = data.results;
+    renderResultsPage();
+    document.getElementById('res-module-info').style.display = 'block';
+  } catch(e) { toast('Failed to load results', 'var(--red)'); }
+}
+
+function renderResultsPage() {
+  if (!resModuleInfo) return;
+  const hp = resModuleInfo.has_practical;
+
+  document.getElementById('res-mod-name').textContent = `${resModuleInfo.code} — ${resModuleInfo.name}`;
+  document.getElementById('res-mod-meta').textContent = `${resModuleInfo.class_level} · ${resModuleInfo.semester}`;
+  document.getElementById('res-mod-type-badge').innerHTML = hp
+    ? '<span class="badge badge-purple">Theory + Practical</span>'
+    : '<span class="badge badge-blue">Theory Only</span>';
+
+  // Weight legend
+  const legendEl = document.getElementById('res-weight-legend');
+  if (hp) {
+    legendEl.innerHTML = `
+      <strong style="color:var(--text)">CA Weighting (40% total):</strong>
+      Theory — A1: 2% · A2: 2% · CAT1: 8% · CAT2: 8% = <strong>20%</strong>&nbsp;&nbsp;|&nbsp;&nbsp;
+      Practical — P1: 10% · P2: 10% = <strong>20%</strong>&nbsp;&nbsp;|&nbsp;&nbsp;
+      Eligible: Theory CA ≥ 10 <em>AND</em> Practical CA ≥ 10
+    `;
+  } else {
+    legendEl.innerHTML = `
+      <strong style="color:var(--text)">CA Weighting (40% total):</strong>
+      A1: 5% · A2: 5% · CAT1: 15% · CAT2: 15%&nbsp;&nbsp;|&nbsp;&nbsp;
+      Eligible: Total CA ≥ 20 (i.e. 50% of 40)
+    `;
+  }
+
+  // Table headers
+  const theadEl = document.getElementById('res-thead');
+  if (hp) {
+    theadEl.innerHTML = `<tr>
+      <th>#</th><th>Reg. No.</th><th>Name</th>
+      <th>A1<br><span style="color:var(--muted);font-size:.6rem">/100 → 2%</span></th>
+      <th>A2<br><span style="color:var(--muted);font-size:.6rem">/100 → 2%</span></th>
+      <th>CAT1-T<br><span style="color:var(--muted);font-size:.6rem">/100 → 8%</span></th>
+      <th>CAT2-T<br><span style="color:var(--muted);font-size:.6rem">/100 → 8%</span></th>
+      <th>P1<br><span style="color:var(--muted);font-size:.6rem">/100 → 10%</span></th>
+      <th>P2<br><span style="color:var(--muted);font-size:.6rem">/100 → 10%</span></th>
+      <th>Theory CA<br><span style="color:var(--muted);font-size:.6rem">/20</span></th>
+      <th>Prac CA<br><span style="color:var(--muted);font-size:.6rem">/20</span></th>
+      <th>Total CA<br><span style="color:var(--muted);font-size:.6rem">/40</span></th>
+      <th>Status</th>
+    </tr>`;
+  } else {
+    theadEl.innerHTML = `<tr>
+      <th>#</th><th>Reg. No.</th><th>Name</th>
+      <th>A1<br><span style="color:var(--muted);font-size:.6rem">/100 → 5%</span></th>
+      <th>A2<br><span style="color:var(--muted);font-size:.6rem">/100 → 5%</span></th>
+      <th>CAT1<br><span style="color:var(--muted);font-size:.6rem">/100 → 15%</span></th>
+      <th>CAT2<br><span style="color:var(--muted);font-size:.6rem">/100 → 15%</span></th>
+      <th>Total CA<br><span style="color:var(--muted);font-size:.6rem">/40</span></th>
+      <th>Status</th>
+    </tr>`;
+  }
+
+  renderResultsTable();
+  if (state.isStaff) renderEndExamTable();
+}
+
+function mkInput(resultId, field, value) {
+  const v = value !== null && value !== undefined ? value : '';
+  return `<input type="number" min="0" max="100" step="0.01"
+    data-rid="${resultId}" data-field="${field}"
+    value="${v}"
+    style="width:68px;background:var(--bg);border:1px solid var(--border);color:var(--text);
+           border-radius:6px;padding:4px 7px;font-size:.8rem;text-align:center;"
+    oninput="onResInput(this)" onblur="autoSaveResult(this)">`;
+}
+
+function calcResultRow(rid) {
+  const hp = resModuleInfo.has_practical;
+  function val(field) {
+    const el = document.querySelector(`input[data-rid="${rid}"][data-field="${field}"]`);
+    if (!el || el.value === '') return null;
+    const v = parseFloat(el.value);
+    return (isNaN(v) || v < 0 || v > 100) ? null : v;
+  }
+  const w = (raw, wt) => raw !== null ? Math.round(raw / 100 * wt * 100) / 100 : null;
+
+  const a1  = val('assign1'), a2  = val('assign2');
+  const ct1 = val('cat1_theory'), ct2 = val('cat2_theory');
+  const cp1 = hp ? val('cat1_practical') : null;
+  const cp2 = hp ? val('cat2_practical') : null;
+
+  if (hp) {
+    const tw = [w(a1,2), w(a2,2), w(ct1,8), w(ct2,8)];
+    const pw = [w(cp1,10), w(cp2,10)];
+    const tca = tw.some(v=>v!==null) ? tw.reduce((s,v)=>s+(v||0),0) : null;
+    const pca = pw.some(v=>v!==null) ? pw.reduce((s,v)=>s+(v||0),0) : null;
+    const tot = (tca!==null||pca!==null) ? (tca||0)+(pca||0) : null;
+    const allT = [a1,a2,ct1,ct2].every(v=>v!==null);
+    const allP = [cp1,cp2].every(v=>v!==null);
+    const tElig = allT ? tca>=10 : null;
+    const pElig = allP ? pca>=10 : null;
+    const caElig = (tElig!==null&&pElig!==null) ? (tElig&&pElig) : null;
+    return { tca, pca, tot, tElig, pElig, caElig };
+  } else {
+    const tw = [w(a1,5), w(a2,5), w(ct1,15), w(ct2,15)];
+    const tca = tw.some(v=>v!==null) ? tw.reduce((s,v)=>s+(v||0),0) : null;
+    const allT = [a1,a2,ct1,ct2].every(v=>v!==null);
+    const caElig = allT ? tca>=20 : null;
+    return { tca, pca: null, tot: tca, tElig: null, pElig: null, caElig };
+  }
+}
+
+function fmtCA(v) {
+  if (v === null || v === undefined) return '<span style="color:var(--muted)">—</span>';
+  const color = v >= (resModuleInfo.has_practical ? 10 : 20) ? 'var(--green)' : 'var(--red)';
+  return `<span style="font-weight:700;color:${color}">${v.toFixed(2)}</span>`;
+}
+
+function eligBadge(v, label='') {
+  if (v === null || v === undefined) return `<span class="badge badge-yellow">Pending${label}</span>`;
+  return v
+    ? `<span class="badge badge-green">✔ Eligible${label}</span>`
+    : `<span class="badge badge-red">✘ Not Eligible${label}</span>`;
+}
+
+function onResInput(el) {
+  const rid   = el.dataset.rid;
+  const field = el.dataset.field;
+  updateResultRowCalc(rid);
+  if (field === 'end_theory' || field === 'end_practical') updateEndExamRowCalc(rid);
+}
+
+function updateEndExamRowCalc(rid) {
+  if (!resModuleInfo) return;
+  const hp = resModuleInfo.has_practical;
+  const c  = calcEndExamRow(rid);
+
+  // Find CA total from live CA cells (or from resData as fallback)
+  const totEl = document.getElementById(`tot-${rid}`);
+  let caTotal = null;
+  if (totEl) {
+    const strong = totEl.querySelector('strong');
+    if (strong) caTotal = parseFloat(strong.textContent);
+  }
+  if (caTotal === null) {
+    const rec = resData.find(r => r.id == rid);
+    if (rec && rec.total_ca !== null) caTotal = parseFloat(rec.total_ca);
+  }
+
+  const fin = (caTotal !== null || c.endTotal !== null)
+    ? Math.round(((caTotal || 0) + (c.endTotal || 0)) * 100) / 100
+    : null;
+
+  const etwEl = document.getElementById(`etw-${rid}`);
+  const epwEl = document.getElementById(`epw-${rid}`);
+  const finEl = document.getElementById(`fin-${rid}`);
+  const resEl = document.getElementById(`res-${rid}`);
+
+  if (etwEl) etwEl.innerHTML = c.etw !== null ? `<span style="color:var(--accent)">${c.etw.toFixed(2)}</span>` : '<span style="color:var(--muted)">—</span>';
+  if (epwEl && hp) epwEl.innerHTML = c.epw !== null ? `<span style="color:var(--accent2)">${c.epw.toFixed(2)}</span>` : '<span style="color:var(--muted)">—</span>';
+  if (finEl) finEl.innerHTML = fin !== null ? `<strong>${fin.toFixed(2)}</strong>` : '<span style="color:var(--muted)">—</span>';
+  if (resEl) {
+    resEl.innerHTML = fin === null
+      ? '<span class="badge badge-yellow">Pending</span>'
+      : fin >= 50 ? '<span class="badge badge-green">✔ PASS</span>' : '<span class="badge badge-red">✘ FAIL</span>';
+  }
+}
+
+function updateResultRowCalc(rid) {
+  const hp = resModuleInfo.has_practical;
+  const c  = calcResultRow(rid);
+  const tCAcell  = document.getElementById(`tca-${rid}`);
+  const pCAcell  = document.getElementById(`pca-${rid}`);
+  const totCell  = document.getElementById(`tot-${rid}`);
+  const eligCell = document.getElementById(`elig-${rid}`);
+
+  if (tCAcell) tCAcell.innerHTML = fmtCA(c.tca !== null ? Math.round(c.tca*100)/100 : null);
+  if (pCAcell && hp) pCAcell.innerHTML = fmtCA(c.pca !== null ? Math.round(c.pca*100)/100 : null);
+  if (totCell) totCell.innerHTML = c.tot !== null ? `<strong>${(Math.round(c.tot*100)/100).toFixed(2)}</strong>` : '<span style="color:var(--muted)">—</span>';
+  if (eligCell) {
+    if (hp) {
+      eligCell.innerHTML = eligBadge(c.caElig);
+    } else {
+      eligCell.innerHTML = eligBadge(c.caElig);
+    }
+  }
+}
+
+function renderResultsTable() {
+  const hp = resModuleInfo.has_practical;
+  const tbody = document.getElementById('res-tbody');
+  if (!resData.length) {
+    const cols = hp ? 13 : 9;
+    tbody.innerHTML = `<tr><td colspan="${cols}"><div class="empty"><div class="ei">🎓</div>No students enrolled</div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = resData.map((r, i) => {
+    const c = {
+      tca:  r.theory_ca,
+      pca:  r.practical_ca,
+      tot:  r.total_ca,
+      caElig: r.ca_eligible,
+    };
+    let row = `<tr>
+      <td>${i+1}</td>
+      <td><span style="font-family:var(--font-mono);font-size:.75rem">${r.student_reg_no}</span></td>
+      <td>${r.student_name}</td>
+      <td>${mkInput(r.id,'assign1',r.assign1)}</td>
+      <td>${mkInput(r.id,'assign2',r.assign2)}</td>
+      <td>${mkInput(r.id,'cat1_theory',r.cat1_theory)}</td>
+      <td>${mkInput(r.id,'cat2_theory',r.cat2_theory)}</td>`;
+    if (hp) {
+      row += `<td>${mkInput(r.id,'cat1_practical',r.cat1_practical)}</td>
+              <td>${mkInput(r.id,'cat2_practical',r.cat2_practical)}</td>
+              <td id="tca-${r.id}">${fmtCA(c.tca)}</td>
+              <td id="pca-${r.id}">${fmtCA(c.pca)}</td>`;
+    }
+    row += `<td id="tot-${r.id}">${c.tot !== null ? `<strong>${c.tot.toFixed(2)}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
+            <td id="elig-${r.id}">${eligBadge(c.caElig)}</td>
+    </tr>`;
+    return row;
+  }).join('');
+}
+
+async function saveAllResults() {
+  if (!resData.length) { toast('No results to save', 'var(--red)'); return; }
+
+  const FIELDS = ['assign1','assign2','cat1_theory','cat2_theory','cat1_practical','cat2_practical'];
+  const payload = resData.map(r => {
+    const item = { id: r.id };
+    FIELDS.forEach(f => {
+      const el = document.querySelector(`input[data-rid="${r.id}"][data-field="${f}"]`);
+      item[f] = el ? (el.value === '' ? null : parseFloat(el.value)) : null;
+    });
+    return item;
+  });
+
+  try {
+    const result = await api('POST', '/results/bulk_save/', payload);
+    toast(`Saved ${result.saved} student(s)${result.errors.length ? ' — ' + result.errors.length + ' error(s)' : ''}`, result.errors.length ? 'var(--yellow)' : 'var(--green)');
+    if (result.errors.length) console.warn('Save errors:', result.errors);
+    // Reload fresh data
+    const fresh = await api('GET', `/results/module/?module_id=${resModuleInfo.id}`);
+    resData = fresh.results;
+    document.getElementById('res-save-info').textContent = `Last saved: ${new Date().toLocaleTimeString()}`;
+  } catch(e) { toast(e?.detail || 'Save failed', 'var(--red)'); }
+}
+
+async function autoSaveResult(el) {
+  const rid   = parseInt(el.dataset.rid, 10);
+  const field = el.dataset.field;
+  const raw   = el.value.trim();
+  const value = raw === '' ? null : parseFloat(raw);
+  if (raw !== '' && (isNaN(value) || value < 0 || value > 100)) {
+    toast('Mark must be 0–100', 'var(--red)'); return;
+  }
+  el.style.borderColor = 'var(--accent)';
+  try {
+    const updated = await api('PATCH', `/results/${rid}/`, { [field]: value });
+    // Sync local data with fresh weighted values from API
+    const rec = resData.find(r => r.id === rid);
+    if (rec) Object.assign(rec, updated);
+    el.style.borderColor = 'var(--green)';
+    const isEndField = field === 'end_theory' || field === 'end_practical';
+    const infoId = isEndField ? 'end-exam-save-info' : 'res-save-info';
+    const infoEl = document.getElementById(infoId);
+    if (infoEl) infoEl.textContent = `Auto-saved at ${new Date().toLocaleTimeString()}`;
+    // Refresh calc cells
+    if (isEndField) updateEndExamRowCalc(rid);
+    setTimeout(() => { el.style.borderColor = ''; }, 1200);
+  } catch(e) {
+    el.style.borderColor = 'var(--red)';
+    toast('Auto-save failed: ' + (e?.detail || ''), 'var(--red)');
+    setTimeout(() => { el.style.borderColor = ''; }, 2000);
+  }
+}
+
+function downloadResultsExcel() {
+  const modId  = document.getElementById('res-flt-module').value;
+  const semId  = document.getElementById('res-flt-sem').value;
+  const lvlId  = document.getElementById('res-flt-level').value;
+  let url = '/api/results/download/?';
+  if (modId) url += `module_id=${modId}&`;
+  if (semId) url += `semester_id=${semId}&`;
+  if (lvlId) url += `class_level_id=${lvlId}&`;
+  window.location.href = url;
+}
+
+function downloadFinalExcel() {
+  const modId  = document.getElementById('res-flt-module').value;
+  const semId  = document.getElementById('res-flt-sem').value;
+  const lvlId  = document.getElementById('res-flt-level').value;
+  let url = '/api/results/download/final/?';
+  if (modId) url += `module_id=${modId}&`;
+  if (semId) url += `semester_id=${semId}&`;
+  if (lvlId) url += `class_level_id=${lvlId}&`;
+  window.location.href = url;
+}
+
+// ── END-OF-SEMESTER EXAM TABLE ─────────────────────────────────────────────────
+
+function renderEndExamTable() {
+  if (!resModuleInfo || !state.isStaff) return;
+  const hp = resModuleInfo.has_practical;
+
+  const card = document.getElementById('end-exam-card');
+  card.style.display = 'block';
+
+  // Weight label
+  const weightLbl = document.getElementById('end-exam-weight-label');
+  weightLbl.textContent = hp
+    ? '— Theory: 30% + Practical: 30% = 60% · enter marks as /100'
+    : '— Written: 60% · enter marks as /100';
+
+  // Header
+  const thead = document.getElementById('end-exam-thead');
+  if (hp) {
+    thead.innerHTML = `<tr>
+      <th>#</th><th>Reg. No.</th><th>Name</th>
+      <th>CA Total<br><span style="color:var(--muted);font-size:.6rem">/40</span></th>
+      <th>End Theory<br><span style="color:var(--muted);font-size:.6rem">/100 → 30%</span></th>
+      <th>End Practical<br><span style="color:var(--muted);font-size:.6rem">/100 → 30%</span></th>
+      <th>End Theory wt<br><span style="color:var(--muted);font-size:.6rem">/30</span></th>
+      <th>End Prac wt<br><span style="color:var(--muted);font-size:.6rem">/30</span></th>
+      <th>Final Total<br><span style="color:var(--muted);font-size:.6rem">/100</span></th>
+      <th>Result</th>
+    </tr>`;
+  } else {
+    thead.innerHTML = `<tr>
+      <th>#</th><th>Reg. No.</th><th>Name</th>
+      <th>CA Total<br><span style="color:var(--muted);font-size:.6rem">/40</span></th>
+      <th>End Exam<br><span style="color:var(--muted);font-size:.6rem">/100 → 60%</span></th>
+      <th>End Exam wt<br><span style="color:var(--muted);font-size:.6rem">/60</span></th>
+      <th>Final Total<br><span style="color:var(--muted);font-size:.6rem">/100</span></th>
+      <th>Result</th>
+    </tr>`;
+  }
+
+  renderEndExamRows();
+}
+
+function calcEndExamRow(rid) {
+  const hp = resModuleInfo.has_practical;
+  function val(field) {
+    const el = document.querySelector(`input[data-rid="${rid}"][data-field="${field}"]`);
+    if (!el || el.value === '') return null;
+    const v = parseFloat(el.value);
+    return (isNaN(v) || v < 0 || v > 100) ? null : v;
+  }
+  const w = (raw, wt) => raw !== null ? Math.round(raw / 100 * wt * 100) / 100 : null;
+  const et = val('end_theory');
+  const ep = hp ? val('end_practical') : null;
+  const etw = hp ? w(et, 30) : w(et, 60);
+  const epw = hp ? w(ep, 30) : null;
+  const endTotal = (etw !== null || epw !== null) ? (etw || 0) + (epw || 0) : null;
+  return { etw, epw, endTotal };
+}
+
+function renderEndExamRows() {
+  const hp = resModuleInfo.has_practical;
+  const tbody = document.getElementById('end-exam-tbody');
+  if (!resData.length) {
+    tbody.innerHTML = `<tr><td colspan="${hp ? 10 : 8}"><div class="empty"><div class="ei">🎓</div>No students enrolled</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = resData.map((r, i) => {
+    const caTotal = r.total_ca;
+    const caTd = caTotal !== null
+      ? `<strong>${parseFloat(caTotal).toFixed(2)}</strong>`
+      : '<span style="color:var(--muted)">—</span>';
+
+    const etw  = r.end_theory_w  !== null ? parseFloat(r.end_theory_w).toFixed(2)  : null;
+    const epw  = r.end_prac_w    !== null ? parseFloat(r.end_prac_w).toFixed(2)    : null;
+    const fin  = r.final_total   !== null ? parseFloat(r.final_total).toFixed(2)   : null;
+
+    const resultBadge = fin === null
+      ? '<span class="badge badge-yellow">Pending</span>'
+      : parseFloat(fin) >= 50
+        ? '<span class="badge badge-green">✔ PASS</span>'
+        : '<span class="badge badge-red">✘ FAIL</span>';
+
+    if (hp) {
+      return `<tr>
+        <td>${i+1}</td>
+        <td><span style="font-family:var(--font-mono);font-size:.75rem">${r.student_reg_no}</span></td>
+        <td>${r.student_name}</td>
+        <td>${caTd}</td>
+        <td>${mkInput(r.id,'end_theory',r.end_theory)}</td>
+        <td>${mkInput(r.id,'end_practical',r.end_practical)}</td>
+        <td id="etw-${r.id}">${etw !== null ? `<span style="color:var(--accent)">${etw}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+        <td id="epw-${r.id}">${epw !== null ? `<span style="color:var(--accent2)">${epw}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+        <td id="fin-${r.id}">${fin !== null ? `<strong>${fin}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
+        <td id="res-${r.id}">${resultBadge}</td>
+      </tr>`;
+    } else {
+      return `<tr>
+        <td>${i+1}</td>
+        <td><span style="font-family:var(--font-mono);font-size:.75rem">${r.student_reg_no}</span></td>
+        <td>${r.student_name}</td>
+        <td>${caTd}</td>
+        <td>${mkInput(r.id,'end_theory',r.end_theory)}</td>
+        <td id="etw-${r.id}">${etw !== null ? `<span style="color:var(--accent)">${etw}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+        <td id="fin-${r.id}">${fin !== null ? `<strong>${fin}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
+        <td id="res-${r.id}">${resultBadge}</td>
+      </tr>`;
+    }
+  }).join('');
+}
+
 // ── ELIGIBILITY PAGE ───────────────────────────────────────────────────────────
 let eligibilityData = { stats: {}, rows: [], threshold: 90 };
 
@@ -1337,7 +1966,8 @@ function renderEligibilityTable() {
     } else {
       eligCell = '<span class="elig-no">✘ NOT ELIGIBLE</span>';
     }
-    return `<tr>
+    const rowClass = elig === true ? 'row-eligible' : elig === false ? 'row-ineligible' : '';
+    return `<tr class="${rowClass}">
       <td>${i+1}</td>
       <td><span style="font-family:var(--font-mono);font-size:.78rem">${r.nactvet_reg_no}</span></td>
       <td>${r.name}</td>
@@ -1355,15 +1985,40 @@ function renderEligibilityTable() {
 function printEligibility() {
   const examType = document.querySelector('input[name="elig-exam-type"]:checked')?.value || 'cat1';
   const examLabels = { cat1: 'CAT 1', cat2: 'CAT 2', end: 'End of Semester' };
-  // Temporarily activate eligibility page for print
-  document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
-  document.getElementById('page-eligibility').style.display = 'block';
   document.getElementById('elig-print-header').textContent =
-    `${examLabels[examType]} Exam Eligibility — Threshold: ${eligibilityData.threshold}% — Printed: ${new Date().toLocaleDateString()}`;
+    `${examLabels[examType]} Exam Eligibility — Threshold: ${eligibilityData.threshold}% — ${new Date().toLocaleDateString()}`;
+  document.body.classList.add('print-elig');
   window.print();
-  // Restore display
-  document.querySelectorAll('.page').forEach(p => p.style.display = '');
-  document.getElementById('page-eligibility').classList.add('active');
+  document.body.classList.remove('print-elig');
+}
+
+function printCAResults() {
+  if (!resModuleInfo) { toast('Select a module first', 'var(--red)'); return; }
+  document.getElementById('ca-print-header').textContent =
+    `CA Results — ${resModuleInfo.code} · ${resModuleInfo.name} · ${resModuleInfo.class_level} · ${resModuleInfo.semester} — ${new Date().toLocaleDateString()}`;
+  document.body.classList.add('print-ca');
+  window.print();
+  document.body.classList.remove('print-ca');
+}
+
+function printFinalResults() {
+  if (!resModuleInfo) { toast('Select a module first', 'var(--red)'); return; }
+  document.getElementById('final-print-header').textContent =
+    `Final Results — ${resModuleInfo.code} · ${resModuleInfo.name} · ${resModuleInfo.class_level} · ${resModuleInfo.semester} — ${new Date().toLocaleDateString()}`;
+  document.body.classList.add('print-final');
+  window.print();
+  document.body.classList.remove('print-final');
+}
+
+function downloadEligibilityExcel() {
+  const semId = document.getElementById('elig-flt-sem').value;
+  const lvlId = document.getElementById('elig-flt-level').value;
+  const modId = document.getElementById('elig-flt-module').value;
+  let url = '/api/eligibility/download/?';
+  if (modId) url += `module_id=${modId}&`;
+  if (lvlId) url += `class_level_id=${lvlId}&`;
+  if (semId) url += `semester_id=${semId}&`;
+  window.location.href = url;
 }
 
 // ── SICK RECORDS PAGE ──────────────────────────────────────────────────────────
@@ -1456,6 +2111,68 @@ async function saveSickCert(id, checked) {
   } catch(e) { toast('Failed to update certificate status', 'var(--red)'); }
 }
 
+// ── ATTENDANCE CUTOFF DATES ────────────────────────────────────────────────────
+function updateCutoffStatuses(sem) {
+  const today = new Date().toISOString().split('T')[0];
+  function setStatus(elId, date) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!date) { el.textContent = 'Not set'; el.style.color = 'var(--muted)'; return; }
+    const closed = today > date;
+    el.textContent = closed ? `🔴 Closed (${date})` : `🟢 Open until ${date}`;
+    el.style.color  = closed ? 'var(--red)' : 'var(--green)';
+  }
+  setStatus('cutoff-cat1-status', sem.cat1_cutoff);
+  setStatus('cutoff-cat2-status', sem.cat2_cutoff);
+  setStatus('cutoff-end-status',  sem.end_cutoff);
+}
+
+async function saveCutoffDates() {
+  if (!state.activeSem) { toast('No active semester', 'var(--red)'); return; }
+  const cat1 = document.getElementById('cutoff-cat1').value || null;
+  const cat2 = document.getElementById('cutoff-cat2').value || null;
+  const end  = document.getElementById('cutoff-end').value  || null;
+  try {
+    const updated = await api('PATCH', `/semesters/${state.activeSem.id}/cutoffs/`, {
+      cat1_cutoff: cat1, cat2_cutoff: cat2, end_cutoff: end,
+    });
+    state.activeSem.cat1_cutoff = updated.cat1_cutoff;
+    state.activeSem.cat2_cutoff = updated.cat2_cutoff;
+    state.activeSem.end_cutoff  = updated.end_cutoff;
+    updateCutoffStatuses(state.activeSem);
+    updatePeriodLocks();
+    toast('Cutoff dates saved!', 'var(--green)');
+  } catch(e) { toast(e?.detail || 'Failed to save cutoffs', 'var(--red)'); }
+}
+
+function updatePeriodLocks() {
+  if (!state.activeSem) return;
+  const today = new Date().toISOString().split('T')[0];
+  const lockMap = {
+    'C1': state.activeSem.cat1_cutoff,
+    'C2': state.activeSem.cat2_cutoff,
+    'GN': state.activeSem.end_cutoff,
+  };
+  document.querySelectorAll('input[name="att-period"]').forEach(radio => {
+    const cutoff = lockMap[radio.value];
+    const locked = !!(cutoff && today > cutoff);
+    radio.disabled = locked;
+    const lbl = radio.closest('label');
+    if (lbl) {
+      lbl.style.opacity = locked ? '0.45' : '';
+      lbl.title = locked
+        ? `Closed — cutoff was ${cutoff}`
+        : (cutoff ? `Open until ${cutoff}` : '');
+    }
+  });
+  // If the currently selected period was locked, pick the first unlocked one
+  const sel = document.querySelector('input[name="att-period"]:checked');
+  if (sel && sel.disabled) {
+    const first = document.querySelector('input[name="att-period"]:not([disabled])');
+    if (first) first.checked = true;
+  }
+}
+
 // ── ADVANCE SEMESTER ───────────────────────────────────────────────────────────
 async function advanceSemester() {
   if (!confirm(`Advance from "${state.activeSem?.label}"? This cannot be undone.`)) return;
@@ -1473,6 +2190,23 @@ async function advanceSemester() {
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────────
+// Inject user info from Django template context immediately (no API round-trip needed)
+(function initUser() {
+  const username = '{{ request.user.username|escapejs }}';
+  const isStaff  = {{ request.user.is_staff|yesno:"true,false" }};
+  const initials = username.slice(0, 2).toUpperCase();
+  document.getElementById('user-name').textContent   = username;
+  document.getElementById('user-avatar').textContent = initials;
+  if (isStaff) {
+    document.body.classList.add('is-admin');
+    document.getElementById('role-badge').textContent  = 'Admin';
+    document.getElementById('role-badge').className    = 'role-badge admin';
+  } else {
+    document.getElementById('role-badge').textContent  = 'Teacher';
+    document.getElementById('role-badge').className    = 'role-badge teacher';
+  }
+})();
+
 document.getElementById('att-date').value = new Date().toISOString().split('T')[0];
 boot();
 </script>
