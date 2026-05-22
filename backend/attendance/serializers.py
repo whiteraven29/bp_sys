@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 from .models import AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord, StudentResult
 
 
@@ -321,12 +322,53 @@ class StudentResultSerializer(serializers.ModelSerializer):
 
 
 class BulkStudentSerializer(serializers.Serializer):
-    module = serializers.PrimaryKeyRelatedField(queryset=Module.objects.all())
+    module = serializers.PrimaryKeyRelatedField(queryset=Module.objects.all(), required=False, allow_null=True)
     students = serializers.ListField(child=serializers.DictField())
 
+    def _resolve_module(self, value):
+        if value is None:
+            return None
+        if isinstance(value, Module):
+            return value
+        if isinstance(value, int):
+            return Module.objects.filter(id=value).first()
+        try:
+            raw = str(value).strip()
+        except Exception:
+            return None
+        if not raw:
+            return None
+        if raw.isdigit():
+            module = Module.objects.filter(id=int(raw)).first()
+            if module:
+                return module
+        module = Module.objects.filter(code__iexact=raw).first()
+        if module:
+            return module
+        module = Module.objects.filter(name__iexact=raw).first()
+        if module:
+            return module
+        module = Module.objects.filter(code__icontains=raw).first()
+        if module:
+            return module
+        return Module.objects.filter(name__icontains=raw).first()
+
+    def validate(self, data):
+        user = self.context.get('user')
+        module = data.get('module')
+        if module and user and not user.is_staff:
+            if module not in user.modules_taught.all():
+                raise PermissionDenied('You may only add students to modules you teach.')
+        return data
+
     def create(self, validated_data):
-        module = validated_data['module']
+        default_module = validated_data.get('module')
         rows = validated_data['students']
+        user = self.context.get('user')
+        allowed_module_ids = None
+        if user and not user.is_staff:
+            allowed_module_ids = set(user.modules_taught.values_list('id', flat=True))
+
         added, skipped = 0, 0
         for row in rows:
             reg_no = str(row.get('nactvet_reg_no', '')).strip().upper()
@@ -334,6 +376,17 @@ class BulkStudentSerializer(serializers.Serializer):
             if not reg_no or not name:
                 skipped += 1
                 continue
+            module = default_module
+            module_source = row.get('module') or row.get('module_code') or row.get('module_name') or row.get('code')
+            if module_source:
+                resolved = self._resolve_module(module_source)
+                if resolved:
+                    module = resolved
+            if not module:
+                skipped += 1
+                continue
+            if allowed_module_ids is not None and module.id not in allowed_module_ids:
+                raise PermissionDenied('You may only add students to modules you teach.')
             _, created = Student.objects.get_or_create(
                 nactvet_reg_no=reg_no, module=module,
                 defaults={'name': name}

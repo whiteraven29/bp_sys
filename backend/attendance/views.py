@@ -259,25 +259,32 @@ class StudentViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
+        module = serializer.validated_data.get('module')
         if not self.request.user.is_staff:
-            raise PermissionDenied('Only the administrator can add students.')
+            allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
+            if module is None or module.id not in allowed_module_ids:
+                raise PermissionDenied('Only teachers for this module can add students.')
         serializer.save()
 
     def update(self, request, *args, **kwargs):
         if not request.user.is_staff:
-            raise PermissionDenied('Only the administrator can edit students.')
+            obj = self.get_object()
+            allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
+            if obj.module_id not in allowed_module_ids:
+                raise PermissionDenied('Only teachers for this module can edit students.')
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
         if not request.user.is_staff:
-            raise PermissionDenied('Only the administrator can remove students.')
+            allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
+            if obj.module_id not in allowed_module_ids:
+                raise PermissionDenied('Only teachers for this module can remove students.')
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=False, methods=['post'], url_path='bulk_create')
     def bulk_create(self, request):
-        if not request.user.is_staff:
-            raise PermissionDenied('Only the administrator can add students.')
-        serializer = BulkStudentSerializer(data=request.data)
+        serializer = BulkStudentSerializer(data=request.data, context={'user': request.user})
         serializer.is_valid(raise_exception=True)
         result = serializer.save()
         return Response(result, status=status.HTTP_201_CREATED)

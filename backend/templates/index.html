@@ -522,7 +522,9 @@
       <div class="card">
         <div class="card-title">📤 Bulk Upload via Excel</div>
         <div class="form-grid">
-          <div class="field"><label>Module *</label><select id="bulk-module"><option value="">— select module —</option></select></div>
+          <div class="field"><label>Module</label><select id="bulk-module"><option value="">— select module —</option></select>
+            <small style="display:block;color:var(--muted);margin-top:6px;">Leave blank to upload students for multiple modules using a module code/name column in the sheet.</small>
+          </div>
         </div>
         <div class="upload-zone" onclick="document.getElementById('excel-file').click()">
           <input type="file" id="excel-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelUpload(event)">
@@ -620,6 +622,12 @@
           <div class="field"><label>Semester</label><select id="res-flt-sem" onchange="onResFilterChange()"><option value="">All Semesters</option></select></div>
           <div class="field"><label>Class Level</label><select id="res-flt-level" onchange="onResFilterChange()"><option value="">All Levels</option></select></div>
           <div class="field"><label>Module *</label><select id="res-flt-module" onchange="loadResultsModule()"><option value="">— select module —</option></select></div>
+        </div>
+      </div>
+      <div class="card" style="padding:14px 20px; display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap;">
+        <div class="field" style="flex:1; min-width:260px; margin-bottom:0;">
+          <label>Search Students</label>
+          <input id="res-search" type="text" placeholder="Search by name or reg no" oninput="onResSearchChange()" style="width:100%;" />
         </div>
       </div>
 
@@ -1206,7 +1214,6 @@ async function deleteStudent(id, name) {
 function handleExcelUpload(event) {
   const file = event.target.files[0];
   const moduleId = document.getElementById('bulk-module').value;
-  if (!moduleId) { toast('Select a module first', 'var(--red)'); event.target.value = ''; return; }
   if (!file) return;
   const reader = new FileReader();
   reader.onload = async (e) => {
@@ -1218,10 +1225,16 @@ function handleExcelUpload(event) {
         const keys = Object.keys(r);
         const regKey = keys.find(k => /reg|nactvet|regno|id/i.test(k));
         const nameKey = keys.find(k => /name/i.test(k));
-        return { nactvet_reg_no: (r[regKey] || '').toString().trim().toUpperCase(), name: (r[nameKey] || '').toString().trim() };
-      }).filter(s => s.nactvet_reg_no && s.name);
+        const moduleKey = keys.find(k => /module|code/i.test(k));
+        return {
+          nactvet_reg_no: (r[regKey] || '').toString().trim().toUpperCase(),
+          name: (r[nameKey] || '').toString().trim(),
+          module: moduleId ? parseInt(moduleId, 10) : (r[moduleKey] || '').toString().trim(),
+        };
+      }).filter(s => s.nactvet_reg_no && s.name && (s.module || moduleId));
       if (!students.length) { toast('No valid rows found', 'var(--red)'); return; }
-      const result = await api('POST', '/students/bulk_create/', { module: parseInt(moduleId, 10), students });
+      const payload = moduleId ? { module: parseInt(moduleId, 10), students } : { students };
+      const result = await api('POST', '/students/bulk_create/', payload);
       toast(`Added: ${result.added}, Skipped: ${result.skipped}`, 'var(--green)');
       loadStudents();
     } catch(err) { toast('Upload failed: ' + (err?.detail || err), 'var(--red)'); }
@@ -1474,6 +1487,12 @@ async function toggleClaim(id, el) {
 // ── RESULTS / CA MARKS PAGE ────────────────────────────────────────────────────
 let resModuleInfo = null;   // {id, name, code, has_practical, class_level, semester}
 let resData = [];           // array of result objects from API
+let resSearchTerm = '';
+
+function onResSearchChange() {
+  resSearchTerm = document.getElementById('res-search').value.trim().toLowerCase();
+  renderResultsTable();
+}
 
 async function onResFilterChange() {
   const semId = document.getElementById('res-flt-sem').value;
@@ -1489,6 +1508,8 @@ async function loadResultsModule() {
   const modId = document.getElementById('res-flt-module').value;
   if (!modId) {
     document.getElementById('res-module-info').style.display = 'none';
+    document.getElementById('res-search').value = '';
+    resSearchTerm = '';
     const endCard = document.getElementById('end-exam-card');
     if (endCard) endCard.style.display = 'none';
     return;
@@ -1497,6 +1518,8 @@ async function loadResultsModule() {
     const data = await api('GET', `/results/module/?module_id=${modId}`);
     resModuleInfo = data.module;
     resData = data.results;
+    document.getElementById('res-search').value = '';
+    resSearchTerm = '';
     renderResultsPage();
     document.getElementById('res-module-info').style.display = 'block';
   } catch(e) { toast('Failed to load results', 'var(--red)'); }
@@ -1686,13 +1709,18 @@ function updateResultRowCalc(rid) {
 function renderResultsTable() {
   const hp = resModuleInfo.has_practical;
   const tbody = document.getElementById('res-tbody');
-  if (!resData.length) {
+  const filtered = resData.filter(r => {
+    if (!resSearchTerm) return true;
+    return r.student_name.toLowerCase().includes(resSearchTerm)
+        || r.student_reg_no.toLowerCase().includes(resSearchTerm);
+  });
+  if (!filtered.length) {
     const cols = hp ? 13 : 9;
-    tbody.innerHTML = `<tr><td colspan="${cols}"><div class="empty"><div class="ei">🎓</div>No students enrolled</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${cols}"><div class="empty"><div class="ei">🎓</div>No students match that search</div></td></tr>`;
     return;
   }
 
-  tbody.innerHTML = resData.map((r, i) => {
+  tbody.innerHTML = filtered.map((r, i) => {
     const c = {
       tca:  r.theory_ca,
       pca:  r.practical_ca,
