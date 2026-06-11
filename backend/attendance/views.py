@@ -1,6 +1,7 @@
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Count, Sum
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import render, redirect
 from django.utils import timezone
@@ -19,7 +20,7 @@ from .serializers import (
     AcademicYearSerializer, SemesterSerializer, ClassLevelSerializer,
     ModuleSerializer, StudentSerializer,
     SessionSerializer, SessionCreateSerializer, BulkStudentSerializer,
-    StudentResultSerializer,
+    StudentResultSerializer, AttendanceRecordSerializer,
 )
 
 
@@ -351,7 +352,16 @@ def dashboard(request):
     sem = active_semester()
 
     subjects_count = my_modules.count()
-    students_count = Student.objects.filter(module__in=my_modules).count()
+    # Count distinct students per class level (by registration number) and sum
+    # those per-class totals for an overall student count. This prevents
+    # double-counting when modules in the same class have different student lists.
+    students_qs = Student.objects.filter(module__in=my_modules)
+    per_class = (
+        students_qs
+        .values('module__class_level_id')
+        .annotate(student_count=Count('nactvet_reg_no', distinct=True))
+    )
+    students_count = int(per_class.aggregate(total=Sum('student_count'))['total'] or 0)
     sessions_today = Session.objects.filter(module__in=my_modules, date=today).count()
 
     all_students = (
@@ -405,8 +415,16 @@ def dashboard(request):
         lvl_mods = my_modules.filter(class_level=lvl)
         if not lvl_mods.exists():
             continue
-        lvl_students = all_students.filter(module__in=lvl_mods)
+        # Distinct students in this class level by registration number
+        lvl_students_count = (
+            Student.objects.filter(module__in=lvl_mods)
+            .values('nactvet_reg_no')
+            .distinct()
+            .count()
+        )
         lp, lc = 0, 0
+        # Use students per level for attendance pct calculation
+        lvl_students = all_students.filter(module__in=lvl_mods)
         for st in lvl_students:
             held = _held(st.module_id)
             if held:
@@ -417,7 +435,7 @@ def dashboard(request):
             'id': lvl.id,
             'name': lvl.name,
             'modules': lvl_mods.count(),
-            'students': lvl_students.count(),
+            'students': lvl_students_count,
             'avg_pct': round(lp / lc) if lc else None,
         })
 
@@ -621,9 +639,13 @@ def eligibility(request):
         mc = _period_counts(st.module_id)
         all_records = list(st.attendance_records.all())
 
-        cat1_eff = sum(1 for r in all_records if r.session.exam_period == Session.CAT1 and r.status in ('P', 'S'))
-        cat2_eff = sum(1 for r in all_records if r.session.exam_period == Session.CAT2 and r.status in ('P', 'S'))
-        total_eff = sum(1 for r in all_records if r.status in ('P', 'S'))
+        def _is_effective(r):
+            # Present always counts. Sick counts only when a certificate is submitted.
+            return r.status == 'P' or (r.status == 'S' and bool(r.certificate_submitted))
+
+        cat1_eff = sum(1 for r in all_records if r.session.exam_period == Session.CAT1 and _is_effective(r))
+        cat2_eff = sum(1 for r in all_records if r.session.exam_period == Session.CAT2 and _is_effective(r))
+        total_eff = sum(1 for r in all_records if _is_effective(r))
 
         cat1_pct = round((cat1_eff / mc['cat1']) * 100) if mc['cat1'] else None
         cat2_pct = round((cat2_eff / mc['cat2']) * 100) if mc['cat2'] else None
@@ -746,6 +768,49 @@ def update_sick_record(request, pk):
         'sick_note': record.sick_note,
         'certificate_submitted': record.certificate_submitted,
     })
+
+
+@api_view(['PATCH'])
+@login_required
+def update_attendance_status(request, pk):
+    """Admin-only: change the status of an attendance record.
+
+    Allows setting status to 'P', 'A' or 'S'. When marking as 'S', an optional
+    `sick_note` and `certificate_submitted` may be provided. Non-staff users
+    are forbidden.
+    """
+    if not request.user.is_staff:
+        return Response({'detail': 'Only the administrator can change attendance status.'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        record = AttendanceRecord.objects.select_related('student__module').get(pk=pk)
+    except AttendanceRecord.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    my_mod_ids = set(user_modules(request.user).values_list('id', flat=True))
+    if record.student.module_id not in my_mod_ids:
+        return Response({'detail': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+
+    # Validate and apply status change
+    if 'status' in request.data:
+        new_status = str(request.data.get('status')).upper()
+        if new_status not in (AttendanceRecord.PRESENT, AttendanceRecord.ABSENT, AttendanceRecord.SICK):
+            return Response({'detail': 'Invalid status.'}, status=status.HTTP_400_BAD_REQUEST)
+        record.status = new_status
+        if new_status != AttendanceRecord.SICK:
+            # Clear sick-related fields when not sick
+            record.sick_note = ''
+            record.certificate_submitted = False
+
+    if 'sick_note' in request.data and record.status == AttendanceRecord.SICK:
+        record.sick_note = str(request.data['sick_note']).strip()
+
+    if 'certificate_submitted' in request.data:
+        record.certificate_submitted = bool(request.data['certificate_submitted'])
+
+    record.save()
+
+    return Response(AttendanceRecordSerializer(record).data)
 
 
 # ── RESULTS ────────────────────────────────────────────────────────────────────

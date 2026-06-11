@@ -19,6 +19,7 @@ urlpatterns = [
     path('eligibility/', views.eligibility, name='eligibility'),
     path('sick-records/', views.sick_records, name='sick-records'),
     path('sick-records/<int:pk>/', views.update_sick_record, name='update-sick-record'),
+    path('records/<int:pk>/status/', views.update_attendance_status, name='update-attendance-status'),
     path('results/download/', views.download_results, name='results-download'),
     path('results/download/final/', views.download_final_results, name='results-download-final'),
     path('eligibility/download/', views.download_eligibility_excel, name='eligibility-download'),
