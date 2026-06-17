@@ -30,3 +30,24 @@ class StyledAuthForm(AuthenticationForm):
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={'placeholder': '••••••••', 'autocomplete': 'current-password'}),
     )
+
+
+class StudentLoginForm(forms.Form):
+    nactvet_reg_no = forms.CharField(
+        label='Registration Number',
+        widget=forms.TextInput(attrs={
+            'placeholder': 'e.g. NACTVET12345',
+            'autocomplete': 'username',
+        }),
+    )
+    last_name = forms.CharField(
+        label='Last Name (UPPERCASE)',
+        widget=forms.TextInput(attrs={
+            'placeholder': 'e.g. MWANGI',
+            'autocomplete': 'family-name',
+        }),
+    )
+
+    def clean_last_name(self):
+        last_name = self.cleaned_data.get('last_name', '').strip()
+        return last_name.upper()

@@ -55,26 +55,23 @@
 </style>
 </head>
 <body>
-<div class="card">
+  <div class="card">
   <div class="logo">Edu<span>Track</span></div>
-  <div class="subtitle">Sign in to your teacher account</div>
+  <div class="subtitle">Sign in — teachers use username/password; students use registration & last name</div>
 
-  {% if form.non_field_errors %}
-    <div class="errors"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
-  {% endif %}
-  {% if form.errors and not form.non_field_errors %}
-    <div class="errors">Invalid username or password.</div>
+  {% if error %}
+    <div class="errors">{{ error }}</div>
   {% endif %}
 
   <form method="post" action="{% url 'login' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}">
     {% csrf_token %}
     <div class="field">
-      <label>Username</label>
-      {{ form.username }}
+      <label>Username or Registration Number</label>
+      <input type="text" name="identifier" value="{{ identifier|default:'' }}" required placeholder="username or NACTVET reg no" />
     </div>
     <div class="field">
-      <label>Password</label>
-      {{ form.password }}
+      <label>Password or Last Name (UPPERCASE)</label>
+      <input type="password" name="secret" required placeholder="password or LASTNAME" />
     </div>
     <button type="submit" class="btn">Sign In</button>
   </form>

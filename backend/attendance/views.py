@@ -1,4 +1,6 @@
-from django.contrib.auth import login, logout
+from functools import wraps
+
+from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Count, Sum
@@ -11,7 +13,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .forms import TeacherRegistrationForm, StyledAuthForm
+from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
 from .models import (
     AcademicYear, Semester, ClassLevel, Module,
     Student, Session, AttendanceRecord, TeacherProfile, StudentResult,
@@ -50,15 +52,122 @@ def _make_both_semesters(year):
 def login_view(request):
     if request.user.is_authenticated:
         return redirect('frontend')
-    form = StyledAuthForm(request, data=request.POST or None)
-    if request.method == 'POST' and form.is_valid():
-        login(request, form.get_user())
-        return redirect(request.GET.get('next', 'frontend'))
-    return render(request, 'login.html', {'form': form})
+    error = None
+    identifier = ''
+
+    if request.method == 'POST':
+        identifier = str(request.POST.get('identifier', '')).strip()
+        secret = str(request.POST.get('secret', '')).strip()
+
+        # Try teacher/user authentication first
+        user = authenticate(request, username=identifier, password=secret)
+        if user is not None:
+            login(request, user)
+            return redirect(request.GET.get('next', 'frontend'))
+
+        # Otherwise try student login using registration number + last name
+        reg_no = identifier
+        last_name = secret.upper()
+        student = None
+        students = Student.objects.filter(nactvet_reg_no__iexact=reg_no).select_related('module')
+        for st in students:
+            if st.name.strip().split()[-1].upper() == last_name:
+                student = st
+                break
+
+        if student is None:
+            error = 'Invalid credentials.'
+        else:
+            request.session['student_id'] = student.id
+            request.session['student_reg_no'] = student.nactvet_reg_no
+            return redirect('student-dashboard')
+
+    return render(request, 'login.html', {'error': error, 'identifier': identifier})
+
+
+def student_login_required(view_func):
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if request.session.get('student_id'):
+            return view_func(request, *args, **kwargs)
+            return redirect('login')
+    return _wrapped
+
+
+def get_logged_student(request):
+    student_id = request.session.get('student_id')
+    if not student_id:
+        return None
+    return Student.objects.filter(
+        id=student_id
+    ).select_related(
+        'module__class_level', 'module__semester__academic_year'
+    ).first()
+
+
+def student_logout_view(request):
+    request.session.pop('student_id', None)
+    request.session.pop('student_reg_no', None)
+    return redirect('login')
+
+
+@student_login_required
+def student_dashboard(request):
+    student = get_logged_student(request)
+    if not student:
+        return redirect('login')
+
+    today = timezone.localdate()
+    active_sem = active_semester()
+    enrollments = Student.objects.filter(nactvet_reg_no=student.nactvet_reg_no)
+    if active_sem is not None:
+        enrollments = enrollments.filter(module__semester=active_sem)
+    enrollments = enrollments.select_related(
+        'module__class_level', 'module__semester__academic_year'
+    ).prefetch_related('attendance_records__session', 'result')
+
+    modules = []
+    attendance_sum = 0
+    attendance_count = 0
+    for enrollment in enrollments:
+        serializer = StudentSerializer(enrollment)
+        data = serializer.data
+        result = getattr(enrollment, 'result', None)
+        result_data = StudentResultSerializer(result).data if result else None
+
+        if data['sessions_total']:
+            attendance_sum += data['attendance_pct']
+            attendance_count += 1
+
+        modules.append({
+            'module_name': data['module_name'],
+            'module_code': data['module_code'],
+            'class_level': data['class_level_name'],
+            'semester': data['semester_label'],
+            'sessions_attended': data['sessions_attended'],
+            'sessions_sick': data['sessions_sick'],
+            'sessions_absent': data['sessions_absent'],
+            'sessions_total': data['sessions_total'],
+            'attendance_pct': data['attendance_pct'],
+            'result': result_data,
+        })
+
+    overall_attendance = round(attendance_sum / attendance_count) if attendance_count else None
+    return render(request, 'student_dashboard.html', {
+        'student_name': student.name,
+        'registration_number': student.nactvet_reg_no,
+        'modules': modules,
+        'module_count': len(modules),
+        'overall_attendance': overall_attendance,
+        'active_semester': active_sem.label if active_sem else 'N/A',
+    })
 
 
 def logout_view(request):
+    # Clear both Django user session and any student session keys
     logout(request)
+    request.session.pop('student_id', None)
+    request.session.pop('student_reg_no', None)
     return redirect('login')
 
 

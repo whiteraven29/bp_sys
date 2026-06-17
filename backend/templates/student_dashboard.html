@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EduTrack — Student Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1117; --surface: #181c27; --surface2: #1e2335; --border: #2a3050;
+    --accent: #4f8ef7; --green: #22c55e; --yellow: #f59e0b; --red: #ef4444;
+    --text: #e8eaf0; --muted: #7a8299; --font-sans: 'DM Sans', sans-serif; --font-mono: 'Space Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: var(--bg); color: var(--text); min-height: 100vh; }
+  body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(79,142,247,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(79,142,247,.04) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .page { max-width: 1080px; margin: 0 auto; padding: 24px 20px; }
+  .topbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 24px; }
+  .brand { display: flex; gap: 10px; align-items: baseline; }
+  .brand .logo { font-family: var(--font-mono); font-size: 1.5rem; color: var(--accent); }
+  .brand .logo span { color: var(--text); }
+  .brand .desc { color: var(--muted); font-size: .95rem; }
+  .profile { text-align: right; }
+  .profile strong { display: block; font-size: 1.05rem; }
+  .profile span { color: var(--muted); font-size: .86rem; }
+  .logout-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: .86rem; color: var(--muted); }
+  .logout-link:hover { color: var(--red); }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; }
+  .stat-card .label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+  .stat-card .value { font-size: 2rem; font-family: var(--font-mono); font-weight: 700; }
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; min-width: 720px; }
+  th, td { padding: 14px 16px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+  th { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; font-family: var(--font-mono); color: var(--muted); }
+  td { font-size: .92rem; color: var(--text); }
+  tbody tr:hover td { background: rgba(79,142,247,.04); }
+  .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: .75rem; font-family: var(--font-mono); }
+  .badge-att { background: rgba(34,197,94,.12); color: var(--green); }
+  .badge-miss { background: rgba(239,68,68,.12); color: var(--red); }
+  .badge-sem { background: rgba(79,142,247,.12); color: var(--accent); }
+  .empty { padding: 40px 20px; color: var(--muted); text-align: center; }
+  .module-name { font-weight: 700; }
+  .result-box { margin-top: 10px; padding: 14px 16px; background: rgba(15,17,23,.92); border: 1px solid var(--border); border-radius: 14px; }
+  .result-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-bottom: 8px; align-items: center; }
+  .result-row span:first-child { color: var(--muted); }
+  .result-row span:last-child { font-family: var(--font-mono); font-weight: 700; }
+  .row-label { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+  @media (max-width: 860px) { .table-wrap { overflow-x: auto; } }
+  @media (max-width: 640px) { .topbar { flex-direction: column; align-items: stretch; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">Edu<span>Track</span></div>
+      <div class="desc">Student progress dashboard — {{ active_semester }}</div>
+    </div>
+    <div class="profile">
+      <strong>{{ student_name }}</strong>
+      <span>{{ registration_number }}</span>
+      <div><a href="{% url 'student-logout' %}" class="logout-link">Logout</a></div>
+    </div>
+  </div>
+  <div style="display:flex;gap:18px;">
+    <aside style="width:240px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;">
+      <div style="font-weight:700;margin-bottom:8px;">Menu</div>
+      <nav style="display:flex;flex-direction:column;gap:8px;">
+        <button class="side-btn" data-target="attendance-section" style="text-align:left;padding:8px;border-radius:8px;border:1px solid var(--border);background:transparent;cursor:pointer;">Attendance</button>
+        <button class="side-btn" data-target="results-section" style="text-align:left;padding:8px;border-radius:8px;border:1px solid var(--border);background:transparent;cursor:pointer;">CA Results</button>
+        <button class="side-btn" data-target="modules-section" style="text-align:left;padding:8px;border-radius:8px;border:1px solid var(--border);background:transparent;cursor:pointer;">Modules</button>
+        <button class="side-btn" data-target="details-section" style="text-align:left;padding:8px;border-radius:8px;border:1px solid var(--border);background:transparent;cursor:pointer;">Student Details</button>
+      </nav>
+    </aside>
+
+    <div style="flex:1;">
+      <div class="stat-grid">
+    <div class="stat-card">
+      <div class="label">Modules this semester</div>
+      <div class="value">{{ module_count }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Overall attendance</div>
+      <div class="value">{{ overall_attendance|default:'N/A' }}%</div>
+    </div>
+  </div>
+      <div id="panels">
+        <div id="attendance-section" class="panel">
+          <div class="card">
+            <div class="card-title">Attendance</div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Module</th><th>Attendance %</th><th>Present</th><th>Absent</th><th>Total</th></tr>
+                </thead>
+                <tbody>
+                  {% for module in modules %}
+                    <tr>
+                      <td>{{ module.module_code }} — {{ module.module_name }}</td>
+                      <td>{{ module.attendance_pct }}%</td>
+                      <td>{{ module.sessions_attended }}</td>
+                      <td>{{ module.sessions_absent }}</td>
+                      <td>{{ module.sessions_total }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="results-section" class="panel" style="display:none;">
+          <div class="card">
+            <div class="card-title">CA Results</div>
+            {% for module in modules %}
+              <div class="card" style="margin-bottom:12px;">
+                <div class="card-title">{{ module.module_code }} — {{ module.module_name }}</div>
+                {% if module.result %}
+                  <div class="result-box">
+                    <div class="result-row"><span>Assignment 1</span><span>{{ module.result.assign1|default:'–' }}</span></div>
+                    <div class="result-row"><span>Assignment 2</span><span>{{ module.result.assign2|default:'–' }}</span></div>
+                    <div class="result-row"><span>CAT 1</span><span>{{ module.result.cat1_theory|default:'–' }}</span></div>
+                    <div class="result-row"><span>CAT 2</span><span>{{ module.result.cat2_theory|default:'–' }}</span></div>
+                    {% if module.result.has_practical %}
+                      <div class="result-row"><span>Practical 1</span><span>{{ module.result.cat1_practical|default:'–' }}</span></div>
+                      <div class="result-row"><span>Practical 2</span><span>{{ module.result.cat2_practical|default:'–' }}</span></div>
+                    {% endif %}
+                    <div class="result-row"><span>End theory</span><span>{{ module.result.end_theory|default:'–' }}</span></div>
+                    {% if module.result.has_practical %}
+                      <div class="result-row"><span>End practical</span><span>{{ module.result.end_practical|default:'–' }}</span></div>
+                    {% endif %}
+                    <div class="result-row"><span>Total</span><span>{{ module.result.final_total|default:'–' }}</span></div>
+                  </div>
+                {% else %}
+                  <div class="empty">No marks available yet for this module.</div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div id="modules-section" class="panel" style="display:none;">
+          <div class="card">
+            <div class="card-title">Modules</div>
+            <ul>
+              {% for module in modules %}
+                <li>{{ module.module_code }} — {{ module.module_name }} ({{ module.semester }})</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+
+        <div id="details-section" class="panel" style="display:none;">
+          <div class="card">
+            <div class="card-title">Student Details</div>
+            <div><strong>Name:</strong> {{ student_name }}</div>
+            <div><strong>Registration No:</strong> {{ registration_number }}</div>
+            <div><strong>Active Semester:</strong> {{ active_semester }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const buttons = document.querySelectorAll('.side-btn');
+    function showPanel(id) {
+      document.querySelectorAll('#panels .panel').forEach(p => p.style.display = 'none');
+      const el = document.getElementById(id);
+      if (el) el.style.display = '';
+    }
+    buttons.forEach(b => b.addEventListener('click', () => {
+      showPanel(b.dataset.target);
+      buttons.forEach(x => x.style.background = 'transparent');
+      b.style.background = 'rgba(79,142,247,.06)';
+    }));
+    // default
+    if (buttons[0]) buttons[0].click();
+  });
+</script>
+</html>
