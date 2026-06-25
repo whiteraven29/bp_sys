@@ -350,7 +350,7 @@
             <input id="sub-code" placeholder="e.g. MATH101" />
           </div>
           <div class="field">
-            <label>Teacher Name *</label>
+            <label>Tutor Name *</label>
             <input id="sub-teacher" placeholder="e.g. Mr. Mwangi" />
           </div>
           <div class="field">
@@ -365,7 +365,7 @@
         <div class="card-title">📚 All Subjects</div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Code</th><th>Subject</th><th>Teacher</th><th>Required Sessions</th><th>Students</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Code</th><th>Subject</th><th>Tutor</th><th>Required Sessions</th><th>Students</th><th>Actions</th></tr></thead>
             <tbody id="subjects-tbody">
               <tr><td colspan="6"><div class="empty"><div class="ei">📚</div>No subjects registered yet</div></td></tr>
             </tbody>
@@ -966,7 +966,7 @@ function exportReport() {
       'Class': st.class || '',
       'Subject': sub ? sub.name : '',
       'Subject Code': sub ? sub.code : '',
-      'Teacher': sub ? sub.teacher : '',
+      'Tutor': sub ? sub.teacher : '',
       'Required Sessions': required,
       'Sessions Attended': attended,
       'Sessions Absent': absent,

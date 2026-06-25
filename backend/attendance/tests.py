@@ -235,6 +235,47 @@ class AttendanceSecurityTests(TestCase):
         self.assertEqual(float(result.cat1_theory), 70)
         self.assertEqual(float(result.cat2_theory), 65)
 
+    def test_student_dashboard_hides_final_results_until_admin_approval(self):
+        StudentResult.objects.create(
+            student=self.student,
+            assign1=80,
+            assign2=70,
+            cat1_theory=60,
+            cat2_theory=50,
+            end_theory=90,
+            final_approved=False,
+        )
+        session = self.client.session
+        session['student_id'] = self.student.id
+        session.save()
+
+        response = self.client.get(reverse('student-dashboard'))
+
+        self.assertContains(response, '80.00')
+        self.assertContains(response, 'CA Results · Semester 1')
+        self.assertContains(response, 'Final examination marks have not been published yet.')
+        self.assertNotContains(response, '90.00')
+        self.assertNotContains(response, '78.0')
+
+    def test_student_dashboard_shows_final_results_after_admin_approval(self):
+        StudentResult.objects.create(
+            student=self.student,
+            assign1=80,
+            assign2=70,
+            cat1_theory=60,
+            cat2_theory=50,
+            end_theory=90,
+            final_approved=True,
+        )
+        session = self.client.session
+        session['student_id'] = self.student.id
+        session.save()
+
+        response = self.client.get(reverse('student-dashboard'))
+
+        self.assertContains(response, '90.00')
+        self.assertContains(response, '78.0')
+
     def test_eligibility_api_and_excel_both_require_sick_certificate(self):
         session = Session.objects.create(
             module=self.module,

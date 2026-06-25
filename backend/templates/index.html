@@ -405,7 +405,7 @@
       <div class="teacher-notice">
         <span style="font-size:1.2rem;flex-shrink:0;">ℹ️</span>
         <div>
-          <strong style="color:var(--text);">Teacher access</strong> — You can take attendance for your assigned modules and view attendance reports.
+          <strong style="color:var(--text);">Tutor access</strong> — You can take attendance for your assigned modules and view attendance reports.
           Contact the administrator to add/remove modules, enrol or remove students, or manage eligibility lists.
         </div>
       </div>
@@ -421,7 +421,7 @@
       <!-- Staff: Attendance cutoff dates -->
       <div class="card staff-only" id="cutoff-card">
         <div class="card-title">🔒 Attendance Cutoff Dates
-          <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— teachers cannot record attendance after each date</span>
+          <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— tutors cannot record attendance after each date</span>
         </div>
         <div class="form-grid-3" style="margin-bottom:12px;">
           <div class="field">
@@ -474,7 +474,7 @@
           <div class="field"><label>Class Level *</label><select id="mod-level"><option value="">— select level —</option></select></div>
           <div class="field"><label>Module Name *</label><input id="mod-name" placeholder="e.g. Business Mathematics" /></div>
           <div class="field"><label>Module Code *</label><input id="mod-code" placeholder="e.g. BM401" /></div>
-          <div class="field"><label>Your Display Name *</label><input id="mod-teacher" placeholder="e.g. Mr. Mwangi" /></div>
+          <div class="field"><label>Tutor Display Name *</label><input id="mod-teacher" placeholder="e.g. Mr. Mwangi" /></div>
         </div>
         <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;margin-bottom:14px;cursor:pointer;">
           <input type="checkbox" id="mod-has-practical" style="width:16px;height:16px;">
@@ -491,7 +491,7 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Code</th><th>Module</th><th>Level</th><th>Semester</th><th>Teacher</th><th>T sessions</th><th>P sessions</th><th>Students</th><th></th></tr></thead>
+            <thead><tr><th>Code</th><th>Module</th><th>Level</th><th>Semester</th><th>Tutor</th><th>T sessions</th><th>P sessions</th><th>Students</th><th></th></tr></thead>
             <tbody id="modules-tbody"></tbody>
           </table>
         </div>
@@ -676,7 +676,11 @@
           <div class="print-header" id="final-print-header"></div>
           <div class="card-title">
             🎓 End of Semester Exam <span id="end-exam-weight-label" style="font-size:.75rem;font-weight:400;color:var(--muted);"></span>
-            <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="printFinalResults()">🖨 Print</button>
+            <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;">
+              <button class="btn btn-green btn-sm" onclick="setFinalApproval(true)">Approve Final Results</button>
+              <button class="btn btn-danger btn-sm" onclick="setFinalApproval(false)">Unapprove</button>
+              <button class="btn btn-secondary btn-sm" onclick="printFinalResults()">🖨 Print</button>
+            </div>
           </div>
           <div class="table-wrap">
             <table id="end-exam-table">
@@ -793,7 +797,7 @@
           <table>
             <thead>
               <tr>
-                <th>Reg. No.</th><th>Name</th><th>Module</th><th>Level</th><th>Sem</th><th>Teacher</th>
+                <th>Reg. No.</th><th>Name</th><th>Module</th><th>Level</th><th>Sem</th><th>Tutor</th>
                 <th>T held</th><th>T att</th><th>T %</th>
                 <th>P held</th><th>P att</th><th>P %</th>
                 <th>Overall %</th><th>Status</th>
@@ -1479,7 +1483,7 @@ async function loadReport() {
 
 function exportReport() {
   if (!reportData.rows.length) { toast('No data to export', 'var(--red)'); return; }
-  const headers = ['NACTVET Reg No','Name','Module','Level','Semester','Teacher','Theory Held','Theory Att','Theory %','Practical Held','Practical Att','Practical %','Overall %','Status'];
+  const headers = ['NACTVET Reg No','Name','Module','Level','Semester','Tutor','Theory Held','Theory Att','Theory %','Practical Held','Practical Att','Practical %','Overall %','Status'];
   const rows = reportData.rows.map(r => [
     r.nactvet_reg_no, r.name, r.module, r.class_level, r.semester, r.teacher,
     r.theory_held, r.theory_eff, r.theory_pct ?? 'N/A',
@@ -1923,7 +1927,7 @@ function renderEndExamTable() {
       <th>End Theory wt<br><span style="color:var(--muted);font-size:.6rem">/30</span></th>
       <th>End Prac wt<br><span style="color:var(--muted);font-size:.6rem">/30</span></th>
       <th>Final Total<br><span style="color:var(--muted);font-size:.6rem">/100</span></th>
-      <th>Result</th>
+      <th>Result</th><th>Student Portal</th>
     </tr>`;
   } else {
     thead.innerHTML = `<tr>
@@ -1932,7 +1936,7 @@ function renderEndExamTable() {
       <th>End Exam<br><span style="color:var(--muted);font-size:.6rem">/100 → 60%</span></th>
       <th>End Exam wt<br><span style="color:var(--muted);font-size:.6rem">/60</span></th>
       <th>Final Total<br><span style="color:var(--muted);font-size:.6rem">/100</span></th>
-      <th>Result</th>
+      <th>Result</th><th>Student Portal</th>
     </tr>`;
   }
 
@@ -1960,7 +1964,7 @@ function renderEndExamRows() {
   const hp = resModuleInfo.has_practical;
   const tbody = document.getElementById('end-exam-tbody');
   if (!resData.length) {
-    tbody.innerHTML = `<tr><td colspan="${hp ? 10 : 8}"><div class="empty"><div class="ei">🎓</div>No students enrolled</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${hp ? 11 : 9}"><div class="empty"><div class="ei">🎓</div>No students enrolled</div></td></tr>`;
     return;
   }
   tbody.innerHTML = resData.map((r, i) => {
@@ -1978,6 +1982,9 @@ function renderEndExamRows() {
       : parseFloat(fin) >= 50
         ? '<span class="badge badge-green">✔ PASS</span>'
         : '<span class="badge badge-red">✘ FAIL</span>';
+    const approvalBadge = r.final_approved
+      ? '<span class="badge badge-green">Approved</span>'
+      : '<span class="badge badge-yellow">Hidden</span>';
 
     if (hp) {
       return `<tr>
@@ -1991,6 +1998,7 @@ function renderEndExamRows() {
         <td id="epw-${r.id}">${epw !== null ? `<span style="color:var(--accent2)">${epw}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
         <td id="fin-${r.id}">${fin !== null ? `<strong>${fin}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
         <td id="res-${r.id}">${resultBadge}</td>
+        <td>${approvalBadge}</td>
       </tr>`;
     } else {
       return `<tr>
@@ -2002,9 +2010,25 @@ function renderEndExamRows() {
         <td id="etw-${r.id}">${etw !== null ? `<span style="color:var(--accent)">${etw}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
         <td id="fin-${r.id}">${fin !== null ? `<strong>${fin}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
         <td id="res-${r.id}">${resultBadge}</td>
+        <td>${approvalBadge}</td>
       </tr>`;
     }
   }).join('');
+}
+
+async function setFinalApproval(approved) {
+  if (!state.isStaff) return;
+  if (!resData.length) { toast('No results to update', 'var(--red)'); return; }
+  const payload = resData.map(r => ({ id: r.id, final_approved: approved }));
+  try {
+    const result = await api('POST', '/results/bulk_save/', payload);
+    toast(`${approved ? 'Approved' : 'Unapproved'} ${result.saved} final result(s)`, result.errors.length ? 'var(--yellow)' : 'var(--green)');
+    const fresh = await api('GET', `/results/module/?module_id=${resModuleInfo.id}`);
+    resData = fresh.results;
+    renderEndExamTable();
+  } catch(e) {
+    toast('Approval update failed: ' + (e?.detail || ''), 'var(--red)');
+  }
 }
 
 // ── ELIGIBILITY PAGE ───────────────────────────────────────────────────────────
@@ -2304,7 +2328,7 @@ async function advanceSemester() {
     document.getElementById('role-badge').textContent  = 'Admin';
     document.getElementById('role-badge').className    = 'role-badge admin';
   } else {
-    document.getElementById('role-badge').textContent  = 'Teacher';
+    document.getElementById('role-badge').textContent  = 'Tutor';
     document.getElementById('role-badge').className    = 'role-badge teacher';
   }
 })();

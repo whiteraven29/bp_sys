@@ -263,7 +263,7 @@ class StudentResultSerializer(serializers.ModelSerializer):
             'theory_ca', 'practical_ca', 'total_ca',
             'theory_eligible', 'practical_eligible', 'ca_eligible',
             'end_theory', 'end_practical',
-            'end_theory_w', 'end_prac_w', 'final_total',
+            'end_theory_w', 'end_prac_w', 'final_total', 'final_approved',
             'updated_at',
         ]
         read_only_fields = ['id', 'updated_at']
@@ -378,7 +378,7 @@ class BulkStudentSerializer(serializers.Serializer):
         module = data.get('module')
         if module and user and not user.is_staff:
             if module not in user.modules_taught.all():
-                raise PermissionDenied('You may only add students to modules you teach.')
+                raise PermissionDenied('You may only add students to modules you tutor.')
         return data
 
     def create(self, validated_data):
@@ -407,7 +407,7 @@ class BulkStudentSerializer(serializers.Serializer):
                 skipped += 1
                 continue
             if allowed_module_ids is not None and module.id not in allowed_module_ids:
-                raise PermissionDenied('You may only add students to modules you teach.')
+                raise PermissionDenied('You may only add students to modules you tutor.')
             student, created = Student.objects.get_or_create(
                 nactvet_reg_no=reg_no, module=module,
                 defaults={'name': name}

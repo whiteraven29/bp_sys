@@ -195,8 +195,17 @@ def student_dashboard(request):
         data = serializer.data
         result = getattr(enrollment, 'result', None)
         result_data = StudentResultSerializer(result).data if result else None
+        final_approved = bool(result and result.final_approved)
+        if result_data and not final_approved:
+            for field in (
+                'end_theory', 'end_practical',
+                'end_theory_w', 'end_prac_w', 'final_total',
+            ):
+                result_data[field] = None
         has_final_result = bool(
-            result and (result.end_theory is not None or result.end_practical is not None)
+            final_approved
+            and result
+            and (result.end_theory is not None or result.end_practical is not None)
         )
 
         if data['sessions_total']:
@@ -486,7 +495,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         if not self.request.user.is_staff:
             allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
             if module is None or module.id not in allowed_module_ids:
-                raise PermissionDenied('Only teachers for this module can add students.')
+                raise PermissionDenied('Only tutors for this module can add students.')
         serializer.save()
 
     def update(self, request, *args, **kwargs):
@@ -494,7 +503,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             obj = self.get_object()
             allowed_module_ids = set(user_modules(self.request.user).values_list('id', flat=True))
             if obj.module_id not in allowed_module_ids:
-                raise PermissionDenied('Only teachers for this module can edit students.')
+                raise PermissionDenied('Only tutors for this module can edit students.')
             target_module = request.data.get('module')
             if target_module:
                 try:
@@ -510,7 +519,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         if not request.user.is_staff:
             allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
             if obj.module_id not in allowed_module_ids:
-                raise PermissionDenied('Only teachers for this module can remove students.')
+                raise PermissionDenied('Only tutors for this module can remove students.')
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=False, methods=['post'], url_path='bulk_create')
@@ -1092,7 +1101,7 @@ class ResultViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         if not request.user.is_staff:
-            for f in ('end_theory', 'end_practical'):
+            for f in ('end_theory', 'end_practical', 'final_approved'):
                 if f in request.data:
                     raise PermissionDenied('Only the administrator can enter end-of-semester exam marks.')
         return super().update(request, *args, **kwargs)
@@ -1101,9 +1110,9 @@ class ResultViewSet(viewsets.ModelViewSet):
         student = serializer.validated_data['student']
         allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
         if student.module_id not in allowed_module_ids:
-            raise PermissionDenied('You may only create results for modules you teach.')
+            raise PermissionDenied('You may only create results for modules you tutor.')
         if not self.request.user.is_staff:
-            for field in ('end_theory', 'end_practical'):
+            for field in ('end_theory', 'end_practical', 'final_approved'):
                 if serializer.validated_data.get(field) is not None:
                     raise PermissionDenied('Only the administrator can enter end-of-semester exam marks.')
         serializer.save()
@@ -1121,7 +1130,7 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         mod_ids = set(user_modules(request.user).values_list('id', flat=True))
         if module.id not in mod_ids:
-            raise PermissionDenied('You do not teach this module.')
+            raise PermissionDenied('You do not tutor this module.')
 
         students = Student.objects.filter(module=module).order_by('name')
         with transaction.atomic():
@@ -1148,7 +1157,7 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         mod_ids   = set(user_modules(request.user).values_list('id', flat=True))
         CA_FIELDS  = ['assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical']
-        END_FIELDS = ['end_theory', 'end_practical']
+        END_FIELDS = ['end_theory', 'end_practical', 'final_approved']
         FIELDS     = CA_FIELDS + (END_FIELDS if request.user.is_staff else [])
         saved, errors = 0, []
 
@@ -1171,6 +1180,9 @@ class ResultViewSet(viewsets.ModelViewSet):
                 if field not in item:
                     continue
                 raw = item[field]
+                if field == 'final_approved':
+                    setattr(result, field, bool(raw))
+                    continue
                 if raw == '' or raw is None:
                     setattr(result, field, None)
                 else:
