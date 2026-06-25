@@ -1,6 +1,6 @@
 from functools import wraps
 
-from django.contrib.auth import login, logout, authenticate
+from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Count, Sum
@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated, SAFE_METHODS
 from rest_framework.response import Response
 
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
@@ -38,6 +38,22 @@ def active_semester():
     return Semester.objects.filter(is_active=True).select_related('academic_year').first()
 
 
+def attendance_is_effective(record):
+    """Present counts; sick counts for eligibility only with a certificate."""
+    return record.status == AttendanceRecord.PRESENT or (
+        record.status == AttendanceRecord.SICK and record.certificate_submitted
+    )
+
+
+class IsAuthenticatedReadOnlyOrAdmin(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and (request.method in SAFE_METHODS or request.user.is_staff)
+        )
+
+
 def _make_both_semesters(year):
     """Ensure Semester 1 and 2 both exist for a given AcademicYear."""
     for num in (1, 2):
@@ -45,6 +61,20 @@ def _make_both_semesters(year):
             academic_year=year, number=num,
             defaults={'is_active': False},
         )
+
+
+def _student_scope_for_request(request):
+    qs = Student.objects.filter(module__in=user_modules(request.user))
+    module_id = request.data.get('module_id') or request.query_params.get('module_id')
+    class_level_id = request.data.get('class_level_id') or request.query_params.get('class_level_id')
+    semester_id = request.data.get('semester_id') or request.query_params.get('semester_id')
+    if module_id:
+        qs = qs.filter(module_id=module_id)
+    if class_level_id:
+        qs = qs.filter(module__class_level_id=class_level_id)
+    if semester_id:
+        qs = qs.filter(module__semester_id=semester_id)
+    return qs
 
 
 # ── AUTH VIEWS ─────────────────────────────────────────────────────────────────
@@ -65,13 +95,12 @@ def login_view(request):
             login(request, user)
             return redirect(request.GET.get('next', 'frontend'))
 
-        # Otherwise try student login using registration number + last name
+        # Otherwise try student login using registration number + portal PIN.
         reg_no = identifier
-        last_name = secret.upper()
         student = None
         students = Student.objects.filter(nactvet_reg_no__iexact=reg_no).select_related('module')
         for st in students:
-            if st.name.strip().split()[-1].upper() == last_name:
+            if st.check_portal_pin(secret):
                 student = st
                 break
 
@@ -90,7 +119,7 @@ def student_login_required(view_func):
     def _wrapped(request, *args, **kwargs):
         if request.session.get('student_id'):
             return view_func(request, *args, **kwargs)
-            return redirect('login')
+        return redirect('login')
     return _wrapped
 
 
@@ -111,20 +140,52 @@ def student_logout_view(request):
     return redirect('login')
 
 
+@api_view(['POST'])
+def change_password(request):
+    current_password = str(request.data.get('current_password', '')).strip()
+    new_password = str(request.data.get('new_password', '')).strip()
+
+    if len(new_password) < 6:
+        return Response({'detail': 'New password must be at least 6 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if request.user.is_authenticated:
+        if not request.user.check_password(current_password):
+            return Response({'detail': 'Current password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
+        request.user.set_password(new_password)
+        request.user.save(update_fields=['password'])
+        update_session_auth_hash(request, request.user)
+        return Response({'detail': 'Password updated.'})
+
+    student = get_logged_student(request)
+    if student is None:
+        return Response({'detail': 'Authentication required.'}, status=status.HTTP_403_FORBIDDEN)
+    if not student.check_portal_pin(current_password):
+        return Response({'detail': 'Current PIN is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    updated = Student.objects.filter(nactvet_reg_no__iexact=student.nactvet_reg_no).count()
+    for enrollment in Student.objects.filter(nactvet_reg_no__iexact=student.nactvet_reg_no):
+        enrollment.set_portal_pin(new_password)
+        enrollment.save(update_fields=['portal_pin_hash'])
+    return Response({'detail': 'Portal PIN updated.', 'updated': updated})
+
+
 @student_login_required
 def student_dashboard(request):
     student = get_logged_student(request)
     if not student:
         return redirect('login')
 
-    today = timezone.localdate()
     active_sem = active_semester()
     enrollments = Student.objects.filter(nactvet_reg_no=student.nactvet_reg_no)
     if active_sem is not None:
-        enrollments = enrollments.filter(module__semester=active_sem)
+        enrollments = enrollments.filter(
+            module__semester__academic_year=active_sem.academic_year
+        )
     enrollments = enrollments.select_related(
         'module__class_level', 'module__semester__academic_year'
-    ).prefetch_related('attendance_records__session', 'result')
+    ).prefetch_related('attendance_records__session', 'result').order_by(
+        'module__semester__number', 'module__name'
+    )
 
     modules = []
     attendance_sum = 0
@@ -134,6 +195,9 @@ def student_dashboard(request):
         data = serializer.data
         result = getattr(enrollment, 'result', None)
         result_data = StudentResultSerializer(result).data if result else None
+        has_final_result = bool(
+            result and (result.end_theory is not None or result.end_practical is not None)
+        )
 
         if data['sessions_total']:
             attendance_sum += data['attendance_pct']
@@ -142,23 +206,72 @@ def student_dashboard(request):
         modules.append({
             'module_name': data['module_name'],
             'module_code': data['module_code'],
+            'teacher': enrollment.module.teacher,
             'class_level': data['class_level_name'],
             'semester': data['semester_label'],
+            'semester_number': enrollment.module.semester.number,
             'sessions_attended': data['sessions_attended'],
             'sessions_sick': data['sessions_sick'],
             'sessions_absent': data['sessions_absent'],
             'sessions_total': data['sessions_total'],
             'attendance_pct': data['attendance_pct'],
+            'attendance_status': (
+                'good' if data['attendance_pct'] >= 75
+                else 'warning' if data['attendance_pct'] >= 50
+                else 'critical'
+            ) if data['sessions_total'] else 'pending',
             'result': result_data,
+            'has_final_result': has_final_result,
         })
 
     overall_attendance = round(attendance_sum / attendance_count) if attendance_count else None
+    total_present = sum(module['sessions_attended'] for module in modules)
+    total_sick = sum(module['sessions_sick'] for module in modules)
+    total_absent = sum(module['sessions_absent'] for module in modules)
+    total_sessions = sum(module['sessions_total'] for module in modules)
+    semester1_modules = [module for module in modules if module['semester_number'] == 1]
+    semester2_modules = [module for module in modules if module['semester_number'] == 2]
+    active_modules = [
+        module for module in modules
+        if active_sem is None or module['semester_number'] == active_sem.number
+    ]
+    recent_records = (
+        AttendanceRecord.objects
+        .filter(student__in=enrollments)
+        .select_related('session__module')
+        .order_by('-session__date', '-session__created_at')[:8]
+    )
+    attendance_history = [
+        {
+            'module_code': record.session.module.code,
+            'module_name': record.session.module.name,
+            'date': record.session.date,
+            'label': record.session.label,
+            'topic': record.session.topic,
+            'status': record.status,
+            'status_label': record.get_status_display(),
+        }
+        for record in recent_records
+    ]
     return render(request, 'student_dashboard.html', {
         'student_name': student.name,
         'registration_number': student.nactvet_reg_no,
         'modules': modules,
         'module_count': len(modules),
+        'active_module_count': len(active_modules),
+        'semester1_modules': semester1_modules,
+        'semester2_modules': semester2_modules,
+        'has_final_results': any(module['has_final_result'] for module in modules),
         'overall_attendance': overall_attendance,
+        'total_present': total_present,
+        'total_sick': total_sick,
+        'total_absent': total_absent,
+        'total_sessions': total_sessions,
+        'attendance_history': attendance_history,
+        'academic_year': (
+            active_sem.academic_year.name
+            if active_sem else student.module.semester.academic_year.name
+        ),
         'active_semester': active_sem.label if active_sem else 'N/A',
     })
 
@@ -199,7 +312,7 @@ def register_view(request):
 class AcademicYearViewSet(viewsets.ModelViewSet):
     queryset = AcademicYear.objects.all()
     serializer_class = AcademicYearSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedReadOnlyOrAdmin]
 
     @action(detail=False, methods=['post'], url_path='advance')
     def advance(self, request):
@@ -289,7 +402,7 @@ class SemesterViewSet(viewsets.ReadOnlyModelViewSet):
 class ClassLevelViewSet(viewsets.ModelViewSet):
     queryset = ClassLevel.objects.all()
     serializer_class = ClassLevelSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedReadOnlyOrAdmin]
 
 
 # ── MODULES ────────────────────────────────────────────────────────────────────
@@ -379,9 +492,17 @@ class StudentViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         if not request.user.is_staff:
             obj = self.get_object()
-            allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
+            allowed_module_ids = set(user_modules(self.request.user).values_list('id', flat=True))
             if obj.module_id not in allowed_module_ids:
                 raise PermissionDenied('Only teachers for this module can edit students.')
+            target_module = request.data.get('module')
+            if target_module:
+                try:
+                    target_module_id = int(target_module)
+                except (TypeError, ValueError):
+                    target_module_id = None
+                if target_module_id not in allowed_module_ids:
+                    raise PermissionDenied('You may only move students to modules you teach.')
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
@@ -398,6 +519,23 @@ class StudentViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         result = serializer.save()
         return Response(result, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='bulk_set_pin')
+    def bulk_set_pin(self, request):
+        if not request.user.is_staff:
+            raise PermissionDenied('Only the administrator can set student passwords in bulk.')
+        portal_pin = str(request.data.get('portal_pin', '')).strip()
+        if len(portal_pin) < 6:
+            return Response({'detail': 'Password/PIN must be at least 6 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        qs = _student_scope_for_request(request)
+        updated = 0
+        with transaction.atomic():
+            for student in qs.select_for_update():
+                student.set_portal_pin(portal_pin)
+                student.save(update_fields=['portal_pin_hash'])
+                updated += 1
+        return Response({'updated': updated})
 
 
 # ── SESSIONS ───────────────────────────────────────────────────────────────────
@@ -428,7 +566,9 @@ class SessionViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Reject new sessions whose exam period is past the semester cutoff date."""
         module      = serializer.validated_data['module']
-        session_date = serializer.validated_data['date']
+        allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
+        if module.id not in allowed_module_ids:
+            raise PermissionDenied('You may only record attendance for modules you teach.')
         period      = serializer.validated_data.get('exam_period', Session.GENERAL)
         semester    = module.semester
         today       = timezone.localdate()
@@ -448,6 +588,13 @@ class SessionViewSet(viewsets.ModelViewSet):
                 f'The cutoff date was {cutoff.strftime("%d %b %Y")}.'
             )
 
+        serializer.save()
+
+    def perform_update(self, serializer):
+        module = serializer.validated_data.get('module', serializer.instance.module)
+        allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
+        if module.id not in allowed_module_ids:
+            raise PermissionDenied('You may only edit sessions for modules you teach.')
         serializer.save()
 
 
@@ -748,13 +895,9 @@ def eligibility(request):
         mc = _period_counts(st.module_id)
         all_records = list(st.attendance_records.all())
 
-        def _is_effective(r):
-            # Present always counts. Sick counts only when a certificate is submitted.
-            return r.status == 'P' or (r.status == 'S' and bool(r.certificate_submitted))
-
-        cat1_eff = sum(1 for r in all_records if r.session.exam_period == Session.CAT1 and _is_effective(r))
-        cat2_eff = sum(1 for r in all_records if r.session.exam_period == Session.CAT2 and _is_effective(r))
-        total_eff = sum(1 for r in all_records if _is_effective(r))
+        cat1_eff = sum(1 for r in all_records if r.session.exam_period == Session.CAT1 and attendance_is_effective(r))
+        cat2_eff = sum(1 for r in all_records if r.session.exam_period == Session.CAT2 and attendance_is_effective(r))
+        total_eff = sum(1 for r in all_records if attendance_is_effective(r))
 
         cat1_pct = round((cat1_eff / mc['cat1']) * 100) if mc['cat1'] else None
         cat2_pct = round((cat2_eff / mc['cat2']) * 100) if mc['cat2'] else None
@@ -953,6 +1096,17 @@ class ResultViewSet(viewsets.ModelViewSet):
                 if f in request.data:
                     raise PermissionDenied('Only the administrator can enter end-of-semester exam marks.')
         return super().update(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        student = serializer.validated_data['student']
+        allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
+        if student.module_id not in allowed_module_ids:
+            raise PermissionDenied('You may only create results for modules you teach.')
+        if not self.request.user.is_staff:
+            for field in ('end_theory', 'end_practical'):
+                if serializer.validated_data.get(field) is not None:
+                    raise PermissionDenied('Only the administrator can enter end-of-semester exam marks.')
+        serializer.save()
 
     # ── Get or create results for every student in a module ────────────────────
     @action(detail=False, methods=['get'], url_path='module')
@@ -1375,9 +1529,9 @@ def download_eligibility_excel(request):
         mc   = _period_counts(st.module_id)
         recs = list(st.attendance_records.all())
 
-        cat1_eff  = sum(1 for r in recs if r.session.exam_period == Session.CAT1 and r.status in ('P', 'S'))
-        cat2_eff  = sum(1 for r in recs if r.session.exam_period == Session.CAT2 and r.status in ('P', 'S'))
-        total_eff = sum(1 for r in recs if r.status in ('P', 'S'))
+        cat1_eff  = sum(1 for r in recs if r.session.exam_period == Session.CAT1 and attendance_is_effective(r))
+        cat2_eff  = sum(1 for r in recs if r.session.exam_period == Session.CAT2 and attendance_is_effective(r))
+        total_eff = sum(1 for r in recs if attendance_is_effective(r))
 
         cat1_pct  = round((cat1_eff / mc['cat1']) * 100) if mc['cat1'] else None
         cat2_pct  = round((cat2_eff / mc['cat2']) * 100) if mc['cat2'] else None

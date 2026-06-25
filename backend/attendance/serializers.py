@@ -83,6 +83,10 @@ class ModuleSerializer(serializers.ModelSerializer):
 
 
 class StudentSerializer(serializers.ModelSerializer):
+    portal_pin = serializers.CharField(
+        write_only=True, required=False, allow_blank=False, min_length=6
+    )
+    has_portal_pin = serializers.BooleanField(read_only=True)
     module_name = serializers.CharField(source='module.name', read_only=True)
     module_code = serializers.CharField(source='module.code', read_only=True)
     class_level_name = serializers.CharField(source='module.class_level.name', read_only=True)
@@ -106,9 +110,25 @@ class StudentSerializer(serializers.ModelSerializer):
             'semester_id', 'semester_label',
             'sessions_attended', 'sessions_sick', 'sessions_absent',
             'sessions_total', 'theory_total', 'practical_total',
-            'attendance_pct', 'created_at',
+            'attendance_pct', 'has_portal_pin', 'portal_pin', 'created_at',
         ]
         read_only_fields = ['id', 'created_at']
+
+    def create(self, validated_data):
+        portal_pin = validated_data.pop('portal_pin', None)
+        student = super().create(validated_data)
+        if portal_pin:
+            student.set_portal_pin(portal_pin)
+            student.save(update_fields=['portal_pin_hash'])
+        return student
+
+    def update(self, instance, validated_data):
+        portal_pin = validated_data.pop('portal_pin', None)
+        student = super().update(instance, validated_data)
+        if portal_pin:
+            student.set_portal_pin(portal_pin)
+            student.save(update_fields=['portal_pin_hash'])
+        return student
 
     def get_sessions_attended(self, obj):
         return obj.attendance_records.filter(status='P').count()
@@ -373,6 +393,7 @@ class BulkStudentSerializer(serializers.Serializer):
         for row in rows:
             reg_no = str(row.get('nactvet_reg_no', '')).strip().upper()
             name = str(row.get('name', '')).strip()
+            portal_pin = str(row.get('portal_pin', '')).strip()
             if not reg_no or not name:
                 skipped += 1
                 continue
@@ -387,12 +408,22 @@ class BulkStudentSerializer(serializers.Serializer):
                 continue
             if allowed_module_ids is not None and module.id not in allowed_module_ids:
                 raise PermissionDenied('You may only add students to modules you teach.')
-            _, created = Student.objects.get_or_create(
+            student, created = Student.objects.get_or_create(
                 nactvet_reg_no=reg_no, module=module,
                 defaults={'name': name}
             )
             if created:
+                if portal_pin:
+                    if len(portal_pin) < 6:
+                        student.delete()
+                        skipped += 1
+                        continue
+                    student.set_portal_pin(portal_pin)
+                    student.save(update_fields=['portal_pin_hash'])
                 added += 1
             else:
+                if portal_pin and len(portal_pin) >= 6:
+                    student.set_portal_pin(portal_pin)
+                    student.save(update_fields=['portal_pin_hash'])
                 skipped += 1
         return {'added': added, 'skipped': skipped}

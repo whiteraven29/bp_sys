@@ -516,6 +516,7 @@
           <div class="field"><label>Module *</label><select id="add-stu-module"><option value="">— select module —</option></select></div>
           <div class="field"><label>NACTVET Reg. No. *</label><input id="add-stu-regno" placeholder="e.g. NTA/L4/0001" /></div>
           <div class="field"><label>Student Name *</label><input id="add-stu-name" placeholder="e.g. John Doe" /></div>
+          <div class="field"><label>Portal PIN *</label><input id="add-stu-pin" type="password" minlength="6" placeholder="At least 6 characters" /></div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="addSingleStudent()">Add Student</button>
       </div>
@@ -530,11 +531,14 @@
           <input type="file" id="excel-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelUpload(event)">
           <div class="uz-icon">📊</div>
           <div class="uz-title">Click to upload Excel / CSV</div>
-          <div class="uz-sub">Columns needed: <strong>NACTVET Reg No</strong> and <strong>Name</strong></div>
+            <div class="uz-sub">Columns: <strong>NACTVET Reg No</strong>, <strong>Name</strong>, and optional <strong>Portal PIN</strong></div>
         </div>
       </div>
       <div class="card">
         <div class="card-title">🎓 Enrolled Students</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" class="admin-only">
+          <button class="btn btn-warning btn-sm" onclick="bulkSetStudentPins()">🔑 Set Password/PIN for Filtered Students</button>
+        </div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>NACTVET Reg. No.</th><th>Name</th><th>Module</th><th>Level</th><th>Semester</th><th>P</th><th>S</th><th>A</th><th>T-held</th><th>P-held</th><th>Overall %</th><th></th></tr></thead>
@@ -820,6 +824,15 @@
       My Profile &amp; Modules
       <button class="modal-close" onclick="closeProfileModal()">✕</button>
     </div>
+    <div class="field" style="margin-bottom:10px;">
+      <label>Current Password</label>
+      <input id="profile-current-password" type="password" autocomplete="current-password" placeholder="Current password">
+    </div>
+    <div class="field" style="margin-bottom:12px;">
+      <label>New Password</label>
+      <input id="profile-new-password" type="password" autocomplete="new-password" minlength="6" placeholder="At least 6 characters">
+    </div>
+    <button class="btn btn-primary btn-sm" style="margin-bottom:18px;" onclick="changeOwnPassword()">Update Password</button>
     <div style="font-size:.75rem;color:var(--muted);margin-bottom:8px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;">
       Click a module to claim / unclaim it
     </div>
@@ -887,6 +900,9 @@ function typeBadge(type) {
 function progressBar(pct) {
   const color = pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--red)';
   return `<div class="progress-bar" style="width:70px;display:inline-block;vertical-align:middle;margin-left:6px;"><div class="progress-fill" style="width:${pct}%;background:${color};"></div></div>`;
+}
+function appendParam(url, name, value) {
+  return value ? `${url}${name}=${encodeURIComponent(value)}&` : url;
 }
 
 // ── SIDEBAR / MOBILE ───────────────────────────────────────────────────────────
@@ -1158,9 +1174,9 @@ async function loadStudents() {
   const lvlId = document.getElementById('stu-flt-level').value;
   const modId = document.getElementById('stu-flt-module').value;
   let url = '/students/?';
-  if (modId) url += `module_id=${modId}&`;
-  else if (lvlId) url += `class_level_id=${lvlId}&`;
-  else if (semId) url += `semester_id=${semId}&`;
+  url = appendParam(url, 'module_id', modId);
+  url = appendParam(url, 'class_level_id', lvlId);
+  url = appendParam(url, 'semester_id', semId);
   try {
     const data = await api('GET', url);
     const students = data.results ?? data;
@@ -1182,7 +1198,10 @@ async function loadStudents() {
         <td><span class="badge badge-blue">${s.theory_total}</span></td>
         <td><span class="badge badge-purple">${s.practical_total}</span></td>
         <td>${pctBadge(s.attendance_pct)}${progressBar(s.attendance_pct)}</td>
-        <td><button class="btn btn-danger btn-sm" onclick="deleteStudent(${s.id},'${s.name.replace(/'/g,"\\'")}')">✕</button></td>
+        <td>
+          <button class="btn btn-secondary btn-sm" title="Set portal PIN" onclick="setStudentPin(${s.id},'${s.name.replace(/'/g,"\\'")}')">🔑</button>
+          <button class="btn btn-danger btn-sm" title="Remove student" onclick="deleteStudent(${s.id},'${s.name.replace(/'/g,"\\'")}')">✕</button>
+        </td>
       </tr>`
     ).join('');
   } catch(e) { toast('Failed to load students', 'var(--red)'); }
@@ -1192,14 +1211,45 @@ async function addSingleStudent() {
   const moduleId = document.getElementById('add-stu-module').value;
   const regNo = document.getElementById('add-stu-regno').value.trim().toUpperCase();
   const name = document.getElementById('add-stu-name').value.trim();
-  if (!moduleId || !regNo || !name) { toast('All fields required', 'var(--red)'); return; }
+  const portalPin = document.getElementById('add-stu-pin').value.trim();
+  if (!moduleId || !regNo || !name || portalPin.length < 6) { toast('All fields required; PIN must be at least 6 characters', 'var(--red)'); return; }
   try {
-    await api('POST', '/students/bulk_create/', { module: parseInt(moduleId, 10), students: [{ nactvet_reg_no: regNo, name }] });
+    await api('POST', '/students/bulk_create/', { module: parseInt(moduleId, 10), students: [{ nactvet_reg_no: regNo, name, portal_pin: portalPin }] });
     toast('Student added!', 'var(--green)');
     document.getElementById('add-stu-regno').value = '';
     document.getElementById('add-stu-name').value = '';
+    document.getElementById('add-stu-pin').value = '';
     loadStudents();
   } catch(e) { toast(e?.detail || 'Error', 'var(--red)'); }
+}
+
+async function setStudentPin(id, name) {
+  const pin = prompt(`Set a new portal PIN for ${name} (at least 6 characters):`);
+  if (pin === null) return;
+  if (pin.trim().length < 6) { toast('PIN must be at least 6 characters', 'var(--red)'); return; }
+  try {
+    await api('PATCH', `/students/${id}/`, { portal_pin: pin.trim() });
+    toast('Portal PIN updated', 'var(--green)');
+    loadStudents();
+  } catch(e) { toast(e?.detail || 'Could not update PIN', 'var(--red)'); }
+}
+
+async function bulkSetStudentPins() {
+  const pin = prompt('Set one password/PIN for all students matching the current filters (at least 6 characters):');
+  if (pin === null) return;
+  if (pin.trim().length < 6) { toast('Password/PIN must be at least 6 characters', 'var(--red)'); return; }
+  const payload = {
+    portal_pin: pin.trim(),
+    module_id: document.getElementById('stu-flt-module').value || null,
+    class_level_id: document.getElementById('stu-flt-level').value || null,
+    semester_id: document.getElementById('stu-flt-sem').value || null,
+  };
+  if (!confirm('Update the password/PIN for every student currently matched by these filters?')) return;
+  try {
+    const result = await api('POST', '/students/bulk_set_pin/', payload);
+    toast(`Updated ${result.updated} student password/PIN(s)`, 'var(--green)');
+    loadStudents();
+  } catch(e) { toast(e?.detail || 'Could not update passwords/PINs', 'var(--red)'); }
 }
 
 async function deleteStudent(id, name) {
@@ -1226,10 +1276,12 @@ function handleExcelUpload(event) {
         const regKey = keys.find(k => /reg|nactvet|regno|id/i.test(k));
         const nameKey = keys.find(k => /name/i.test(k));
         const moduleKey = keys.find(k => /module|code/i.test(k));
+        const pinKey = keys.find(k => /portal.?pin|pin/i.test(k));
         return {
           nactvet_reg_no: (r[regKey] || '').toString().trim().toUpperCase(),
           name: (r[nameKey] || '').toString().trim(),
           module: moduleId ? parseInt(moduleId, 10) : (r[moduleKey] || '').toString().trim(),
+          portal_pin: pinKey ? (r[pinKey] || '').toString().trim() : '',
         };
       }).filter(s => s.nactvet_reg_no && s.name && (s.module || moduleId));
       if (!students.length) { toast('No valid rows found', 'var(--red)'); return; }
@@ -1450,6 +1502,20 @@ async function openProfileModal() {
   } catch(e) { console.error(e); }
 }
 function closeProfileModal() { document.getElementById('profile-modal').classList.remove('open'); }
+async function changeOwnPassword() {
+  const current = document.getElementById('profile-current-password').value;
+  const next = document.getElementById('profile-new-password').value;
+  if (!current || next.trim().length < 6) {
+    toast('Enter current password and a new password of at least 6 characters', 'var(--red)');
+    return;
+  }
+  try {
+    await api('POST', '/change-password/', { current_password: current, new_password: next.trim() });
+    document.getElementById('profile-current-password').value = '';
+    document.getElementById('profile-new-password').value = '';
+    toast('Password updated', 'var(--green)');
+  } catch(e) { toast(e?.detail || 'Could not update password', 'var(--red)'); }
+}
 function renderClaimGrid() {
   const semId = document.getElementById('profile-flt-sem').value;
   const lvlId = document.getElementById('profile-flt-level').value;
@@ -1588,6 +1654,7 @@ function mkInput(resultId, field, value) {
   const v = value !== null && value !== undefined ? value : '';
   return `<input type="number" min="0" max="100" step="0.01"
     data-rid="${resultId}" data-field="${field}"
+    data-original="${v}"
     value="${v}"
     style="width:68px;background:var(--bg);border:1px solid var(--border);color:var(--text);
            border-radius:6px;padding:4px 7px;font-size:.8rem;text-align:center;"
@@ -1646,6 +1713,7 @@ function eligBadge(v, label='') {
 function onResInput(el) {
   const rid   = el.dataset.rid;
   const field = el.dataset.field;
+  el.dataset.dirty = String(el.value !== el.dataset.original);
   updateResultRowCalc(rid);
   if (field === 'end_theory' || field === 'end_practical') updateEndExamRowCalc(rid);
 }
@@ -1752,14 +1820,17 @@ async function saveAllResults() {
   if (!resData.length) { toast('No results to save', 'var(--red)'); return; }
 
   const FIELDS = ['assign1','assign2','cat1_theory','cat2_theory','cat1_practical','cat2_practical'];
-  const payload = resData.map(r => {
-    const item = { id: r.id };
-    FIELDS.forEach(f => {
-      const el = document.querySelector(`input[data-rid="${r.id}"][data-field="${f}"]`);
-      item[f] = el ? (el.value === '' ? null : parseFloat(el.value)) : null;
-    });
-    return item;
+  const byResult = {};
+  document.querySelectorAll('#res-tbody input[data-rid][data-field]').forEach(el => {
+    const field = el.dataset.field;
+    if (!FIELDS.includes(field)) return;
+    if (el.value === el.dataset.original && el.dataset.dirty !== 'true') return;
+    const rid = el.dataset.rid;
+    if (!byResult[rid]) byResult[rid] = { id: parseInt(rid, 10) };
+    byResult[rid][field] = el.value === '' ? null : parseFloat(el.value);
   });
+  const payload = Object.values(byResult);
+  if (!payload.length) { toast('No changed marks to save', 'var(--yellow)'); return; }
 
   try {
     const result = await api('POST', '/results/bulk_save/', payload);
@@ -1768,6 +1839,7 @@ async function saveAllResults() {
     // Reload fresh data
     const fresh = await api('GET', `/results/module/?module_id=${resModuleInfo.id}`);
     resData = fresh.results;
+    renderResultsPage();
     document.getElementById('res-save-info').textContent = `Last saved: ${new Date().toLocaleTimeString()}`;
   } catch(e) { toast(e?.detail || 'Save failed', 'var(--red)'); }
 }
@@ -1786,6 +1858,8 @@ async function autoSaveResult(el) {
     // Sync local data with fresh weighted values from API
     const rec = resData.find(r => r.id === rid);
     if (rec) Object.assign(rec, updated);
+    el.dataset.original = raw;
+    el.dataset.dirty = 'false';
     el.style.borderColor = 'var(--green)';
     const isEndField = field === 'end_theory' || field === 'end_practical';
     const infoId = isEndField ? 'end-exam-save-info' : 'res-save-info';

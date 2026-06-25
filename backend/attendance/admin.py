@@ -37,13 +37,17 @@ class ModuleAdmin(admin.ModelAdmin):
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ['nactvet_reg_no', 'name', 'module', 'get_class_level']
+    list_display = ['nactvet_reg_no', 'name', 'module', 'get_class_level', 'has_portal_access']
     list_filter = ['module__class_level', 'module__semester']
     search_fields = ['nactvet_reg_no', 'name']
 
     @admin.display(description='Class Level', ordering='module__class_level__order')
     def get_class_level(self, obj):
         return obj.module.class_level.name
+
+    @admin.display(boolean=True, description='Portal PIN')
+    def has_portal_access(self, obj):
+        return obj.has_portal_pin
 
 
 class AttendanceRecordInline(admin.TabularInline):

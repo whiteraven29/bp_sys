@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.conf import settings
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
@@ -95,6 +96,7 @@ class Student(models.Model):
     nactvet_reg_no = models.CharField(max_length=50, verbose_name='NACTVET Reg. No.')
     name = models.CharField(max_length=200)
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='students')
+    portal_pin_hash = models.CharField(max_length=128, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -103,6 +105,16 @@ class Student(models.Model):
 
     def __str__(self):
         return f"{self.nactvet_reg_no} – {self.name}"
+
+    @property
+    def has_portal_pin(self):
+        return bool(self.portal_pin_hash)
+
+    def set_portal_pin(self, raw_pin):
+        self.portal_pin_hash = make_password(str(raw_pin))
+
+    def check_portal_pin(self, raw_pin):
+        return bool(self.portal_pin_hash) and check_password(str(raw_pin), self.portal_pin_hash)
 
 
 class Session(models.Model):

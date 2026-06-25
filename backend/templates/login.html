@@ -57,7 +57,7 @@
 <body>
   <div class="card">
   <div class="logo">Edu<span>Track</span></div>
-  <div class="subtitle">Sign in — teachers use username/password; students use registration & last name</div>
+  <div class="subtitle">Teachers use their username and password. Students use their registration number and portal PIN.</div>
 
   {% if error %}
     <div class="errors">{{ error }}</div>
@@ -70,8 +70,8 @@
       <input type="text" name="identifier" value="{{ identifier|default:'' }}" required placeholder="username or NACTVET reg no" />
     </div>
     <div class="field">
-      <label>Password or Last Name (UPPERCASE)</label>
-      <input type="password" name="secret" required placeholder="password or LASTNAME" />
+      <label>Password or Student Portal PIN</label>
+      <input type="password" name="secret" required placeholder="password or 6+ character PIN" />
     </div>
     <button type="submit" class="btn">Sign In</button>
   </form>

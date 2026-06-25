@@ -1,1 +1,7 @@
 DEPLOYMENT.md
+backend/.env
+backend/venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+backend/staticfiles/
