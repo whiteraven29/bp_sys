@@ -93,6 +93,19 @@
   .nav-btn:hover { background: var(--surface2); color: var(--text); }
   .nav-btn.active { background: rgba(79,142,247,.15); color: var(--accent); border-left: 2px solid var(--accent); padding-left: 8px; }
   .nav-btn .icon { font-size: .95rem; width: 20px; text-align: center; flex-shrink: 0; }
+  .nav-group { display: flex; flex-direction: column; gap: 2px; }
+  body.is-admin .nav-group.admin-only { display: flex !important; }
+  .nav-submenu { display: none; padding: 2px 0 5px 30px; }
+  .nav-group.open .nav-submenu { display: flex; flex-direction: column; gap: 2px; }
+  .nav-caret { margin-left: auto; color: var(--muted); font-size: .7rem; transition: transform .15s; }
+  .nav-group.open .nav-caret { transform: rotate(90deg); }
+  .nav-sub-btn {
+    border: none; background: transparent; color: var(--muted); text-align: left;
+    border-radius: 7px; padding: 7px 9px; font-family: var(--font-sans);
+    font-size: .78rem; cursor: pointer; transition: all .13s;
+  }
+  .nav-sub-btn:hover { background: var(--surface2); color: var(--text); }
+  .nav-sub-btn.active { color: var(--accent); background: rgba(79,142,247,.1); }
   .sidebar-level { padding: 6px 10px; font-size: .62rem; font-family: var(--font-mono); color: var(--accent2); letter-spacing: .08em; text-transform: uppercase; margin-top: 4px; }
   .sidebar-module {
     display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 7px; cursor: pointer;
@@ -208,6 +221,9 @@
   .level-tab-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
   .level-tab { padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); font-size: .77rem; font-weight: 600; cursor: pointer; transition: all .13s; }
   .level-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .student-subview { display: none; }
+  .student-subview.active { display: block; }
+  .row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
 
   /* Profile modules grid */
   .claim-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 10px; }
@@ -384,7 +400,13 @@
     <div class="aside-label">Navigation</div>
     <button class="nav-btn active" data-page="dashboard" onclick="showPage('dashboard',this)"><span class="icon">📊</span> Dashboard</button>
     <button class="nav-btn admin-only" data-page="modules" onclick="showPage('modules',this)"><span class="icon">📚</span> Modules</button>
-    <button class="nav-btn admin-only" data-page="students" onclick="showPage('students',this)"><span class="icon">🎓</span> Students</button>
+    <div class="nav-group admin-only" id="students-nav-group">
+      <button class="nav-btn" data-page="students" onclick="toggleStudentsMenu(event)"><span class="icon">🎓</span> Students <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn active" data-student-section="register" onclick="showStudentSection('register', this)">Upload / Register</button>
+        <button class="nav-sub-btn" data-student-section="manage" onclick="showStudentSection('manage', this)">Manage Enrollments</button>
+      </div>
+    </div>
     <button class="nav-btn" data-page="attendance" onclick="showPage('attendance',this)"><span class="icon">✅</span> Take Attendance</button>
     <button class="nav-btn" data-page="results" onclick="showPage('results',this)"><span class="icon">📝</span> Results / CA</button>
     <button class="nav-btn" data-page="reports" onclick="showPage('reports',this)"><span class="icon">📈</span> Reports</button>
@@ -502,48 +524,59 @@
     <div class="page" id="page-students">
       <div class="page-title">Students</div>
       <div class="page-sub">Manage student enrollment per module</div>
-      <div class="card">
-        <div class="card-title">Filters</div>
-        <div class="form-grid-3">
-          <div class="field"><label>Semester</label><select id="stu-flt-sem" onchange="onStudentFilterChange()"><option value="">All Semesters</option></select></div>
-          <div class="field"><label>Class Level</label><select id="stu-flt-level" onchange="onStudentFilterChange()"><option value="">All Levels</option></select></div>
-          <div class="field"><label>Module</label><select id="stu-flt-module" onchange="loadStudents()"><option value="">All Modules</option></select></div>
-        </div>
+
+      <div class="level-tab-bar">
+        <button class="level-tab active" data-student-tab="register" onclick="showStudentSection('register')">Upload / Register</button>
+        <button class="level-tab" data-student-tab="manage" onclick="showStudentSection('manage')">Manage Enrollments</button>
       </div>
-      <div class="card">
-        <div class="card-title">➕ Add Single Student</div>
-        <div class="form-grid">
-          <div class="field"><label>Module *</label><select id="add-stu-module"><option value="">— select module —</option></select></div>
-          <div class="field"><label>NACTVET Reg. No. *</label><input id="add-stu-regno" placeholder="e.g. NTA/L4/0001" /></div>
-          <div class="field"><label>Student Name *</label><input id="add-stu-name" placeholder="e.g. John Doe" /></div>
-          <div class="field"><label>Portal PIN *</label><input id="add-stu-pin" type="password" minlength="6" placeholder="At least 6 characters" /></div>
+
+      <div class="student-subview active" id="student-section-register">
+        <div class="card">
+          <div class="card-title">➕ Register New Student</div>
+          <div class="form-grid">
+            <div class="field"><label>Module *</label><select id="add-stu-module"><option value="">— select module —</option></select></div>
+            <div class="field"><label>NACTVET Reg. No. *</label><input id="add-stu-regno" placeholder="e.g. NTA/L4/0001" /></div>
+            <div class="field"><label>Student Name *</label><input id="add-stu-name" placeholder="e.g. John Doe" /></div>
+            <div class="field"><label>Portal PIN *</label><input id="add-stu-pin" type="password" minlength="6" placeholder="At least 6 characters" /></div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="addSingleStudent()">Add Student</button>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="addSingleStudent()">Add Student</button>
-      </div>
-      <div class="card">
-        <div class="card-title">📤 Bulk Upload via Excel</div>
-        <div class="form-grid">
-          <div class="field"><label>Module</label><select id="bulk-module"><option value="">— select module —</option></select>
-            <small style="display:block;color:var(--muted);margin-top:6px;">Leave blank to upload students for multiple modules using a module code/name column in the sheet.</small>
+        <div class="card">
+          <div class="card-title">📤 Bulk Upload via Excel</div>
+          <div class="form-grid">
+            <div class="field"><label>Module</label><select id="bulk-module"><option value="">— select module —</option></select>
+              <small style="display:block;color:var(--muted);margin-top:6px;">Leave blank to upload students for multiple modules using a module code/name column in the sheet.</small>
+            </div>
+          </div>
+          <div class="upload-zone" onclick="document.getElementById('excel-file').click()">
+            <input type="file" id="excel-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelUpload(event)">
+            <div class="uz-icon">📊</div>
+            <div class="uz-title">Click to upload Excel / CSV</div>
+              <div class="uz-sub">Columns: <strong>NACTVET Reg No</strong>, <strong>Name</strong>, and optional <strong>Portal PIN</strong></div>
           </div>
         </div>
-        <div class="upload-zone" onclick="document.getElementById('excel-file').click()">
-          <input type="file" id="excel-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelUpload(event)">
-          <div class="uz-icon">📊</div>
-          <div class="uz-title">Click to upload Excel / CSV</div>
-            <div class="uz-sub">Columns: <strong>NACTVET Reg No</strong>, <strong>Name</strong>, and optional <strong>Portal PIN</strong></div>
-        </div>
       </div>
-      <div class="card">
-        <div class="card-title">🎓 Enrolled Students</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" class="admin-only">
-          <button class="btn btn-warning btn-sm" onclick="bulkSetStudentPins()">🔑 Set Password/PIN for Filtered Students</button>
+
+      <div class="student-subview" id="student-section-manage">
+        <div class="card">
+          <div class="card-title">Filters</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Semester</label><select id="stu-flt-sem" onchange="onStudentFilterChange()"><option value="">All Semesters</option></select></div>
+            <div class="field"><label>Class Level</label><select id="stu-flt-level" onchange="onStudentFilterChange()"><option value="">All Levels</option></select></div>
+            <div class="field"><label>Module</label><select id="stu-flt-module" onchange="loadStudents()"><option value="">All Modules</option></select></div>
+          </div>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>NACTVET Reg. No.</th><th>Name</th><th>Module</th><th>Level</th><th>Semester</th><th>P</th><th>S</th><th>A</th><th>T-held</th><th>P-held</th><th>Overall %</th><th></th></tr></thead>
-            <tbody id="students-tbody"></tbody>
-          </table>
+        <div class="card">
+          <div class="card-title">🎓 Enrolled Students</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" class="admin-only">
+            <button class="btn btn-warning btn-sm" onclick="bulkSetStudentPins()">🔑 Set Password/PIN for Filtered Students</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>NACTVET Reg. No.</th><th>Name</th><th>Module</th><th>Level</th><th>Semester</th><th>P</th><th>S</th><th>A</th><th>T-held</th><th>P-held</th><th>Overall %</th><th></th></tr></thead>
+              <tbody id="students-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -823,6 +856,24 @@
   </main>
 </div>
 
+<!-- STUDENT EDIT MODAL -->
+<div class="modal-overlay" id="student-edit-modal">
+  <div class="modal">
+    <div class="modal-title">
+      Update Student
+      <button class="modal-close" onclick="closeStudentEditModal()">✕</button>
+    </div>
+    <input type="hidden" id="edit-stu-id">
+    <div class="form-grid" style="margin-bottom:14px;">
+      <div class="field"><label>Module *</label><select id="edit-stu-module"><option value="">— select module —</option></select></div>
+      <div class="field"><label>NACTVET Reg. No. *</label><input id="edit-stu-regno"></div>
+      <div class="field"><label>Student Name *</label><input id="edit-stu-name"></div>
+      <div class="field"><label>New Portal PIN</label><input id="edit-stu-pin" type="password" minlength="6" placeholder="Leave blank to keep current PIN"></div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="saveStudentEdit()">Save Changes</button>
+  </div>
+</div>
+
 <!-- PROFILE MODAL -->
 <div class="modal-overlay" id="profile-modal">
   <div class="modal">
@@ -925,8 +976,19 @@ function closeSidebar() {
 function showPage(name, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.nav-sub-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
-  btn.classList.add('active');
+  if (btn) btn.classList.add('active');
+  document.querySelectorAll('.nav-group').forEach(g => {
+    if (g.id !== 'students-nav-group' || name !== 'students') g.classList.remove('open');
+  });
+  if (name === 'students') {
+    const group = document.getElementById('students-nav-group');
+    group.classList.add('open');
+    group.querySelector('.nav-btn').classList.add('active');
+    const section = document.querySelector('.student-subview.active')?.id?.replace('student-section-', '') || 'register';
+    document.querySelector(`[data-student-section="${section}"]`)?.classList.add('active');
+  }
   closeSidebar();
   if (name === 'modules') loadModules();
   if (name === 'students') loadStudents();
@@ -935,6 +997,24 @@ function showPage(name, btn) {
   if (name === 'results') loadResultsModule();
   if (name === 'eligibility') loadEligibility();
   if (name === 'sick') loadSickRecords();
+}
+
+function toggleStudentsMenu(event) {
+  const group = document.getElementById('students-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-students').classList.contains('active')) {
+    showStudentSection('register', group.querySelector('[data-student-section="register"]'));
+  }
+  event.stopPropagation();
+}
+
+function showStudentSection(section, btn) {
+  document.querySelectorAll('.student-subview').forEach(el => el.classList.remove('active'));
+  document.getElementById('student-section-' + section).classList.add('active');
+  document.querySelectorAll('[data-student-tab]').forEach(el => el.classList.toggle('active', el.dataset.studentTab === section));
+  document.querySelectorAll('.nav-sub-btn').forEach(el => el.classList.toggle('active', el.dataset.studentSection === section));
+  showPage('students', document.querySelector('#students-nav-group .nav-btn'));
+  if (btn) btn.classList.add('active');
 }
 
 // ── BOOT ───────────────────────────────────────────────────────────────────────
@@ -1011,6 +1091,7 @@ async function boot() {
     }
 
     populateAllSelects();
+    await refreshModuleDropdowns('', '', 'stu-flt-module', 'add-stu-module', 'bulk-module');
     buildSidebarModules();
   } catch(e) {
     console.error(e);
@@ -1095,7 +1176,7 @@ async function buildSidebarModules() {
 }
 function goToModule(id) {
   document.getElementById('stu-flt-module').value = id;
-  showPage('students', document.querySelector('[data-page="students"]'));
+  showStudentSection('manage', document.querySelector('[data-student-section="manage"]'));
 }
 
 // ── MODULES PAGE ───────────────────────────────────────────────────────────────
@@ -1158,6 +1239,8 @@ async function deleteModule(id, name) {
 }
 
 // ── STUDENTS PAGE ──────────────────────────────────────────────────────────────
+let studentRows = [];
+
 async function onStudentFilterChange() {
   const semId = document.getElementById('stu-flt-sem').value;
   const lvlId = document.getElementById('stu-flt-level').value;
@@ -1171,7 +1254,10 @@ async function refreshModuleDropdowns(semId, lvlId, ...dropdownIds) {
   try {
     const data = await api('GET', url);
     const mods = data.results ?? data;
-    dropdownIds.forEach(id => { const el = document.getElementById(id); if (el) buildModuleOptions(el, mods, true); });
+    dropdownIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) buildModuleOptions(el, mods, id.includes('flt'));
+    });
     return mods;
   } catch(e) { return []; }
 }
@@ -1186,6 +1272,7 @@ async function loadStudents() {
   try {
     const data = await api('GET', url);
     const students = data.results ?? data;
+    studentRows = students;
     const tbody = document.getElementById('students-tbody');
     if (!students.length) {
       tbody.innerHTML = '<tr><td colspan="12"><div class="empty"><div class="ei">🎓</div>No students enrolled</div></td></tr>';
@@ -1205,12 +1292,61 @@ async function loadStudents() {
         <td><span class="badge badge-purple">${s.practical_total}</span></td>
         <td>${pctBadge(s.attendance_pct)}${progressBar(s.attendance_pct)}</td>
         <td>
-          <button class="btn btn-secondary btn-sm" title="Set portal PIN" onclick="setStudentPin(${s.id},'${s.name.replace(/'/g,"\\'")}')">🔑</button>
-          <button class="btn btn-danger btn-sm" title="Remove student" onclick="deleteStudent(${s.id},'${s.name.replace(/'/g,"\\'")}')">✕</button>
+          <div class="row-actions">
+            <button class="btn btn-secondary btn-sm" title="Update student" onclick="openStudentEditModal(${s.id})">✎</button>
+            <button class="btn btn-secondary btn-sm" title="Set portal PIN" onclick="setStudentPin(${s.id},'${s.name.replace(/'/g,"\\'")}')">🔑</button>
+            <button class="btn btn-danger btn-sm" title="Remove student" onclick="deleteStudent(${s.id},'${s.name.replace(/'/g,"\\'")}')">✕</button>
+          </div>
         </td>
       </tr>`
     ).join('');
   } catch(e) { toast('Failed to load students', 'var(--red)'); }
+}
+
+async function openStudentEditModal(id) {
+  const student = studentRows.find(s => s.id === id);
+  if (!student) return;
+  await refreshModuleDropdowns(
+    document.getElementById('stu-flt-sem').value,
+    document.getElementById('stu-flt-level').value,
+    'edit-stu-module'
+  );
+  document.getElementById('edit-stu-id').value = student.id;
+  document.getElementById('edit-stu-module').value = student.module;
+  document.getElementById('edit-stu-regno').value = student.nactvet_reg_no;
+  document.getElementById('edit-stu-name').value = student.name;
+  document.getElementById('edit-stu-pin').value = '';
+  document.getElementById('student-edit-modal').classList.add('open');
+}
+
+function closeStudentEditModal() {
+  document.getElementById('student-edit-modal').classList.remove('open');
+}
+
+async function saveStudentEdit() {
+  const id = document.getElementById('edit-stu-id').value;
+  const moduleId = document.getElementById('edit-stu-module').value;
+  const regNo = document.getElementById('edit-stu-regno').value.trim().toUpperCase();
+  const name = document.getElementById('edit-stu-name').value.trim();
+  const pin = document.getElementById('edit-stu-pin').value.trim();
+  if (!id || !moduleId || !regNo || !name) {
+    toast('Module, registration number, and name are required', 'var(--red)');
+    return;
+  }
+  if (pin && pin.length < 6) {
+    toast('PIN must be at least 6 characters', 'var(--red)');
+    return;
+  }
+  const payload = { module: parseInt(moduleId, 10), nactvet_reg_no: regNo, name };
+  if (pin) payload.portal_pin = pin;
+  try {
+    await api('PATCH', `/students/${id}/`, payload);
+    closeStudentEditModal();
+    toast('Student updated', 'var(--green)');
+    loadStudents();
+  } catch(e) {
+    toast(e?.detail || 'Could not update student', 'var(--red)');
+  }
 }
 
 async function addSingleStudent() {
