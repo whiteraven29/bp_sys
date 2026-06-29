@@ -76,7 +76,7 @@ class AttendanceRecordAdmin(admin.ModelAdmin):
 
 @admin.register(StudentResult)
 class StudentResultAdmin(admin.ModelAdmin):
-    list_display = ['student', 'assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical', 'updated_at']
-    list_filter  = ['student__module__class_level', 'student__module__semester', 'student__module__has_practical']
+    list_display = ['student', 'assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical', 'ca_approved', 'final_approved', 'updated_at']
+    list_filter  = ['ca_approved', 'final_approved', 'student__module__class_level', 'student__module__semester', 'student__module__has_practical']
     search_fields = ['student__name', 'student__nactvet_reg_no']
     readonly_fields = ['updated_at']

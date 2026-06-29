@@ -82,6 +82,13 @@
     content: ""; position: absolute; left: -12px; width: 4px; height: 26px;
     border-radius: 0 4px 4px 0; background: var(--blue);
   }
+  .nav-group { margin-bottom: 3px; }
+  .nav-toggle .nav-caret { margin-left: auto; color: #6f879f; transition: transform .18s ease; }
+  .nav-toggle[aria-expanded="true"] .nav-caret { transform: rotate(180deg); }
+  .nav-submenu { display: none; margin: 2px 0 6px 31px; padding-left: 9px; border-left: 1px solid rgba(255,255,255,.08); }
+  .nav-submenu.open { display: grid; gap: 2px; }
+  .nav-submenu .nav-item { padding: 9px 10px; font-size: .74rem; }
+  .nav-submenu .nav-item.active::before { left: -10px; height: 20px; }
   .nav-icon { display: grid; place-items: center; width: 19px; color: #cfe7ff; font-size: .95rem; }
   .nav-badge { margin-left: auto; padding: 2px 7px; border-radius: 999px; color: var(--blue); background: var(--blue-soft); font-size: .62rem; }
   .logout {
@@ -274,10 +281,21 @@
       <div class="nav-label">Overview</div>
       <button class="nav-item active" data-view="dashboard"><span class="nav-icon">▦</span>Dashboard</button>
       <div class="nav-label">Academic</div>
-      <button class="nav-item" data-view="attendance"><span class="nav-icon">✓</span>Attendance</button>
-      <button class="nav-item" data-view="ca-sem1"><span class="nav-icon">▤</span>CA Results · Semester 1<span class="nav-badge">{{ semester1_modules|length }}</span></button>
-      <button class="nav-item" data-view="ca-sem2"><span class="nav-icon">▤</span>CA Results · Semester 2<span class="nav-badge">{{ semester2_modules|length }}</span></button>
-      <button class="nav-item" data-view="final-results"><span class="nav-icon">★</span>Final Results</button>
+      <div class="nav-group">
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="attendance-menu"><span class="nav-icon">✓</span>Attendance<span class="nav-caret">⌄</span></button>
+        <div class="nav-submenu" id="attendance-menu">
+          <button class="nav-item" data-view="attendance-sem1"><span class="nav-icon">1</span>Semester 1<span class="nav-badge">{{ semester1_modules|length }}</span></button>
+          <button class="nav-item" data-view="attendance-sem2"><span class="nav-icon">2</span>Semester 2<span class="nav-badge">{{ semester2_modules|length }}</span></button>
+        </div>
+      </div>
+      <div class="nav-group">
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="results-menu"><span class="nav-icon">▤</span>Results<span class="nav-caret">⌄</span></button>
+        <div class="nav-submenu" id="results-menu">
+          <button class="nav-item" data-view="ca-sem1"><span class="nav-icon">1</span>CA · Semester 1<span class="nav-badge">{{ semester1_modules|length }}</span></button>
+          <button class="nav-item" data-view="ca-sem2"><span class="nav-icon">2</span>CA · Semester 2<span class="nav-badge">{{ semester2_modules|length }}</span></button>
+          <button class="nav-item" data-view="final-results"><span class="nav-icon">★</span>Semester Results</button>
+        </div>
+      </div>
       <button class="nav-item" data-view="modules"><span class="nav-icon">▥</span>Enrolled Modules<span class="nav-badge">{{ module_count }}</span></button>
       <div class="nav-label">Account</div>
       <button class="nav-item" data-view="profile"><span class="nav-icon">●</span>My Profile</button>
@@ -322,7 +340,7 @@
             </div>
           </section>
           <div class="side-stack">
-            <button class="quick-link" data-go="attendance"><span class="quick-link-icon">✓</span><span><strong>Check attendance</strong><span>See module percentages</span></span></button>
+            <button class="quick-link" data-go="attendance-sem1"><span class="quick-link-icon">✓</span><span><strong>Check attendance</strong><span>See module percentages</span></span></button>
             <button class="quick-link" data-go="ca-sem1"><span class="quick-link-icon">1</span><span><strong>Semester 1 CA</strong><span>Assignments and CATs</span></span></button>
             <button class="quick-link" data-go="final-results"><span class="quick-link-icon">★</span><span><strong>Final results</strong><span>Weighted totals</span></span></button>
           </div>
@@ -336,21 +354,35 @@
         </section>
       </section>
 
-      <section class="view" id="view-attendance">
-        <div class="section-title"><p class="eyebrow">Academic</p><h2>Attendance</h2><p>Attendance by module for {{ academic_year }}.</p></div>
+      <section class="view" id="view-attendance-sem1">
+        <div class="section-title"><p class="eyebrow">Academic</p><h2>Attendance · Semester 1</h2><p>Attendance by module for {{ academic_year }}.</p></div>
         <div class="module-list searchable-area">
-          {% for module in modules %}
+          {% for module in semester1_modules %}
           <article class="module-card searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.semester }}">
             <div class="module-top"><div><div class="module-code">{{ module.module_code }}</div><h3>{{ module.module_name }}</h3><div class="meta">{{ module.semester }} · {{ module.teacher }}</div></div><span class="status {{ module.attendance_status }}">{% if module.attendance_status == 'good' %}On track{% elif module.attendance_status == 'warning' %}Needs care{% elif module.attendance_status == 'critical' %}At risk{% else %}Pending{% endif %}</span></div>
             <div class="progress-row"><span>Attendance rate</span><strong>{{ module.attendance_pct }}%</strong></div><div class="progress"><span style="width:{{ module.attendance_pct }}%"></span></div>
             <div class="counts"><div class="count"><strong>{{ module.sessions_attended }}</strong><span>Present</span></div><div class="count"><strong>{{ module.sessions_sick }}</strong><span>Sick</span></div><div class="count"><strong>{{ module.sessions_absent }}</strong><span>Absent</span></div></div>
           </article>
-          {% empty %}<div class="empty">No attendance modules are available.</div>{% endfor %}
+          {% empty %}<div class="empty">No Semester 1 attendance modules are available.</div>{% endfor %}
+        </div>
+      </section>
+
+      <section class="view" id="view-attendance-sem2">
+        <div class="section-title"><p class="eyebrow">Academic</p><h2>Attendance · Semester 2</h2><p>Attendance by module for {{ academic_year }}.</p></div>
+        <div class="module-list searchable-area">
+          {% for module in semester2_modules %}
+          <article class="module-card searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.semester }}">
+            <div class="module-top"><div><div class="module-code">{{ module.module_code }}</div><h3>{{ module.module_name }}</h3><div class="meta">{{ module.semester }} · {{ module.teacher }}</div></div><span class="status {{ module.attendance_status }}">{% if module.attendance_status == 'good' %}On track{% elif module.attendance_status == 'warning' %}Needs care{% elif module.attendance_status == 'critical' %}At risk{% else %}Pending{% endif %}</span></div>
+            <div class="progress-row"><span>Attendance rate</span><strong>{{ module.attendance_pct }}%</strong></div><div class="progress"><span style="width:{{ module.attendance_pct }}%"></span></div>
+            <div class="counts"><div class="count"><strong>{{ module.sessions_attended }}</strong><span>Present</span></div><div class="count"><strong>{{ module.sessions_sick }}</strong><span>Sick</span></div><div class="count"><strong>{{ module.sessions_absent }}</strong><span>Absent</span></div></div>
+          </article>
+          {% empty %}<div class="empty">No Semester 2 attendance modules are available.</div>{% endfor %}
         </div>
       </section>
 
       <section class="view" id="view-ca-sem1">
         <div class="section-title"><p class="eyebrow">Continuous assessment</p><h2>CA Results · Semester 1</h2><p>Assignments, CATs, practical tests, and weighted CA totals.</p></div>
+        {% if has_ca_results_sem1 %}
         <section class="panel searchable-area"><div class="table-wrap"><table>
           <thead><tr><th>Code</th><th>Module</th><th>Assignment 1</th><th>Assignment 2</th><th>CAT 1 Theory</th><th>CAT 2 Theory</th><th>Practical 1</th><th>Practical 2</th><th>CA Total /40</th><th>Eligibility</th></tr></thead>
           <tbody>
@@ -369,10 +401,12 @@
             {% empty %}<tr><td colspan="10">No Semester 1 modules are registered for this academic year.</td></tr>{% endfor %}
           </tbody>
         </table></div></section>
+        {% else %}<div class="empty">CA results for Semester 1 have not been published yet.</div>{% endif %}
       </section>
 
       <section class="view" id="view-ca-sem2">
         <div class="section-title"><p class="eyebrow">Continuous assessment</p><h2>CA Results · Semester 2</h2><p>Assignments, CATs, practical tests, and weighted CA totals.</p></div>
+        {% if has_ca_results_sem2 %}
         <section class="panel searchable-area"><div class="table-wrap"><table>
           <thead><tr><th>Code</th><th>Module</th><th>Assignment 1</th><th>Assignment 2</th><th>CAT 1 Theory</th><th>CAT 2 Theory</th><th>Practical 1</th><th>Practical 2</th><th>CA Total /40</th><th>Eligibility</th></tr></thead>
           <tbody>
@@ -391,6 +425,7 @@
             {% empty %}<tr><td colspan="10">No Semester 2 modules are registered for this academic year.</td></tr>{% endfor %}
           </tbody>
         </table></div></section>
+        {% else %}<div class="empty">CA results for Semester 2 have not been published yet.</div>{% endif %}
       </section>
 
       <section class="view" id="view-final-results">
@@ -405,7 +440,7 @@
       <section class="view" id="view-modules">
         <div class="section-title"><p class="eyebrow">Academic</p><h2>Enrolled Modules</h2><p>All modules connected to your registration number in {{ academic_year }}.</p></div>
         <div class="module-list searchable-area">
-          {% for module in modules %}<article class="module-card searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.teacher }}"><div class="module-code">{{ module.module_code }}</div><h3>{{ module.module_name }}</h3><div class="meta">{{ module.semester }} · {{ module.class_level }}</div><div class="result-total"><span>Tutor</span><strong style="font-size:.78rem;">{{ module.teacher }}</strong></div><div class="counts"><div class="count"><strong>{{ module.sessions_total }}</strong><span>Total sessions</span></div><div class="count"><strong>{{ module.attendance_pct }}%</strong><span>Attendance</span></div><div class="count"><strong>{% if module.result %}{{ module.result.total_ca|default_if_none:"—" }}{% else %}—{% endif %}</strong><span>CA /40</span></div></div></article>
+          {% for module in modules %}<article class="module-card searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.teacher }}"><div class="module-code">{{ module.module_code }}</div><h3>{{ module.module_name }}</h3><div class="meta">{{ module.semester }} · {{ module.class_level }}</div><div class="result-total"><span>Tutor</span><strong style="font-size:.78rem;">{{ module.teacher }}</strong></div><div class="counts"><div class="count"><strong>{{ module.sessions_total }}</strong><span>Total sessions</span></div><div class="count"><strong>{{ module.attendance_pct }}%</strong><span>Attendance</span></div><div class="count"><strong>{% if module.has_ca_result and module.result %}{{ module.result.total_ca|default_if_none:"—" }}{% else %}—{% endif %}</strong><span>CA /40</span></div></div></article>
           {% empty %}<div class="empty">No modules are registered.</div>{% endfor %}
         </div>
       </section>
@@ -428,6 +463,8 @@
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('overlay');
   const navItems = document.querySelectorAll('.nav-item');
+  const viewNavItems = document.querySelectorAll('.nav-item[data-view]');
+  const navToggles = document.querySelectorAll('.nav-toggle');
   const views = document.querySelectorAll('.view');
   const search = document.getElementById('portal-search');
   const toastEl = document.getElementById('toast');
@@ -462,10 +499,20 @@
   }
 
   function showView(name, updateHash = true) {
+    if (name === 'attendance') name = 'attendance-sem1';
     const target = document.getElementById(`view-${name}`);
     if (!target) return;
     views.forEach(view => view.classList.remove('active'));
-    navItems.forEach(item => item.classList.toggle('active', item.dataset.view === name));
+    viewNavItems.forEach(item => item.classList.toggle('active', item.dataset.view === name));
+    navToggles.forEach(toggle => {
+      const menu = document.getElementById(toggle.dataset.menu);
+      const hasActiveChild = !!menu?.querySelector(`.nav-item[data-view="${name}"]`);
+      toggle.classList.toggle('active', hasActiveChild);
+      if (hasActiveChild) {
+        toggle.setAttribute('aria-expanded', 'true');
+        menu.classList.add('open');
+      }
+    });
     target.classList.add('active');
     search.value = '';
     document.querySelectorAll('.searchable').forEach(item => item.hidden = false);
@@ -474,7 +521,13 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  navItems.forEach(item => item.addEventListener('click', () => showView(item.dataset.view)));
+  viewNavItems.forEach(item => item.addEventListener('click', () => showView(item.dataset.view)));
+  navToggles.forEach(toggle => toggle.addEventListener('click', () => {
+    const menu = document.getElementById(toggle.dataset.menu);
+    const expanded = toggle.getAttribute('aria-expanded') === 'true';
+    toggle.setAttribute('aria-expanded', String(!expanded));
+    menu?.classList.toggle('open', !expanded);
+  }));
   document.querySelectorAll('[data-go]').forEach(item => item.addEventListener('click', () => showView(item.dataset.go)));
   document.getElementById('menu-button').addEventListener('click', () => {
     sidebar.classList.toggle('open');

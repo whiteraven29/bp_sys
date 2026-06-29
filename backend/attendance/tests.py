@@ -235,6 +235,67 @@ class AttendanceSecurityTests(TestCase):
         self.assertEqual(float(result.cat1_theory), 70)
         self.assertEqual(float(result.cat2_theory), 65)
 
+    def test_teacher_cannot_approve_ca_results(self):
+        result = StudentResult.objects.create(student=self.student, assign1=80)
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.post('/api/results/bulk_save/', [
+            {'id': result.id, 'ca_approved': True},
+        ], format='json')
+
+        self.assertEqual(response.status_code, 200)
+        result.refresh_from_db()
+        self.assertFalse(result.ca_approved)
+        self.assertTrue(response.data['errors'])
+
+    def test_admin_can_approve_ca_results(self):
+        result = StudentResult.objects.create(student=self.student, assign1=80)
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.post('/api/results/bulk_save/', [
+            {'id': result.id, 'ca_approved': True},
+        ], format='json')
+
+        self.assertEqual(response.status_code, 200)
+        result.refresh_from_db()
+        self.assertTrue(result.ca_approved)
+
+    def test_student_dashboard_hides_ca_results_until_admin_approval(self):
+        StudentResult.objects.create(
+            student=self.student,
+            assign1=80,
+            assign2=70,
+            cat1_theory=60,
+            cat2_theory=50,
+            ca_approved=False,
+        )
+        session = self.client.session
+        session['student_id'] = self.student.id
+        session.save()
+
+        response = self.client.get(reverse('student-dashboard'))
+
+        self.assertContains(response, 'CA results for Semester 1 have not been published yet.')
+        self.assertNotContains(response, '80.00')
+
+    def test_student_dashboard_shows_ca_results_after_admin_approval(self):
+        StudentResult.objects.create(
+            student=self.student,
+            assign1=80,
+            assign2=70,
+            cat1_theory=60,
+            cat2_theory=50,
+            ca_approved=True,
+        )
+        session = self.client.session
+        session['student_id'] = self.student.id
+        session.save()
+
+        response = self.client.get(reverse('student-dashboard'))
+
+        self.assertContains(response, '80.00')
+        self.assertNotContains(response, 'CA results for Semester 1 have not been published yet.')
+
     def test_student_dashboard_hides_final_results_until_admin_approval(self):
         StudentResult.objects.create(
             student=self.student,
@@ -251,9 +312,10 @@ class AttendanceSecurityTests(TestCase):
 
         response = self.client.get(reverse('student-dashboard'))
 
-        self.assertContains(response, '80.00')
+        self.assertContains(response, 'CA results for Semester 1 have not been published yet.')
         self.assertContains(response, 'CA Results · Semester 1')
         self.assertContains(response, 'Final examination marks have not been published yet.')
+        self.assertNotContains(response, '80.00')
         self.assertNotContains(response, '90.00')
         self.assertNotContains(response, '78.0')
 

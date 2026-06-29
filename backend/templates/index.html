@@ -658,6 +658,8 @@
           <div class="card-title">
             📝 CA Marks <span style="font-size:.75rem;font-weight:400;color:var(--muted);">(Assignments + CATs — 40%)</span>
             <div style="display:flex;gap:6px;margin-left:auto;">
+              <button class="btn btn-green btn-sm admin-only" onclick="setCAApproval(true)">Approve CA</button>
+              <button class="btn btn-danger btn-sm admin-only" onclick="setCAApproval(false)">Hide CA</button>
               <button class="btn btn-secondary btn-sm" onclick="printCAResults()">🖨 Print</button>
               <button class="btn btn-primary btn-sm" onclick="saveAllResults()">💾 Save</button>
             </div>
@@ -1636,7 +1638,7 @@ function renderResultsPage() {
       <th>Theory CA<br><span style="color:var(--muted);font-size:.6rem">/20</span></th>
       <th>Prac CA<br><span style="color:var(--muted);font-size:.6rem">/20</span></th>
       <th>Total CA<br><span style="color:var(--muted);font-size:.6rem">/40</span></th>
-      <th>Status</th>
+      <th>Status</th><th>Student Portal</th>
     </tr>`;
   } else {
     theadEl.innerHTML = `<tr>
@@ -1646,7 +1648,7 @@ function renderResultsPage() {
       <th>CAT1<br><span style="color:var(--muted);font-size:.6rem">/100 → 15%</span></th>
       <th>CAT2<br><span style="color:var(--muted);font-size:.6rem">/100 → 15%</span></th>
       <th>Total CA<br><span style="color:var(--muted);font-size:.6rem">/40</span></th>
-      <th>Status</th>
+      <th>Status</th><th>Student Portal</th>
     </tr>`;
   }
 
@@ -1787,7 +1789,7 @@ function renderResultsTable() {
         || r.student_reg_no.toLowerCase().includes(resSearchTerm);
   });
   if (!filtered.length) {
-    const cols = hp ? 13 : 9;
+    const cols = hp ? 14 : 10;
     tbody.innerHTML = `<tr><td colspan="${cols}"><div class="empty"><div class="ei">🎓</div>No students match that search</div></td></tr>`;
     return;
   }
@@ -1799,6 +1801,9 @@ function renderResultsTable() {
       tot:  r.total_ca,
       caElig: r.ca_eligible,
     };
+    const approvalBadge = r.ca_approved
+      ? '<span class="badge badge-green">Approved</span>'
+      : '<span class="badge badge-yellow">Hidden</span>';
     let row = `<tr>
       <td>${i+1}</td>
       <td><span style="font-family:var(--font-mono);font-size:.75rem">${r.student_reg_no}</span></td>
@@ -1815,6 +1820,7 @@ function renderResultsTable() {
     }
     row += `<td id="tot-${r.id}">${c.tot !== null ? `<strong>${c.tot.toFixed(2)}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
             <td id="elig-${r.id}">${eligBadge(c.caElig)}</td>
+            <td>${approvalBadge}</td>
     </tr>`;
     return row;
   }).join('');
@@ -1846,6 +1852,21 @@ async function saveAllResults() {
     renderResultsPage();
     document.getElementById('res-save-info').textContent = `Last saved: ${new Date().toLocaleTimeString()}`;
   } catch(e) { toast(e?.detail || 'Save failed', 'var(--red)'); }
+}
+
+async function setCAApproval(approved) {
+  if (!state.isStaff) return;
+  if (!resData.length) { toast('No results to update', 'var(--red)'); return; }
+  const payload = resData.map(r => ({ id: r.id, ca_approved: approved }));
+  try {
+    const result = await api('POST', '/results/bulk_save/', payload);
+    toast(`${approved ? 'Approved' : 'Hid'} ${result.saved} CA result(s)`, result.errors.length ? 'var(--yellow)' : 'var(--green)');
+    const fresh = await api('GET', `/results/module/?module_id=${resModuleInfo.id}`);
+    resData = fresh.results;
+    renderResultsPage();
+  } catch(e) {
+    toast('CA approval update failed: ' + (e?.detail || ''), 'var(--red)');
+  }
 }
 
 async function autoSaveResult(el) {

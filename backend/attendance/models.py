@@ -212,6 +212,7 @@ class StudentResult(models.Model):
     cat2_practical = _mark_field(verbose_name='Practical Test 2 (raw /100)')
     end_theory     = _mark_field(verbose_name='End of Semester – Theory/Written (raw /100)')
     end_practical  = _mark_field(verbose_name='End of Semester – Practical (raw /100)')
+    ca_approved    = models.BooleanField(default=False)
     final_approved = models.BooleanField(default=False)
     updated_at     = models.DateTimeField(auto_now=True)
 

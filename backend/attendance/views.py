@@ -195,7 +195,20 @@ def student_dashboard(request):
         data = serializer.data
         result = getattr(enrollment, 'result', None)
         result_data = StudentResultSerializer(result).data if result else None
+        ca_approved = bool(result and result.ca_approved)
         final_approved = bool(result and result.final_approved)
+        if result_data and not ca_approved:
+            for field in (
+                'assign1', 'assign2', 'cat1_theory', 'cat2_theory',
+                'cat1_practical', 'cat2_practical',
+                'assign1_w', 'assign2_w', 'cat1_theory_w', 'cat2_theory_w',
+                'cat1_prac_w', 'cat2_prac_w',
+                'theory_ca', 'practical_ca',
+                'theory_eligible', 'practical_eligible', 'ca_eligible',
+            ):
+                result_data[field] = None
+            if not final_approved:
+                result_data['total_ca'] = None
         if result_data and not final_approved:
             for field in (
                 'end_theory', 'end_practical',
@@ -230,6 +243,7 @@ def student_dashboard(request):
                 else 'critical'
             ) if data['sessions_total'] else 'pending',
             'result': result_data,
+            'has_ca_result': bool(ca_approved and result),
             'has_final_result': has_final_result,
         })
 
@@ -270,6 +284,8 @@ def student_dashboard(request):
         'active_module_count': len(active_modules),
         'semester1_modules': semester1_modules,
         'semester2_modules': semester2_modules,
+        'has_ca_results_sem1': any(module['has_ca_result'] for module in semester1_modules),
+        'has_ca_results_sem2': any(module['has_ca_result'] for module in semester2_modules),
         'has_final_results': any(module['has_final_result'] for module in modules),
         'overall_attendance': overall_attendance,
         'total_present': total_present,
@@ -1101,9 +1117,9 @@ class ResultViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         if not request.user.is_staff:
-            for f in ('end_theory', 'end_practical', 'final_approved'):
+            for f in ('end_theory', 'end_practical', 'ca_approved', 'final_approved'):
                 if f in request.data:
-                    raise PermissionDenied('Only the administrator can enter end-of-semester exam marks.')
+                    raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
         return super().update(request, *args, **kwargs)
 
     def perform_create(self, serializer):
@@ -1112,9 +1128,12 @@ class ResultViewSet(viewsets.ModelViewSet):
         if student.module_id not in allowed_module_ids:
             raise PermissionDenied('You may only create results for modules you tutor.')
         if not self.request.user.is_staff:
-            for field in ('end_theory', 'end_practical', 'final_approved'):
+            for field in ('ca_approved', 'final_approved'):
+                if field in serializer.validated_data:
+                    raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
+            for field in ('end_theory', 'end_practical'):
                 if serializer.validated_data.get(field) is not None:
-                    raise PermissionDenied('Only the administrator can enter end-of-semester exam marks.')
+                    raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
         serializer.save()
 
     # ── Get or create results for every student in a module ────────────────────
@@ -1157,11 +1176,18 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         mod_ids   = set(user_modules(request.user).values_list('id', flat=True))
         CA_FIELDS  = ['assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical']
-        END_FIELDS = ['end_theory', 'end_practical', 'final_approved']
+        END_FIELDS = ['end_theory', 'end_practical', 'ca_approved', 'final_approved']
         FIELDS     = CA_FIELDS + (END_FIELDS if request.user.is_staff else [])
         saved, errors = 0, []
 
         for item in updates:
+            if not request.user.is_staff:
+                restricted = {'end_theory', 'end_practical', 'ca_approved', 'final_approved'}
+                blocked = restricted.intersection(item.keys())
+                if blocked:
+                    errors.append(f'Result {item.get("id")}: administrator approval required')
+                    continue
+
             try:
                 result = (
                     StudentResult.objects
@@ -1180,7 +1206,7 @@ class ResultViewSet(viewsets.ModelViewSet):
                 if field not in item:
                     continue
                 raw = item[field]
-                if field == 'final_approved':
+                if field in ('ca_approved', 'final_approved'):
                     setattr(result, field, bool(raw))
                     continue
                 if raw == '' or raw is None:

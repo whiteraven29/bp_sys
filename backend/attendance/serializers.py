@@ -263,7 +263,7 @@ class StudentResultSerializer(serializers.ModelSerializer):
             'theory_ca', 'practical_ca', 'total_ca',
             'theory_eligible', 'practical_eligible', 'ca_eligible',
             'end_theory', 'end_practical',
-            'end_theory_w', 'end_prac_w', 'final_total', 'final_approved',
+            'end_theory_w', 'end_prac_w', 'final_total', 'ca_approved', 'final_approved',
             'updated_at',
         ]
         read_only_fields = ['id', 'updated_at']
