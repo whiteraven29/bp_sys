@@ -221,8 +221,8 @@
   .level-tab-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
   .level-tab { padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); font-size: .77rem; font-weight: 600; cursor: pointer; transition: all .13s; }
   .level-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .student-subview { display: none; }
-  .student-subview.active { display: block; }
+  .student-subview, .module-subview { display: none; }
+  .student-subview.active, .module-subview.active { display: block; }
   .row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
 
   /* Profile modules grid */
@@ -256,15 +256,15 @@
     padding: 2px 8px; border-radius: 99px; letter-spacing: .06em;
   }
   .role-badge.admin  { background: rgba(239,68,68,.15);  color: var(--red);    border: 1px solid rgba(239,68,68,.3); }
-  .role-badge.teacher{ background: rgba(79,142,247,.15); color: var(--accent); border: 1px solid rgba(79,142,247,.3); }
+  .role-badge.tutor{ background: rgba(79,142,247,.15); color: var(--accent); border: 1px solid rgba(79,142,247,.3); }
 
-  /* teacher notice card */
-  .teacher-notice {
+  /* tutor notice card */
+  .tutor-notice {
     background: rgba(79,142,247,.06); border: 1px solid rgba(79,142,247,.2);
     border-radius: var(--radius); padding: 14px 18px; margin-bottom: 20px;
     font-size: .84rem; color: var(--muted); display: none;
   }
-  body:not(.is-admin) .teacher-notice { display: flex; align-items: flex-start; gap: 10px; }
+  body:not(.is-admin) .tutor-notice { display: flex; align-items: flex-start; gap: 10px; }
 
   /* ── MOBILE ── */
   @media (max-width: 768px) {
@@ -399,7 +399,13 @@
   <aside id="sidebar">
     <div class="aside-label">Navigation</div>
     <button class="nav-btn active" data-page="dashboard" onclick="showPage('dashboard',this)"><span class="icon">📊</span> Dashboard</button>
-    <button class="nav-btn admin-only" data-page="modules" onclick="showPage('modules',this)"><span class="icon">📚</span> Modules</button>
+    <div class="nav-group admin-only" id="modules-nav-group">
+      <button class="nav-btn" data-page="modules" onclick="toggleModulesMenu(event)"><span class="icon">📚</span> Modules <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn active" data-module-section="register" onclick="showModuleSection('register', this)">Register Module</button>
+        <button class="nav-sub-btn" data-module-section="manage" onclick="showModuleSection('manage', this)">Manage Modules</button>
+      </div>
+    </div>
     <div class="nav-group admin-only" id="students-nav-group">
       <button class="nav-btn" data-page="students" onclick="toggleStudentsMenu(event)"><span class="icon">🎓</span> Students <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
@@ -407,9 +413,20 @@
         <button class="nav-sub-btn" data-student-section="manage" onclick="showStudentSection('manage', this)">Manage Enrollments</button>
       </div>
     </div>
-    <button class="nav-btn" data-page="attendance" onclick="showPage('attendance',this)"><span class="icon">✅</span> Take Attendance</button>
-    <button class="nav-btn" data-page="results" onclick="showPage('results',this)"><span class="icon">📝</span> Results / CA</button>
-    <button class="nav-btn" data-page="reports" onclick="showPage('reports',this)"><span class="icon">📈</span> Reports</button>
+    <div class="nav-group" id="attendance-nav-group">
+      <button class="nav-btn" data-page="attendance" onclick="toggleAttendanceMenu(event)"><span class="icon">✅</span> Attendance <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn active" data-attendance-section="take" onclick="showAttendanceSection('take', this)">Take Attendance</button>
+        <button class="nav-sub-btn" data-attendance-section="report" onclick="showAttendanceSection('report', this)">Attendance Report</button>
+      </div>
+    </div>
+    <div class="nav-group" id="results-nav-group">
+      <button class="nav-btn" data-page="results" onclick="toggleResultsMenu(event)"><span class="icon">📝</span> Results <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn active" data-results-section="ca" onclick="showResultsSection('ca', this)">CA Results</button>
+        <button class="nav-sub-btn" data-results-section="final" onclick="showResultsSection('final', this)">End of Semester</button>
+      </div>
+    </div>
     <button class="nav-btn admin-only" data-page="eligibility" onclick="showPage('eligibility',this)"><span class="icon">🎫</span> Eligibility</button>
     <button class="nav-btn admin-only" data-page="sick" onclick="showPage('sick',this)"><span class="icon">🤒</span> Sick Records</button>
     <div class="aside-label" style="margin-top:10px;">My Modules</div>
@@ -423,8 +440,8 @@
       <div class="page-title">Dashboard</div>
       <div class="page-sub" id="dash-sub">Overview of your attendance activity</div>
 
-      <!-- Teacher-only notice -->
-      <div class="teacher-notice">
+      <!-- Tutor-only notice -->
+      <div class="tutor-notice">
         <span style="font-size:1.2rem;flex-shrink:0;">ℹ️</span>
         <div>
           <strong style="color:var(--text);">Tutor access</strong> — You can take attendance for your assigned modules and view attendance reports.
@@ -489,6 +506,7 @@
     <div class="page" id="page-modules">
       <div class="page-title">Modules</div>
       <div class="page-sub">Manage the modules you teach — each module can hold both Theory and Practical sessions</div>
+      <div class="module-subview active" id="module-section-register">
       <div class="card">
         <div class="card-title">➕ Register New Module</div>
         <div class="form-grid-3">
@@ -504,6 +522,8 @@
         </label>
         <button class="btn btn-primary" onclick="createModule()">➕ Add Module</button>
       </div>
+      </div>
+      <div class="module-subview" id="module-section-manage">
       <div class="card">
         <div class="card-title">📚 Your Modules
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;">
@@ -518,17 +538,13 @@
           </table>
         </div>
       </div>
+      </div>
     </div>
 
     <!-- STUDENTS -->
     <div class="page" id="page-students">
       <div class="page-title">Students</div>
       <div class="page-sub">Manage student enrollment per module</div>
-
-      <div class="level-tab-bar">
-        <button class="level-tab active" data-student-tab="register" onclick="showStudentSection('register')">Upload / Register</button>
-        <button class="level-tab" data-student-tab="manage" onclick="showStudentSection('manage')">Manage Enrollments</button>
-      </div>
 
       <div class="student-subview active" id="student-section-register">
         <div class="card">
@@ -563,7 +579,7 @@
           <div class="form-grid-3">
             <div class="field"><label>Semester</label><select id="stu-flt-sem" onchange="onStudentFilterChange()"><option value="">All Semesters</option></select></div>
             <div class="field"><label>Class Level</label><select id="stu-flt-level" onchange="onStudentFilterChange()"><option value="">All Levels</option></select></div>
-            <div class="field"><label>Module</label><select id="stu-flt-module" onchange="loadStudents()"><option value="">All Modules</option></select></div>
+            <div class="field"><label>Module</label><select id="stu-flt-module" onchange="onStudentModuleFilterChange()"><option value="">All Modules</option></select></div>
           </div>
         </div>
         <div class="card">
@@ -826,7 +842,7 @@
       </div>
       <div class="card">
         <div class="card-title">📊 Student Attendance
-          <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="exportReport()">⬇ Export CSV</button>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="exportReport()">⬇ Export Excel</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -980,14 +996,38 @@ function showPage(name, btn) {
   document.getElementById('page-' + name).classList.add('active');
   if (btn) btn.classList.add('active');
   document.querySelectorAll('.nav-group').forEach(g => {
-    if (g.id !== 'students-nav-group' || name !== 'students') g.classList.remove('open');
+    const keep =
+      (g.id === 'modules-nav-group' && name === 'modules') ||
+      (g.id === 'students-nav-group' && name === 'students') ||
+      (g.id === 'attendance-nav-group' && (name === 'attendance' || name === 'reports')) ||
+      (g.id === 'results-nav-group' && name === 'results');
+    if (!keep) g.classList.remove('open');
   });
+  if (name === 'modules') {
+    const group = document.getElementById('modules-nav-group');
+    group.classList.add('open');
+    group.querySelector('.nav-btn').classList.add('active');
+    const section = document.querySelector('.module-subview.active')?.id?.replace('module-section-', '') || 'register';
+    document.querySelector(`[data-module-section="${section}"]`)?.classList.add('active');
+  }
   if (name === 'students') {
     const group = document.getElementById('students-nav-group');
     group.classList.add('open');
     group.querySelector('.nav-btn').classList.add('active');
     const section = document.querySelector('.student-subview.active')?.id?.replace('student-section-', '') || 'register';
     document.querySelector(`[data-student-section="${section}"]`)?.classList.add('active');
+  }
+  if (name === 'attendance' || name === 'reports') {
+    const group = document.getElementById('attendance-nav-group');
+    group.classList.add('open');
+    group.querySelector('.nav-btn').classList.add('active');
+    document.querySelector(`[data-attendance-section="${name === 'reports' ? 'report' : 'take'}"]`)?.classList.add('active');
+  }
+  if (name === 'results') {
+    const group = document.getElementById('results-nav-group');
+    group.classList.add('open');
+    group.querySelector('.nav-btn').classList.add('active');
+    document.querySelector(`[data-results-section="${state.resultsSection || 'ca'}"]`)?.classList.add('active');
   }
   closeSidebar();
   if (name === 'modules') loadModules();
@@ -999,6 +1039,15 @@ function showPage(name, btn) {
   if (name === 'sick') loadSickRecords();
 }
 
+function toggleModulesMenu(event) {
+  const group = document.getElementById('modules-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-modules').classList.contains('active')) {
+    showModuleSection('register', group.querySelector('[data-module-section="register"]'));
+  }
+  event.stopPropagation();
+}
+
 function toggleStudentsMenu(event) {
   const group = document.getElementById('students-nav-group');
   group.classList.toggle('open');
@@ -1008,13 +1057,55 @@ function toggleStudentsMenu(event) {
   event.stopPropagation();
 }
 
+function toggleAttendanceMenu(event) {
+  const group = document.getElementById('attendance-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-attendance').classList.contains('active') && !document.getElementById('page-reports').classList.contains('active')) {
+    showAttendanceSection('take', group.querySelector('[data-attendance-section="take"]'));
+  }
+  event.stopPropagation();
+}
+
+function toggleResultsMenu(event) {
+  const group = document.getElementById('results-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-results').classList.contains('active')) {
+    showResultsSection('ca', group.querySelector('[data-results-section="ca"]'));
+  }
+  event.stopPropagation();
+}
+
+function showModuleSection(section, btn) {
+  document.querySelectorAll('.module-subview').forEach(el => el.classList.remove('active'));
+  document.getElementById('module-section-' + section).classList.add('active');
+  document.querySelectorAll('[data-module-section]').forEach(el => el.classList.toggle('active', el.dataset.moduleSection === section));
+  showPage('modules', document.querySelector('#modules-nav-group .nav-btn'));
+  if (btn) btn.classList.add('active');
+}
+
 function showStudentSection(section, btn) {
   document.querySelectorAll('.student-subview').forEach(el => el.classList.remove('active'));
   document.getElementById('student-section-' + section).classList.add('active');
-  document.querySelectorAll('[data-student-tab]').forEach(el => el.classList.toggle('active', el.dataset.studentTab === section));
   document.querySelectorAll('.nav-sub-btn').forEach(el => el.classList.toggle('active', el.dataset.studentSection === section));
   showPage('students', document.querySelector('#students-nav-group .nav-btn'));
   if (btn) btn.classList.add('active');
+}
+
+function showAttendanceSection(section, btn) {
+  showPage(section === 'report' ? 'reports' : 'attendance', document.querySelector('#attendance-nav-group .nav-btn'));
+  document.querySelectorAll('[data-attendance-section]').forEach(el => el.classList.toggle('active', el.dataset.attendanceSection === section));
+  if (btn) btn.classList.add('active');
+}
+
+function showResultsSection(section, btn) {
+  state.resultsSection = section;
+  showPage('results', document.querySelector('#results-nav-group .nav-btn'));
+  document.querySelectorAll('[data-results-section]').forEach(el => el.classList.toggle('active', el.dataset.resultsSection === section));
+  if (btn) btn.classList.add('active');
+  requestAnimationFrame(() => {
+    const target = section === 'final' ? document.getElementById('end-exam-card') : document.getElementById('res-ca-print-area');
+    if (target && target.offsetParent !== null) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 }
 
 // ── BOOT ───────────────────────────────────────────────────────────────────────
@@ -1125,13 +1216,15 @@ function buildLevelOptions(el, includeAll = false) {
 function buildModuleOptions(el, modules, includeAll = false) {
   const cur = el.value;
   el.innerHTML = includeAll ? '<option value="">All Modules</option>' : '<option value="">— select module —</option>';
+  let hasCurrent = !cur;
   modules.forEach(m => {
     const opt = document.createElement('option');
     opt.value = m.id;
     opt.textContent = `${m.code} – ${m.name}`;
     el.appendChild(opt);
+    if (String(m.id) === String(cur)) hasCurrent = true;
   });
-  if (cur) el.value = cur;
+  el.value = hasCurrent ? cur : '';
 }
 function populateAllSelects() {
   buildSemOptions(document.getElementById('mod-semester'));
@@ -1174,7 +1267,13 @@ async function buildSidebarModules() {
     container.innerHTML = html || '<div style="padding:8px 10px;font-size:.78rem;color:var(--muted);">No modules yet</div>';
   } catch(e) { console.error(e); }
 }
-function goToModule(id) {
+async function goToModule(id) {
+  const mod = state.modules.find(m => String(m.id) === String(id));
+  if (mod) {
+    document.getElementById('stu-flt-sem').value = mod.semester || '';
+    document.getElementById('stu-flt-level').value = mod.class_level || '';
+    await refreshModuleDropdowns(mod.semester || '', mod.class_level || '', 'stu-flt-module');
+  }
   document.getElementById('stu-flt-module').value = id;
   showStudentSection('manage', document.querySelector('[data-student-section="manage"]'));
 }
@@ -1245,6 +1344,27 @@ async function onStudentFilterChange() {
   const semId = document.getElementById('stu-flt-sem').value;
   const lvlId = document.getElementById('stu-flt-level').value;
   await refreshModuleDropdowns(semId, lvlId, 'stu-flt-module', 'add-stu-module', 'bulk-module');
+  loadStudents();
+}
+async function onStudentModuleFilterChange() {
+  const modId = document.getElementById('stu-flt-module').value;
+  if (modId) {
+    let mod = state.modules.find(m => String(m.id) === String(modId));
+    if (!mod) {
+      const mods = await refreshModuleDropdowns('', '', 'stu-flt-module');
+      mod = mods.find(m => String(m.id) === String(modId));
+    }
+    if (mod) {
+      const semEl = document.getElementById('stu-flt-sem');
+      const lvlEl = document.getElementById('stu-flt-level');
+      if (String(semEl.value || '') !== String(mod.semester || '') || String(lvlEl.value || '') !== String(mod.class_level || '')) {
+        semEl.value = mod.semester || '';
+        lvlEl.value = mod.class_level || '';
+        await refreshModuleDropdowns(semEl.value, lvlEl.value, 'stu-flt-module', 'add-stu-module', 'bulk-module');
+        document.getElementById('stu-flt-module').value = modId;
+      }
+    }
+  }
   loadStudents();
 }
 async function refreshModuleDropdowns(semId, lvlId, ...dropdownIds) {
@@ -1621,18 +1741,50 @@ async function loadReport() {
 
 function exportReport() {
   if (!reportData.rows.length) { toast('No data to export', 'var(--red)'); return; }
-  const headers = ['NACTVET Reg No','Name','Module','Level','Semester','Tutor','Theory Held','Theory Att','Theory %','Practical Held','Practical Att','Practical %','Overall %','Status'];
-  const rows = reportData.rows.map(r => [
-    r.nactvet_reg_no, r.name, r.module, r.class_level, r.semester, r.teacher,
-    r.theory_held, r.theory_eff, r.theory_pct ?? 'N/A',
-    r.practical_held, r.practical_eff, r.practical_pct ?? 'N/A',
-    r.pct, r.status
-  ]);
-  const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-  a.download = 'attendance_report.csv';
-  a.click();
+  const summaryRows = reportData.rows.map(r => ({
+    'NACTVET Reg No': r.nactvet_reg_no,
+    Name: r.name,
+    Module: r.module,
+    Level: r.class_level,
+    Semester: r.semester,
+    Tutor: r.teacher,
+    'Theory Held': r.theory_held,
+    'Theory Attended': r.theory_eff,
+    'Theory %': r.theory_pct ?? 'N/A',
+    'Practical Held': r.practical_held,
+    'Practical Attended': r.practical_eff,
+    'Practical %': r.practical_pct ?? 'N/A',
+    'Overall %': r.pct,
+    Status: r.status,
+  }));
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(summaryRows);
+  ws['!cols'] = Object.keys(summaryRows[0]).map(() => ({ wch: 18 }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Attendance Summary');
+
+  if (reportData.session_history?.length) {
+    const historyRows = reportData.session_history.map(h => ({
+      Date: h.date,
+      Module: h.module,
+      Type: h.session_type === 'T' ? 'Theory' : 'Practical',
+      Level: h.class_level,
+      Semester: h.semester,
+      Label: h.label,
+      Topic: h.topic || '',
+      Present: h.present,
+      Sick: h.sick,
+      Absent: h.absent,
+      'Rate %': h.pct,
+    }));
+    const wsHistory = XLSX.utils.json_to_sheet(historyRows);
+    wsHistory['!cols'] = Object.keys(historyRows[0]).map(() => ({ wch: 18 }));
+    XLSX.utils.book_append_sheet(wb, wsHistory, 'Session History');
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `attendance_report_${today}.xlsx`);
+  toast('Attendance report exported to Excel', 'var(--green)');
 }
 
 // ── PROFILE MODAL ──────────────────────────────────────────────────────────────
@@ -2486,7 +2638,7 @@ async function advanceSemester() {
     document.getElementById('role-badge').className    = 'role-badge admin';
   } else {
     document.getElementById('role-badge').textContent  = 'Tutor';
-    document.getElementById('role-badge').className    = 'role-badge teacher';
+    document.getElementById('role-badge').className    = 'role-badge tutor';
   }
 })();
 

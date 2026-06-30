@@ -434,6 +434,12 @@
               <option value="">All Subjects</option>
             </select>
           </div>
+          <div class="field">
+            <label>Filter by Class</label>
+            <select id="stu-filter-class" onchange="renderStudentTable()">
+              <option value="">All Classes</option>
+            </select>
+          </div>
         </div>
         <div class="table-wrap">
           <table>
@@ -630,6 +636,19 @@ function populateSelects() {
       <span class="sub-badge">${stuCount}</span>
     </div>`;
   });
+  populateClassFilter();
+}
+
+function populateClassFilter() {
+  const el = document.getElementById('stu-filter-class');
+  if (!el) return;
+  const cur = el.value;
+  const classes = [...new Set(state.students.map(s => (s.class || '').trim()).filter(Boolean))].sort();
+  el.innerHTML = '<option value="">All Classes</option>';
+  classes.forEach(cls => {
+    el.innerHTML += `<option value="${cls.replace(/"/g, '&quot;')}">${cls}</option>`;
+  });
+  el.value = classes.includes(cur) ? cur : '';
 }
 
 function filterBySubject(subjectId) {
@@ -719,6 +738,7 @@ function deleteStudent(id) {
   const st = state.students.find(s => s.id === id);
   if (!confirm(`Remove student "${st?.name}"?`)) return;
   state.students = state.students.filter(s => s.id !== id);
+  populateSelects();
   renderStudentTable();
   renderSubjectsTable();
   renderDashboard();
@@ -727,8 +747,12 @@ function deleteStudent(id) {
 
 function renderStudentTable() {
   const tbody = document.getElementById('students-tbody');
-  const filter = document.getElementById('stu-filter-subject').value;
-  const list = filter ? state.students.filter(s => s.subjectId === filter) : state.students;
+  const subjectFilter = document.getElementById('stu-filter-subject').value;
+  const classFilter = document.getElementById('stu-filter-class').value;
+  const list = state.students.filter(s =>
+    (!subjectFilter || s.subjectId === subjectFilter) &&
+    (!classFilter || (s.class || '') === classFilter)
+  );
   if (!list.length) {
     tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="ei">🎓</div>No students found</div></td></tr>';
     return;
