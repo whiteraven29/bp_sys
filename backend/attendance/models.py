@@ -68,6 +68,15 @@ class TeacherProfile(models.Model):
         return self.full_name
 
 
+class AccountantProfile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='accountant_profile')
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
 class Module(models.Model):
     name = models.CharField(max_length=200)
     code = models.CharField(max_length=50)
@@ -115,6 +124,161 @@ class Student(models.Model):
 
     def check_portal_pin(self, raw_pin):
         return bool(self.portal_pin_hash) and check_password(str(raw_pin), self.portal_pin_hash)
+
+
+class PaymentCategory(models.Model):
+    SCHOOL_FEES = 'school_fees'
+    SPECIAL_EXAM = 'special_exam'
+    SUPP_EXAM = 'supp_exam'
+    REPEAT_MODULE = 'repeat_module'
+    DISCONTINUATION = 'discontinuation'
+    OTHER = 'other'
+    TYPE_CHOICES = [
+        (SCHOOL_FEES, 'School Fees'),
+        (SPECIAL_EXAM, 'Special Exam'),
+        (SUPP_EXAM, 'Supplementary Exam'),
+        (REPEAT_MODULE, 'Repeat Module'),
+        (DISCONTINUATION, 'Discontinuation'),
+        (OTHER, 'Other Payment'),
+    ]
+
+    name = models.CharField(max_length=160)
+    category_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=OTHER)
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, null=True, blank=True, related_name='payment_categories')
+    class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, null=True, blank=True, related_name='payment_categories')
+    default_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    installment_count = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text='Maximum number of installments allowed for this category and level.',
+    )
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='payment_categories_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['category_type', 'name']
+        unique_together = ('name', 'category_type')
+
+    def __str__(self):
+        return f"{self.get_category_type_display()} – {self.name}"
+
+
+class StudentFinanceObligation(models.Model):
+    SPECIAL_EXAM = 'special_exam'
+    SUPP_EXAM = 'supp_exam'
+    REPEAT_MODULE = 'repeat_module'
+    DISCONTINUATION = 'discontinuation'
+    OBLIGATION_CHOICES = [
+        (SPECIAL_EXAM, 'Special Exam'),
+        (SUPP_EXAM, 'Supplementary Exam'),
+        (REPEAT_MODULE, 'Repeat Module'),
+        (DISCONTINUATION, 'Discontinuation'),
+    ]
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='finance_obligations')
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='finance_obligations')
+    module = models.ForeignKey(Module, on_delete=models.PROTECT, null=True, blank=True, related_name='finance_obligations')
+    obligation_type = models.CharField(max_length=20, choices=OBLIGATION_CHOICES)
+    category = models.ForeignKey(
+        PaymentCategory,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='obligations',
+    )
+    amount_required = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    note = models.CharField(max_length=300, blank=True)
+    declared_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='finance_obligations_declared',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    @property
+    def amount_paid(self):
+        return sum(payment.amount_paid for payment in self.payments.all())
+
+    @property
+    def balance(self):
+        return self.amount_required - self.amount_paid
+
+    @property
+    def is_finance_cleared(self):
+        return self.amount_required == 0 or self.balance <= 0
+
+    def __str__(self):
+        return f"{self.student.nactvet_reg_no} – {self.get_obligation_type_display()}"
+
+
+class StudentPayment(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='payments')
+    category = models.ForeignKey(PaymentCategory, on_delete=models.PROTECT, related_name='payments')
+    obligation = models.ForeignKey(
+        StudentFinanceObligation, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='payments',
+    )
+    amount_required = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2)
+    installment_number = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+    )
+    payment_date = models.DateField()
+    reference = models.CharField(max_length=100, blank=True)
+    note = models.CharField(max_length=300, blank=True)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='student_payments_recorded',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-payment_date', '-created_at']
+
+    @property
+    def balance(self):
+        return self.amount_required - self.amount_paid
+
+    def __str__(self):
+        return f"{self.student.nactvet_reg_no} – {self.category.name} – {self.amount_paid}"
+
+
+class StudentFinanceClearance(models.Model):
+    CAT1 = 'cat1'
+    CAT2 = 'cat2'
+    END = 'end'
+    REGISTRATION = 'registration'
+    PERIOD_CHOICES = [
+        (CAT1, 'CAT 1'),
+        (CAT2, 'CAT 2'),
+        (END, 'End of Semester'),
+        (REGISTRATION, 'Registration / Results'),
+    ]
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='finance_clearances')
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='finance_clearances')
+    period = models.CharField(max_length=20, choices=PERIOD_CHOICES)
+    is_cleared = models.BooleanField(default=False)
+    note = models.CharField(max_length=300, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='finance_clearances_approved',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('student', 'semester', 'period')
+        ordering = ['student__name', 'period']
+
+    def __str__(self):
+        return f"{self.student.nactvet_reg_no} – {self.get_period_display()} – {self.is_cleared}"
 
 
 class Session(models.Model):

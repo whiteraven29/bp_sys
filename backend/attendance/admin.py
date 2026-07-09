@@ -1,5 +1,9 @@
 from django.contrib import admin
-from .models import AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord, TeacherProfile, StudentResult
+from .models import (
+    AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord,
+    TeacherProfile, AccountantProfile, StudentResult, PaymentCategory, StudentPayment,
+    StudentFinanceObligation, StudentFinanceClearance,
+)
 
 
 @admin.register(AcademicYear)
@@ -25,6 +29,13 @@ class ClassLevelAdmin(admin.ModelAdmin):
 @admin.register(TeacherProfile)
 class TeacherProfileAdmin(admin.ModelAdmin):
     list_display = ['full_name', 'user']
+    search_fields = ['full_name', 'user__username']
+
+
+@admin.register(AccountantProfile)
+class AccountantProfileAdmin(admin.ModelAdmin):
+    list_display = ['full_name', 'user', 'is_active']
+    list_filter = ['is_active']
     search_fields = ['full_name', 'user__username']
 
 
@@ -80,3 +91,31 @@ class StudentResultAdmin(admin.ModelAdmin):
     list_filter  = ['ca_approved', 'final_approved', 'student__module__class_level', 'student__module__semester', 'student__module__has_practical']
     search_fields = ['student__name', 'student__nactvet_reg_no']
     readonly_fields = ['updated_at']
+
+
+@admin.register(PaymentCategory)
+class PaymentCategoryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'category_type', 'semester', 'class_level', 'default_amount', 'installment_count', 'is_active', 'created_by', 'created_at']
+    list_filter = ['category_type', 'semester', 'class_level', 'is_active']
+    search_fields = ['name']
+
+
+@admin.register(StudentPayment)
+class StudentPaymentAdmin(admin.ModelAdmin):
+    list_display = ['student', 'category', 'obligation', 'installment_number', 'amount_required', 'amount_paid', 'balance', 'payment_date', 'reference', 'recorded_by']
+    list_filter = ['category__category_type', 'payment_date', 'student__module__class_level']
+    search_fields = ['student__name', 'student__nactvet_reg_no', 'reference', 'note']
+
+
+@admin.register(StudentFinanceObligation)
+class StudentFinanceObligationAdmin(admin.ModelAdmin):
+    list_display = ['student', 'obligation_type', 'semester', 'module', 'category', 'amount_required', 'balance', 'declared_by', 'created_at']
+    list_filter = ['obligation_type', 'semester', 'student__module__class_level']
+    search_fields = ['student__name', 'student__nactvet_reg_no', 'note']
+
+
+@admin.register(StudentFinanceClearance)
+class StudentFinanceClearanceAdmin(admin.ModelAdmin):
+    list_display = ['student', 'semester', 'period', 'is_cleared', 'approved_by', 'updated_at']
+    list_filter = ['semester', 'period', 'is_cleared']
+    search_fields = ['student__name', 'student__nactvet_reg_no', 'note']

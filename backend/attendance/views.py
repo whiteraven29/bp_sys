@@ -1,9 +1,10 @@
 from functools import wraps
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import render, redirect
 from django.utils import timezone
@@ -16,14 +17,21 @@ from rest_framework.response import Response
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
 from .models import (
     AcademicYear, Semester, ClassLevel, Module,
-    Student, Session, AttendanceRecord, TeacherProfile, StudentResult,
+    Student, Session, AttendanceRecord, TeacherProfile, AccountantProfile,
+    StudentResult, PaymentCategory, StudentFinanceObligation, StudentPayment,
+    StudentFinanceClearance,
 )
 from .serializers import (
     AcademicYearSerializer, SemesterSerializer, ClassLevelSerializer,
     ModuleSerializer, StudentSerializer,
     SessionSerializer, SessionCreateSerializer, BulkStudentSerializer,
     StudentResultSerializer, AttendanceRecordSerializer,
+    FinanceStudentSerializer, PaymentCategorySerializer,
+    StudentFinanceObligationSerializer, StudentPaymentSerializer,
+    StudentFinanceClearanceSerializer,
 )
+
+User = get_user_model()
 
 
 # ── HELPERS ────────────────────────────────────────────────────────────────────
@@ -32,6 +40,18 @@ def user_modules(user):
     if user.is_staff:
         return Module.objects.all()
     return user.modules_taught.all()
+
+
+def is_accountant(user):
+    return bool(
+        user
+        and user.is_authenticated
+        and AccountantProfile.objects.filter(user=user, is_active=True).exists()
+    )
+
+
+def can_manage_finance(user):
+    return bool(user and user.is_authenticated and (user.is_staff or is_accountant(user)))
 
 
 def active_semester():
@@ -52,6 +72,11 @@ class IsAuthenticatedReadOnlyOrAdmin(BasePermission):
             and request.user.is_authenticated
             and (request.method in SAFE_METHODS or request.user.is_staff)
         )
+
+
+class IsFinanceUser(BasePermission):
+    def has_permission(self, request, view):
+        return can_manage_finance(request.user)
 
 
 def _make_both_semesters(year):
@@ -258,6 +283,74 @@ def student_dashboard(request):
         module for module in modules
         if active_sem is None or module['semester_number'] == active_sem.number
     ]
+    eligibility_rows = []
+    for enrollment in enrollments:
+        counts = {
+            Session.CAT1: Session.objects.filter(module=enrollment.module, exam_period=Session.CAT1).count(),
+            Session.CAT2: Session.objects.filter(module=enrollment.module, exam_period=Session.CAT2).count(),
+            'all': Session.objects.filter(module=enrollment.module).count(),
+        }
+        records = list(enrollment.attendance_records.select_related('session'))
+        cat1_eff = sum(1 for r in records if r.session.exam_period == Session.CAT1 and attendance_is_effective(r))
+        cat2_eff = sum(1 for r in records if r.session.exam_period == Session.CAT2 and attendance_is_effective(r))
+        all_eff = sum(1 for r in records if attendance_is_effective(r))
+        cat1_pct = round((cat1_eff / counts[Session.CAT1]) * 100) if counts[Session.CAT1] else None
+        cat2_pct = round((cat2_eff / counts[Session.CAT2]) * 100) if counts[Session.CAT2] else None
+        end_pct = round((all_eff / counts['all']) * 100) if counts['all'] else None
+        cat1_att = (cat1_pct >= ELIGIBILITY_THRESHOLD) if counts[Session.CAT1] else None
+        cat2_att = (cat2_pct >= ELIGIBILITY_THRESHOLD) if counts[Session.CAT2] else None
+        end_att = (end_pct >= ELIGIBILITY_THRESHOLD) if counts['all'] else None
+        total_ca, ca_ok, ca_note = ca_eligibility_for_student(enrollment)
+        clearances = {c.period: c for c in enrollment.finance_clearances.filter(semester=enrollment.module.semester)}
+        cat1_fin = bool(clearances.get(StudentFinanceClearance.CAT1) and clearances[StudentFinanceClearance.CAT1].is_cleared)
+        cat2_fin = bool(clearances.get(StudentFinanceClearance.CAT2) and clearances[StudentFinanceClearance.CAT2].is_cleared)
+        end_fin = bool(clearances.get(StudentFinanceClearance.END) and clearances[StudentFinanceClearance.END].is_cleared)
+        cat1_parts = [
+            (cat1_att, attendance_eligibility_reason(cat1_pct, counts[Session.CAT1], 'CAT 1')),
+            (cat1_fin, finance_clearance_reason(cat1_fin, 'CAT 1')),
+        ]
+        cat2_parts = [
+            (cat2_att, attendance_eligibility_reason(cat2_pct, counts[Session.CAT2], 'CAT 2')),
+            (cat2_fin, finance_clearance_reason(cat2_fin, 'CAT 2')),
+        ]
+        end_parts = [
+            (end_att, attendance_eligibility_reason(end_pct, counts['all'], 'End-of-semester')),
+            (ca_ok, ca_note),
+            (end_fin, finance_clearance_reason(end_fin, 'end-of-semester exam')),
+        ]
+        eligibility_rows.append({
+            'module_code': enrollment.module.code,
+            'module_name': enrollment.module.name,
+            'semester': enrollment.module.semester.label,
+            'cat1_pct': cat1_pct,
+            'cat1_ok': combined_eligibility(cat1_parts),
+            'cat1_note': combined_reason(cat1_parts),
+            'cat2_pct': cat2_pct,
+            'cat2_ok': combined_eligibility(cat2_parts),
+            'cat2_note': combined_reason(cat2_parts),
+            'ese_pct': end_pct,
+            'ca_total': total_ca,
+            'ese_ok': combined_eligibility(end_parts),
+            'ese_note': combined_reason(end_parts),
+        })
+    finance_obligations = list(
+        StudentFinanceObligation.objects
+        .filter(student__in=enrollments)
+        .select_related('category', 'module', 'semester')
+        .prefetch_related('payments')
+        .order_by('-created_at')
+    )
+    finance_payments = list(
+        StudentPayment.objects
+        .filter(student__in=enrollments)
+        .select_related('category')
+        .order_by('-payment_date', '-created_at')
+    )
+    finance_required = sum(o.amount_required for o in finance_obligations) + sum(
+        p.amount_required for p in finance_payments if p.obligation_id is None
+    )
+    finance_paid = sum(p.amount_paid for p in finance_payments)
+    finance_balance = finance_required - finance_paid
     recent_records = (
         AttendanceRecord.objects
         .filter(student__in=enrollments)
@@ -292,6 +385,12 @@ def student_dashboard(request):
         'total_sick': total_sick,
         'total_absent': total_absent,
         'total_sessions': total_sessions,
+        'eligibility_rows': eligibility_rows,
+        'finance_obligations': finance_obligations,
+        'finance_payments': finance_payments,
+        'finance_required': finance_required,
+        'finance_paid': finance_paid,
+        'finance_balance': finance_balance,
         'attendance_history': attendance_history,
         'academic_year': (
             active_sem.academic_year.name
@@ -310,7 +409,9 @@ def logout_view(request):
 
 
 def register_view(request):
-    if request.user.is_authenticated:
+    if not request.user.is_authenticated:
+        return redirect('login')
+    if not request.user.is_staff:
         return redirect('frontend')
     levels = ClassLevel.objects.prefetch_related('modules__semester__academic_year').all()
     form = TeacherRegistrationForm(request.POST or None)
@@ -327,9 +428,51 @@ def register_view(request):
                 Module.objects.get(id=mid).teachers.add(user)
             except Module.DoesNotExist:
                 pass
-        login(request, user)
         return redirect('frontend')
     return render(request, 'register.html', {'form': form, 'levels': levels})
+
+
+@api_view(['POST'])
+@login_required
+def create_staff_account(request):
+    if not request.user.is_staff:
+        return Response({'detail': 'Only the administrator can create staff accounts.'}, status=status.HTTP_403_FORBIDDEN)
+
+    role = str(request.data.get('role', '')).strip()
+    full_name = str(request.data.get('full_name', '')).strip()
+    username = str(request.data.get('username', '')).strip()
+    password = str(request.data.get('password', '')).strip()
+    module_ids = request.data.get('module_ids') or []
+
+    if role not in ('tutor', 'accountant'):
+        return Response({'detail': 'Role must be tutor or accountant.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not full_name or not username or len(password) < 6:
+        return Response({'detail': 'Full name, username, and a 6+ character password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+    if User.objects.filter(username__iexact=username).exists():
+        return Response({'detail': 'That username is already taken.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        parts = full_name.split(None, 1)
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            first_name=parts[0],
+            last_name=parts[1] if len(parts) > 1 else '',
+        )
+        if role == 'accountant':
+            AccountantProfile.objects.create(user=user, full_name=full_name)
+        else:
+            TeacherProfile.objects.create(user=user, full_name=full_name)
+            modules = Module.objects.filter(id__in=module_ids)
+            for module in modules:
+                module.teachers.add(user)
+
+    return Response({
+        'id': user.id,
+        'username': user.username,
+        'full_name': full_name,
+        'role': role,
+    }, status=status.HTTP_201_CREATED)
 
 
 # ── ACADEMIC YEAR ──────────────────────────────────────────────────────────────
@@ -729,7 +872,180 @@ def dashboard(request):
         'recent_sessions': recent,
         'levels': levels,
         'is_staff': request.user.is_staff,
+        'is_accountant': is_accountant(request.user),
     })
+
+
+# ── FINANCE ───────────────────────────────────────────────────────────────────
+
+class FinanceStudentViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = FinanceStudentSerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = Student.objects.select_related(
+            'module__class_level', 'module__semester__academic_year'
+        )
+        semester_id = self.request.query_params.get('semester_id')
+        if not semester_id:
+            sem = active_semester()
+            if sem:
+                qs = qs.filter(module__semester=sem)
+        for param, field in [
+            ('class_level_id', 'module__class_level_id'),
+            ('semester_id', 'module__semester_id'),
+        ]:
+            val = self.request.query_params.get(param)
+            if val:
+                qs = qs.filter(**{field: val})
+        search = str(self.request.query_params.get('search', '')).strip()
+        if search:
+            qs = qs.filter(
+                Q(name__icontains=search)
+                | Q(nactvet_reg_no__icontains=search)
+                | Q(module__name__icontains=search)
+                | Q(module__code__icontains=search)
+            )
+        return qs.order_by('module__class_level__order', 'name')
+
+
+class PaymentCategoryViewSet(viewsets.ModelViewSet):
+    serializer_class = PaymentCategorySerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = PaymentCategory.objects.select_related('created_by')
+        semester_id = self.request.query_params.get('semester_id')
+        if semester_id:
+            qs = qs.filter(Q(semester_id=semester_id) | Q(semester__isnull=True))
+        else:
+            sem = active_semester()
+            if sem:
+                qs = qs.filter(Q(semester=sem) | Q(semester__isnull=True))
+        class_level_id = self.request.query_params.get('class_level_id')
+        if class_level_id:
+            qs = qs.filter(Q(class_level_id=class_level_id) | Q(class_level__isnull=True))
+        active = self.request.query_params.get('is_active')
+        if active == 'true':
+            qs = qs.filter(is_active=True)
+        category_type = self.request.query_params.get('category_type')
+        if category_type:
+            qs = qs.filter(category_type=category_type)
+        return qs.order_by('category_type', 'name')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class StudentFinanceObligationViewSet(viewsets.ModelViewSet):
+    serializer_class = StudentFinanceObligationSerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = StudentFinanceObligation.objects.select_related(
+            'student__module__class_level',
+            'student__module__semester__academic_year',
+            'semester__academic_year',
+            'module',
+            'category',
+            'declared_by',
+        ).prefetch_related('payments')
+        semester_id = self.request.query_params.get('semester_id')
+        if semester_id:
+            qs = qs.filter(semester_id=semester_id)
+        else:
+            sem = active_semester()
+            if sem:
+                qs = qs.filter(semester=sem)
+        for param, field in [
+            ('student_id', 'student_id'),
+            ('class_level_id', 'student__module__class_level_id'),
+            ('obligation_type', 'obligation_type'),
+        ]:
+            val = self.request.query_params.get(param)
+            if val:
+                qs = qs.filter(**{field: val})
+        return qs.order_by('-created_at')
+
+    def perform_create(self, serializer):
+        if not self.request.user.is_staff:
+            raise PermissionDenied('Only the administrator can declare special, supplementary, and repeat-module obligations.')
+        serializer.save(declared_by=self.request.user)
+
+
+class StudentPaymentViewSet(viewsets.ModelViewSet):
+    serializer_class = StudentPaymentSerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = StudentPayment.objects.select_related(
+            'student__module__class_level',
+            'student__module__semester__academic_year',
+            'category',
+            'obligation',
+            'recorded_by',
+        )
+        semester_id = self.request.query_params.get('semester_id')
+        if semester_id:
+            qs = qs.filter(student__module__semester_id=semester_id)
+        else:
+            sem = active_semester()
+            if sem:
+                qs = qs.filter(student__module__semester=sem)
+        for param, field in [
+            ('student_id', 'student_id'),
+            ('category_id', 'category_id'),
+            ('class_level_id', 'student__module__class_level_id'),
+            ('obligation_id', 'obligation_id'),
+        ]:
+            val = self.request.query_params.get(param)
+            if val:
+                qs = qs.filter(**{field: val})
+        return qs.order_by('-payment_date', '-created_at')
+
+    def perform_create(self, serializer):
+        category = serializer.validated_data.get('category')
+        installment_number = serializer.validated_data.get('installment_number') or 1
+        if category and installment_number > category.installment_count:
+            raise PermissionDenied(f'This category allows only {category.installment_count} installment(s).')
+        if serializer.validated_data.get('amount_required') in (None, 0) and category:
+            serializer.validated_data['amount_required'] = category.default_amount
+        serializer.save(recorded_by=self.request.user)
+
+
+class StudentFinanceClearanceViewSet(viewsets.ModelViewSet):
+    serializer_class = StudentFinanceClearanceSerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = StudentFinanceClearance.objects.select_related(
+            'student__module__class_level',
+            'student__module__semester__academic_year',
+            'semester__academic_year',
+            'approved_by',
+        )
+        semester_id = self.request.query_params.get('semester_id')
+        if semester_id:
+            qs = qs.filter(semester_id=semester_id)
+        else:
+            sem = active_semester()
+            if sem:
+                qs = qs.filter(semester=sem)
+        for param, field in [
+            ('student_id', 'student_id'),
+            ('class_level_id', 'student__module__class_level_id'),
+            ('period', 'period'),
+        ]:
+            val = self.request.query_params.get(param)
+            if val:
+                qs = qs.filter(**{field: val})
+        return qs.order_by('student__name', 'period')
+
+    def perform_create(self, serializer):
+        serializer.save(approved_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(approved_by=self.request.user)
 
 
 # ── REPORT ─────────────────────────────────────────────────────────────────────
@@ -883,6 +1199,66 @@ def all_modules(request):
 # ── ELIGIBILITY ────────────────────────────────────────────────────────────────
 
 ELIGIBILITY_THRESHOLD = 90
+CA_ELIGIBILITY_THRESHOLD = 20
+
+
+def ca_eligibility_for_student(student):
+    result = getattr(student, 'result', None)
+    has_practical = student.module.has_practical
+    required_fields = [
+        ('assign1', 'Assignment 1'),
+        ('assign2', 'Assignment 2'),
+        ('cat1_theory', 'CAT 1 Theory'),
+        ('cat2_theory', 'CAT 2 Theory'),
+    ]
+    if has_practical:
+        required_fields.extend([
+            ('cat1_practical', 'Practical Test 1'),
+            ('cat2_practical', 'Practical Test 2'),
+        ])
+
+    if result is None:
+        return None, None, 'Pending CA result record'
+
+    missing = [label for field, label in required_fields if getattr(result, field) is None]
+    serializer = StudentResultSerializer()
+    total_ca = serializer.get_total_ca(result)
+
+    if missing:
+        return total_ca, None, f"Pending CA marks: {', '.join(missing)}"
+    if total_ca is None:
+        return None, None, 'Pending CA marks'
+    if total_ca < CA_ELIGIBILITY_THRESHOLD:
+        return total_ca, False, f'Total CA {total_ca}/40 is below required {CA_ELIGIBILITY_THRESHOLD}/40'
+    return total_ca, True, f'Total CA {total_ca}/40 meets required {CA_ELIGIBILITY_THRESHOLD}/40'
+
+
+def attendance_eligibility_reason(pct, sessions, label):
+    if not sessions:
+        return f'Pending {label} attendance sessions'
+    if pct is None:
+        return f'Pending {label} attendance'
+    if pct < ELIGIBILITY_THRESHOLD:
+        return f'{label} attendance {pct}% is below required {ELIGIBILITY_THRESHOLD}%'
+    return f'{label} attendance {pct}% meets required {ELIGIBILITY_THRESHOLD}%'
+
+
+def finance_clearance_reason(is_cleared, label):
+    if is_cleared:
+        return f'Finance cleared for {label}'
+    return f'Pending finance clearance for {label}'
+
+
+def combined_eligibility(parts):
+    if any(value is False for value, _note in parts):
+        return False
+    if any(value is None for value, _note in parts):
+        return None
+    return True
+
+
+def combined_reason(parts):
+    return '; '.join(note for _value, note in parts if note)
 
 
 @api_view(['GET'])
@@ -897,6 +1273,8 @@ def eligibility(request):
         Student.objects.filter(module__in=my_modules)
         .select_related('module__class_level', 'module__semester__academic_year')
         .prefetch_related('attendance_records__session')
+        .prefetch_related('finance_clearances')
+        .select_related('result')
     )
     if module_id:
         students = students.filter(module_id=module_id)
@@ -927,6 +1305,33 @@ def eligibility(request):
         cat1_pct = round((cat1_eff / mc['cat1']) * 100) if mc['cat1'] else None
         cat2_pct = round((cat2_eff / mc['cat2']) * 100) if mc['cat2'] else None
         end_pct = round((total_eff / mc['total']) * 100) if mc['total'] else None
+        cat1_eligible = (cat1_pct >= ELIGIBILITY_THRESHOLD) if mc['cat1'] else None
+        cat2_eligible = (cat2_pct >= ELIGIBILITY_THRESHOLD) if mc['cat2'] else None
+        end_eligible = (end_pct >= ELIGIBILITY_THRESHOLD) if mc['total'] else None
+        total_ca, ca_eligible, ca_note = ca_eligibility_for_student(st)
+        finance_by_period = {
+            c.period: c for c in st.finance_clearances.all()
+            if c.semester_id == st.module.semester_id
+        }
+        cat1_finance_eligible = bool(finance_by_period.get(StudentFinanceClearance.CAT1) and finance_by_period[StudentFinanceClearance.CAT1].is_cleared)
+        cat2_finance_eligible = bool(finance_by_period.get(StudentFinanceClearance.CAT2) and finance_by_period[StudentFinanceClearance.CAT2].is_cleared)
+        end_finance_eligible = bool(finance_by_period.get(StudentFinanceClearance.END) and finance_by_period[StudentFinanceClearance.END].is_cleared)
+        cat1_att_note = attendance_eligibility_reason(cat1_pct, mc['cat1'], 'CAT 1')
+        cat2_att_note = attendance_eligibility_reason(cat2_pct, mc['cat2'], 'CAT 2')
+        end_att_note = attendance_eligibility_reason(end_pct, mc['total'], 'End-of-semester')
+        cat1_exam_parts = [
+            (cat1_eligible, cat1_att_note),
+            (cat1_finance_eligible, finance_clearance_reason(cat1_finance_eligible, 'CAT 1')),
+        ]
+        cat2_exam_parts = [
+            (cat2_eligible, cat2_att_note),
+            (cat2_finance_eligible, finance_clearance_reason(cat2_finance_eligible, 'CAT 2')),
+        ]
+        end_exam_parts = [
+            (end_eligible, end_att_note),
+            (ca_eligible, ca_note),
+            (end_finance_eligible, finance_clearance_reason(end_finance_eligible, 'end-of-semester exam')),
+        ]
 
         rows.append({
             'id': st.id,
@@ -939,15 +1344,33 @@ def eligibility(request):
             'cat1_sessions': mc['cat1'],
             'cat1_attended': cat1_eff,
             'cat1_pct': cat1_pct,
-            'cat1_eligible': (cat1_pct >= ELIGIBILITY_THRESHOLD) if mc['cat1'] else None,
+            'cat1_eligible': cat1_eligible,
+            'cat1_note': cat1_att_note,
+            'cat1_finance_eligible': cat1_finance_eligible,
+            'cat1_finance_note': finance_clearance_reason(cat1_finance_eligible, 'CAT 1'),
+            'cat1_exam_eligible': combined_eligibility(cat1_exam_parts),
+            'cat1_exam_note': combined_reason(cat1_exam_parts),
             'cat2_sessions': mc['cat2'],
             'cat2_attended': cat2_eff,
             'cat2_pct': cat2_pct,
-            'cat2_eligible': (cat2_pct >= ELIGIBILITY_THRESHOLD) if mc['cat2'] else None,
+            'cat2_eligible': cat2_eligible,
+            'cat2_note': cat2_att_note,
+            'cat2_finance_eligible': cat2_finance_eligible,
+            'cat2_finance_note': finance_clearance_reason(cat2_finance_eligible, 'CAT 2'),
+            'cat2_exam_eligible': combined_eligibility(cat2_exam_parts),
+            'cat2_exam_note': combined_reason(cat2_exam_parts),
             'end_sessions': mc['total'],
             'end_attended': total_eff,
             'end_pct': end_pct,
-            'end_eligible': (end_pct >= ELIGIBILITY_THRESHOLD) if mc['total'] else None,
+            'end_eligible': end_eligible,
+            'end_note': end_att_note,
+            'end_finance_eligible': end_finance_eligible,
+            'end_finance_note': finance_clearance_reason(end_finance_eligible, 'end-of-semester exam'),
+            'end_exam_eligible': combined_eligibility(end_exam_parts),
+            'end_exam_note': combined_reason(end_exam_parts),
+            'ca_total': total_ca,
+            'ca_eligible': ca_eligible,
+            'ca_note': ca_note,
         })
 
     stats = {
@@ -961,9 +1384,26 @@ def eligibility(request):
         'end_eligible': sum(1 for r in rows if r['end_eligible'] is True),
         'end_ineligible': sum(1 for r in rows if r['end_eligible'] is False),
         'end_na': sum(1 for r in rows if r['end_eligible'] is None),
+        'ca_eligible': sum(1 for r in rows if r['ca_eligible'] is True),
+        'ca_ineligible': sum(1 for r in rows if r['ca_eligible'] is False),
+        'ca_na': sum(1 for r in rows if r['ca_eligible'] is None),
+        'cat1_exam_eligible': sum(1 for r in rows if r['cat1_exam_eligible'] is True),
+        'cat1_exam_ineligible': sum(1 for r in rows if r['cat1_exam_eligible'] is False),
+        'cat1_exam_na': sum(1 for r in rows if r['cat1_exam_eligible'] is None),
+        'cat2_exam_eligible': sum(1 for r in rows if r['cat2_exam_eligible'] is True),
+        'cat2_exam_ineligible': sum(1 for r in rows if r['cat2_exam_eligible'] is False),
+        'cat2_exam_na': sum(1 for r in rows if r['cat2_exam_eligible'] is None),
+        'end_exam_eligible': sum(1 for r in rows if r['end_exam_eligible'] is True),
+        'end_exam_ineligible': sum(1 for r in rows if r['end_exam_eligible'] is False),
+        'end_exam_na': sum(1 for r in rows if r['end_exam_eligible'] is None),
     }
 
-    return Response({'stats': stats, 'rows': rows, 'threshold': ELIGIBILITY_THRESHOLD})
+    return Response({
+        'stats': stats,
+        'rows': rows,
+        'threshold': ELIGIBILITY_THRESHOLD,
+        'ca_threshold': CA_ELIGIBILITY_THRESHOLD,
+    })
 
 
 # ── SICK RECORDS ───────────────────────────────────────────────────────────────
@@ -1162,6 +1602,7 @@ class ResultViewSet(viewsets.ModelViewSet):
                 'code':         module.code,
                 'has_practical': module.has_practical,
                 'class_level':  module.class_level.name,
+                'semester_id':   module.semester_id,
                 'semester':     module.semester.label,
             },
             'results': StudentResultSerializer(results, many=True).data,

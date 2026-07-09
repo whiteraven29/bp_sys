@@ -9,13 +9,19 @@ from rest_framework.test import APIClient
 
 from .models import (
     AcademicYear,
+    AccountantProfile,
     AttendanceRecord,
     ClassLevel,
     Module,
+    PaymentCategory,
     Semester,
     Session,
     Student,
+    StudentFinanceClearance,
+    StudentFinanceObligation,
+    StudentPayment,
     StudentResult,
+    TeacherProfile,
 )
 
 
@@ -79,6 +85,58 @@ class AttendanceSecurityTests(TestCase):
         dashboard_response = self.client.get(reverse('student-dashboard'))
         self.assertEqual(dashboard_response.status_code, 200)
         self.assertContains(dashboard_response, 'CA Results · Semester 1')
+
+    def test_login_page_does_not_offer_public_registration(self):
+        response = self.client.get(reverse('login'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Register here')
+        self.assertContains(response, 'Accounts are created by the administrator.')
+
+    def test_register_page_is_admin_only(self):
+        anonymous = self.client.get(reverse('register'))
+        self.assertRedirects(anonymous, reverse('login'))
+
+        self.client.force_login(self.teacher)
+        tutor_response = self.client.get(reverse('register'))
+        self.assertRedirects(tutor_response, reverse('frontend'))
+
+        self.client.force_login(self.admin)
+        admin_response = self.client.get(reverse('register'))
+        self.assertEqual(admin_response.status_code, 200)
+
+    def test_admin_can_create_tutor_and_accountant_accounts(self):
+        self.client.force_authenticate(self.admin)
+
+        tutor_response = self.client.post('/api/staff-accounts/', {
+            'role': 'tutor',
+            'full_name': 'Tutor Three',
+            'username': 'tutor3',
+            'password': 'safe-password',
+            'module_ids': [self.module.id],
+        }, format='json')
+        self.assertEqual(tutor_response.status_code, 201)
+        tutor = User.objects.get(username='tutor3')
+        self.assertTrue(TeacherProfile.objects.filter(user=tutor).exists())
+        self.assertTrue(self.module.teachers.filter(id=tutor.id).exists())
+
+        accountant_response = self.client.post('/api/staff-accounts/', {
+            'role': 'accountant',
+            'full_name': 'Finance Officer',
+            'username': 'finance1',
+            'password': 'safe-password',
+        }, format='json')
+        self.assertEqual(accountant_response.status_code, 201)
+        accountant = User.objects.get(username='finance1')
+        self.assertTrue(AccountantProfile.objects.filter(user=accountant).exists())
+
+        self.client.force_authenticate(self.teacher)
+        denied = self.client.post('/api/staff-accounts/', {
+            'role': 'accountant',
+            'full_name': 'Blocked User',
+            'username': 'blocked',
+            'password': 'safe-password',
+        }, format='json')
+        self.assertEqual(denied.status_code, 403)
 
     def test_student_dashboard_includes_both_semesters_in_active_year(self):
         semester_two = Semester.objects.create(
@@ -367,3 +425,90 @@ class AttendanceSecurityTests(TestCase):
         workbook = load_workbook(BytesIO(excel_response.content))
         sheet = workbook.active
         self.assertEqual(sheet.cell(row=2, column=9).value, 0)
+
+    def test_accountant_can_manage_payments_but_tutor_cannot(self):
+        accountant = User.objects.create_user('accountant', password='safe-password')
+        AccountantProfile.objects.create(user=accountant, full_name='Finance Officer')
+
+        self.client.force_authenticate(self.teacher)
+        denied = self.client.get('/api/payment-categories/')
+        self.assertEqual(denied.status_code, 403)
+
+        self.client.force_authenticate(accountant)
+        category_response = self.client.post('/api/payment-categories/', {
+            'name': 'Semester 1 School Fees',
+            'category_type': PaymentCategory.SCHOOL_FEES,
+            'default_amount': '1000.00',
+            'installment_count': 2,
+            'semester': self.semester.id,
+            'class_level': self.level.id,
+            'is_active': True,
+        })
+        self.assertEqual(category_response.status_code, 201)
+        self.assertEqual(category_response.data['installment_count'], 2)
+
+        payment_response = self.client.post('/api/student-payments/', {
+            'student': self.student.id,
+            'category': category_response.data['id'],
+            'amount_required': '1000.00',
+            'amount_paid': '600.00',
+            'installment_number': 2,
+            'payment_date': str(date.today()),
+            'reference': 'RCPT-001',
+        })
+        self.assertEqual(payment_response.status_code, 201)
+        self.assertEqual(payment_response.data['balance'], '400.00')
+        self.assertEqual(StudentPayment.objects.count(), 1)
+
+        blocked_installment = self.client.post('/api/student-payments/', {
+            'student': self.student.id,
+            'category': category_response.data['id'],
+            'amount_required': '1000.00',
+            'amount_paid': '100.00',
+            'installment_number': 3,
+            'payment_date': str(date.today()),
+        })
+        self.assertEqual(blocked_installment.status_code, 403)
+
+        special_category = self.client.post('/api/payment-categories/', {
+            'name': 'Special Exam Fee',
+            'category_type': PaymentCategory.SPECIAL_EXAM,
+            'default_amount': '150.00',
+            'installment_count': 1,
+            'semester': self.semester.id,
+            'class_level': self.level.id,
+            'is_active': True,
+        })
+        self.assertEqual(special_category.status_code, 201)
+
+        self.client.force_authenticate(self.admin)
+        obligation_response = self.client.post('/api/finance-obligations/', {
+            'student': self.student.id,
+            'semester': self.semester.id,
+            'obligation_type': StudentFinanceObligation.SPECIAL_EXAM,
+            'category': special_category.data['id'],
+            'amount_required': '150.00',
+        })
+        self.assertEqual(obligation_response.status_code, 201)
+
+        self.client.force_authenticate(accountant)
+        obligation_payment = self.client.post('/api/student-payments/', {
+            'student': self.student.id,
+            'category': special_category.data['id'],
+            'obligation': obligation_response.data['id'],
+            'amount_required': '150.00',
+            'amount_paid': '150.00',
+            'installment_number': 1,
+            'payment_date': str(date.today()),
+        })
+        self.assertEqual(obligation_payment.status_code, 201)
+
+        clearance_response = self.client.post('/api/finance-clearances/', {
+            'student': self.student.id,
+            'semester': self.semester.id,
+            'period': StudentFinanceClearance.CAT1,
+            'is_cleared': True,
+            'note': 'Paid special exam fee.',
+        })
+        self.assertEqual(clearance_response.status_code, 201)
+        self.assertTrue(clearance_response.data['is_cleared'])

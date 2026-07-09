@@ -10,6 +10,11 @@ router.register('modules', views.ModuleViewSet, basename='module')
 router.register('students', views.StudentViewSet, basename='student')
 router.register('sessions', views.SessionViewSet, basename='session')
 router.register('results', views.ResultViewSet, basename='result')
+router.register('finance-students', views.FinanceStudentViewSet, basename='finance-student')
+router.register('payment-categories', views.PaymentCategoryViewSet, basename='payment-category')
+router.register('finance-obligations', views.StudentFinanceObligationViewSet, basename='finance-obligation')
+router.register('student-payments', views.StudentPaymentViewSet, basename='student-payment')
+router.register('finance-clearances', views.StudentFinanceClearanceViewSet, basename='finance-clearance')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -21,6 +26,7 @@ urlpatterns = [
     path('sick-records/<int:pk>/', views.update_sick_record, name='update-sick-record'),
     path('records/<int:pk>/status/', views.update_attendance_status, name='update-attendance-status'),
     path('change-password/', views.change_password, name='change-password'),
+    path('staff-accounts/', views.create_staff_account, name='staff-accounts'),
     path('results/download/', views.download_results, name='results-download'),
     path('results/download/final/', views.download_final_results, name='results-download-final'),
     path('eligibility/download/', views.download_eligibility_excel, name='eligibility-download'),

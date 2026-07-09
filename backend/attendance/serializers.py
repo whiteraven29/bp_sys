@@ -1,6 +1,10 @@
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
-from .models import AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord, StudentResult
+from .models import (
+    AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord,
+    StudentResult, PaymentCategory, StudentFinanceObligation, StudentPayment,
+    StudentFinanceClearance,
+)
 
 
 # ── Weighted-mark helper ───────────────────────────────────────────────────────
@@ -154,6 +158,105 @@ class StudentSerializer(serializers.ModelSerializer):
             return 0
         effective = obj.attendance_records.filter(status__in=['P', 'S']).count()
         return round((effective / total) * 100)
+
+
+class FinanceStudentSerializer(serializers.ModelSerializer):
+    module_name = serializers.CharField(source='module.name', read_only=True)
+    module_code = serializers.CharField(source='module.code', read_only=True)
+    class_level_name = serializers.CharField(source='module.class_level.name', read_only=True)
+    semester_label = serializers.CharField(source='module.semester.label', read_only=True)
+
+    class Meta:
+        model = Student
+        fields = [
+            'id', 'nactvet_reg_no', 'name', 'module_name', 'module_code',
+            'class_level_name', 'semester_label',
+        ]
+
+
+class PaymentCategorySerializer(serializers.ModelSerializer):
+    category_type_display = serializers.CharField(source='get_category_type_display', read_only=True)
+
+    class Meta:
+        model = PaymentCategory
+        fields = [
+            'id', 'name', 'category_type', 'category_type_display',
+            'semester', 'class_level', 'default_amount', 'installment_count',
+            'is_active', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class StudentFinanceObligationSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    student_reg_no = serializers.CharField(source='student.nactvet_reg_no', read_only=True)
+    class_level = serializers.CharField(source='student.module.class_level.name', read_only=True)
+    semester_label = serializers.CharField(source='semester.label', read_only=True)
+    module_name = serializers.CharField(source='module.name', read_only=True)
+    module_code = serializers.CharField(source='module.code', read_only=True)
+    obligation_type_display = serializers.CharField(source='get_obligation_type_display', read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    category_type = serializers.CharField(source='category.category_type', read_only=True)
+    amount_paid = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    is_finance_cleared = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = StudentFinanceObligation
+        fields = [
+            'id', 'student', 'student_name', 'student_reg_no', 'class_level',
+            'semester', 'semester_label', 'module', 'module_name', 'module_code',
+            'obligation_type', 'obligation_type_display', 'category', 'category_name',
+            'category_type', 'amount_required', 'amount_paid', 'balance',
+            'is_finance_cleared', 'note', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+        extra_kwargs = {
+            'category': {'required': False, 'allow_null': True},
+            'amount_required': {'required': False},
+        }
+
+
+class StudentPaymentSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    student_reg_no = serializers.CharField(source='student.nactvet_reg_no', read_only=True)
+    module_name = serializers.CharField(source='student.module.name', read_only=True)
+    module_code = serializers.CharField(source='student.module.code', read_only=True)
+    class_level = serializers.CharField(source='student.module.class_level.name', read_only=True)
+    semester = serializers.CharField(source='student.module.semester.label', read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    category_type = serializers.CharField(source='category.category_type', read_only=True)
+    category_type_display = serializers.CharField(source='category.get_category_type_display', read_only=True)
+    balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = StudentPayment
+        fields = [
+            'id', 'student', 'student_name', 'student_reg_no',
+            'module_name', 'module_code', 'class_level', 'semester',
+            'category', 'category_name', 'category_type', 'category_type_display',
+            'obligation',
+            'amount_required', 'amount_paid', 'balance',
+            'installment_number', 'payment_date', 'reference', 'note', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class StudentFinanceClearanceSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    student_reg_no = serializers.CharField(source='student.nactvet_reg_no', read_only=True)
+    class_level = serializers.CharField(source='student.module.class_level.name', read_only=True)
+    semester_label = serializers.CharField(source='semester.label', read_only=True)
+    period_display = serializers.CharField(source='get_period_display', read_only=True)
+
+    class Meta:
+        model = StudentFinanceClearance
+        fields = [
+            'id', 'student', 'student_name', 'student_reg_no', 'class_level',
+            'semester', 'semester_label', 'period', 'period_display',
+            'is_cleared', 'note', 'updated_at',
+        ]
+        read_only_fields = ['id', 'updated_at']
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
