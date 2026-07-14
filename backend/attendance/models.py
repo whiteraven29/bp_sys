@@ -106,6 +106,7 @@ class Student(models.Model):
     name = models.CharField(max_length=200)
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='students')
     portal_pin_hash = models.CharField(max_length=128, blank=True, editable=False)
+    must_change_portal_password = models.BooleanField(default=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -119,8 +120,9 @@ class Student(models.Model):
     def has_portal_pin(self):
         return bool(self.portal_pin_hash)
 
-    def set_portal_pin(self, raw_pin):
+    def set_portal_pin(self, raw_pin, *, require_change=True):
         self.portal_pin_hash = make_password(str(raw_pin))
+        self.must_change_portal_password = require_change
 
     def check_portal_pin(self, raw_pin):
         return bool(self.portal_pin_hash) and check_password(str(raw_pin), self.portal_pin_hash)
@@ -376,6 +378,14 @@ class StudentResult(models.Model):
     cat2_practical = _mark_field(verbose_name='Practical Test 2 (raw /100)')
     end_theory     = _mark_field(verbose_name='End of Semester – Theory/Written (raw /100)')
     end_practical  = _mark_field(verbose_name='End of Semester – Practical (raw /100)')
+    assign1_absent        = models.BooleanField(default=False)
+    assign2_absent        = models.BooleanField(default=False)
+    cat1_theory_absent    = models.BooleanField(default=False)
+    cat2_theory_absent    = models.BooleanField(default=False)
+    cat1_practical_absent = models.BooleanField(default=False)
+    cat2_practical_absent = models.BooleanField(default=False)
+    end_theory_absent     = models.BooleanField(default=False)
+    end_practical_absent  = models.BooleanField(default=False)
     ca_approved    = models.BooleanField(default=False)
     final_approved = models.BooleanField(default=False)
     updated_at     = models.DateTimeField(auto_now=True)

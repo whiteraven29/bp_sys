@@ -1,4 +1,5 @@
 from functools import wraps
+import re
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
@@ -32,6 +33,21 @@ from .serializers import (
 )
 
 User = get_user_model()
+
+STUDENT_PASSWORD_MESSAGE = (
+    'Password must be at least 8 characters and include an uppercase letter, '
+    'a lowercase letter, a number, and a symbol.'
+)
+
+
+def student_password_is_strong(password):
+    return (
+        len(password) >= 8
+        and re.search(r'[A-Z]', password)
+        and re.search(r'[a-z]', password)
+        and re.search(r'\d', password)
+        and re.search(r'[^A-Za-z0-9]', password)
+    )
 
 
 # ── HELPERS ────────────────────────────────────────────────────────────────────
@@ -170,10 +186,9 @@ def change_password(request):
     current_password = str(request.data.get('current_password', '')).strip()
     new_password = str(request.data.get('new_password', '')).strip()
 
-    if len(new_password) < 6:
-        return Response({'detail': 'New password must be at least 6 characters.'}, status=status.HTTP_400_BAD_REQUEST)
-
     if request.user.is_authenticated:
+        if len(new_password) < 6:
+            return Response({'detail': 'New password must be at least 6 characters.'}, status=status.HTTP_400_BAD_REQUEST)
         if not request.user.check_password(current_password):
             return Response({'detail': 'Current password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
         request.user.set_password(new_password)
@@ -186,12 +201,16 @@ def change_password(request):
         return Response({'detail': 'Authentication required.'}, status=status.HTTP_403_FORBIDDEN)
     if not student.check_portal_pin(current_password):
         return Response({'detail': 'Current PIN is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not student_password_is_strong(new_password):
+        return Response({'detail': STUDENT_PASSWORD_MESSAGE}, status=status.HTTP_400_BAD_REQUEST)
+    if current_password == new_password:
+        return Response({'detail': 'Choose a new password different from the generated PIN.'}, status=status.HTTP_400_BAD_REQUEST)
 
     updated = Student.objects.filter(nactvet_reg_no__iexact=student.nactvet_reg_no).count()
     for enrollment in Student.objects.filter(nactvet_reg_no__iexact=student.nactvet_reg_no):
-        enrollment.set_portal_pin(new_password)
-        enrollment.save(update_fields=['portal_pin_hash'])
-    return Response({'detail': 'Portal PIN updated.', 'updated': updated})
+        enrollment.set_portal_pin(new_password, require_change=False)
+        enrollment.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
+    return Response({'detail': 'Portal password updated.', 'updated': updated})
 
 
 @student_login_required
@@ -199,6 +218,11 @@ def student_dashboard(request):
     student = get_logged_student(request)
     if not student:
         return redirect('login')
+    if student.must_change_portal_password:
+        return render(request, 'student_password_change.html', {
+            'student_name': student.name,
+            'registration_number': student.nactvet_reg_no,
+        })
 
     active_sem = active_semester()
     enrollments = Student.objects.filter(nactvet_reg_no=student.nactvet_reg_no)
@@ -240,10 +264,20 @@ def student_dashboard(request):
                 'end_theory_w', 'end_prac_w', 'final_total',
             ):
                 result_data[field] = None
+        if result_data and ca_approved:
+            for field in ('assign1', 'assign2', 'cat1_theory', 'cat2_theory',
+                          'cat1_practical', 'cat2_practical'):
+                if result_data.get(f'{field}_absent'):
+                    result_data[field] = 'Abscond'
+        if result_data and final_approved:
+            for field in ('end_theory', 'end_practical'):
+                if result_data.get(f'{field}_absent'):
+                    result_data[field] = 'Abscond'
         has_final_result = bool(
             final_approved
             and result
-            and (result.end_theory is not None or result.end_practical is not None)
+            and (result.end_theory is not None or result.end_theory_absent
+                 or result.end_practical is not None or result.end_practical_absent)
         )
 
         if data['sessions_total']:
@@ -701,7 +735,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             for student in qs.select_for_update():
                 student.set_portal_pin(portal_pin)
-                student.save(update_fields=['portal_pin_hash'])
+                student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
                 updated += 1
         return Response({'updated': updated})
 
@@ -1220,7 +1254,8 @@ def ca_eligibility_for_student(student):
     if result is None:
         return None, None, 'Pending CA result record'
 
-    missing = [label for field, label in required_fields if getattr(result, field) is None]
+    missing = [label for field, label in required_fields
+               if getattr(result, field) is None and not getattr(result, f'{field}_absent')]
     serializer = StudentResultSerializer()
     total_ca = serializer.get_total_ca(result)
 
@@ -1557,7 +1592,8 @@ class ResultViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         if not request.user.is_staff:
-            for f in ('end_theory', 'end_practical', 'ca_approved', 'final_approved'):
+            for f in ('end_theory', 'end_practical', 'end_theory_absent',
+                      'end_practical_absent', 'ca_approved', 'final_approved'):
                 if f in request.data:
                     raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
         return super().update(request, *args, **kwargs)
@@ -1571,7 +1607,7 @@ class ResultViewSet(viewsets.ModelViewSet):
             for field in ('ca_approved', 'final_approved'):
                 if field in serializer.validated_data:
                     raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
-            for field in ('end_theory', 'end_practical'):
+            for field in ('end_theory', 'end_practical', 'end_theory_absent', 'end_practical_absent'):
                 if serializer.validated_data.get(field) is not None:
                     raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
         serializer.save()
@@ -1616,14 +1652,17 @@ class ResultViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Empty list.'}, status=status.HTTP_400_BAD_REQUEST)
 
         mod_ids   = set(user_modules(request.user).values_list('id', flat=True))
-        CA_FIELDS  = ['assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical']
-        END_FIELDS = ['end_theory', 'end_practical', 'ca_approved', 'final_approved']
+        CA_MARKS = ['assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical']
+        CA_FIELDS = CA_MARKS + [f'{field}_absent' for field in CA_MARKS]
+        END_MARKS = ['end_theory', 'end_practical']
+        END_FIELDS = END_MARKS + [f'{field}_absent' for field in END_MARKS] + ['ca_approved', 'final_approved']
         FIELDS     = CA_FIELDS + (END_FIELDS if request.user.is_staff else [])
         saved, errors = 0, []
 
         for item in updates:
             if not request.user.is_staff:
-                restricted = {'end_theory', 'end_practical', 'ca_approved', 'final_approved'}
+                restricted = {'end_theory', 'end_practical', 'end_theory_absent',
+                              'end_practical_absent', 'ca_approved', 'final_approved'}
                 blocked = restricted.intersection(item.keys())
                 if blocked:
                     errors.append(f'Result {item.get("id")}: administrator approval required')
@@ -1647,8 +1686,10 @@ class ResultViewSet(viewsets.ModelViewSet):
                 if field not in item:
                     continue
                 raw = item[field]
-                if field in ('ca_approved', 'final_approved'):
+                if field in ('ca_approved', 'final_approved') or field.endswith('_absent'):
                     setattr(result, field, bool(raw))
+                    if field.endswith('_absent') and bool(raw):
+                        setattr(result, field[:-7], None)
                     continue
                 if raw == '' or raw is None:
                     setattr(result, field, None)
@@ -1659,6 +1700,7 @@ class ResultViewSet(viewsets.ModelViewSet):
                             errors.append(f'Result {item.get("id")}: {field} must be 0–100')
                             continue
                         setattr(result, field, v)
+                        setattr(result, f'{field}_absent', False)
                     except (TypeError, ValueError):
                         errors.append(f'Result {item.get("id")}: invalid value for {field}')
                         continue

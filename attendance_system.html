@@ -137,6 +137,10 @@
     outline: none;
   }
   .field input:focus, .field select:focus { border-color: var(--accent); }
+  input[type="date"] { color-scheme: dark; }
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer; opacity: 1; filter: invert(72%) sepia(87%) saturate(1414%) hue-rotate(184deg) brightness(104%);
+  }
   .field select option { background: var(--surface2); }
 
   /* ── BUTTONS ── */

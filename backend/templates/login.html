@@ -40,6 +40,10 @@
     outline: none; transition: border .15s; width: 100%;
   }
   .field input:focus { border-color: var(--accent); }
+  .password-wrap { position: relative; width: 100%; }
+  .password-wrap input { padding-right: 44px; }
+  .password-toggle { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border: 0; border-radius: 7px; color: var(--accent); background: transparent; cursor: pointer; }
+  .password-toggle:hover, .password-toggle:focus-visible { background: rgba(79,142,247,.14); outline: none; }
   .errors { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.25); border-radius: 8px; padding: 10px 14px; font-size: .82rem; color: var(--red); margin-bottom: 16px; }
   .errors ul { padding-left: 16px; }
   .btn {
@@ -78,5 +82,8 @@
 
   <div class="footer">Accounts are created by the administrator.</div>
 </div>
+<script>
+document.querySelectorAll('input[type="password"]').forEach(input=>{const wrap=document.createElement('div');wrap.className='password-wrap';input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);const button=document.createElement('button');button.type='button';button.className='password-toggle';button.setAttribute('aria-label','Show password');button.textContent='👁';button.onclick=()=>{const hidden=input.type==='password';input.type=hidden?'text':'password';button.textContent=hidden?'◉':'👁';button.setAttribute('aria-label',hidden?'Hide password':'Show password');input.focus()};wrap.appendChild(button)});
+</script>
 </body>
 </html>

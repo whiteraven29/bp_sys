@@ -23,6 +23,7 @@ from .models import (
     StudentResult,
     TeacherProfile,
 )
+from .serializers import StudentResultSerializer
 
 
 User = get_user_model()
@@ -62,7 +63,8 @@ class AttendanceSecurityTests(TestCase):
             module=self.module,
         )
         self.student.set_portal_pin('482913')
-        self.student.save(update_fields=['portal_pin_hash'])
+        self.student.must_change_portal_password = False
+        self.student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
         self.client = APIClient()
 
     def test_student_dashboard_redirects_without_student_session(self):
@@ -70,6 +72,8 @@ class AttendanceSecurityTests(TestCase):
         self.assertRedirects(response, reverse('login'))
 
     def test_student_can_login_with_portal_pin_not_surname(self):
+        self.student.must_change_portal_password = True
+        self.student.save(update_fields=['must_change_portal_password'])
         surname_response = self.client.post(reverse('login'), {
             'identifier': self.student.nactvet_reg_no,
             'secret': 'MOLLEL',
@@ -84,7 +88,52 @@ class AttendanceSecurityTests(TestCase):
         self.assertRedirects(pin_response, reverse('student-dashboard'))
         dashboard_response = self.client.get(reverse('student-dashboard'))
         self.assertEqual(dashboard_response.status_code, 200)
-        self.assertContains(dashboard_response, 'CA Results · Semester 1')
+        self.assertContains(dashboard_response, 'Create a secure password')
+
+        weak_response = self.client.post('/api/change-password/', {
+            'current_password': '482913', 'new_password': 'weakpassword',
+        }, format='json')
+        self.assertEqual(weak_response.status_code, 400)
+
+        strong_response = self.client.post('/api/change-password/', {
+            'current_password': '482913', 'new_password': 'Strong@123',
+        }, format='json')
+        self.assertEqual(strong_response.status_code, 200)
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.must_change_portal_password)
+        self.assertContains(self.client.get(reverse('student-dashboard')), 'CA Results · Semester 1')
+
+    def test_approved_ca_shows_incomplete_for_unfilled_component(self):
+        StudentResult.objects.create(
+            student=self.student, ca_approved=True,
+            assign1=60, assign2=60, cat1_theory=60,
+        )
+        session = self.client.session
+        session['student_id'] = self.student.id
+        session.save()
+
+        response = self.client.get(reverse('student-dashboard'))
+
+        self.assertContains(response, 'Incomplete')
+
+    def test_abscond_is_a_completed_zero_mark_and_teacher_cannot_set_end_absence(self):
+        result = StudentResult.objects.create(
+            student=self.student, assign1_absent=True,
+            assign2=60, cat1_theory=60, cat2_theory=60,
+        )
+        serialized = StudentResultSerializer(result).data
+        self.assertEqual(serialized['assign1_w'], 0.0)
+        self.assertIsNotNone(serialized['total_ca'])
+
+        self.client.force_authenticate(self.teacher)
+        allowed = self.client.patch(
+            f'/api/results/{result.id}/', {'cat1_theory_absent': True}, format='json'
+        )
+        denied = self.client.patch(
+            f'/api/results/{result.id}/', {'end_theory_absent': True}, format='json'
+        )
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(denied.status_code, 403)
 
     def test_login_page_does_not_offer_public_registration(self):
         response = self.client.get(reverse('login'))
@@ -238,6 +287,7 @@ class AttendanceSecurityTests(TestCase):
         self.student.refresh_from_db()
         other_student.refresh_from_db()
         self.assertTrue(self.student.check_portal_pin('shared-123'))
+        self.assertTrue(self.student.must_change_portal_password)
         self.assertFalse(other_student.check_portal_pin('shared-123'))
 
     def test_authenticated_user_can_change_own_password(self):
@@ -263,14 +313,16 @@ class AttendanceSecurityTests(TestCase):
 
         response = self.client.post('/api/change-password/', {
             'current_password': '482913',
-            'new_password': 'student-new-pin',
+            'new_password': 'Student@123',
         }, format='json')
 
         self.assertEqual(response.status_code, 200)
         self.student.refresh_from_db()
         second_enrollment.refresh_from_db()
-        self.assertTrue(self.student.check_portal_pin('student-new-pin'))
-        self.assertTrue(second_enrollment.check_portal_pin('student-new-pin'))
+        self.assertTrue(self.student.check_portal_pin('Student@123'))
+        self.assertTrue(second_enrollment.check_portal_pin('Student@123'))
+        self.assertFalse(self.student.must_change_portal_password)
+        self.assertFalse(second_enrollment.must_change_portal_password)
 
     def test_bulk_result_save_preserves_omitted_fields(self):
         result = StudentResult.objects.create(

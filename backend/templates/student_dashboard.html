@@ -233,6 +233,10 @@
   .account-field label { color: var(--muted); font-size: .61rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
   .account-field input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; outline: none; color: var(--text); background: var(--bg); font-size: .78rem; }
   .account-field input:focus { border-color: #31587d; }
+  .password-wrap { position: relative; width: 100%; }
+  .password-wrap input { padding-right: 44px; }
+  .password-toggle { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 7px; color: var(--blue); background: transparent; cursor: pointer; }
+  .password-toggle:hover, .password-toggle:focus-visible { background: var(--blue-soft); outline: none; }
   .account-button { height: 39px; padding: 0 14px; border: 0; border-radius: 10px; color: #07111c; background: var(--blue); cursor: pointer; font-size: .75rem; font-weight: 850; }
   .notice { margin-top: 14px; padding: 15px; border: 1px solid #294866; border-radius: 12px; color: #a8c3db; background: #0e2236; font-size: .72rem; line-height: 1.6; }
   .toast { position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: calc(100vw - 36px); padding: 11px 14px; border: 1px solid var(--line); border-radius: 11px; color: var(--text); background: var(--surface-3); opacity: 0; transform: translateY(18px); transition: .2s ease; font-size: .78rem; }
@@ -260,12 +264,28 @@
     .semester-pill { display: none; }
     .content { padding: 16px 12px 30px; }
     .page-head { align-items: flex-start; flex-direction: column; }
-    .hero { padding: 21px; min-height: auto; }
+    .hero { display: none; }
     .year-card { min-width: 100%; }
     .stats { gap: 9px; }
     .stat-card { padding: 14px; }
     .course-grid, .side-stack, .profile-grid, .account-form { grid-template-columns: 1fr; }
     .marks { grid-template-columns: 1fr; }
+    .top-avatar { display: none; }
+    .page-head { margin-bottom: 14px; }
+    .stats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .stat-top { margin-bottom: 8px; }
+    .stat-card strong { font-size: 1.25rem; }
+    .module-card, .profile-item { padding: 14px; box-shadow: none; }
+    .panel { border: 0; background: transparent; box-shadow: none; }
+    .panel-head { padding: 12px 0; }
+    .table-wrap { overflow: visible; }
+    table { min-width: 0; }
+    table thead { display: none; }
+    table, table tbody, table tr, table td { display: block; width: 100%; }
+    table tr { margin-bottom: 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+    table td { display: grid; grid-template-columns: minmax(105px, 42%) 1fr; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: right; overflow-wrap: anywhere; }
+    table td:last-child { border-bottom: 0; }
+    table td::before { content: attr(data-label); color: var(--muted); font-size: .63rem; font-weight: 800; text-align: left; text-transform: uppercase; }
   }
 </style>
 </head>
@@ -390,14 +410,14 @@
             {% for module in semester1_modules %}
             <tr class="searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.teacher }}">
               <td><strong>{{ module.module_code }}</strong></td><td>{{ module.module_name }}<div class="meta">{{ module.teacher }}</div></td>
-              <td>{% if module.result %}{{ module.result.assign1|default_if_none:"—" }}{% else %}—{% endif %}</td>
-              <td>{% if module.result %}{{ module.result.assign2|default_if_none:"—" }}{% else %}—{% endif %}</td>
-              <td>{% if module.result %}{{ module.result.cat1_theory|default_if_none:"—" }}{% else %}—{% endif %}</td>
-              <td>{% if module.result %}{{ module.result.cat2_theory|default_if_none:"—" }}{% else %}—{% endif %}</td>
-              <td>{% if module.result.has_practical %}{{ module.result.cat1_practical|default_if_none:"—" }}{% else %}N/A{% endif %}</td>
-              <td>{% if module.result.has_practical %}{{ module.result.cat2_practical|default_if_none:"—" }}{% else %}N/A{% endif %}</td>
-              <td><strong>{% if module.result %}{{ module.result.total_ca|default_if_none:"—" }}{% else %}—{% endif %}</strong></td>
-              <td>{% if module.result.ca_eligible is True %}<span class="status pass">Eligible</span>{% elif module.result.ca_eligible is False %}<span class="status fail">Not eligible</span>{% else %}<span class="status pending">Pending</span>{% endif %}</td>
+              <td>{{ module.result.assign1|default_if_none:"Incomplete" }}</td>
+              <td>{{ module.result.assign2|default_if_none:"Incomplete" }}</td>
+              <td>{{ module.result.cat1_theory|default_if_none:"Incomplete" }}</td>
+              <td>{{ module.result.cat2_theory|default_if_none:"Incomplete" }}</td>
+              <td>{% if module.result.has_practical %}{{ module.result.cat1_practical|default_if_none:"Incomplete" }}{% else %}N/A{% endif %}</td>
+              <td>{% if module.result.has_practical %}{{ module.result.cat2_practical|default_if_none:"Incomplete" }}{% else %}N/A{% endif %}</td>
+              <td><strong>{{ module.result.total_ca|default_if_none:"Incomplete" }}</strong></td>
+              <td>{% if module.result.ca_eligible is True %}<span class="status pass">Eligible</span>{% elif module.result.ca_eligible is False %}<span class="status fail">Not eligible</span>{% else %}<span class="status pending">Incomplete</span>{% endif %}</td>
             </tr>
             {% empty %}<tr><td colspan="10">No Semester 1 modules are registered for this academic year.</td></tr>{% endfor %}
           </tbody>
@@ -414,14 +434,14 @@
             {% for module in semester2_modules %}
             <tr class="searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.teacher }}">
               <td><strong>{{ module.module_code }}</strong></td><td>{{ module.module_name }}<div class="meta">{{ module.teacher }}</div></td>
-              <td>{% if module.result %}{{ module.result.assign1|default_if_none:"—" }}{% else %}—{% endif %}</td>
-              <td>{% if module.result %}{{ module.result.assign2|default_if_none:"—" }}{% else %}—{% endif %}</td>
-              <td>{% if module.result %}{{ module.result.cat1_theory|default_if_none:"—" }}{% else %}—{% endif %}</td>
-              <td>{% if module.result %}{{ module.result.cat2_theory|default_if_none:"—" }}{% else %}—{% endif %}</td>
-              <td>{% if module.result.has_practical %}{{ module.result.cat1_practical|default_if_none:"—" }}{% else %}N/A{% endif %}</td>
-              <td>{% if module.result.has_practical %}{{ module.result.cat2_practical|default_if_none:"—" }}{% else %}N/A{% endif %}</td>
-              <td><strong>{% if module.result %}{{ module.result.total_ca|default_if_none:"—" }}{% else %}—{% endif %}</strong></td>
-              <td>{% if module.result.ca_eligible is True %}<span class="status pass">Eligible</span>{% elif module.result.ca_eligible is False %}<span class="status fail">Not eligible</span>{% else %}<span class="status pending">Pending</span>{% endif %}</td>
+              <td>{{ module.result.assign1|default_if_none:"Incomplete" }}</td>
+              <td>{{ module.result.assign2|default_if_none:"Incomplete" }}</td>
+              <td>{{ module.result.cat1_theory|default_if_none:"Incomplete" }}</td>
+              <td>{{ module.result.cat2_theory|default_if_none:"Incomplete" }}</td>
+              <td>{% if module.result.has_practical %}{{ module.result.cat1_practical|default_if_none:"Incomplete" }}{% else %}N/A{% endif %}</td>
+              <td>{% if module.result.has_practical %}{{ module.result.cat2_practical|default_if_none:"Incomplete" }}{% else %}N/A{% endif %}</td>
+              <td><strong>{{ module.result.total_ca|default_if_none:"Incomplete" }}</strong></td>
+              <td>{% if module.result.ca_eligible is True %}<span class="status pass">Eligible</span>{% elif module.result.ca_eligible is False %}<span class="status fail">Not eligible</span>{% else %}<span class="status pending">Incomplete</span>{% endif %}</td>
             </tr>
             {% empty %}<tr><td colspan="10">No Semester 2 modules are registered for this academic year.</td></tr>{% endfor %}
           </tbody>
@@ -489,11 +509,11 @@
         <div class="section-title"><p class="eyebrow">Account</p><h2>My Profile</h2><p>Your student identity and current academic context.</p></div>
         <div class="profile-grid"><div class="profile-item"><span>Full name</span><strong>{{ student_name }}</strong></div><div class="profile-item"><span>Registration number</span><strong>{{ registration_number }}</strong></div><div class="profile-item"><span>Academic year</span><strong>{{ academic_year }}</strong></div><div class="profile-item"><span>Current semester</span><strong>{{ active_semester }}</strong></div><div class="profile-item"><span>Enrolled modules</span><strong>{{ module_count }}</strong></div><div class="profile-item"><span>Recorded sessions</span><strong>{{ total_sessions }}</strong></div></div>
         <div class="account-form">
-          <div class="account-field"><label>Current PIN</label><input id="current-pin" type="password" autocomplete="current-password" placeholder="Current portal PIN"></div>
-          <div class="account-field"><label>New PIN</label><input id="new-pin" type="password" autocomplete="new-password" minlength="6" placeholder="At least 6 characters"></div>
-          <button class="account-button" type="button" id="change-pin-btn">Update PIN</button>
+          <div class="account-field"><label>Current password</label><input id="current-pin" type="password" autocomplete="current-password" placeholder="Current portal password"></div>
+          <div class="account-field"><label>New password</label><input id="new-pin" type="password" autocomplete="new-password" minlength="8" placeholder="8+ characters with Aa, 1 and symbol"></div>
+          <button class="account-button" type="button" id="change-pin-btn">Update password</button>
         </div>
-        <div class="notice">For corrections to your name, registration number, modules, attendance, or marks, contact your lecturer or system administrator. Your portal PIN is securely stored and is never displayed.</div>
+        <div class="notice">For corrections to your name, registration number, modules, attendance, or marks, contact your lecturer or system administrator. Your portal password is securely stored and is never displayed.</div>
       </section>
     </main>
   </div>
@@ -585,22 +605,29 @@
   document.getElementById('change-pin-btn').addEventListener('click', async () => {
     const current = document.getElementById('current-pin').value;
     const next = document.getElementById('new-pin').value;
-    if (!current || next.trim().length < 6) {
-      toast('Enter your current PIN and a new PIN of at least 6 characters.');
+    if (!current || !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(next)) {
+      toast('Use 8+ characters with uppercase, lowercase, a number, and a symbol.');
       return;
     }
     try {
       await api('POST', '/change-password/', { current_password: current, new_password: next.trim() });
       document.getElementById('current-pin').value = '';
       document.getElementById('new-pin').value = '';
-      toast('Portal PIN updated.');
+      toast('Portal password updated.');
     } catch (error) {
-      toast(error?.detail || 'Could not update portal PIN.');
+      toast(error?.detail || 'Could not update portal password.');
     }
   });
 
   const initialView = location.hash.slice(1);
   if (initialView) showView(initialView, false);
+  document.querySelectorAll('input[type="password"]').forEach(input=>{const wrap=document.createElement('div');wrap.className='password-wrap';input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);const button=document.createElement('button');button.type='button';button.className='password-toggle';button.setAttribute('aria-label','Show password');button.textContent='👁';button.onclick=()=>{const hidden=input.type==='password';input.type=hidden?'text':'password';button.textContent=hidden?'◉':'👁';button.setAttribute('aria-label',hidden?'Hide password':'Show password');input.focus()};wrap.appendChild(button)});
+  document.querySelectorAll('table').forEach(table => {
+    const labels = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    table.querySelectorAll('tbody tr').forEach(row => {
+      [...row.children].forEach((cell, index) => cell.dataset.label = labels[index] || 'Details');
+    });
+  });
 </script>
 </body>
 </html>

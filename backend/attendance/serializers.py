@@ -123,7 +123,7 @@ class StudentSerializer(serializers.ModelSerializer):
         student = super().create(validated_data)
         if portal_pin:
             student.set_portal_pin(portal_pin)
-            student.save(update_fields=['portal_pin_hash'])
+            student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
         return student
 
     def update(self, instance, validated_data):
@@ -131,7 +131,7 @@ class StudentSerializer(serializers.ModelSerializer):
         student = super().update(instance, validated_data)
         if portal_pin:
             student.set_portal_pin(portal_pin)
-            student.save(update_fields=['portal_pin_hash'])
+            student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
         return student
 
     def get_sessions_attended(self, obj):
@@ -362,10 +362,13 @@ class StudentResultSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'student', 'student_name', 'student_reg_no', 'module_id', 'has_practical',
             'assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical',
+            'assign1_absent', 'assign2_absent', 'cat1_theory_absent', 'cat2_theory_absent',
+            'cat1_practical_absent', 'cat2_practical_absent',
             'assign1_w', 'assign2_w', 'cat1_theory_w', 'cat2_theory_w', 'cat1_prac_w', 'cat2_prac_w',
             'theory_ca', 'practical_ca', 'total_ca',
             'theory_eligible', 'practical_eligible', 'ca_eligible',
             'end_theory', 'end_practical',
+            'end_theory_absent', 'end_practical_absent',
             'end_theory_w', 'end_prac_w', 'final_total', 'ca_approved', 'final_approved',
             'updated_at',
         ]
@@ -374,13 +377,32 @@ class StudentResultSerializer(serializers.ModelSerializer):
     def _hp(self, obj):
         return obj.student.module.has_practical
 
+    def _mark(self, obj, field):
+        """An explicitly absent assessment is complete and contributes zero."""
+        return 0 if getattr(obj, f'{field}_absent') else getattr(obj, field)
+
+    def _complete(self, obj, fields):
+        return all(getattr(obj, field) is not None or getattr(obj, f'{field}_absent') for field in fields)
+
+    def validate(self, attrs):
+        # A component cannot simultaneously contain a mark and be absent. A newly
+        # entered mark clears ABS; selecting ABS clears any existing mark.
+        for field in ('assign1', 'assign2', 'cat1_theory', 'cat2_theory',
+                      'cat1_practical', 'cat2_practical', 'end_theory', 'end_practical'):
+            absent_field = f'{field}_absent'
+            if attrs.get(absent_field) is True:
+                attrs[field] = None
+            elif field in attrs and attrs[field] is not None:
+                attrs[absent_field] = False
+        return attrs
+
     # ── Individual weighted fields ──────────────────────────────────────────────
-    def get_assign1_w(self, obj):     return _wt(obj.assign1,        2 if self._hp(obj) else 5)
-    def get_assign2_w(self, obj):     return _wt(obj.assign2,        2 if self._hp(obj) else 5)
-    def get_cat1_theory_w(self, obj): return _wt(obj.cat1_theory,    8 if self._hp(obj) else 15)
-    def get_cat2_theory_w(self, obj): return _wt(obj.cat2_theory,    8 if self._hp(obj) else 15)
-    def get_cat1_prac_w(self, obj):   return _wt(obj.cat1_practical, 10) if self._hp(obj) else None
-    def get_cat2_prac_w(self, obj):   return _wt(obj.cat2_practical, 10) if self._hp(obj) else None
+    def get_assign1_w(self, obj):     return _wt(self._mark(obj, 'assign1'),        2 if self._hp(obj) else 5)
+    def get_assign2_w(self, obj):     return _wt(self._mark(obj, 'assign2'),        2 if self._hp(obj) else 5)
+    def get_cat1_theory_w(self, obj): return _wt(self._mark(obj, 'cat1_theory'),    8 if self._hp(obj) else 15)
+    def get_cat2_theory_w(self, obj): return _wt(self._mark(obj, 'cat2_theory'),    8 if self._hp(obj) else 15)
+    def get_cat1_prac_w(self, obj):   return _wt(self._mark(obj, 'cat1_practical'), 10) if self._hp(obj) else None
+    def get_cat2_prac_w(self, obj):   return _wt(self._mark(obj, 'cat2_practical'), 10) if self._hp(obj) else None
 
     # ── Sub-totals ──────────────────────────────────────────────────────────────
     def get_theory_ca(self, obj):
@@ -397,6 +419,11 @@ class StudentResultSerializer(serializers.ModelSerializer):
         return round(sum(filled), 2) if filled else None
 
     def get_total_ca(self, obj):
+        required = ['assign1', 'assign2', 'cat1_theory', 'cat2_theory']
+        if self._hp(obj):
+            required += ['cat1_practical', 'cat2_practical']
+        if not self._complete(obj, required):
+            return None
         t = self.get_theory_ca(obj)
         p = self.get_practical_ca(obj)
         if t is None and p is None:
@@ -405,7 +432,7 @@ class StudentResultSerializer(serializers.ModelSerializer):
 
     # ── Eligibility (only set when all required marks are present) ──────────────
     def get_theory_eligible(self, obj):
-        if any(v is None for v in [obj.assign1, obj.assign2, obj.cat1_theory, obj.cat2_theory]):
+        if not self._complete(obj, ['assign1', 'assign2', 'cat1_theory', 'cat2_theory']):
             return None
         t = self.get_theory_ca(obj)
         return t >= (10 if self._hp(obj) else 20) if t is not None else None
@@ -413,7 +440,7 @@ class StudentResultSerializer(serializers.ModelSerializer):
     def get_practical_eligible(self, obj):
         if not self._hp(obj):
             return None
-        if obj.cat1_practical is None or obj.cat2_practical is None:
+        if not self._complete(obj, ['cat1_practical', 'cat2_practical']):
             return None
         p = self.get_practical_ca(obj)
         return p >= 10 if p is not None else None
@@ -430,12 +457,15 @@ class StudentResultSerializer(serializers.ModelSerializer):
     # ── End-of-semester exam ───────────────────────────────────────────────────
     def get_end_theory_w(self, obj):
         weight = 30 if self._hp(obj) else 60
-        return _wt(obj.end_theory, weight)
+        return _wt(self._mark(obj, 'end_theory'), weight)
 
     def get_end_prac_w(self, obj):
-        return _wt(obj.end_practical, 30) if self._hp(obj) else None
+        return _wt(self._mark(obj, 'end_practical'), 30) if self._hp(obj) else None
 
     def get_final_total(self, obj):
+        end_fields = ['end_theory'] + (['end_practical'] if self._hp(obj) else [])
+        if self.get_total_ca(obj) is None or not self._complete(obj, end_fields):
+            return None
         ca = self.get_total_ca(obj)
         et = self.get_end_theory_w(obj)
         ep = self.get_end_prac_w(obj)
@@ -522,11 +552,11 @@ class BulkStudentSerializer(serializers.Serializer):
                         skipped += 1
                         continue
                     student.set_portal_pin(portal_pin)
-                    student.save(update_fields=['portal_pin_hash'])
+                    student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
                 added += 1
             else:
                 if portal_pin and len(portal_pin) >= 6:
                     student.set_portal_pin(portal_pin)
-                    student.save(update_fields=['portal_pin_hash'])
+                    student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
                 skipped += 1
         return {'added': added, 'skipped': skipped}
