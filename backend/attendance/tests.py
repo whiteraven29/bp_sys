@@ -160,7 +160,7 @@ class AttendanceSecurityTests(TestCase):
 
         response = self.client.get(reverse('student-dashboard'))
 
-        self.assertContains(response, 'Incomplete')
+        self.assertContains(response, 'INC')
 
     def test_abscond_is_a_completed_zero_mark_and_teacher_cannot_set_end_absence(self):
         result = StudentResult.objects.create(
@@ -400,7 +400,36 @@ class AttendanceSecurityTests(TestCase):
 
         self.assertContains(response, '12 credits')
         self.assertContains(response, 'ESE /60')
-        self.assertContains(response, 'Grade Point')
+        self.assertNotContains(response, '<th>Grade Point</th>', html=True)
+
+    def test_student_ca_table_uses_compact_headers_and_average_status(self):
+        StudentResult.objects.create(
+            student=self.student,
+            assign1_absent=True,
+            assign2=60,
+            cat1_theory=60,
+            cat2_theory=60,
+            ca_approved=True,
+        )
+        session = self.client.session
+        session['student_id'] = self.student.id
+        session.save()
+
+        response = self.client.get(reverse('student-dashboard'))
+
+        self.assertContains(response, '<th>Module Name</th>', html=True)
+        self.assertContains(response, '<th>A1</th>', html=True)
+        self.assertContains(response, '<th>Average CA /40</th>', html=True)
+        module = response.context['semester1_modules'][0]
+        self.assertEqual(module['result']['ca_display'], 'ABS')
+        self.assertIsNone(module['result']['assign1'])
+        self.assertNotContains(response, 'Recent attendance activity')
+        self.assertContains(response, 'Payment History')
+        self.assertContains(response, 'Academic Obligations')
+        self.assertContains(response, 'Theory Modules')
+        theory_table = response.context['semester1_theory_modules']
+        self.assertEqual(len(theory_table), 1)
+        self.assertEqual(response.context['semester1_practical_modules'], [])
 
     def test_cat_analysis_reports_module_grades_and_total_pass_rate(self):
         StudentResult.objects.create(

@@ -314,10 +314,18 @@
           <button class="nav-item" data-view="ca-sem1"><span class="nav-icon">1</span>CA · Semester 1<span class="nav-badge">{{ semester1_modules|length }}</span></button>
           <button class="nav-item" data-view="ca-sem2"><span class="nav-icon">2</span>CA · Semester 2<span class="nav-badge">{{ semester2_modules|length }}</span></button>
           <button class="nav-item" data-view="final-results"><span class="nav-icon">★</span>Semester Results</button>
+          <button class="nav-item" data-view="obligations"><span class="nav-icon">!</span>Obligations</button>
         </div>
       </div>
       <button class="nav-item" data-view="modules"><span class="nav-icon">▥</span>Enrolled Modules<span class="nav-badge">{{ module_count }}</span></button>
-      <button class="nav-item" data-view="eligibility-payments"><span class="nav-icon">₵</span>Eligibility & Payments</button>
+      <button class="nav-item" data-view="eligibility"><span class="nav-icon">✓</span>Exam Eligibility</button>
+      <div class="nav-group">
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="payments-menu"><span class="nav-icon">₵</span>Payments<span class="nav-caret">⌄</span></button>
+        <div class="nav-submenu" id="payments-menu">
+          <button class="nav-item" data-view="payments"><span class="nav-icon">▤</span>Payment History</button>
+          <button class="nav-item" data-view="payment-summary"><span class="nav-icon">Σ</span>Payment Summary</button>
+        </div>
+      </div>
       <div class="nav-label">Account</div>
       <button class="nav-item" data-view="profile"><span class="nav-icon">●</span>My Profile</button>
     </nav>
@@ -366,13 +374,6 @@
             <button class="quick-link" data-go="final-results"><span class="quick-link-icon">★</span><span><strong>Final results</strong><span>Weighted totals</span></span></button>
           </div>
         </div>
-        <section class="panel" style="margin-top:18px;">
-          <div class="panel-head"><h2>Recent attendance activity</h2><span>Latest 8 records</span></div>
-          <div class="table-wrap"><table><thead><tr><th>Date</th><th>Module</th><th>Session</th><th>Topic</th><th>Status</th></tr></thead><tbody>
-            {% for record in attendance_history %}<tr><td>{{ record.date|date:"d M Y" }}</td><td>{{ record.module_code }} · {{ record.module_name }}</td><td>{{ record.label }}</td><td>{{ record.topic|default:"—" }}</td><td><span class="status {% if record.status == 'P' %}good{% elif record.status == 'S' %}warning{% else %}critical{% endif %}">{{ record.status_label }}</span></td></tr>
-            {% empty %}<tr><td colspan="5">No attendance has been recorded yet.</td></tr>{% endfor %}
-          </tbody></table></div>
-        </section>
       </section>
 
       <section class="view" id="view-attendance-sem1">
@@ -404,56 +405,70 @@
       <section class="view" id="view-ca-sem1">
         <div class="section-title"><p class="eyebrow">Continuous assessment</p><h2>CA Results · Semester 1</h2><p>Assignments, CATs, practical tests, and weighted CA totals.</p></div>
         {% if has_ca_results_sem1 %}
-        <section class="panel searchable-area"><div class="table-wrap"><table>
-          <thead><tr><th>Code</th><th>Module</th><th>Credits</th><th>Assignment 1</th><th>Assignment 2</th><th>CAT 1 Theory</th><th>CAT 2 Theory</th><th>Practical 1</th><th>Practical 2</th><th>CA Total /40</th><th>Eligibility</th></tr></thead>
+        {% if semester1_theory_modules %}
+        <section class="panel searchable-area"><div class="panel-head"><h2>Theory Modules</h2></div><div class="table-wrap"><table>
+          <thead><tr><th>Module Name</th><th>Code</th><th>A1</th><th>A2</th><th>CAT1</th><th>CAT2</th><th>Average CA /40</th></tr></thead>
           <tbody>
-            {% for module in semester1_modules %}
+            {% for module in semester1_theory_modules %}
             <tr class="searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.teacher }}">
-              <td><strong>{{ module.module_code }}</strong></td><td>{{ module.module_name }}<div class="meta">{{ module.teacher }}</div></td><td>{{ module.credits }}</td>
-              <td>{{ module.result.assign1|default_if_none:"Incomplete" }}</td>
-              <td>{{ module.result.assign2|default_if_none:"Incomplete" }}</td>
-              <td>{{ module.result.cat1_theory|default_if_none:"Incomplete" }}</td>
-              <td>{{ module.result.cat2_theory|default_if_none:"Incomplete" }}</td>
-              <td>{% if module.result.has_practical %}{{ module.result.cat1_practical|default_if_none:"Incomplete" }}{% else %}N/A{% endif %}</td>
-              <td>{% if module.result.has_practical %}{{ module.result.cat2_practical|default_if_none:"Incomplete" }}{% else %}N/A{% endif %}</td>
-              <td><strong>{{ module.result.total_ca|default_if_none:"Incomplete" }}</strong></td>
-              <td>{% if module.result.ca_eligible is True %}<span class="status pass">Eligible</span>{% elif module.result.ca_eligible is False %}<span class="status fail">Not eligible</span>{% else %}<span class="status pending">Incomplete</span>{% endif %}</td>
+              <td>{{ module.module_name }}</td><td><strong>{{ module.module_code }}</strong></td>
+              <td>{{ module.result.assign1|default_if_none:"" }}</td>
+              <td>{{ module.result.assign2|default_if_none:"" }}</td>
+              <td>{{ module.result.cat1_theory|default_if_none:"" }}</td>
+              <td>{{ module.result.cat2_theory|default_if_none:"" }}</td>
+              <td><strong>{{ module.result.ca_display }}</strong></td>
             </tr>
-            {% empty %}<tr><td colspan="11">No Semester 1 modules are registered for this academic year.</td></tr>{% endfor %}
+            {% endfor %}
           </tbody>
         </table></div></section>
+        {% endif %}
+        {% if semester1_practical_modules %}
+        <section class="panel searchable-area" style="margin-top:18px;"><div class="panel-head"><h2>Modules with Practical Components</h2></div><div class="table-wrap"><table>
+          <thead><tr><th>Module Name</th><th>Code</th><th>A1</th><th>A2</th><th>CAT1</th><th>CAT2</th><th>PRAC1</th><th>PRAC2</th><th>Average CA /40</th></tr></thead>
+          <tbody>{% for module in semester1_practical_modules %}
+            <tr class="searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.teacher }}"><td>{{ module.module_name }}</td><td><strong>{{ module.module_code }}</strong></td><td>{{ module.result.assign1|default_if_none:"" }}</td><td>{{ module.result.assign2|default_if_none:"" }}</td><td>{{ module.result.cat1_theory|default_if_none:"" }}</td><td>{{ module.result.cat2_theory|default_if_none:"" }}</td><td>{{ module.result.cat1_practical|default_if_none:"" }}</td><td>{{ module.result.cat2_practical|default_if_none:"" }}</td><td><strong>{{ module.result.ca_display }}</strong></td></tr>
+          {% endfor %}</tbody>
+        </table></div></section>
+        {% endif %}
         {% else %}<div class="empty">CA results for Semester 1 have not been published yet.</div>{% endif %}
       </section>
 
       <section class="view" id="view-ca-sem2">
         <div class="section-title"><p class="eyebrow">Continuous assessment</p><h2>CA Results · Semester 2</h2><p>Assignments, CATs, practical tests, and weighted CA totals.</p></div>
         {% if has_ca_results_sem2 %}
-        <section class="panel searchable-area"><div class="table-wrap"><table>
-          <thead><tr><th>Code</th><th>Module</th><th>Credits</th><th>Assignment 1</th><th>Assignment 2</th><th>CAT 1 Theory</th><th>CAT 2 Theory</th><th>Practical 1</th><th>Practical 2</th><th>CA Total /40</th><th>Eligibility</th></tr></thead>
+        {% if semester2_theory_modules %}
+        <section class="panel searchable-area"><div class="panel-head"><h2>Theory Modules</h2></div><div class="table-wrap"><table>
+          <thead><tr><th>Module Name</th><th>Code</th><th>A1</th><th>A2</th><th>CAT1</th><th>CAT2</th><th>Average CA /40</th></tr></thead>
           <tbody>
-            {% for module in semester2_modules %}
+            {% for module in semester2_theory_modules %}
             <tr class="searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.teacher }}">
-              <td><strong>{{ module.module_code }}</strong></td><td>{{ module.module_name }}<div class="meta">{{ module.teacher }}</div></td><td>{{ module.credits }}</td>
-              <td>{{ module.result.assign1|default_if_none:"Incomplete" }}</td>
-              <td>{{ module.result.assign2|default_if_none:"Incomplete" }}</td>
-              <td>{{ module.result.cat1_theory|default_if_none:"Incomplete" }}</td>
-              <td>{{ module.result.cat2_theory|default_if_none:"Incomplete" }}</td>
-              <td>{% if module.result.has_practical %}{{ module.result.cat1_practical|default_if_none:"Incomplete" }}{% else %}N/A{% endif %}</td>
-              <td>{% if module.result.has_practical %}{{ module.result.cat2_practical|default_if_none:"Incomplete" }}{% else %}N/A{% endif %}</td>
-              <td><strong>{{ module.result.total_ca|default_if_none:"Incomplete" }}</strong></td>
-              <td>{% if module.result.ca_eligible is True %}<span class="status pass">Eligible</span>{% elif module.result.ca_eligible is False %}<span class="status fail">Not eligible</span>{% else %}<span class="status pending">Incomplete</span>{% endif %}</td>
+              <td>{{ module.module_name }}</td><td><strong>{{ module.module_code }}</strong></td>
+              <td>{{ module.result.assign1|default_if_none:"" }}</td>
+              <td>{{ module.result.assign2|default_if_none:"" }}</td>
+              <td>{{ module.result.cat1_theory|default_if_none:"" }}</td>
+              <td>{{ module.result.cat2_theory|default_if_none:"" }}</td>
+              <td><strong>{{ module.result.ca_display }}</strong></td>
             </tr>
-            {% empty %}<tr><td colspan="11">No Semester 2 modules are registered for this academic year.</td></tr>{% endfor %}
+            {% endfor %}
           </tbody>
         </table></div></section>
+        {% endif %}
+        {% if semester2_practical_modules %}
+        <section class="panel searchable-area" style="margin-top:18px;"><div class="panel-head"><h2>Modules with Practical Components</h2></div><div class="table-wrap"><table>
+          <thead><tr><th>Module Name</th><th>Code</th><th>A1</th><th>A2</th><th>CAT1</th><th>CAT2</th><th>PRAC1</th><th>PRAC2</th><th>Average CA /40</th></tr></thead>
+          <tbody>{% for module in semester2_practical_modules %}
+            <tr class="searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.teacher }}"><td>{{ module.module_name }}</td><td><strong>{{ module.module_code }}</strong></td><td>{{ module.result.assign1|default_if_none:"" }}</td><td>{{ module.result.assign2|default_if_none:"" }}</td><td>{{ module.result.cat1_theory|default_if_none:"" }}</td><td>{{ module.result.cat2_theory|default_if_none:"" }}</td><td>{{ module.result.cat1_practical|default_if_none:"" }}</td><td>{{ module.result.cat2_practical|default_if_none:"" }}</td><td><strong>{{ module.result.ca_display }}</strong></td></tr>
+          {% endfor %}</tbody>
+        </table></div></section>
+        {% endif %}
         {% else %}<div class="empty">CA results for Semester 2 have not been published yet.</div>{% endif %}
       </section>
 
       <section class="view" id="view-final-results">
-        <div class="section-title"><p class="eyebrow">Academic results</p><h2>Final Results</h2><p>The grade is determined from CA /40 + ESE /60. Module credits weight each grade point in the GPA.</p></div>
+        <div class="section-title"><p class="eyebrow">Academic results</p><h2>Final Results</h2></div>
         {% if has_final_results %}
-        <section class="panel"><p style="padding:14px 16px;"><strong>GPA:</strong> {{ gpa|default_if_none:"Incomplete" }} · {{ gpa_classification }}</p><div class="table-wrap"><table><thead><tr><th>Semester</th><th>Module</th><th>Credits</th><th>CA /40</th><th>ESE /60</th><th>Final /100</th><th>Grade</th><th>Grade Point</th><th>Status</th></tr></thead><tbody>
-          {% for module in modules %}{% if module.has_final_result %}<tr><td>Semester {{ module.semester_number }}</td><td><strong>{{ module.module_code }}</strong> · {{ module.module_name }}</td><td>{{ module.credits }}</td><td>{{ module.result.total_ca|default_if_none:"—" }}</td><td><strong>{{ module.result.end_exam_total|default_if_none:"—" }}</strong><div class="meta">Raw: T {{ module.result.end_theory|default_if_none:"—" }}{% if module.result.has_practical %} · P {{ module.result.end_practical|default_if_none:"—" }}{% endif %}</div></td><td><strong>{{ module.result.final_total|default_if_none:"—" }}</strong></td><td>{{ module.result.grade|default_if_none:"—" }}</td><td>{{ module.result.grade_point|default_if_none:"—" }}</td><td><span class="status {% if module.result.result_status == 'PASS' %}pass{% elif module.result.result_status == 'SUPP' %}pending{% else %}fail{% endif %}">{{ module.result.result_status }}</span></td></tr>{% endif %}{% endfor %}
+        <section class="panel"><p style="padding:14px 16px;"><strong>GPA:</strong> {{ gpa|default_if_none:"Incomplete" }} · {{ gpa_classification }}</p><div class="table-wrap"><table><thead><tr><th>Semester</th><th>Module</th><th>Credits</th><th>CA /40</th><th>ESE /60</th><th>Final /100</th><th>Grade</th><th>Status</th></tr></thead><tbody>
+          {% for module in modules %}{% if module.has_final_result %}<tr><td>Semester {{ module.semester_number }}</td><td><strong>{{ module.module_code }}</strong> · {{ module.module_name }}</td><td>{{ module.credits }}</td><td>{{ module.result.total_ca|default_if_none:"—" }}</td><td><strong>{{ module.result.end_exam_total|default_if_none:"—" }}</strong><div class="meta">Raw: T {{ module.result.end_theory|default_if_none:"—" }}{% if module.result.has_practical %} · P {{ module.result.end_practical|default_if_none:"—" }}{% endif %}</div></td><td><strong>{{ module.result.final_total|default_if_none:"—" }}</strong></td><td>{{ module.result.grade|default_if_none:"—" }}</td><td><span class="status {% if module.result.result_status == 'PASS' %}pass{% elif module.result.result_status == 'SUPP' %}pending{% else %}fail{% endif %}">{{ module.result.result_status }}</span></td></tr>{% endif %}{% endfor %}
         </tbody></table></div></section>
         {% else %}<div class="empty">Final examination marks have not been published yet.</div>{% endif %}
       </section>
@@ -466,13 +481,8 @@
         </div>
       </section>
 
-      <section class="view" id="view-eligibility-payments">
-        <div class="section-title"><p class="eyebrow">Clearance</p><h2>Eligibility & Payments</h2><p>Track CAT/ESE eligibility, finance clearance, and declared payment items.</p></div>
-        <div class="stats">
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon">▥</div></div><strong>{{ finance_required|floatformat:2 }}</strong><p>Total required</p></article>
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon">✓</div></div><strong>{{ finance_paid|floatformat:2 }}</strong><p>Total paid</p></article>
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon">!</div></div><strong>{{ finance_balance|floatformat:2 }}</strong><p>Outstanding</p></article>
-        </div>
+      <section class="view" id="view-eligibility">
+        <div class="section-title"><p class="eyebrow">Clearance</p><h2>Exam Eligibility</h2><p>Attendance, CA, and finance clearance for CAT and ESE examinations.</p></div>
         <section class="panel searchable-area" style="margin-top:18px;">
           <div class="panel-head"><h2>Exam eligibility</h2><span>Attendance, CA, and finance clearance</span></div>
           <div class="table-wrap"><table><thead><tr><th>Module</th><th>CAT 1</th><th>CAT 2</th><th>ESE</th><th>Notes</th></tr></thead><tbody>
@@ -487,7 +497,11 @@
             {% empty %}<tr><td colspan="5">No eligibility records are available yet.</td></tr>{% endfor %}
           </tbody></table></div>
         </section>
-        <section class="panel" style="margin-top:18px;">
+      </section>
+
+      <section class="view" id="view-obligations">
+        <div class="section-title"><p class="eyebrow">Results</p><h2>Academic Obligations</h2><p>Special, supplementary, repeat-module, and related declared obligations.</p></div>
+        <section class="panel">
           <div class="panel-head"><h2>Declared obligations</h2><span>Exam, school fee, hostel, and other finance items</span></div>
           <div class="table-wrap"><table><thead><tr><th>Type</th><th>Module</th><th>Category</th><th>Required</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead><tbody>
             {% for item in finance_obligations %}
@@ -495,14 +509,27 @@
             {% empty %}<tr><td colspan="7">No declared obligations yet.</td></tr>{% endfor %}
           </tbody></table></div>
         </section>
-        <section class="panel" style="margin-top:18px;">
-          <div class="panel-head"><h2>Payment history</h2><span>Recorded by finance</span></div>
+      </section>
+
+      <section class="view" id="view-payments">
+        <div class="section-title"><p class="eyebrow">Finance</p><h2>Payment History</h2><p>A general payment table across your registration, not separated by module.</p></div>
+        <section class="panel">
+          <div class="panel-head"><h2>General payments</h2><span>Recorded by finance</span></div>
           <div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Installment</th><th>Required</th><th>Paid</th><th>Reference</th><th>Note</th></tr></thead><tbody>
             {% for payment in finance_payments %}
             <tr><td>{{ payment.payment_date|date:"d M Y" }}</td><td>{{ payment.category.name }}</td><td>{{ payment.installment_number }}</td><td>{{ payment.amount_required|floatformat:2 }}</td><td>{{ payment.amount_paid|floatformat:2 }}</td><td>{{ payment.reference|default:"—" }}</td><td>{{ payment.note|default:"—" }}</td></tr>
             {% empty %}<tr><td colspan="7">No payments have been recorded yet.</td></tr>{% endfor %}
           </tbody></table></div>
         </section>
+      </section>
+
+      <section class="view" id="view-payment-summary">
+        <div class="section-title"><p class="eyebrow">Finance</p><h2>Payment Summary</h2><p>Your overall financial position.</p></div>
+        <div class="stats">
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon">▥</div></div><strong>{{ finance_required|floatformat:2 }}</strong><p>Total required</p></article>
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon">✓</div></div><strong>{{ finance_paid|floatformat:2 }}</strong><p>Total paid</p></article>
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon">!</div></div><strong>{{ finance_balance|floatformat:2 }}</strong><p>Outstanding</p></article>
+        </div>
       </section>
 
       <section class="view" id="view-profile">

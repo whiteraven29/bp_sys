@@ -269,14 +269,26 @@ def student_dashboard(request):
             ):
                 result_data[field] = None
         if result_data and ca_approved:
+            ca_fields = [
+                'assign1', 'assign2', 'cat1_theory', 'cat2_theory',
+            ] + (
+                ['cat1_practical', 'cat2_practical']
+                if enrollment.module.has_practical else []
+            )
+            if any(result_data.get(f'{field}_absent') for field in ca_fields):
+                result_data['ca_display'] = 'ABS'
+            elif any(result_data.get(field) is None for field in ca_fields):
+                result_data['ca_display'] = 'INC'
+            else:
+                result_data['ca_display'] = result_data.get('total_ca')
             for field in ('assign1', 'assign2', 'cat1_theory', 'cat2_theory',
                           'cat1_practical', 'cat2_practical'):
                 if result_data.get(f'{field}_absent'):
-                    result_data[field] = 'Abscond'
+                    result_data[field] = None
         if result_data and final_approved:
             for field in ('end_theory', 'end_practical'):
                 if result_data.get(f'{field}_absent'):
-                    result_data[field] = 'Abscond'
+                    result_data[field] = 'ABS'
         has_final_result = bool(
             final_approved
             and result
@@ -337,6 +349,22 @@ def student_dashboard(request):
     total_sessions = sum(module['sessions_total'] for module in modules)
     semester1_modules = [module for module in modules if module['semester_number'] == 1]
     semester2_modules = [module for module in modules if module['semester_number'] == 2]
+    semester1_theory_modules = [
+        module for module in semester1_modules
+        if not module['result'] or not module['result']['has_practical']
+    ]
+    semester1_practical_modules = [
+        module for module in semester1_modules
+        if module['result'] and module['result']['has_practical']
+    ]
+    semester2_theory_modules = [
+        module for module in semester2_modules
+        if not module['result'] or not module['result']['has_practical']
+    ]
+    semester2_practical_modules = [
+        module for module in semester2_modules
+        if module['result'] and module['result']['has_practical']
+    ]
     active_modules = [
         module for module in modules
         if active_sem is None or module['semester_number'] == active_sem.number
@@ -409,24 +437,6 @@ def student_dashboard(request):
     )
     finance_paid = sum(p.amount_paid for p in finance_payments)
     finance_balance = finance_required - finance_paid
-    recent_records = (
-        AttendanceRecord.objects
-        .filter(student__in=enrollments)
-        .select_related('session__module')
-        .order_by('-session__date', '-session__created_at')[:8]
-    )
-    attendance_history = [
-        {
-            'module_code': record.session.module.code,
-            'module_name': record.session.module.name,
-            'date': record.session.date,
-            'label': record.session.label,
-            'topic': record.session.topic,
-            'status': record.status,
-            'status_label': record.get_status_display(),
-        }
-        for record in recent_records
-    ]
     return render(request, 'student_dashboard.html', {
         'student_name': student.name,
         'registration_number': student.nactvet_reg_no,
@@ -435,6 +445,10 @@ def student_dashboard(request):
         'active_module_count': len(active_modules),
         'semester1_modules': semester1_modules,
         'semester2_modules': semester2_modules,
+        'semester1_theory_modules': semester1_theory_modules,
+        'semester1_practical_modules': semester1_practical_modules,
+        'semester2_theory_modules': semester2_theory_modules,
+        'semester2_practical_modules': semester2_practical_modules,
         'has_ca_results_sem1': any(module['has_ca_result'] for module in semester1_modules),
         'has_ca_results_sem2': any(module['has_ca_result'] for module in semester2_modules),
         'has_final_results': any(module['has_final_result'] for module in modules),
@@ -451,7 +465,6 @@ def student_dashboard(request):
         'finance_required': finance_required,
         'finance_paid': finance_paid,
         'finance_balance': finance_balance,
-        'attendance_history': attendance_history,
         'academic_year': (
             active_sem.academic_year.name
             if active_sem else student.module.semester.academic_year.name
