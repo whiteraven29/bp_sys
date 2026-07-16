@@ -420,7 +420,9 @@ class AttendanceSecurityTests(TestCase):
         StudentResult.objects.create(student=incomplete_student)
         self.client.force_authenticate(self.admin)
 
-        response = self.client.get('/api/results/cat-analysis/?cat=1')
+        response = self.client.get(
+            f'/api/results/cat-analysis/?cat=1&semester_id={self.semester.id}'
+        )
 
         self.assertEqual(response.status_code, 200)
         row = next(r for r in response.data['rows'] if r['module_id'] == self.module.id)
@@ -445,6 +447,7 @@ class AttendanceSecurityTests(TestCase):
 
         response = self.client.get(
             f'/api/results/cat-analysis/?cat=2&module_id={self.module.id}'
+            f'&semester_id={self.semester.id}'
         )
 
         self.assertEqual(response.status_code, 200)
@@ -453,6 +456,35 @@ class AttendanceSecurityTests(TestCase):
         self.assertEqual(row['passed'], 1)
         self.assertEqual(row['grade_counts']['C'], 1)
         self.assertEqual(row['pass_rate'], 100.0)
+
+    def test_cat_analysis_download_is_formatted_excel_report(self):
+        StudentResult.objects.create(student=self.student, cat1_theory=80)
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get(
+            f'/api/results/cat-analysis/download/?cat=1&semester_id={self.semester.id}'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response['Content-Type'],
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        workbook = load_workbook(BytesIO(response.content))
+        sheet = workbook.active
+        self.assertEqual(sheet['A1'].value, 'EDUTRACK — CAT 1 MODULE ANALYSIS')
+        self.assertEqual(sheet['A7'].value, 'Module Code')
+        self.assertEqual(sheet.freeze_panes, 'A8')
+        self.assertEqual(sheet.sheet_view.showGridLines, False)
+        self.assertEqual(sheet['A8'].value, self.module.code)
+
+    def test_cat_analysis_requires_semester_filter(self):
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get('/api/results/cat-analysis/?cat=1')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['detail'], 'Select a semester for CAT analysis.')
         self.assertFalse(Session.objects.exists())
 
     def test_teacher_cannot_move_student_to_unassigned_module(self):

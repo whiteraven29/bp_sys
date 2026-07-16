@@ -390,6 +390,40 @@
     body.print-final .card:not(#end-exam-card) { display: none !important; }
     body.print-final #end-exam-card { display: block !important; border: none !important;
                                       box-shadow: none !important; padding: 0 !important; }
+
+    /* ── CAT Analysis print ── */
+    body.print-cat-analysis #page-results { display: block !important; }
+    body.print-cat-analysis #page-results > .card:not(#cat-analysis-card),
+    body.print-cat-analysis #res-module-info { display: none !important; }
+    body.print-cat-analysis #cat-analysis-card { display: block !important; border: none !important;
+      box-shadow: none !important; padding: 0 !important; }
+    body.print-cat-analysis #cat-analysis-card .card-title > div,
+    body.print-cat-analysis #cat-analysis-card .btn { display: none !important; }
+    body.print-cat-analysis #cat-analysis-card,
+    body.print-cat-analysis #cat-analysis-card * { color: #1e2d78 !important; }
+    body.print-cat-analysis #cat-analysis-card .print-icon { display: none !important; }
+    body.print-cat-analysis #cat-analysis-card th,
+    body.print-cat-analysis #cat-analysis-card td,
+    body.print-cat-analysis #cat-analysis-card .stat-card {
+      border-color: #7186c7 !important;
+    }
+    body.print-cat-analysis #cat-analysis-card thead th {
+      background: #e8edff !important;
+      color: #1e2d78 !important;
+    }
+    body.print-cat-analysis #cat-analysis-card .card-title,
+    body.print-cat-analysis #cat-analysis-card .card-title *,
+    body.print-cat-analysis #cat-analysis-report-heading,
+    body.print-cat-analysis #cat-analysis-report-heading * {
+      color: #1e2d78 !important;
+    }
+    body.print-cat-analysis #cat-analysis-card .badge-green { color: #1e2d78 !important; }
+    body.print-cat-analysis #cat-analysis-card .badge-yellow { color: #334fa3 !important; }
+    body.print-cat-analysis #cat-analysis-card .badge-red { color: #243b86 !important; }
+    body.print-cat-analysis #cat-analysis-stats { grid-template-columns: repeat(6, 1fr) !important; }
+    body.print-cat-analysis #cat-analysis-stats .stat-card {
+      display: block !important; padding: 8px !important; border: 1px solid #bbb !important;
+    }
   }
   .print-header { display: none; }
 </style>
@@ -774,7 +808,7 @@
 
       <div class="card" id="cat-analysis-card" style="display:none;">
         <div class="card-title">
-          📊 CAT Module Analysis
+          <span class="print-icon" aria-hidden="true">📊</span> CAT Module Analysis
           <div style="display:flex;gap:8px;margin-left:auto;align-items:flex-end;flex-wrap:wrap;">
             <div class="field" style="margin:0;min-width:130px;">
               <label>Assessment</label>
@@ -783,12 +817,14 @@
                 <option value="2">CAT 2</option>
               </select>
             </div>
-            <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Print</button>
+            <button class="btn btn-green btn-sm" onclick="downloadCatAnalysisExcel()">⬇ Download Excel</button>
+            <button class="btn btn-secondary btn-sm" onclick="printCatAnalysis()">🖨 Print</button>
           </div>
         </div>
         <p style="font-size:.78rem;color:var(--muted);margin-bottom:14px;">
           Practical-module CAT marks use the average of theory and practical. Pass mark: 50.
         </p>
+        <div id="cat-analysis-report-heading" style="text-align:center;color:var(--accent);font-weight:700;margin-bottom:14px;"></div>
         <div class="stats-grid" id="cat-analysis-stats"></div>
         <div class="table-wrap">
           <table>
@@ -2394,6 +2430,14 @@ async function loadCatAnalysis() {
   const semId = document.getElementById('res-flt-sem').value;
   const lvlId = document.getElementById('res-flt-level').value;
   const modId = document.getElementById('res-flt-module').value;
+  if (!semId) {
+    document.getElementById('cat-analysis-report-heading').textContent = '';
+    document.getElementById('cat-analysis-stats').innerHTML = '';
+    document.getElementById('cat-analysis-thead').innerHTML = '';
+    document.getElementById('cat-analysis-tbody').innerHTML =
+      '<tr><td><div class="empty">Select a semester to generate the CAT analysis report.</div></td></tr>';
+    return;
+  }
   let url = `/results/cat-analysis/?cat=${cat}&`;
   if (semId) url += `semester_id=${semId}&`;
   if (lvlId) url += `class_level_id=${lvlId}&`;
@@ -2404,6 +2448,8 @@ async function loadCatAnalysis() {
   try {
     const data = await api('GET', url);
     const stats = data.stats;
+    document.getElementById('cat-analysis-report-heading').textContent =
+      `CAT ${data.cat} MODULE ANALYSIS — ${data.semester}`;
     document.getElementById('cat-analysis-stats').innerHTML = `
       <div class="stat-card"><div class="label">Modules</div><div class="value">${stats.modules}</div></div>
       <div class="stat-card"><div class="label">Assessed</div><div class="value">${stats.assessed}</div></div>
@@ -2414,14 +2460,13 @@ async function loadCatAnalysis() {
     `;
     const grades = ['A', 'B+', 'B', 'C', 'D', 'F'];
     document.getElementById('cat-analysis-thead').innerHTML = `<tr>
-      <th>Module</th><th>Level</th><th>Semester</th><th>Assessed</th>
+      <th>Module</th><th>Level</th><th>Assessed</th>
       ${grades.map(g => `<th>${g}</th>`).join('')}
       <th>Pass</th><th>Fail</th><th>Incomplete</th><th>Pass Rate</th>
     </tr>`;
     tbody.innerHTML = data.rows.length ? data.rows.map(row => `<tr>
       <td><strong>${row.module_code}</strong><br><span style="font-size:.72rem;color:var(--muted)">${row.module_name}</span></td>
       <td>${row.class_level}</td>
-      <td>${row.semester}</td>
       <td>${row.assessed}</td>
       ${grades.map(g => `<td>${row.grade_counts[g] || 0}</td>`).join('')}
       <td style="color:var(--green);font-weight:700">${row.passed}</td>
@@ -2433,6 +2478,38 @@ async function loadCatAnalysis() {
     tbody.innerHTML = '<tr><td colspan="14"><div class="empty">Failed to load CAT analysis.</div></td></tr>';
     toast(e?.detail || 'Failed to load CAT analysis', 'var(--red)');
   }
+}
+
+function catAnalysisDownloadUrl() {
+  const cat = document.getElementById('cat-analysis-period').value;
+  const semId = document.getElementById('res-flt-sem').value;
+  const lvlId = document.getElementById('res-flt-level').value;
+  const modId = document.getElementById('res-flt-module').value;
+  let url = `/api/results/cat-analysis/download/?cat=${cat}&`;
+  if (semId) url += `semester_id=${encodeURIComponent(semId)}&`;
+  if (lvlId) url += `class_level_id=${encodeURIComponent(lvlId)}&`;
+  if (modId) url += `module_id=${encodeURIComponent(modId)}&`;
+  return url;
+}
+
+function downloadCatAnalysisExcel() {
+  if (!document.getElementById('res-flt-sem').value) {
+    toast('Select a semester before downloading the CAT analysis.', 'var(--red)');
+    return;
+  }
+  window.location.href = catAnalysisDownloadUrl();
+}
+
+function printCatAnalysis() {
+  if (!document.getElementById('res-flt-sem').value) {
+    toast('Select a semester before printing the CAT analysis.', 'var(--red)');
+    return;
+  }
+  document.body.classList.add('print-cat-analysis');
+  const cleanup = () => document.body.classList.remove('print-cat-analysis');
+  window.addEventListener('afterprint', cleanup, { once: true });
+  window.print();
+  setTimeout(cleanup, 1000);
 }
 
 function onResSearchChange() {

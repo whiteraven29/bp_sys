@@ -1678,6 +1678,20 @@ class ResultViewSet(viewsets.ModelViewSet):
                 {'detail': 'cat must be 1 or 2.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        semester_id = request.query_params.get('semester_id')
+        if not semester_id:
+            return Response(
+                {'detail': 'Select a semester for CAT analysis.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        semester = Semester.objects.select_related('academic_year').filter(
+            pk=semester_id
+        ).first()
+        if semester is None:
+            return Response(
+                {'detail': 'Semester not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         qs = (
             StudentResult.objects
@@ -1764,6 +1778,7 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         return Response({
             'cat': int(cat),
+            'semester': semester.label,
             'stats': {
                 'modules': len(rows),
                 'assessed': overall_assessed,
@@ -1778,6 +1793,127 @@ class ResultViewSet(viewsets.ModelViewSet):
             },
             'rows': rows,
         })
+
+    @action(detail=False, methods=['get'], url_path='cat-analysis/download')
+    def download_cat_analysis(self, request):
+        analysis_response = self.cat_analysis(request)
+        if analysis_response.status_code != status.HTTP_200_OK:
+            return analysis_response
+        data = analysis_response.data
+
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        from openpyxl.utils import get_column_letter
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = f'CAT {data["cat"]} Analysis'
+        ws.sheet_view.showGridLines = False
+        ws.freeze_panes = 'A8'
+        ws.page_setup.orientation = 'landscape'
+        ws.page_setup.fitToWidth = 1
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.print_title_rows = '7:7'
+
+        navy = '1E2D78'
+        blue = 'DCE6F1'
+        green = 'DCFCE7'
+        red = 'FEE2E2'
+        yellow = 'FEF3C7'
+        white = 'FFFFFF'
+        thin = Side(style='thin', color='B8C0CC')
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+        headers = [
+            'Module Code', 'Module Name', 'Level', 'Assessed',
+            'A', 'B+', 'B', 'C', 'D', 'F',
+            'Passed', 'Failed', 'Incomplete', 'Pass Rate',
+        ]
+        last_col = len(headers)
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_col)
+        title = ws.cell(1, 1, f'EDUTRACK — CAT {data["cat"]} MODULE ANALYSIS')
+        title.font = Font(bold=True, size=16, color=white)
+        title.fill = PatternFill('solid', fgColor=navy)
+        title.alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[1].height = 30
+
+        filters = []
+        for param, label, model in (
+            ('semester_id', 'Semester', Semester),
+            ('class_level_id', 'Class Level', ClassLevel),
+            ('module_id', 'Module', Module),
+        ):
+            value = request.query_params.get(param)
+            if value:
+                obj = model.objects.filter(pk=value).first()
+                filters.append(f'{label}: {obj or value}')
+        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last_col)
+        ws.cell(2, 1, ' | '.join(filters) if filters else 'Scope: All accessible modules').alignment = Alignment(horizontal='center')
+
+        stats = data['stats']
+        summary = [
+            ('Modules', stats['modules']), ('Assessed', stats['assessed']),
+            ('Passed', stats['passed']), ('Failed', stats['failed']),
+            ('Incomplete', stats['incomplete']), ('Total Pass Rate', f'{stats["pass_rate"]}%'),
+        ]
+        for index, (label, value) in enumerate(summary, 1):
+            column = 1 + (index - 1) * 2
+            ws.merge_cells(start_row=4, start_column=column, end_row=4, end_column=column + 1)
+            ws.merge_cells(start_row=5, start_column=column, end_row=5, end_column=column + 1)
+            ws.cell(4, column, label).font = Font(bold=True, color=navy)
+            ws.cell(4, column).alignment = Alignment(horizontal='center')
+            ws.cell(5, column, value).font = Font(bold=True, size=13)
+            ws.cell(5, column).alignment = Alignment(horizontal='center')
+            for row_number in (4, 5):
+                for col in range(column, column + 2):
+                    ws.cell(row_number, col).fill = PatternFill('solid', fgColor=blue)
+                    ws.cell(row_number, col).border = border
+
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(7, col, header)
+            cell.font = Font(bold=True, color=white)
+            cell.fill = PatternFill('solid', fgColor=navy)
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            cell.border = border
+
+        grades = ['A', 'B+', 'B', 'C', 'D', 'F']
+        for row_number, row in enumerate(data['rows'], 8):
+            values = [
+                row['module_code'], row['module_name'], row['class_level'],
+                row['assessed'],
+                *[row['grade_counts'].get(grade, 0) for grade in grades],
+                row['passed'], row['failed'], row['incomplete'],
+                row['pass_rate'] / 100,
+            ]
+            for col, value in enumerate(values, 1):
+                cell = ws.cell(row_number, col, value)
+                cell.border = border
+                cell.alignment = Alignment(
+                    horizontal='left' if col in (1, 2, 3) else 'center',
+                    vertical='center',
+                    wrap_text=True,
+                )
+                if row_number % 2 == 0:
+                    cell.fill = PatternFill('solid', fgColor='F8FAFC')
+            ws.cell(row_number, 11).fill = PatternFill('solid', fgColor=green)
+            ws.cell(row_number, 12).fill = PatternFill('solid', fgColor=red)
+            ws.cell(row_number, 13).fill = PatternFill('solid', fgColor=yellow)
+            ws.cell(row_number, 14).number_format = '0.0%'
+
+        widths = [14, 30, 18, 10, 7, 7, 7, 7, 7, 7, 10, 10, 12, 12]
+        for col, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+        ws.auto_filter.ref = f'A7:{get_column_letter(last_col)}{max(7, 7 + len(data["rows"]))}'
+        ws.print_area = f'A1:{get_column_letter(last_col)}{max(7, 7 + len(data["rows"]))}'
+
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = (
+            f'attachment; filename="cat_{data["cat"]}_module_analysis_{timezone.localdate()}.xlsx"'
+        )
+        wb.save(response)
+        return response
 
     # ── Bulk-save marks submitted from the frontend ────────────────────────────
     @action(detail=False, methods=['post'], url_path='bulk_save')
