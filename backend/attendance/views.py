@@ -31,6 +31,7 @@ from .serializers import (
     StudentFinanceObligationSerializer, StudentPaymentSerializer,
     StudentFinanceClearanceSerializer,
 )
+from .grading import grade_for_mark, gpa_classification
 
 User = get_user_model()
 
@@ -176,8 +177,9 @@ def get_logged_student(request):
 
 
 def student_logout_view(request):
-    request.session.pop('student_id', None)
-    request.session.pop('student_reg_no', None)
+    # Invalidate the complete server-side session and rotate the cookie. Merely
+    # removing the student keys would leave the old session identifier reusable.
+    request.session.flush()
     return redirect('login')
 
 
@@ -261,7 +263,9 @@ def student_dashboard(request):
         if result_data and not final_approved:
             for field in (
                 'end_theory', 'end_practical',
-                'end_theory_w', 'end_prac_w', 'final_total',
+                'end_theory_w', 'end_prac_w', 'end_exam_total', 'final_total',
+                'supplementary_mark', 'end_exam_mark', 'supplementary_required',
+                'result_status', 'grade', 'grade_point', 'grade_description',
             ):
                 result_data[field] = None
         if result_data and ca_approved:
@@ -291,6 +295,7 @@ def student_dashboard(request):
             'class_level': data['class_level_name'],
             'semester': data['semester_label'],
             'semester_number': enrollment.module.semester.number,
+            'credits': enrollment.module.credits,
             'sessions_attended': data['sessions_attended'],
             'sessions_sick': data['sessions_sick'],
             'sessions_absent': data['sessions_absent'],
@@ -305,6 +310,25 @@ def student_dashboard(request):
             'has_ca_result': bool(ca_approved and result),
             'has_final_result': has_final_result,
         })
+
+    published_points = [
+        (module['result']['grade_point'], module['credits'])
+        for module in modules
+        if module['has_final_result']
+        and module['result']
+        and module['result']['grade_point'] is not None
+    ]
+    gpa = (
+        round(
+            sum(float(points) * credits for points, credits in published_points)
+            / sum(credits for _, credits in published_points),
+            2,
+        )
+        if published_points else None
+    )
+    gpa_class = gpa_classification(
+        gpa, student.module.class_level
+    )
 
     overall_attendance = round(attendance_sum / attendance_count) if attendance_count else None
     total_present = sum(module['sessions_attended'] for module in modules)
@@ -414,6 +438,8 @@ def student_dashboard(request):
         'has_ca_results_sem1': any(module['has_ca_result'] for module in semester1_modules),
         'has_ca_results_sem2': any(module['has_ca_result'] for module in semester2_modules),
         'has_final_results': any(module['has_final_result'] for module in modules),
+        'gpa': gpa,
+        'gpa_classification': gpa_class,
         'overall_attendance': overall_attendance,
         'total_present': total_present,
         'total_sick': total_sick,
@@ -435,10 +461,8 @@ def student_dashboard(request):
 
 
 def logout_view(request):
-    # Clear both Django user session and any student session keys
+    # Django logout flushes the complete session and rotates the session cookie.
     logout(request)
-    request.session.pop('student_id', None)
-    request.session.pop('student_reg_no', None)
     return redirect('login')
 
 
@@ -1592,7 +1616,7 @@ class ResultViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         if not request.user.is_staff:
-            for f in ('end_theory', 'end_practical', 'end_theory_absent',
+            for f in ('end_theory', 'end_practical', 'supplementary_mark', 'end_theory_absent',
                       'end_practical_absent', 'ca_approved', 'final_approved'):
                 if f in request.data:
                     raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
@@ -1607,7 +1631,8 @@ class ResultViewSet(viewsets.ModelViewSet):
             for field in ('ca_approved', 'final_approved'):
                 if field in serializer.validated_data:
                     raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
-            for field in ('end_theory', 'end_practical', 'end_theory_absent', 'end_practical_absent'):
+            for field in ('end_theory', 'end_practical', 'supplementary_mark',
+                          'end_theory_absent', 'end_practical_absent'):
                 if serializer.validated_data.get(field) is not None:
                     raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
         serializer.save()
@@ -1637,11 +1662,121 @@ class ResultViewSet(viewsets.ModelViewSet):
                 'name':         module.name,
                 'code':         module.code,
                 'has_practical': module.has_practical,
+                'credits':       module.credits,
                 'class_level':  module.class_level.name,
                 'semester_id':   module.semester_id,
                 'semester':     module.semester.label,
             },
             'results': StudentResultSerializer(results, many=True).data,
+        })
+
+    @action(detail=False, methods=['get'], url_path='cat-analysis')
+    def cat_analysis(self, request):
+        cat = str(request.query_params.get('cat', '1'))
+        if cat not in ('1', '2'):
+            return Response(
+                {'detail': 'cat must be 1 or 2.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = (
+            StudentResult.objects
+            .filter(student__module__in=user_modules(request.user))
+            .select_related(
+                'student__module__class_level',
+                'student__module__semester__academic_year',
+            )
+            .order_by('student__module__class_level__order', 'student__module__code')
+        )
+        for param, field in (
+            ('module_id', 'student__module_id'),
+            ('semester_id', 'student__module__semester_id'),
+            ('class_level_id', 'student__module__class_level_id'),
+        ):
+            value = request.query_params.get(param)
+            if value:
+                qs = qs.filter(**{field: value})
+
+        theory_field = f'cat{cat}_theory'
+        practical_field = f'cat{cat}_practical'
+        modules = {}
+        all_grade_counts = {}
+        overall_assessed = overall_passed = overall_failed = overall_incomplete = 0
+
+        for result in qs:
+            module = result.student.module
+            row = modules.setdefault(module.id, {
+                'module_id': module.id,
+                'module_code': module.code,
+                'module_name': module.name,
+                'class_level': module.class_level.name,
+                'semester': module.semester.label,
+                'has_practical': module.has_practical,
+                'assessed': 0, 'passed': 0, 'failed': 0, 'incomplete': 0,
+                'grade_counts': {},
+            })
+
+            theory_complete = (
+                getattr(result, theory_field) is not None
+                or getattr(result, f'{theory_field}_absent')
+            )
+            practical_complete = (
+                not module.has_practical
+                or getattr(result, practical_field) is not None
+                or getattr(result, f'{practical_field}_absent')
+            )
+            if not theory_complete or not practical_complete:
+                row['incomplete'] += 1
+                overall_incomplete += 1
+                continue
+
+            theory = (
+                0.0 if getattr(result, f'{theory_field}_absent')
+                else float(getattr(result, theory_field))
+            )
+            if module.has_practical:
+                practical = (
+                    0.0 if getattr(result, f'{practical_field}_absent')
+                    else float(getattr(result, practical_field))
+                )
+                mark = round((theory + practical) / 2, 2)
+            else:
+                mark = theory
+
+            grade, _, _ = grade_for_mark(mark, module.class_level)
+            row['assessed'] += 1
+            row['grade_counts'][grade] = row['grade_counts'].get(grade, 0) + 1
+            all_grade_counts[grade] = all_grade_counts.get(grade, 0) + 1
+            overall_assessed += 1
+            if mark >= 50:
+                row['passed'] += 1
+                overall_passed += 1
+            else:
+                row['failed'] += 1
+                overall_failed += 1
+
+        rows = list(modules.values())
+        for row in rows:
+            row['pass_rate'] = (
+                round(row['passed'] / row['assessed'] * 100, 1)
+                if row['assessed'] else 0
+            )
+
+        return Response({
+            'cat': int(cat),
+            'stats': {
+                'modules': len(rows),
+                'assessed': overall_assessed,
+                'passed': overall_passed,
+                'failed': overall_failed,
+                'incomplete': overall_incomplete,
+                'pass_rate': (
+                    round(overall_passed / overall_assessed * 100, 1)
+                    if overall_assessed else 0
+                ),
+                'grade_counts': all_grade_counts,
+            },
+            'rows': rows,
         })
 
     # ── Bulk-save marks submitted from the frontend ────────────────────────────
@@ -1654,14 +1789,14 @@ class ResultViewSet(viewsets.ModelViewSet):
         mod_ids   = set(user_modules(request.user).values_list('id', flat=True))
         CA_MARKS = ['assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical']
         CA_FIELDS = CA_MARKS + [f'{field}_absent' for field in CA_MARKS]
-        END_MARKS = ['end_theory', 'end_practical']
+        END_MARKS = ['end_theory', 'end_practical', 'supplementary_mark']
         END_FIELDS = END_MARKS + [f'{field}_absent' for field in END_MARKS] + ['ca_approved', 'final_approved']
         FIELDS     = CA_FIELDS + (END_FIELDS if request.user.is_staff else [])
         saved, errors = 0, []
 
         for item in updates:
             if not request.user.is_staff:
-                restricted = {'end_theory', 'end_practical', 'end_theory_absent',
+                restricted = {'end_theory', 'end_practical', 'supplementary_mark', 'end_theory_absent',
                               'end_practical_absent', 'ca_approved', 'final_approved'}
                 blocked = restricted.intersection(item.keys())
                 if blocked:
@@ -1886,7 +2021,7 @@ def download_final_results(request):
         'End Theory wt', 'End Practical wt',
         'End Exam Total',
         # Grand total
-        'Final Total /100', 'Pass/Fail',
+        'Final Total /100', 'Supplementary /100', 'Grade', 'Grade Point', 'Result Status',
     ]
     ws.append(headers)
     for ci in range(1, len(headers) + 1):
@@ -1949,7 +2084,8 @@ def download_final_results(request):
 
         end_exam_total = round((etw or 0) + (epw or 0), 2) if (etw is not None or epw is not None) else None
         final = round((tot_ca or 0) + (end_exam_total or 0), 2) if (tot_ca is not None or end_exam_total is not None) else None
-        pass_fail = ('PASS' if final >= 50 else 'FAIL') if final is not None else 'Pending'
+        outcome = StudentResultSerializer(res).data
+        pass_fail = outcome['result_status']
 
         row = [
             rn - 1,
@@ -1961,7 +2097,9 @@ def download_final_results(request):
             fmt(et), fmt(ep) if hp else 'N/A',
             etw or '', epw or '' if hp else 'N/A',
             end_exam_total or '',
-            final or '', pass_fail,
+            final or '', fmt(res.supplementary_mark), outcome['grade'] or '',
+            outcome['grade_point'] if outcome['grade_point'] is not None else '',
+            pass_fail,
         ]
         ws.append(row)
 

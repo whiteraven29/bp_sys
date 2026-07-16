@@ -447,6 +447,7 @@
       <div class="nav-submenu">
         <button class="nav-sub-btn active" data-results-section="ca" onclick="showResultsSection('ca', this)">CA Results</button>
         <button class="nav-sub-btn" data-results-section="final" onclick="showResultsSection('final', this)">End of Semester</button>
+        <button class="nav-sub-btn" data-results-section="analysis" onclick="showResultsSection('analysis', this)">CAT Analysis</button>
       </div>
     </div>
     <div class="nav-group admin-only" id="declarations-nav-group">
@@ -601,6 +602,7 @@
           <div class="field"><label>Module Name *</label><input id="mod-name" placeholder="e.g. Business Mathematics" /></div>
           <div class="field"><label>Module Code *</label><input id="mod-code" placeholder="e.g. BM401" /></div>
           <div class="field"><label>Tutor Display Name *</label><input id="mod-teacher" placeholder="e.g. Mr. Mwangi" /></div>
+          <div class="field"><label>Module Credits *</label><input id="mod-credits" type="number" min="1" value="1" /></div>
         </div>
         <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;margin-bottom:14px;cursor:pointer;">
           <input type="checkbox" id="mod-has-practical" style="width:16px;height:16px;">
@@ -619,7 +621,7 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Code</th><th>Module</th><th>Level</th><th>Semester</th><th>Tutor</th><th>T sessions</th><th>P sessions</th><th>Students</th><th></th></tr></thead>
+            <thead><tr><th>Code</th><th>Module</th><th>Credits</th><th>Level</th><th>Semester</th><th>Tutor</th><th>T sessions</th><th>P sessions</th><th>Students</th><th></th></tr></thead>
             <tbody id="modules-tbody"></tbody>
           </table>
         </div>
@@ -767,6 +769,32 @@
         <div class="field" style="flex:1; min-width:260px; margin-bottom:0;">
           <label>Search Students</label>
           <input id="res-search" type="text" placeholder="Search by name or reg no" oninput="onResSearchChange()" style="width:100%;" />
+        </div>
+      </div>
+
+      <div class="card" id="cat-analysis-card" style="display:none;">
+        <div class="card-title">
+          📊 CAT Module Analysis
+          <div style="display:flex;gap:8px;margin-left:auto;align-items:flex-end;flex-wrap:wrap;">
+            <div class="field" style="margin:0;min-width:130px;">
+              <label>Assessment</label>
+              <select id="cat-analysis-period" onchange="loadCatAnalysis()">
+                <option value="1">CAT 1</option>
+                <option value="2">CAT 2</option>
+              </select>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Print</button>
+          </div>
+        </div>
+        <p style="font-size:.78rem;color:var(--muted);margin-bottom:14px;">
+          Practical-module CAT marks use the average of theory and practical. Pass mark: 50.
+        </p>
+        <div class="stats-grid" id="cat-analysis-stats"></div>
+        <div class="table-wrap">
+          <table>
+            <thead id="cat-analysis-thead"></thead>
+            <tbody id="cat-analysis-tbody"></tbody>
+          </table>
         </div>
       </div>
 
@@ -1509,8 +1537,15 @@ function showResultsSection(section, btn) {
   showPage('results', document.querySelector('#results-nav-group .nav-btn'));
   document.querySelectorAll('[data-results-section]').forEach(el => el.classList.toggle('active', el.dataset.resultsSection === section));
   if (btn) btn.classList.add('active');
+  const analysisCard = document.getElementById('cat-analysis-card');
+  if (analysisCard) analysisCard.style.display = section === 'analysis' ? 'block' : 'none';
+  if (section === 'analysis') loadCatAnalysis();
   requestAnimationFrame(() => {
-    const target = section === 'final' ? document.getElementById('end-exam-card') : document.getElementById('res-ca-print-area');
+    const target = section === 'analysis'
+      ? analysisCard
+      : section === 'final'
+        ? document.getElementById('end-exam-card')
+        : document.getElementById('res-ca-print-area');
     if (target && target.offsetParent !== null) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 }
@@ -1790,13 +1825,14 @@ async function loadModules() {
     state.modules = data.results ?? data;
     const tbody = document.getElementById('modules-tbody');
     if (!state.modules.length) {
-      tbody.innerHTML = '<tr><td colspan="9"><div class="empty"><div class="ei">📚</div>No modules yet</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty"><div class="ei">📚</div>No modules yet</div></td></tr>';
       return;
     }
     tbody.innerHTML = state.modules.map(m =>
       `<tr>
         <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${m.code}</span></td>
         <td><strong>${m.name}</strong></td>
+        <td>${m.credits}</td>
         <td>${m.class_level_name}</td>
         <td style="font-size:.75rem;color:var(--muted)">${m.semester_label}</td>
         <td>${m.teacher}</td>
@@ -1815,15 +1851,17 @@ async function createModule() {
   const name  = document.getElementById('mod-name').value.trim();
   const code  = document.getElementById('mod-code').value.trim().toUpperCase();
   const teacher = document.getElementById('mod-teacher').value.trim();
+  const credits = parseInt(document.getElementById('mod-credits').value, 10);
   const has_practical = document.getElementById('mod-has-practical').checked;
-  if (!semId || !lvlId || !name || !code || !teacher) {
+  if (!semId || !lvlId || !name || !code || !teacher || !credits || credits < 1) {
     toast('Please fill in all required fields', 'var(--red)'); return;
   }
   try {
-    await api('POST', '/modules/', { semester: semId, class_level: lvlId, name, code, teacher, has_practical });
+    await api('POST', '/modules/', { semester: semId, class_level: lvlId, name, code, teacher, credits, has_practical });
     toast('Module added!', 'var(--green)');
     ['mod-name','mod-code','mod-teacher'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('mod-has-practical').checked = false;
+    document.getElementById('mod-credits').value = 1;
     loadModules(); buildSidebarModules();
   } catch(e) { toast(e?.detail || JSON.stringify(e), 'var(--red)'); }
 }
@@ -2349,6 +2387,54 @@ let resModuleInfo = null;   // {id, name, code, has_practical, class_level, seme
 let resData = [];           // array of result objects from API
 let resSearchTerm = '';
 
+async function loadCatAnalysis() {
+  const card = document.getElementById('cat-analysis-card');
+  if (!card || state.resultsSection !== 'analysis') return;
+  const cat = document.getElementById('cat-analysis-period').value;
+  const semId = document.getElementById('res-flt-sem').value;
+  const lvlId = document.getElementById('res-flt-level').value;
+  const modId = document.getElementById('res-flt-module').value;
+  let url = `/results/cat-analysis/?cat=${cat}&`;
+  if (semId) url += `semester_id=${semId}&`;
+  if (lvlId) url += `class_level_id=${lvlId}&`;
+  if (modId) url += `module_id=${modId}&`;
+
+  const tbody = document.getElementById('cat-analysis-tbody');
+  tbody.innerHTML = '<tr><td colspan="14"><div class="empty">Loading analysis…</div></td></tr>';
+  try {
+    const data = await api('GET', url);
+    const stats = data.stats;
+    document.getElementById('cat-analysis-stats').innerHTML = `
+      <div class="stat-card"><div class="label">Modules</div><div class="value">${stats.modules}</div></div>
+      <div class="stat-card"><div class="label">Assessed</div><div class="value">${stats.assessed}</div></div>
+      <div class="stat-card"><div class="label">Passed</div><div class="value" style="color:var(--green)">${stats.passed}</div></div>
+      <div class="stat-card"><div class="label">Failed</div><div class="value" style="color:var(--red)">${stats.failed}</div></div>
+      <div class="stat-card"><div class="label">Incomplete</div><div class="value">${stats.incomplete}</div></div>
+      <div class="stat-card"><div class="label">Total Pass Rate</div><div class="value">${stats.pass_rate}%</div></div>
+    `;
+    const grades = ['A', 'B+', 'B', 'C', 'D', 'F'];
+    document.getElementById('cat-analysis-thead').innerHTML = `<tr>
+      <th>Module</th><th>Level</th><th>Semester</th><th>Assessed</th>
+      ${grades.map(g => `<th>${g}</th>`).join('')}
+      <th>Pass</th><th>Fail</th><th>Incomplete</th><th>Pass Rate</th>
+    </tr>`;
+    tbody.innerHTML = data.rows.length ? data.rows.map(row => `<tr>
+      <td><strong>${row.module_code}</strong><br><span style="font-size:.72rem;color:var(--muted)">${row.module_name}</span></td>
+      <td>${row.class_level}</td>
+      <td>${row.semester}</td>
+      <td>${row.assessed}</td>
+      ${grades.map(g => `<td>${row.grade_counts[g] || 0}</td>`).join('')}
+      <td style="color:var(--green);font-weight:700">${row.passed}</td>
+      <td style="color:var(--red);font-weight:700">${row.failed}</td>
+      <td>${row.incomplete}</td>
+      <td><span class="badge ${row.pass_rate >= 75 ? 'badge-green' : row.pass_rate >= 50 ? 'badge-yellow' : 'badge-red'}">${row.pass_rate}%</span></td>
+    </tr>`).join('') : '<tr><td colspan="14"><div class="empty">No CAT results found for these filters.</div></td></tr>';
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="14"><div class="empty">Failed to load CAT analysis.</div></td></tr>';
+    toast(e?.detail || 'Failed to load CAT analysis', 'var(--red)');
+  }
+}
+
 function onResSearchChange() {
   resSearchTerm = document.getElementById('res-search').value.trim().toLowerCase();
   renderResultsTable();
@@ -2362,9 +2448,14 @@ async function onResFilterChange() {
   document.getElementById('res-module-info').style.display = 'none';
   const endCard = document.getElementById('end-exam-card');
   if (endCard) endCard.style.display = 'none';
+  if (state.resultsSection === 'analysis') loadCatAnalysis();
 }
 
 async function loadResultsModule() {
+  if (state.resultsSection === 'analysis') {
+    await loadCatAnalysis();
+    return;
+  }
   const modId = document.getElementById('res-flt-module').value;
   if (!modId) {
     document.getElementById('res-module-info').style.display = 'none';
@@ -2565,9 +2656,14 @@ function updateEndExamRowCalc(rid) {
   if (epwEl && hp) epwEl.innerHTML = c.epw !== null ? `<span style="color:var(--accent2)">${c.epw.toFixed(2)}</span>` : '<span style="color:var(--muted)">—</span>';
   if (finEl) finEl.innerHTML = fin !== null ? `<strong>${fin.toFixed(2)}</strong>` : '<span style="color:var(--muted)">—</span>';
   if (resEl) {
+    const rec = resData.find(r => r.id == rid);
     resEl.innerHTML = fin === null
       ? '<span class="badge badge-yellow">Pending</span>'
-      : fin >= 50 ? '<span class="badge badge-green">✔ PASS</span>' : '<span class="badge badge-red">✘ FAIL</span>';
+      : rec?.result_status === 'PASS'
+        ? `<span class="badge badge-green">✔ ${rec.grade || 'PASS'}</span>`
+        : rec?.result_status === 'SUPP'
+          ? '<span class="badge badge-yellow">SUPP REQUIRED</span>'
+          : `<span class="badge badge-red">${rec?.result_status || 'FAIL'}</span>`;
   }
 }
 
@@ -2627,9 +2723,15 @@ function examDeclarationReason(r, type) {
   if (hp && (r.cat1_practical === null || r.cat1_practical === undefined)) missing.push('CAT 1 practical');
   if (hp && (r.cat2_practical === null || r.cat2_practical === undefined)) missing.push('CAT 2 practical');
   if (type === 'special_exam') return missing.length ? `Missing ${missing.join(', ')}` : '';
-  if (type === 'supp_exam') return 'Manual supplementary declaration. Automatic below-D rule pending criteria.';
-  if (type === 'repeat_module') return 'Manual repeat-module declaration. Automatic final/supp failure rule pending criteria.';
-  return 'Discontinuation review pending GPA criteria.';
+  if (type === 'supp_exam') {
+    if (r.result_status !== 'SUPP') return '';
+    const labels = (r.failed_end_components || []).map(field =>
+      field === 'end_practical' ? 'practical' : 'theory'
+    );
+    return `End-of-semester ${labels.join(' and ') || 'exam'} component is below 50`;
+  }
+  if (type === 'repeat_module') return r.result_status === 'REPEAT' ? `Supplementary mark ${r.supplementary_mark} is below 50` : '';
+  return 'GPA below 2.0 requires discontinuation review.';
 }
 
 function examDeclarationCandidates() {
@@ -2639,7 +2741,9 @@ function examDeclarationCandidates() {
       .map(r => ({ result: r, reason: examDeclarationReason(r, type), selectable: true, candidate: true }))
       .filter(item => item.reason);
   }
-  return declarationData.map(r => ({ result: r, reason: examDeclarationReason(r, type), selectable: true, candidate: false }));
+  return declarationData
+    .map(r => ({ result: r, reason: examDeclarationReason(r, type), selectable: true, candidate: true }))
+    .filter(item => item.reason);
 }
 
 function renderExamDeclarations() {
@@ -2657,11 +2761,11 @@ function renderExamDeclarations() {
   if (type === 'special_exam') {
     note.textContent = 'Special exam candidates are students whose CAT 1 or CAT 2 marks are not filled for this module.';
   } else if (type === 'supp_exam') {
-    note.textContent = 'Supplementary automatic rule will be based on below-D once you confirm the grade criteria. You can manually declare now.';
+    note.textContent = 'Every end-of-semester component must score at least 50. For practical modules, either theory or practical below 50 automatically requires a supplementary exam.';
   } else if (type === 'repeat_module') {
-    note.textContent = 'Repeat-module automatic rule will use final and supplementary failure once criteria are confirmed. You can manually declare now.';
+    note.textContent = 'Students who score below 50 in the supplementary exam automatically repeat the module.';
   } else {
-    note.textContent = 'Discontinuation automatic rule will use GPA below 2.0 once GPA calculation criteria are confirmed.';
+    note.textContent = 'A GPA below 2.0 requires discontinuation review.';
   }
   const helper = document.getElementById('decl-helper-filter')?.value || 'needs_action';
   const q = (document.getElementById('decl-search')?.value || '').toLowerCase().trim();
@@ -2818,7 +2922,7 @@ async function autoSaveResult(el) {
     el.dataset.original = raw;
     el.dataset.dirty = 'false';
     el.style.borderColor = 'var(--green)';
-    const isEndField = field === 'end_theory' || field === 'end_practical';
+    const isEndField = field === 'end_theory' || field === 'end_practical' || field === 'supplementary_mark';
     const infoId = isEndField ? 'end-exam-save-info' : 'res-save-info';
     const infoEl = document.getElementById(infoId);
     if (infoEl) infoEl.textContent = `Auto-saved at ${new Date().toLocaleTimeString()}`;
@@ -2879,6 +2983,7 @@ function renderEndExamTable() {
       <th>End Practical<br><span style="color:var(--muted);font-size:.6rem">/100 → 30%</span></th>
       <th>End Theory wt<br><span style="color:var(--muted);font-size:.6rem">/30</span></th>
       <th>End Prac wt<br><span style="color:var(--muted);font-size:.6rem">/30</span></th>
+      <th>Supplementary<br><span style="color:var(--muted);font-size:.6rem">/100</span></th>
       <th>Final Total<br><span style="color:var(--muted);font-size:.6rem">/100</span></th>
       <th>Result</th><th>Student Portal</th>
     </tr>`;
@@ -2888,6 +2993,7 @@ function renderEndExamTable() {
       <th>CA Total<br><span style="color:var(--muted);font-size:.6rem">/40</span></th>
       <th>End Exam<br><span style="color:var(--muted);font-size:.6rem">/100 → 60%</span></th>
       <th>End Exam wt<br><span style="color:var(--muted);font-size:.6rem">/60</span></th>
+      <th>Supplementary<br><span style="color:var(--muted);font-size:.6rem">/100</span></th>
       <th>Final Total<br><span style="color:var(--muted);font-size:.6rem">/100</span></th>
       <th>Result</th><th>Student Portal</th>
     </tr>`;
@@ -2919,7 +3025,7 @@ function renderEndExamRows() {
   const hp = resModuleInfo.has_practical;
   const tbody = document.getElementById('end-exam-tbody');
   if (!resData.length) {
-    tbody.innerHTML = `<tr><td colspan="${hp ? 11 : 9}"><div class="empty"><div class="ei">🎓</div>No students enrolled</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${hp ? 12 : 10}"><div class="empty"><div class="ei">🎓</div>No students enrolled</div></td></tr>`;
     return;
   }
   tbody.innerHTML = resData.map((r, i) => {
@@ -2932,11 +3038,14 @@ function renderEndExamRows() {
     const epw  = r.end_prac_w    !== null ? parseFloat(r.end_prac_w).toFixed(2)    : null;
     const fin  = r.final_total   !== null ? parseFloat(r.final_total).toFixed(2)   : null;
 
+    const status = r.result_status;
     const resultBadge = fin === null
       ? '<span class="badge badge-yellow">Pending</span>'
-      : parseFloat(fin) >= 50
-        ? '<span class="badge badge-green">✔ PASS</span>'
-        : '<span class="badge badge-red">✘ FAIL</span>';
+      : status === 'PASS'
+        ? `<span class="badge badge-green">✔ ${r.grade || 'PASS'}</span>`
+        : status === 'SUPP'
+          ? '<span class="badge badge-yellow">SUPP REQUIRED</span>'
+          : `<span class="badge badge-red">${status}</span>`;
     const approvalBadge = r.final_approved
       ? '<span class="badge badge-green">Approved</span>'
       : '<span class="badge badge-yellow">Hidden</span>';
@@ -2951,6 +3060,7 @@ function renderEndExamRows() {
         <td>${mkInput(r.id,'end_practical',r.end_practical,r.end_practical_absent)}</td>
         <td id="etw-${r.id}">${etw !== null ? `<span style="color:var(--accent)">${etw}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
         <td id="epw-${r.id}">${epw !== null ? `<span style="color:var(--accent2)">${epw}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+        <td>${mkInput(r.id,'supplementary_mark',r.supplementary_mark,false)}</td>
         <td id="fin-${r.id}">${fin !== null ? `<strong>${fin}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
         <td id="res-${r.id}">${resultBadge}</td>
         <td>${approvalBadge}</td>
@@ -2963,6 +3073,7 @@ function renderEndExamRows() {
         <td>${caTd}</td>
         <td>${mkInput(r.id,'end_theory',r.end_theory,r.end_theory_absent)}</td>
         <td id="etw-${r.id}">${etw !== null ? `<span style="color:var(--accent)">${etw}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+        <td>${mkInput(r.id,'supplementary_mark',r.supplementary_mark,false)}</td>
         <td id="fin-${r.id}">${fin !== null ? `<strong>${fin}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
         <td id="res-${r.id}">${resultBadge}</td>
         <td>${approvalBadge}</td>

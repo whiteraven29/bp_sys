@@ -88,6 +88,11 @@ class Module(models.Model):
         verbose_name='Has Practical Component',
         help_text='Enable for modules assessed with both theory and practical components.',
     )
+    credits = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text='Module credits used in the weighted GPA calculation.',
+    )
     teachers = models.ManyToManyField(
         settings.AUTH_USER_MODEL, related_name='modules_taught', blank=True
     )
@@ -378,6 +383,9 @@ class StudentResult(models.Model):
     cat2_practical = _mark_field(verbose_name='Practical Test 2 (raw /100)')
     end_theory     = _mark_field(verbose_name='End of Semester – Theory/Written (raw /100)')
     end_practical  = _mark_field(verbose_name='End of Semester – Practical (raw /100)')
+    supplementary_mark = _mark_field(
+        verbose_name='Supplementary Examination (raw /100)'
+    )
     assign1_absent        = models.BooleanField(default=False)
     assign2_absent        = models.BooleanField(default=False)
     cat1_theory_absent    = models.BooleanField(default=False)

@@ -2,6 +2,8 @@ from datetime import date
 from io import BytesIO
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
+from django.contrib.sessions.models import Session as DjangoSession
 from django.test import TestCase
 from django.urls import reverse
 from openpyxl import load_workbook
@@ -24,6 +26,7 @@ from .models import (
     TeacherProfile,
 )
 from .serializers import StudentResultSerializer
+from .grading import gpa_classification
 
 
 User = get_user_model()
@@ -70,6 +73,49 @@ class AttendanceSecurityTests(TestCase):
     def test_student_dashboard_redirects_without_student_session(self):
         response = self.client.get(reverse('student-dashboard'))
         self.assertRedirects(response, reverse('login'))
+
+    def test_sessions_expire_when_browser_session_closes(self):
+        self.assertTrue(settings.SESSION_EXPIRE_AT_BROWSER_CLOSE)
+
+        response = self.client.post(reverse('login'), {
+            'identifier': self.teacher.username,
+            'secret': 'safe-password',
+        })
+        cookie = response.cookies[settings.SESSION_COOKIE_NAME]
+
+        self.assertIn(cookie['expires'], ('', None))
+        self.assertIn(cookie['max-age'], ('', None))
+        self.assertTrue(cookie['httponly'])
+        self.assertEqual(cookie['samesite'], 'Lax')
+
+    def test_staff_logout_invalidates_old_session_key(self):
+        self.client.force_login(self.teacher)
+        old_session_key = self.client.session.session_key
+        self.assertTrue(DjangoSession.objects.filter(session_key=old_session_key).exists())
+
+        response = self.client.get(reverse('logout'))
+
+        self.assertRedirects(response, reverse('login'))
+        self.assertFalse(DjangoSession.objects.filter(session_key=old_session_key).exists())
+        deletion_cookie = response.cookies[settings.SESSION_COOKIE_NAME]
+        self.assertEqual(deletion_cookie.value, '')
+        self.assertEqual(deletion_cookie['max-age'], 0)
+
+    def test_student_logout_invalidates_old_session_key(self):
+        session = self.client.session
+        session['student_id'] = self.student.id
+        session['student_reg_no'] = self.student.nactvet_reg_no
+        session.save()
+        old_session_key = session.session_key
+
+        response = self.client.get(reverse('student-logout'))
+
+        self.assertRedirects(response, reverse('login'))
+        self.assertFalse(DjangoSession.objects.filter(session_key=old_session_key).exists())
+        self.assertRedirects(
+            self.client.get(reverse('student-dashboard')),
+            reverse('login'),
+        )
 
     def test_student_can_login_with_portal_pin_not_surname(self):
         self.student.must_change_portal_password = True
@@ -224,6 +270,189 @@ class AttendanceSecurityTests(TestCase):
             'records': [],
         }, format='json')
         self.assertEqual(response.status_code, 403)
+
+    def test_end_exam_below_50_requires_supplementary_only_for_end_exam(self):
+        result = StudentResult.objects.create(
+            student=self.student,
+            assign1=20, assign2=20, cat1_theory=20, cat2_theory=20,
+            end_theory=49,
+        )
+
+        data = StudentResultSerializer(result).data
+
+        self.assertEqual(data['result_status'], 'SUPP')
+        self.assertTrue(data['supplementary_required'])
+        self.assertEqual(data['end_exam_mark'], 49.0)
+
+    def test_passed_supplementary_is_capped_at_c_and_two_points(self):
+        result = StudentResult.objects.create(
+            student=self.student,
+            assign1=100, assign2=100, cat1_theory=100, cat2_theory=100,
+            end_theory=49, supplementary_mark=95,
+        )
+
+        data = StudentResultSerializer(result).data
+
+        self.assertEqual(data['grade'], 'C')
+        self.assertEqual(data['grade_point'], 2)
+        self.assertEqual(data['result_status'], 'PASS')
+
+    def test_practical_module_requires_supp_if_either_end_component_is_below_half(self):
+        self.module.has_practical = True
+        self.module.save(update_fields=['has_practical'])
+        result = StudentResult.objects.create(
+            student=self.student,
+            assign1=100, assign2=100,
+            cat1_theory=100, cat2_theory=100,
+            cat1_practical=100, cat2_practical=100,
+            end_theory=100, end_practical=49,
+        )
+
+        data = StudentResultSerializer(result).data
+
+        self.assertEqual(data['final_total'], 84.7)
+        self.assertEqual(data['end_exam_mark'], 74.5)
+        self.assertEqual(data['result_status'], 'SUPP')
+        self.assertTrue(data['supplementary_required'])
+        self.assertEqual(data['failed_end_components'], ['end_practical'])
+        self.assertIsNone(data['grade'])
+
+    def test_practical_module_passes_when_both_end_components_reach_half(self):
+        self.module.has_practical = True
+        self.module.save(update_fields=['has_practical'])
+        result = StudentResult.objects.create(
+            student=self.student,
+            assign1=100, assign2=100,
+            cat1_theory=100, cat2_theory=100,
+            cat1_practical=100, cat2_practical=100,
+            end_theory=50, end_practical=50,
+        )
+
+        data = StudentResultSerializer(result).data
+
+        self.assertFalse(data['supplementary_required'])
+        self.assertEqual(data['result_status'], 'PASS')
+
+    def test_failed_supplementary_requires_repeat(self):
+        result = StudentResult.objects.create(
+            student=self.student,
+            assign1=100, assign2=100, cat1_theory=100, cat2_theory=100,
+            end_theory=49, supplementary_mark=49,
+        )
+
+        data = StudentResultSerializer(result).data
+
+        self.assertEqual(data['result_status'], 'REPEAT')
+        self.assertEqual(data['grade_point'], 0)
+
+    def test_level_six_uses_five_point_grading_scale(self):
+        level_six = ClassLevel.objects.create(name='NTA Level 6', order=6)
+        module = Module.objects.create(
+            name='Level Six Module', code='L6M', teacher='Teacher',
+            class_level=level_six, semester=self.semester, credits=10,
+        )
+        student = Student.objects.create(
+            nactvet_reg_no='L6-001', name='Level Six Student', module=module,
+        )
+        result = StudentResult.objects.create(
+            student=student,
+            assign1=100, assign2=100, cat1_theory=100, cat2_theory=100,
+            end_theory=60,
+        )
+
+        data = StudentResultSerializer(result).data
+
+        self.assertEqual(data['final_total'], 76.0)
+        self.assertEqual(data['grade'], 'A')
+        self.assertEqual(data['grade_point'], 5)
+        self.assertEqual(gpa_classification(4.6, level_six), 'First Class')
+
+    def test_final_grade_uses_ca_40_plus_ese_60_total(self):
+        result = StudentResult.objects.create(
+            student=self.student,
+            assign1=100, assign2=100,
+            cat1_theory=100, cat2_theory=100,
+            end_theory=60,
+        )
+
+        data = StudentResultSerializer(result).data
+
+        self.assertEqual(data['total_ca'], 40.0)
+        self.assertEqual(data['end_exam_total'], 36.0)
+        self.assertEqual(data['final_total'], 76.0)
+        self.assertEqual(data['grade'], 'B')
+        self.assertEqual(data['grade_point'], 3)
+
+    def test_student_portal_displays_module_credits_and_weighted_result_parts(self):
+        self.module.credits = 12
+        self.module.save(update_fields=['credits'])
+        StudentResult.objects.create(
+            student=self.student,
+            assign1=100, assign2=100,
+            cat1_theory=100, cat2_theory=100,
+            end_theory=60, ca_approved=True, final_approved=True,
+        )
+        session = self.client.session
+        session['student_id'] = self.student.id
+        session.save()
+
+        response = self.client.get(reverse('student-dashboard'))
+
+        self.assertContains(response, '12 credits')
+        self.assertContains(response, 'ESE /60')
+        self.assertContains(response, 'Grade Point')
+
+    def test_cat_analysis_reports_module_grades_and_total_pass_rate(self):
+        StudentResult.objects.create(
+            student=self.student,
+            cat1_theory=80,
+        )
+        failing_student = Student.objects.create(
+            nactvet_reg_no='REG-FAIL', name='Failing Student', module=self.module,
+        )
+        StudentResult.objects.create(
+            student=failing_student,
+            cat1_theory=40,
+        )
+        incomplete_student = Student.objects.create(
+            nactvet_reg_no='REG-INC', name='Incomplete Student', module=self.module,
+        )
+        StudentResult.objects.create(student=incomplete_student)
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get('/api/results/cat-analysis/?cat=1')
+
+        self.assertEqual(response.status_code, 200)
+        row = next(r for r in response.data['rows'] if r['module_id'] == self.module.id)
+        self.assertEqual(row['assessed'], 2)
+        self.assertEqual(row['passed'], 1)
+        self.assertEqual(row['failed'], 1)
+        self.assertEqual(row['incomplete'], 1)
+        self.assertEqual(row['grade_counts']['A'], 1)
+        self.assertEqual(row['grade_counts']['D'], 1)
+        self.assertEqual(row['pass_rate'], 50.0)
+        self.assertEqual(response.data['stats']['pass_rate'], 50.0)
+
+    def test_cat_analysis_averages_theory_and_practical_components(self):
+        self.module.has_practical = True
+        self.module.save(update_fields=['has_practical'])
+        StudentResult.objects.create(
+            student=self.student,
+            cat2_theory=80,
+            cat2_practical=40,
+        )
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get(
+            f'/api/results/cat-analysis/?cat=2&module_id={self.module.id}'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        row = response.data['rows'][0]
+        self.assertEqual(row['assessed'], 1)
+        self.assertEqual(row['passed'], 1)
+        self.assertEqual(row['grade_counts']['C'], 1)
+        self.assertEqual(row['pass_rate'], 100.0)
         self.assertFalse(Session.objects.exists())
 
     def test_teacher_cannot_move_student_to_unassigned_module(self):

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
+from .grading import result_outcome
 from .models import (
     AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord,
     StudentResult, PaymentCategory, StudentFinanceObligation, StudentPayment,
@@ -65,7 +66,7 @@ class ModuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Module
         fields = [
-            'id', 'name', 'code', 'teacher', 'has_practical',
+            'id', 'name', 'code', 'teacher', 'has_practical', 'credits',
             'class_level', 'class_level_name',
             'semester', 'semester_label',
             'student_count', 'session_count', 'theory_count', 'practical_count',
@@ -355,7 +356,15 @@ class StudentResultSerializer(serializers.ModelSerializer):
     # End-of-semester exam (weighted, read-only)
     end_theory_w  = serializers.SerializerMethodField()
     end_prac_w    = serializers.SerializerMethodField()
+    end_exam_total = serializers.SerializerMethodField()
     final_total   = serializers.SerializerMethodField()
+    end_exam_mark = serializers.SerializerMethodField()
+    supplementary_required = serializers.SerializerMethodField()
+    failed_end_components = serializers.SerializerMethodField()
+    result_status = serializers.SerializerMethodField()
+    grade = serializers.SerializerMethodField()
+    grade_point = serializers.SerializerMethodField()
+    grade_description = serializers.SerializerMethodField()
 
     class Meta:
         model  = StudentResult
@@ -369,7 +378,11 @@ class StudentResultSerializer(serializers.ModelSerializer):
             'theory_eligible', 'practical_eligible', 'ca_eligible',
             'end_theory', 'end_practical',
             'end_theory_absent', 'end_practical_absent',
-            'end_theory_w', 'end_prac_w', 'final_total', 'ca_approved', 'final_approved',
+            'end_theory_w', 'end_prac_w', 'end_exam_total', 'final_total',
+            'supplementary_mark', 'end_exam_mark', 'supplementary_required',
+            'failed_end_components',
+            'result_status', 'grade', 'grade_point', 'grade_description',
+            'ca_approved', 'final_approved',
             'updated_at',
         ]
         read_only_fields = ['id', 'updated_at']
@@ -462,16 +475,47 @@ class StudentResultSerializer(serializers.ModelSerializer):
     def get_end_prac_w(self, obj):
         return _wt(self._mark(obj, 'end_practical'), 30) if self._hp(obj) else None
 
+    def get_end_exam_total(self, obj):
+        end_fields = ['end_theory'] + (['end_practical'] if self._hp(obj) else [])
+        if not self._complete(obj, end_fields):
+            return None
+        theory = self.get_end_theory_w(obj)
+        practical = self.get_end_prac_w(obj)
+        return round((theory or 0) + (practical or 0), 2)
+
     def get_final_total(self, obj):
         end_fields = ['end_theory'] + (['end_practical'] if self._hp(obj) else [])
         if self.get_total_ca(obj) is None or not self._complete(obj, end_fields):
             return None
         ca = self.get_total_ca(obj)
-        et = self.get_end_theory_w(obj)
-        ep = self.get_end_prac_w(obj)
-        if ca is None and et is None and ep is None:
+        end_total = self.get_end_exam_total(obj)
+        if ca is None and end_total is None:
             return None
-        return round((ca or 0) + (et or 0) + (ep or 0), 2)
+        return round((ca or 0) + (end_total or 0), 2)
+
+    def _outcome(self, obj):
+        return result_outcome(obj, self)
+
+    def get_end_exam_mark(self, obj):
+        return self._outcome(obj)['end_exam_mark']
+
+    def get_supplementary_required(self, obj):
+        return self._outcome(obj)['supplementary_required']
+
+    def get_failed_end_components(self, obj):
+        return self._outcome(obj).get('failed_end_components', [])
+
+    def get_result_status(self, obj):
+        return self._outcome(obj)['status']
+
+    def get_grade(self, obj):
+        return self._outcome(obj)['grade']
+
+    def get_grade_point(self, obj):
+        return self._outcome(obj)['grade_point']
+
+    def get_grade_description(self, obj):
+        return self._outcome(obj)['grade_description']
 
 
 class BulkStudentSerializer(serializers.Serializer):
