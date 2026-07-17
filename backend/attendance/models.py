@@ -386,6 +386,8 @@ class StudentResult(models.Model):
     supplementary_mark = _mark_field(
         verbose_name='Supplementary Examination (raw /100)'
     )
+    authority_grade = models.CharField(max_length=20, blank=True, default='')
+    authority_status = models.CharField(max_length=20, blank=True, default='')
     assign1_absent        = models.BooleanField(default=False)
     assign2_absent        = models.BooleanField(default=False)
     cat1_theory_absent    = models.BooleanField(default=False)

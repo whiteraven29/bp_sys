@@ -661,6 +661,17 @@
           </table>
         </div>
       </div>
+      <div class="card" id="module-roster-card">
+        <div class="card-title">🎓 Module Students</div>
+        <div class="form-grid" style="margin-bottom:14px;">
+          <div class="field"><label>Module</label><select id="roster-module" onchange="loadModuleRoster()"><option value="">— select a module —</option></select></div>
+          <div class="field"><label>Search</label><input id="roster-search" type="search" oninput="renderModuleRoster()" placeholder="Registration number or student name"></div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Registration No.</th><th>Name</th><th>Level</th><th>Semester</th><th></th></tr></thead>
+          <tbody id="module-roster-tbody"><tr><td colspan="5"><div class="empty">Select a module to view its students</div></td></tr></tbody>
+        </table></div>
+      </div>
       </div>
     </div>
 
@@ -702,7 +713,7 @@
           <div class="form-grid-3">
             <div class="field"><label>Semester</label><select id="stu-flt-sem" onchange="onStudentFilterChange()"><option value="">All Semesters</option></select></div>
             <div class="field"><label>Class Level</label><select id="stu-flt-level" onchange="onStudentFilterChange()"><option value="">All Levels</option></select></div>
-            <div class="field"><label>Module</label><select id="stu-flt-module" onchange="onStudentModuleFilterChange()"><option value="">All Modules</option></select></div>
+            <div class="field"><label>Search</label><input id="stu-search" type="search" oninput="scheduleStudentSearch()" placeholder="Registration number or student name"></div>
           </div>
         </div>
         <div class="card">
@@ -804,6 +815,19 @@
         <div class="field" style="flex:1; min-width:260px; margin-bottom:0;">
           <label>Search Students</label>
           <input id="res-search" type="text" placeholder="Search by name or reg no" oninput="onResSearchChange()" style="width:100%;" />
+        </div>
+      </div>
+      <div class="card admin-only">
+        <div class="card-title">📥 Authority Grade Import</div>
+        <p style="font-size:.78rem;color:var(--muted);margin-bottom:14px;">Download a level template, then enter the authority value beneath each module code. Stars are interpreted using the official grading key.</p>
+        <div class="form-grid-3">
+          <div class="field"><label>Semester *</label><select id="auth-grade-semester"><option value="">— select semester —</option></select></div>
+          <div class="field"><label>Class Level *</label><select id="auth-grade-level"><option value="">— select level —</option></select></div>
+          <div class="field"><label>Grade File</label><input id="auth-grade-file" type="file" accept=".xlsx,.xls,.csv"></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="downloadAuthorityGradeTemplate()">⬇ Download Level Template</button>
+          <button class="btn btn-primary btn-sm" onclick="uploadAuthorityGrades()">⬆ Upload Authority Grades</button>
         </div>
       </div>
 
@@ -1245,6 +1269,24 @@
     </div>
 
   </main>
+</div>
+
+<!-- MODULE EDIT MODAL -->
+<div class="modal-overlay" id="module-edit-modal">
+  <div class="modal">
+    <div class="modal-title">Edit Module<button class="modal-close" onclick="closeModuleEditModal()">✕</button></div>
+    <input type="hidden" id="edit-mod-id">
+    <div class="form-grid" style="margin-bottom:14px;">
+      <div class="field"><label>Semester *</label><select id="edit-mod-semester"></select></div>
+      <div class="field"><label>Class Level *</label><select id="edit-mod-level"></select></div>
+      <div class="field"><label>Module Name *</label><input id="edit-mod-name"></div>
+      <div class="field"><label>Module Code *</label><input id="edit-mod-code"></div>
+      <div class="field"><label>Tutor Display Name *</label><input id="edit-mod-teacher"></div>
+      <div class="field"><label>Credits *</label><input id="edit-mod-credits" type="number" min="1"></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input id="edit-mod-practical" type="checkbox"> Has Practical Component</label>
+    <button class="btn btn-primary btn-sm" onclick="saveModuleEdit()">Save Changes</button>
+  </div>
 </div>
 
 <!-- STUDENT EDIT MODAL -->
@@ -1694,7 +1736,7 @@ async function boot() {
     }
 
     populateAllSelects();
-    await refreshModuleDropdowns('', '', 'stu-flt-module', 'add-stu-module', 'bulk-module');
+    await refreshModuleDropdowns('', '', 'add-stu-module', 'bulk-module');
     buildSidebarModules();
     if (!state.isStaff && state.isAccountant) {
       showPage('finance', document.querySelector('[data-page="finance"]'));
@@ -1754,6 +1796,8 @@ function populateAllSelects() {
   buildLevelOptions(document.getElementById('rpt-flt-level'), true);
   buildSemOptions(document.getElementById('res-flt-sem'), true);
   buildLevelOptions(document.getElementById('res-flt-level'), true);
+  buildSemOptions(document.getElementById('auth-grade-semester'));
+  buildLevelOptions(document.getElementById('auth-grade-level'));
   buildSemOptions(document.getElementById('decl-flt-sem'), true);
   buildLevelOptions(document.getElementById('decl-flt-level'), true);
   buildSemOptions(document.getElementById('elig-flt-sem'), true);
@@ -1791,14 +1835,8 @@ async function buildSidebarModules() {
   } catch(e) { console.error(e); }
 }
 async function goToModule(id) {
-  const mod = state.modules.find(m => String(m.id) === String(id));
-  if (mod) {
-    document.getElementById('stu-flt-sem').value = mod.semester || '';
-    document.getElementById('stu-flt-level').value = mod.class_level || '';
-    await refreshModuleDropdowns(mod.semester || '', mod.class_level || '', 'stu-flt-module');
-  }
-  document.getElementById('stu-flt-module').value = id;
-  showStudentSection('manage', document.querySelector('[data-student-section="manage"]'));
+  showModuleSection('manage', document.querySelector('[data-module-section="manage"]'));
+  await selectModuleRoster(id);
 }
 
 // ── USER ACCOUNTS ──────────────────────────────────────────────────────────────
@@ -1860,6 +1898,7 @@ async function loadModules() {
   try {
     const data = await api('GET', url);
     state.modules = data.results ?? data;
+    buildModuleOptions(document.getElementById('roster-module'), state.modules, false);
     const tbody = document.getElementById('modules-tbody');
     if (!state.modules.length) {
       tbody.innerHTML = '<tr><td colspan="10"><div class="empty"><div class="ei">📚</div>No modules yet</div></td></tr>';
@@ -1876,7 +1915,11 @@ async function loadModules() {
         <td><span class="badge badge-blue">${m.theory_count}</span></td>
         <td><span class="badge badge-purple">${m.practical_count}</span></td>
         <td>${m.student_count}</td>
-        <td><button class="btn btn-danger btn-sm" onclick="deleteModule(${m.id},'${m.name.replace(/'/g,"\\'")}')">✕</button></td>
+        <td><div class="row-actions">
+          <button class="btn btn-secondary btn-sm" title="View students" onclick="selectModuleRoster(${m.id})">🎓</button>
+          <button class="btn btn-secondary btn-sm" title="Edit module" onclick="openModuleEditModal(${m.id})">✎</button>
+          <button class="btn btn-danger btn-sm" title="Delete module" onclick="deleteModule(${m.id},'${m.name.replace(/'/g,"\\'")}')">✕</button>
+        </div></td>
       </tr>`
     ).join('');
   } catch(e) { toast('Failed to load modules', 'var(--red)'); }
@@ -1912,36 +1955,85 @@ async function deleteModule(id, name) {
   } catch(e) { toast(e?.detail || 'Error', 'var(--red)'); }
 }
 
+let moduleRosterRows = [];
+async function selectModuleRoster(id) {
+  document.getElementById('roster-module').value = String(id);
+  await loadModuleRoster();
+  document.getElementById('module-roster-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+async function loadModuleRoster() {
+  const moduleId = document.getElementById('roster-module').value;
+  const tbody = document.getElementById('module-roster-tbody');
+  if (!moduleId) {
+    moduleRosterRows = [];
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty">Select a module to view its students</div></td></tr>';
+    return;
+  }
+  try {
+    const data = await api('GET', `/students/?module_id=${encodeURIComponent(moduleId)}`);
+    moduleRosterRows = data.results ?? data;
+    renderModuleRoster();
+  } catch(e) { toast('Failed to load module students', 'var(--red)'); }
+}
+function renderModuleRoster() {
+  const q = document.getElementById('roster-search').value.trim().toLowerCase();
+  const rows = moduleRosterRows.filter(s => !q || s.name.toLowerCase().includes(q) || s.nactvet_reg_no.toLowerCase().includes(q));
+  document.getElementById('module-roster-tbody').innerHTML = rows.length ? rows.map(s => `<tr>
+    <td><span style="font-family:var(--font-mono);font-size:.78rem">${s.nactvet_reg_no}</span></td><td>${s.name}</td>
+    <td>${s.class_level_name}</td><td>${s.semester_label}</td>
+    <td><button class="btn btn-danger btn-sm" onclick="deleteRosterStudent(${s.id},'${s.name.replace(/'/g,"\\'")}')">Remove</button></td>
+  </tr>`).join('') : '<tr><td colspan="5"><div class="empty">No matching students in this module</div></td></tr>';
+}
+async function deleteRosterStudent(id, name) {
+  if (!confirm(`Remove "${name}" from this module?`)) return;
+  try {
+    await api('DELETE', `/students/${id}/`);
+    toast('Student removed from module', 'var(--orange)');
+    await loadModuleRoster();
+  } catch(e) { toast(e?.detail || 'Could not remove student', 'var(--red)'); }
+}
+function openModuleEditModal(id) {
+  const module = state.modules.find(m => m.id === id);
+  if (!module) return;
+  buildSemOptions(document.getElementById('edit-mod-semester'));
+  buildLevelOptions(document.getElementById('edit-mod-level'));
+  document.getElementById('edit-mod-id').value = module.id;
+  document.getElementById('edit-mod-semester').value = module.semester;
+  document.getElementById('edit-mod-level').value = module.class_level;
+  document.getElementById('edit-mod-name').value = module.name;
+  document.getElementById('edit-mod-code').value = module.code;
+  document.getElementById('edit-mod-teacher').value = module.teacher;
+  document.getElementById('edit-mod-credits').value = module.credits;
+  document.getElementById('edit-mod-practical').checked = module.has_practical;
+  document.getElementById('module-edit-modal').classList.add('open');
+}
+function closeModuleEditModal() { document.getElementById('module-edit-modal').classList.remove('open'); }
+async function saveModuleEdit() {
+  const id = document.getElementById('edit-mod-id').value;
+  const payload = {
+    semester: Number(document.getElementById('edit-mod-semester').value), class_level: Number(document.getElementById('edit-mod-level').value),
+    name: document.getElementById('edit-mod-name').value.trim(), code: document.getElementById('edit-mod-code').value.trim().toUpperCase(),
+    teacher: document.getElementById('edit-mod-teacher').value.trim(), credits: Number(document.getElementById('edit-mod-credits').value),
+    has_practical: document.getElementById('edit-mod-practical').checked
+  };
+  if (!payload.semester || !payload.class_level || !payload.name || !payload.code || !payload.teacher || payload.credits < 1) {
+    toast('Please fill in all required module details', 'var(--red)'); return;
+  }
+  try {
+    await api('PATCH', `/modules/${id}/`, payload);
+    closeModuleEditModal(); toast('Module updated', 'var(--green)');
+    await loadModules(); buildSidebarModules();
+  } catch(e) { toast(e?.detail || 'Could not update module', 'var(--red)'); }
+}
+
 // ── STUDENTS PAGE ──────────────────────────────────────────────────────────────
 let studentRows = [];
 
 async function onStudentFilterChange() {
-  const semId = document.getElementById('stu-flt-sem').value;
-  const lvlId = document.getElementById('stu-flt-level').value;
-  await refreshModuleDropdowns(semId, lvlId, 'stu-flt-module', 'add-stu-module', 'bulk-module');
   loadStudents();
 }
-async function onStudentModuleFilterChange() {
-  const modId = document.getElementById('stu-flt-module').value;
-  if (modId) {
-    let mod = state.modules.find(m => String(m.id) === String(modId));
-    if (!mod) {
-      const mods = await refreshModuleDropdowns('', '', 'stu-flt-module');
-      mod = mods.find(m => String(m.id) === String(modId));
-    }
-    if (mod) {
-      const semEl = document.getElementById('stu-flt-sem');
-      const lvlEl = document.getElementById('stu-flt-level');
-      if (String(semEl.value || '') !== String(mod.semester || '') || String(lvlEl.value || '') !== String(mod.class_level || '')) {
-        semEl.value = mod.semester || '';
-        lvlEl.value = mod.class_level || '';
-        await refreshModuleDropdowns(semEl.value, lvlEl.value, 'stu-flt-module', 'add-stu-module', 'bulk-module');
-        document.getElementById('stu-flt-module').value = modId;
-      }
-    }
-  }
-  loadStudents();
-}
+let studentSearchTimer;
+function scheduleStudentSearch() { clearTimeout(studentSearchTimer); studentSearchTimer = setTimeout(loadStudents, 250); }
 async function refreshModuleDropdowns(semId, lvlId, ...dropdownIds) {
   let url = '/modules/?';
   if (semId) url += `semester_id=${semId}&`;
@@ -1959,11 +2051,11 @@ async function refreshModuleDropdowns(semId, lvlId, ...dropdownIds) {
 async function loadStudents() {
   const semId = document.getElementById('stu-flt-sem').value;
   const lvlId = document.getElementById('stu-flt-level').value;
-  const modId = document.getElementById('stu-flt-module').value;
+  const search = document.getElementById('stu-search').value.trim();
   let url = '/students/?';
-  url = appendParam(url, 'module_id', modId);
   url = appendParam(url, 'class_level_id', lvlId);
   url = appendParam(url, 'semester_id', semId);
+  url = appendParam(url, 'search', search);
   try {
     const data = await api('GET', url);
     const students = data.results ?? data;
@@ -2077,9 +2169,9 @@ async function bulkSetStudentPins() {
   if (pin.trim().length < 6) { toast('Password/PIN must be at least 6 characters', 'var(--red)'); return; }
   const payload = {
     portal_pin: pin.trim(),
-    module_id: document.getElementById('stu-flt-module').value || null,
     class_level_id: document.getElementById('stu-flt-level').value || null,
     semester_id: document.getElementById('stu-flt-sem').value || null,
+    search: document.getElementById('stu-search').value.trim() || null,
   };
   if (!confirm('Update the password/PIN for every student currently matched by these filters?')) return;
   try {
@@ -2424,6 +2516,71 @@ let resModuleInfo = null;   // {id, name, code, has_practical, class_level, seme
 let resData = [];           // array of result objects from API
 let resSearchTerm = '';
 
+async function authorityTemplateData() {
+  const semesterId = document.getElementById('auth-grade-semester').value;
+  const levelId = document.getElementById('auth-grade-level').value;
+  if (!semesterId || !levelId) throw { detail: 'Select a semester and class level first.' };
+  const moduleData = await api('GET', `/modules/?semester_id=${encodeURIComponent(semesterId)}&class_level_id=${encodeURIComponent(levelId)}`);
+  const modules = moduleData.results ?? moduleData;
+  if (!modules.length) throw { detail: 'No modules found for the selected level and semester.' };
+  const rosters = await Promise.all(modules.map(m => api('GET', `/students/?module_id=${encodeURIComponent(m.id)}`)));
+  const students = new Map();
+  rosters.forEach((data, index) => (data.results ?? data).forEach(student => {
+    const key = student.nactvet_reg_no.trim().toUpperCase();
+    if (!students.has(key)) students.set(key, { 'Registration Number': student.nactvet_reg_no, 'Student Name': student.name });
+    students.get(key)[modules[index].code] = '';
+  }));
+  return { modules, rows: [...students.values()].sort((a, b) => a['Registration Number'].localeCompare(b['Registration Number'])), levelId };
+}
+
+async function downloadAuthorityGradeTemplate() {
+  try {
+    const { modules, rows, levelId } = await authorityTemplateData();
+    const headers = ['Registration Number', 'Student Name', ...modules.map(m => m.code)];
+    const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+    ws['!cols'] = [{ wch: 24 }, { wch: 30 }, ...modules.map(() => ({ wch: 14 }))];
+    const help = XLSX.utils.aoa_to_sheet([
+      ['AUTHORITY GRADE TEMPLATE INSTRUCTIONS'],
+      ['Enter one authority grade under each module code. Do not edit registration numbers or module-code headings.'],
+      ['Item', 'Meaning'], ['Grade****', 'Failed both Written & Practical'],
+      ['Grade***', 'Failed Written'], ['Grade**', 'Failed Practical'],
+      ['Grade*', 'Failed Semester Exam (SE)'], ['*N*', 'Results Nullified'],
+      ['*W*', 'Results Withheld'], ['FAIL', 'Discontinued from Studies'], ['NA', 'Not Applicable'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Authority Grades');
+    XLSX.utils.book_append_sheet(wb, help, 'Instructions');
+    const level = state.levels.find(l => String(l.id) === String(levelId));
+    XLSX.writeFile(wb, `authority_grades_${(level?.name || 'level').replace(/\s+/g, '_')}.xlsx`);
+    toast('Authority grade template downloaded', 'var(--green)');
+  } catch(e) { toast(e?.detail || 'Could not create grade template', 'var(--red)'); }
+}
+
+async function uploadAuthorityGrades() {
+  const file = document.getElementById('auth-grade-file').files[0];
+  if (!file) { toast('Choose a completed authority grade file', 'var(--red)'); return; }
+  try {
+    const { modules } = await authorityTemplateData();
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const sourceRows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: '' });
+    const rows = [];
+    sourceRows.forEach(row => {
+      const regNo = String(row['Registration Number'] || row['Reg No'] || row['RegNo'] || '').trim();
+      if (!regNo) return;
+      modules.forEach(module => {
+        const grade = String(row[module.code] || '').trim();
+        if (grade) rows.push({ reg_no: regNo, module_code: module.code, grade });
+      });
+    });
+    if (!rows.length) { toast('No grades were found in the selected file', 'var(--red)'); return; }
+    if (!confirm(`Import ${rows.length} authority grade(s)? Uploaded grades become the approved final result.`)) return;
+    const result = await api('POST', '/results/authority-grades/', { rows });
+    toast(`Imported ${result.saved} authority grade(s)${result.errors.length ? `; ${result.errors.length} error(s)` : ''}`, result.errors.length ? 'var(--yellow)' : 'var(--green)');
+    if (result.errors.length) alert(`Imported ${result.saved} grade(s).\n\nNot imported:\n${result.errors.slice(0, 20).join('\n')}${result.errors.length > 20 ? '\n…' : ''}`);
+    if (document.getElementById('res-flt-module').value) loadResultsModule();
+  } catch(e) { toast(e?.detail || 'Authority grade upload failed', 'var(--red)'); }
+}
+
 async function loadCatAnalysis() {
   const card = document.getElementById('cat-analysis-card');
   if (!card || state.resultsSection !== 'analysis') return;
@@ -2735,7 +2892,7 @@ function updateEndExamRowCalc(rid) {
   if (finEl) finEl.innerHTML = fin !== null ? `<strong>${fin.toFixed(2)}</strong>` : '<span style="color:var(--muted)">—</span>';
   if (resEl) {
     const rec = resData.find(r => r.id == rid);
-    resEl.innerHTML = fin === null
+    resEl.innerHTML = (fin === null && !rec?.authority_grade)
       ? '<span class="badge badge-yellow">Pending</span>'
       : rec?.result_status === 'PASS'
         ? `<span class="badge badge-green">✔ ${rec.grade || 'PASS'}</span>`
@@ -3117,7 +3274,7 @@ function renderEndExamRows() {
     const fin  = r.final_total   !== null ? parseFloat(r.final_total).toFixed(2)   : null;
 
     const status = r.result_status;
-    const resultBadge = fin === null
+    const resultBadge = (fin === null && !r.authority_grade)
       ? '<span class="badge badge-yellow">Pending</span>'
       : status === 'PASS'
         ? `<span class="badge badge-green">✔ ${r.grade || 'PASS'}</span>`

@@ -31,7 +31,7 @@ from .serializers import (
     StudentFinanceObligationSerializer, StudentPaymentSerializer,
     StudentFinanceClearanceSerializer,
 )
-from .grading import grade_for_mark, gpa_classification
+from .grading import grade_for_mark, gpa_classification, parse_authority_grade
 
 User = get_user_model()
 
@@ -110,12 +110,15 @@ def _student_scope_for_request(request):
     module_id = request.data.get('module_id') or request.query_params.get('module_id')
     class_level_id = request.data.get('class_level_id') or request.query_params.get('class_level_id')
     semester_id = request.data.get('semester_id') or request.query_params.get('semester_id')
+    search = str(request.data.get('search') or request.query_params.get('search') or '').strip()
     if module_id:
         qs = qs.filter(module_id=module_id)
     if class_level_id:
         qs = qs.filter(module__class_level_id=class_level_id)
     if semester_id:
         qs = qs.filter(module__semester_id=semester_id)
+    if search:
+        qs = qs.filter(Q(nactvet_reg_no__icontains=search) | Q(name__icontains=search))
     return qs
 
 
@@ -292,7 +295,8 @@ def student_dashboard(request):
         has_final_result = bool(
             final_approved
             and result
-            and (result.end_theory is not None or result.end_theory_absent
+            and (bool(result.authority_grade)
+                 or result.end_theory is not None or result.end_theory_absent
                  or result.end_practical is not None or result.end_practical_absent)
         )
 
@@ -718,6 +722,9 @@ class StudentViewSet(viewsets.ModelViewSet):
             val = self.request.query_params.get(param)
             if val:
                 qs = qs.filter(**{field: val})
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            qs = qs.filter(Q(nactvet_reg_no__icontains=search) | Q(name__icontains=search))
         return qs
 
     def perform_create(self, serializer):
@@ -1649,6 +1656,41 @@ class ResultViewSet(viewsets.ModelViewSet):
                 if serializer.validated_data.get(field) is not None:
                     raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
         serializer.save()
+
+    @action(detail=False, methods=['post'], url_path='authority-grades')
+    def authority_grades(self, request):
+        if not request.user.is_staff:
+            raise PermissionDenied('Only the administrator can upload authority grades.')
+        rows = request.data.get('rows', []) if isinstance(request.data, dict) else []
+        if not rows:
+            return Response({'detail': 'No grade rows supplied.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        saved, errors = 0, []
+        with transaction.atomic():
+            for index, row in enumerate(rows, start=2):
+                reg_no = str(row.get('reg_no', '')).strip()
+                module_code = str(row.get('module_code', '')).strip()
+                raw = str(row.get('grade', '')).strip().upper()
+                if not reg_no or not module_code or not raw:
+                    continue
+                student = Student.objects.filter(
+                    nactvet_reg_no__iexact=reg_no, module__code__iexact=module_code,
+                ).select_related('module').first()
+                if student is None:
+                    errors.append(f'Row {index}: no enrollment for {reg_no} / {module_code}')
+                    continue
+                try:
+                    parsed = parse_authority_grade(raw, student.module.class_level)
+                except ValueError as exc:
+                    errors.append(f'Row {index}: {exc} for {reg_no} / {module_code}')
+                    continue
+                result, _ = StudentResult.objects.get_or_create(student=student)
+                result.authority_grade = parsed['raw']
+                result.authority_status = parsed['status']
+                result.final_approved = True
+                result.save(update_fields=['authority_grade', 'authority_status', 'final_approved', 'updated_at'])
+                saved += 1
+        return Response({'saved': saved, 'errors': errors})
 
     # ── Get or create results for every student in a module ────────────────────
     @action(detail=False, methods=['get'], url_path='module')

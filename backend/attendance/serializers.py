@@ -257,7 +257,7 @@ class StudentFinanceClearanceSerializer(serializers.ModelSerializer):
             'semester', 'semester_label', 'period', 'period_display',
             'is_cleared', 'note', 'updated_at',
         ]
-        read_only_fields = ['id', 'updated_at']
+        read_only_fields = ['id', 'authority_grade', 'authority_status', 'updated_at']
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
@@ -382,6 +382,7 @@ class StudentResultSerializer(serializers.ModelSerializer):
             'supplementary_mark', 'end_exam_mark', 'supplementary_required',
             'failed_end_components',
             'result_status', 'grade', 'grade_point', 'grade_description',
+            'authority_grade', 'authority_status',
             'ca_approved', 'final_approved',
             'updated_at',
         ]

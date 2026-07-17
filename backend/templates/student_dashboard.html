@@ -278,14 +278,9 @@
     .module-card, .profile-item { padding: 14px; box-shadow: none; }
     .panel { border: 0; background: transparent; box-shadow: none; }
     .panel-head { padding: 12px 0; }
-    .table-wrap { overflow: visible; }
-    table { min-width: 0; }
-    table thead { display: none; }
-    table, table tbody, table tr, table td { display: block; width: 100%; }
-    table tr { margin-bottom: 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-    table td { display: grid; grid-template-columns: minmax(105px, 42%) 1fr; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: right; overflow-wrap: anywhere; }
-    table td:last-child { border-bottom: 0; }
-    table td::before { content: attr(data-label); color: var(--muted); font-size: .63rem; font-weight: 800; text-align: left; text-transform: uppercase; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    table { min-width: 620px; font-size: .72rem; }
+    table th, table td { padding: 9px 10px; white-space: nowrap; }
   }
 </style>
 </head>

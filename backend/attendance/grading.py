@@ -50,8 +50,63 @@ def gpa_classification(gpa, class_level):
     return 'Pass'
 
 
+def parse_authority_grade(value, class_level):
+    """Translate the NACTE grade-key notation into the system outcome fields."""
+    raw = str(value or '').strip().upper()
+    if not raw:
+        raise ValueError('grade is blank')
+    if raw == '*N*':
+        return {'raw': raw, 'grade': None, 'status': 'NULLIFIED', 'points': None,
+                'description': 'Results nullified by authority', 'failed_components': []}
+    if raw == '*W*':
+        return {'raw': raw, 'grade': None, 'status': 'WITHHELD', 'points': None,
+                'description': 'Results withheld by authority', 'failed_components': []}
+    if raw == 'FAIL':
+        return {'raw': raw, 'grade': None, 'status': 'DISCONTINUED', 'points': 0,
+                'description': 'Discontinued from studies', 'failed_components': []}
+    if raw == 'NA':
+        return {'raw': raw, 'grade': None, 'status': 'NA', 'points': None,
+                'description': 'Not applicable', 'failed_components': []}
+
+    grade = raw.rstrip('*').strip()
+    suffix = raw[len(grade):]
+    valid_grades = {'A', 'B+', 'B', 'C', 'D', 'F'}
+    if grade not in valid_grades or suffix not in {'', '*', '**', '***', '****'}:
+        raise ValueError(f'invalid authority grade "{raw}"')
+    if grade == 'B+' and not is_level_six(class_level):
+        raise ValueError('B+ is only valid for Level 6')
+
+    failed_by_suffix = {
+        '': [],
+        '*': ['semester_exam'],
+        '**': ['end_practical'],
+        '***': ['end_theory'],
+        '****': ['end_theory', 'end_practical'],
+    }
+    failed_components = failed_by_suffix[suffix]
+    points_by_grade = {
+        'A': 5 if is_level_six(class_level) else 4,
+        'B+': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0,
+    }
+    return {
+        'raw': raw, 'grade': raw,
+        'status': 'SUPP' if failed_components else 'PASS',
+        'points': points_by_grade[grade],
+        'description': 'Supplementary required by authority' if failed_components else 'Official authority grade',
+        'failed_components': failed_components,
+    }
+
+
 def result_outcome(result, serializer):
     """Return the official module result derived from ordinary and supp exams."""
+    if result.authority_grade:
+        parsed = parse_authority_grade(result.authority_grade, result.student.module.class_level)
+        return {
+            'end_exam_mark': None, 'supplementary_required': parsed['status'] == 'SUPP',
+            'status': parsed['status'], 'grade': parsed['grade'],
+            'grade_point': parsed['points'], 'grade_description': parsed['description'],
+            'official_total': None, 'failed_end_components': parsed['failed_components'],
+        }
     final_total = serializer.get_final_total(result)
     end_fields = ['end_theory'] + (
         ['end_practical'] if result.student.module.has_practical else []
