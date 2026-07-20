@@ -28,6 +28,7 @@ urlpatterns = [
     path('change-password/', views.change_password, name='change-password'),
     path('staff-accounts/', views.create_staff_account, name='staff-accounts'),
     path('results/download/', views.download_results, name='results-download'),
+    path('results/download/ca-signoff/', views.download_ca_signoff, name='results-download-ca-signoff'),
     path('results/download/final/', views.download_final_results, name='results-download-final'),
     path('eligibility/download/', views.download_eligibility_excel, name='eligibility-download'),
 ]

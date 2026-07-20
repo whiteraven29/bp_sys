@@ -7,6 +7,7 @@ from django.contrib.sessions.models import Session as DjangoSession
 from django.test import TestCase
 from django.urls import reverse
 from openpyxl import load_workbook
+from docx import Document
 from rest_framework.test import APIClient
 
 from .models import (
@@ -180,6 +181,61 @@ class AttendanceSecurityTests(TestCase):
         )
         self.assertEqual(allowed.status_code, 200)
         self.assertEqual(denied.status_code, 403)
+
+    def test_teacher_can_download_module_ca_signoff_docx(self):
+        StudentResult.objects.create(
+            student=self.student, assign1=60, assign2=60,
+            cat1_theory=60, cat2_theory=60,
+        )
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(
+            reverse('results-download-ca-signoff'), {'module_id': self.module.id}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response['Content-Type'],
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        )
+        document = Document(BytesIO(response.content))
+        self.assertIn('CONTINUOUS ASSESSMENT', document.paragraphs[0].text)
+        headers = [cell.text for cell in document.tables[0].rows[0].cells]
+        self.assertIn('Student Signature', headers)
+        self.assertIn('Total CA Average /40', headers)
+        self.assertNotIn('Assignment Avg /100', headers)
+        self.assertNotIn('CAT Avg /100', headers)
+        self.assertNotIn('Practical 1 /100', headers)
+        self.assertNotIn('Practical 2 /100', headers)
+        self.assertNotIn('Verification / Date', headers)
+        self.assertEqual(document.tables[0].rows[1].cells[1].text, self.student.nactvet_reg_no)
+
+    def test_teacher_cannot_download_other_module_ca_signoff(self):
+        self.client.force_login(self.teacher)
+        response = self.client.get(
+            reverse('results-download-ca-signoff'), {'module_id': self.other_module.id}
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_practical_ca_signoff_includes_practical_columns(self):
+        self.module.has_practical = True
+        self.module.save(update_fields=['has_practical'])
+        StudentResult.objects.create(
+            student=self.student, assign1=60, assign2=60,
+            cat1_theory=60, cat2_theory=60,
+            cat1_practical=70, cat2_practical=80,
+        )
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(
+            reverse('results-download-ca-signoff'), {'module_id': self.module.id}
+        )
+
+        document = Document(BytesIO(response.content))
+        headers = [cell.text for cell in document.tables[0].rows[0].cells]
+        self.assertIn('Practical 1 /100', headers)
+        self.assertIn('Practical 2 /100', headers)
+        self.assertNotIn('Practical Avg /100', headers)
 
     def test_login_page_does_not_offer_public_registration(self):
         response = self.client.get(reverse('login'))

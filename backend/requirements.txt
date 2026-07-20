@@ -4,3 +4,4 @@ django-cors-headers==4.4.0
 psycopg[binary]>=3.1
 python-decouple==3.8
 openpyxl==3.1.5
+python-docx==1.2.0

@@ -710,9 +710,10 @@
       <div class="student-subview" id="student-section-manage">
         <div class="card">
           <div class="card-title">Filters</div>
-          <div class="form-grid-3">
+          <div class="form-grid">
             <div class="field"><label>Semester</label><select id="stu-flt-sem" onchange="onStudentFilterChange()"><option value="">All Semesters</option></select></div>
             <div class="field"><label>Class Level</label><select id="stu-flt-level" onchange="onStudentFilterChange()"><option value="">All Levels</option></select></div>
+            <div class="field"><label>Module</label><select id="stu-flt-module" onchange="loadStudents()"><option value="">All Modules</option></select></div>
             <div class="field"><label>Search</label><input id="stu-search" type="search" oninput="scheduleStudentSearch()" placeholder="Registration number or student name"></div>
           </div>
         </div>
@@ -723,7 +724,7 @@
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>NACTVET Reg. No.</th><th>Name</th><th>Module</th><th>Level</th><th>Semester</th><th>P</th><th>S</th><th>A</th><th>T-held</th><th>P-held</th><th>Overall %</th><th></th></tr></thead>
+              <thead><tr><th>NACTVET Reg. No.</th><th>Name</th><th>Level</th><th>Semester</th><th>P</th><th>S</th><th>A</th><th>T-held</th><th>P-held</th><th>Overall %</th><th></th></tr></thead>
               <tbody id="students-tbody"></tbody>
             </table>
           </div>
@@ -740,7 +741,7 @@
         <div class="form-grid-3">
           <div class="field"><label>Semester</label><select id="att-flt-sem" onchange="onAttFilterChange()"><option value="">All Semesters</option></select></div>
           <div class="field"><label>Class Level</label><select id="att-flt-level" onchange="onAttFilterChange()"><option value="">All Levels</option></select></div>
-          <div class="field"><label>Module *</label><select id="att-module" onchange="loadAttendanceRoster()"><option value="">— select module —</option></select></div>
+          <div class="field"><label>Module *</label><select id="att-module" onchange="onAttendanceModuleChange()"><option value="">— select module —</option></select></div>
           <div class="field"><label>Date *</label><input type="date" id="att-date" /></div>
           <div class="field"><label>Session Label *</label><input id="att-label" placeholder="e.g. Week 3 – Lecture 1" /></div>
         </div>
@@ -793,6 +794,19 @@
         <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <button class="btn btn-primary" onclick="submitAttendance()">💾 Save Session</button>
           <span id="att-count-info" style="font-size:.82rem;color:var(--muted);"></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">
+          📅 Attendance Upload History
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="loadAttendanceHistory()">↻ Refresh</button>
+        </div>
+        <p style="font-size:.78rem;color:var(--muted);margin-bottom:12px;">Previously saved sessions for your selected filters. Check this list before uploading another session.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Module</th><th>Period</th><th>Type</th><th>Session</th><th>Topic</th><th>P</th><th>S</th><th>A</th><th>Rate</th></tr></thead>
+            <tbody id="att-history-tbody"><tr><td colspan="10"><div class="empty">Loading attendance history…</div></td></tr></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -867,6 +881,7 @@
             <div style="font-size:.78rem;color:var(--muted);" id="res-mod-meta">—</div>
           </div>
           <div id="res-mod-type-badge" style="margin-left:auto;"></div>
+          <button class="btn btn-secondary btn-sm" onclick="downloadCASignoffDocx()">⬇ CA Sign-off (.docx)</button>
           <div class="admin-only" style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm" onclick="downloadResultsExcel()">⬇ CA Results</button>
             <button class="btn btn-green btn-sm" onclick="downloadFinalExcel()">⬇ Final Results</button>
@@ -1514,7 +1529,7 @@ function showPage(name, btn) {
   if (name === 'modules') loadModules();
   if (name === 'accounts') loadAccountModules();
   if (name === 'students') loadStudents();
-  if (name === 'attendance') { loadAttendanceModuleSelect(); updatePeriodLocks(); }
+  if (name === 'attendance') { loadAttendanceModuleSelect(); loadAttendanceHistory(); updatePeriodLocks(); }
   if (name === 'reports') loadReport();
   if (name === 'results') loadResultsModule();
   if (name === 'declarations') loadDeclarationModule();
@@ -1618,6 +1633,12 @@ function showResultsSection(section, btn) {
   if (btn) btn.classList.add('active');
   const analysisCard = document.getElementById('cat-analysis-card');
   if (analysisCard) analysisCard.style.display = section === 'analysis' ? 'block' : 'none';
+  const caCard = document.getElementById('res-ca-print-area');
+  const legend = document.getElementById('res-weight-legend');
+  const endCard = document.getElementById('end-exam-card');
+  if (caCard) caCard.style.display = section === 'ca' ? 'block' : 'none';
+  if (legend) legend.style.display = section === 'ca' ? 'block' : 'none';
+  if (endCard) endCard.style.display = section === 'final' && resModuleInfo && state.isStaff ? 'block' : 'none';
   if (section === 'analysis') loadCatAnalysis();
   requestAnimationFrame(() => {
     const target = section === 'analysis'
@@ -1736,7 +1757,7 @@ async function boot() {
     }
 
     populateAllSelects();
-    await refreshModuleDropdowns('', '', 'add-stu-module', 'bulk-module');
+    await refreshModuleDropdowns('', '', 'add-stu-module', 'bulk-module', 'stu-flt-module');
     buildSidebarModules();
     if (!state.isStaff && state.isAccountant) {
       showPage('finance', document.querySelector('[data-page="finance"]'));
@@ -2030,6 +2051,9 @@ async function saveModuleEdit() {
 let studentRows = [];
 
 async function onStudentFilterChange() {
+  const semId = document.getElementById('stu-flt-sem').value;
+  const lvlId = document.getElementById('stu-flt-level').value;
+  await refreshModuleDropdowns(semId, lvlId, 'stu-flt-module');
   loadStudents();
 }
 let studentSearchTimer;
@@ -2051,10 +2075,12 @@ async function refreshModuleDropdowns(semId, lvlId, ...dropdownIds) {
 async function loadStudents() {
   const semId = document.getElementById('stu-flt-sem').value;
   const lvlId = document.getElementById('stu-flt-level').value;
+  const modId = document.getElementById('stu-flt-module').value;
   const search = document.getElementById('stu-search').value.trim();
   let url = '/students/?';
   url = appendParam(url, 'class_level_id', lvlId);
   url = appendParam(url, 'semester_id', semId);
+  url = appendParam(url, 'module_id', modId);
   url = appendParam(url, 'search', search);
   try {
     const data = await api('GET', url);
@@ -2062,14 +2088,13 @@ async function loadStudents() {
     studentRows = students;
     const tbody = document.getElementById('students-tbody');
     if (!students.length) {
-      tbody.innerHTML = '<tr><td colspan="12"><div class="empty"><div class="ei">🎓</div>No students enrolled</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11"><div class="empty"><div class="ei">🎓</div>No students enrolled</div></td></tr>';
       return;
     }
     tbody.innerHTML = students.map(s =>
       `<tr>
         <td><span style="font-family:var(--font-mono);font-size:.78rem">${s.nactvet_reg_no}</span></td>
         <td>${s.name}</td>
-        <td>${s.module_name}</td>
         <td>${s.class_level_name}</td>
         <td style="font-size:.75rem;color:var(--muted)">${s.semester_label}</td>
         <td><span class="badge badge-green">${s.sessions_attended}</span></td>
@@ -2232,6 +2257,7 @@ async function onAttFilterChange() {
   const lvlId = document.getElementById('att-flt-level').value;
   await refreshModuleDropdowns(semId, lvlId, 'att-module');
   document.getElementById('att-roster-card').style.display = 'none';
+  loadAttendanceHistory();
 }
 async function loadAttendanceModuleSelect() {
   const semId = document.getElementById('att-flt-sem').value;
@@ -2337,9 +2363,45 @@ async function submitAttendance() {
     document.getElementById('att-label').value = '';
     document.getElementById('att-topic').value = '';
     document.getElementById('att-roster-card').style.display = 'none';
-    document.getElementById('att-module').value = '';
     rosterStudents = [];
+    await loadAttendanceHistory();
   } catch(e) { toast(e?.detail || 'Error saving session', 'var(--red)'); }
+}
+
+function onAttendanceModuleChange() {
+  loadAttendanceRoster();
+  loadAttendanceHistory();
+}
+
+async function loadAttendanceHistory() {
+  const tbody = document.getElementById('att-history-tbody');
+  if (!tbody) return;
+  const semId = document.getElementById('att-flt-sem').value;
+  const lvlId = document.getElementById('att-flt-level').value;
+  const modId = document.getElementById('att-module').value;
+  let url = '/sessions/?';
+  url = appendParam(url, 'semester_id', semId);
+  url = appendParam(url, 'class_level_id', lvlId);
+  url = appendParam(url, 'module_id', modId);
+  tbody.innerHTML = '<tr><td colspan="10"><div class="empty">Loading attendance history…</div></td></tr>';
+  try {
+    const data = await api('GET', url);
+    const sessions = data.results ?? data;
+    tbody.innerHTML = sessions.length ? sessions.map(session => `<tr>
+      <td>${session.date}</td>
+      <td>${session.module_name}</td>
+      <td>${session.exam_period_display}</td>
+      <td>${typeBadge(session.session_type)}</td>
+      <td>${session.label}</td>
+      <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${session.topic || '<span style="color:var(--muted)">—</span>'}</td>
+      <td><span class="badge badge-green">${session.present_count}</span></td>
+      <td><span class="badge badge-orange">${session.sick_count}</span></td>
+      <td><span class="badge badge-red">${session.absent_count}</span></td>
+      <td>${pctBadge(session.attendance_pct)}</td>
+    </tr>`).join('') : '<tr><td colspan="10"><div class="empty"><div class="ei">📅</div>No attendance sessions uploaded for these filters.</div></td></tr>';
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty">Could not load attendance history.</div></td></tr>';
+  }
 }
 
 // ── REPORTS PAGE ───────────────────────────────────────────────────────────────
@@ -2768,6 +2830,9 @@ function renderResultsPage() {
 
   renderResultsTable();
   if (state.isStaff) renderEndExamTable();
+  document.getElementById('res-ca-print-area').style.display = state.resultsSection === 'ca' ? 'block' : 'none';
+  document.getElementById('res-weight-legend').style.display = state.resultsSection === 'ca' ? 'block' : 'none';
+  document.getElementById('end-exam-card').style.display = state.resultsSection === 'final' && state.isStaff ? 'block' : 'none';
 }
 
 function mkInput(resultId, field, value, absent=false) {
@@ -3182,6 +3247,12 @@ function downloadResultsExcel() {
   window.location.href = url;
 }
 
+function downloadCASignoffDocx() {
+  const modId = document.getElementById('res-flt-module').value;
+  if (!modId) { toast('Select a module before downloading the CA sign-off sheet.', 'var(--red)'); return; }
+  window.location.href = `/api/results/download/ca-signoff/?module_id=${encodeURIComponent(modId)}`;
+}
+
 function downloadFinalExcel() {
   const modId  = document.getElementById('res-flt-module').value;
   const semId  = document.getElementById('res-flt-sem').value;
@@ -3200,7 +3271,7 @@ function renderEndExamTable() {
   const hp = resModuleInfo.has_practical;
 
   const card = document.getElementById('end-exam-card');
-  card.style.display = 'block';
+  card.style.display = state.resultsSection === 'final' ? 'block' : 'none';
 
   // Weight label
   const weightLbl = document.getElementById('end-exam-weight-label');

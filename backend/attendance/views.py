@@ -2039,6 +2039,124 @@ class ResultViewSet(viewsets.ModelViewSet):
 # ── RESULTS EXCEL DOWNLOAD (admin only) ────────────────────────────────────────
 
 @login_required
+def download_ca_signoff(request):
+    """Create a module CA acknowledgement sheet for student signatures."""
+    module_id = request.GET.get('module_id')
+    if not module_id:
+        return HttpResponse('module_id is required.', status=400)
+
+    try:
+        module = (
+            user_modules(request.user)
+            .select_related('class_level', 'semester__academic_year')
+            .get(pk=module_id)
+        )
+    except (Module.DoesNotExist, ValueError):
+        return HttpResponseForbidden('You do not have access to this module.')
+
+    students = list(
+        Student.objects.filter(module=module)
+        .select_related('result')
+        .order_by('name', 'nactvet_reg_no')
+    )
+
+    from docx import Document
+    from docx.enum.section import WD_ORIENT
+    from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Inches, Pt
+
+    document = Document()
+    section = document.sections[0]
+    section.orientation = WD_ORIENT.LANDSCAPE
+    section.page_width, section.page_height = section.page_height, section.page_width
+    section.top_margin = section.bottom_margin = Inches(0.55)
+    section.left_margin = section.right_margin = Inches(0.55)
+
+    title = document.add_paragraph()
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = title.add_run('CONTINUOUS ASSESSMENT RESULTS ACKNOWLEDGEMENT')
+    run.bold = True
+    run.font.size = Pt(14)
+    details = document.add_paragraph()
+    details.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    details.add_run(
+        f'{module.code} — {module.name}\n'
+        f'{module.class_level.name} · {module.semester.label} · '
+        f'{module.semester.academic_year.name}'
+    ).bold = True
+    document.add_paragraph(
+        'Each student should verify the CA shown below, then sign in the Student Signature column.'
+    )
+
+    headers = [
+        '#', 'NACTVET Reg. No.', 'Student Name',
+        'A1 /100', 'A2 /100', 'CAT 1 /100', 'CAT 2 /100',
+    ]
+    if module.has_practical:
+        headers += ['Practical 1 /100', 'Practical 2 /100']
+    headers += ['Total CA Average /40', 'Student Signature']
+    table = document.add_table(rows=1, cols=len(headers))
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.style = 'Table Grid'
+    for index, header in enumerate(headers):
+        cell = table.rows[0].cells[index]
+        cell.text = header
+        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+        for run in cell.paragraphs[0].runs:
+            run.bold = True
+            run.font.size = Pt(9)
+
+    serializer = StudentResultSerializer()
+
+    def mark_text(result, field):
+        if not result:
+            return '—'
+        if getattr(result, f'{field}_absent'):
+            return 'ABS'
+        value = getattr(result, field)
+        return '—' if value is None else f'{value:.2f}'
+
+    for number, student in enumerate(students, 1):
+        result = getattr(student, 'result', None)
+        total_ca = serializer.get_total_ca(result) if result else None
+        row = table.add_row()
+        values = [
+            number, student.nactvet_reg_no, student.name,
+            mark_text(result, 'assign1'), mark_text(result, 'assign2'),
+            mark_text(result, 'cat1_theory'), mark_text(result, 'cat2_theory'),
+        ]
+        if module.has_practical:
+            values += [
+                mark_text(result, 'cat1_practical'), mark_text(result, 'cat2_practical'),
+            ]
+        values += ['—' if total_ca is None else f'{total_ca:.2f}', '']
+        for index, value in enumerate(values):
+            row.cells[index].text = str(value)
+            row.cells[index].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            row.cells[index].paragraphs[0].paragraph_format.space_after = Pt(0)
+            row.cells[index].paragraphs[0].runs[0].font.size = Pt(7.5)
+        row.height = Inches(0.42)
+
+    widths = [0.3, 1.15, 1.7] + [0.62] * (len(headers) - 4) + [1.35]
+    for row in table.rows:
+        for index, width in enumerate(widths):
+            row.cells[index].width = Inches(width)
+
+    document.add_paragraph()
+    footer = document.add_paragraph('Tutor/Verifier Name: __________________________   Signature: __________________')
+    footer.runs[0].bold = True
+
+    safe_code = re.sub(r'[^A-Za-z0-9_-]+', '_', module.code).strip('_') or 'module'
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{safe_code}_ca_signoff.docx"'
+    document.save(response)
+    return response
+
+
+@login_required
 def download_results(request):
     if not request.user.is_staff:
         return HttpResponseForbidden('Administrator access required.')
