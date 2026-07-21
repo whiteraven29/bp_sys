@@ -327,6 +327,30 @@ class AttendanceSecurityTests(TestCase):
         }, format='json')
         self.assertEqual(response.status_code, 403)
 
+    def test_duplicate_attendance_session_is_rejected_and_can_be_deleted(self):
+        self.client.force_authenticate(self.teacher)
+        payload = {
+            'module': self.module.id,
+            'session_type': Session.THEORY,
+            'exam_period': Session.GENERAL,
+            'date': str(date.today()),
+            'label': 'Week 1',
+            'topic': 'Introduction',
+            'records': [{'nactvet_reg_no': self.student.nactvet_reg_no, 'status': 'P'}],
+        }
+
+        created = self.client.post('/api/sessions/', payload, format='json')
+        duplicate = self.client.post(
+            '/api/sessions/', {**payload, 'label': ' week 1 '}, format='json'
+        )
+
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn('already been recorded', str(duplicate.data))
+        deleted = self.client.delete(f'/api/sessions/{created.data["id"]}/')
+        self.assertEqual(deleted.status_code, 204)
+        self.assertFalse(Session.objects.filter(id=created.data['id']).exists())
+
     def test_end_exam_below_50_requires_supplementary_only_for_end_exam(self):
         result = StudentResult.objects.create(
             student=self.student,

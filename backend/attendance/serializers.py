@@ -312,6 +312,25 @@ class SessionCreateSerializer(serializers.ModelSerializer):
         fields = ['id', 'module', 'session_type', 'exam_period', 'date', 'label', 'topic', 'records']
         read_only_fields = ['id']
 
+    def validate(self, attrs):
+        label = str(attrs.get('label', '')).strip()
+        attrs['label'] = label
+        duplicate = Session.objects.filter(
+            module=attrs.get('module'),
+            session_type=attrs.get('session_type', Session.THEORY),
+            exam_period=attrs.get('exam_period', Session.GENERAL),
+            date=attrs.get('date'),
+            label__iexact=label,
+        )
+        if duplicate.exists():
+            raise serializers.ValidationError({
+                'detail': (
+                    'This attendance session has already been recorded. '
+                    'Use Attendance Upload History to remove the incorrect copy first.'
+                )
+            })
+        return attrs
+
     def create(self, validated_data):
         records_data = validated_data.pop('records')
         session = Session.objects.create(**validated_data)

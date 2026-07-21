@@ -804,8 +804,8 @@
         <p style="font-size:.78rem;color:var(--muted);margin-bottom:12px;">Previously saved sessions for your selected filters. Check this list before uploading another session.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Date</th><th>Module</th><th>Period</th><th>Type</th><th>Session</th><th>Topic</th><th>P</th><th>S</th><th>A</th><th>Rate</th></tr></thead>
-            <tbody id="att-history-tbody"><tr><td colspan="10"><div class="empty">Loading attendance history…</div></td></tr></tbody>
+            <thead><tr><th>Date</th><th>Module</th><th>Period</th><th>Type</th><th>Session</th><th>Topic</th><th>P</th><th>S</th><th>A</th><th>Rate</th><th>Manage</th></tr></thead>
+            <tbody id="att-history-tbody"><tr><td colspan="11"><div class="empty">Loading attendance history…</div></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -2383,7 +2383,7 @@ async function loadAttendanceHistory() {
   url = appendParam(url, 'semester_id', semId);
   url = appendParam(url, 'class_level_id', lvlId);
   url = appendParam(url, 'module_id', modId);
-  tbody.innerHTML = '<tr><td colspan="10"><div class="empty">Loading attendance history…</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11"><div class="empty">Loading attendance history…</div></td></tr>';
   try {
     const data = await api('GET', url);
     const sessions = data.results ?? data;
@@ -2398,9 +2398,21 @@ async function loadAttendanceHistory() {
       <td><span class="badge badge-orange">${session.sick_count}</span></td>
       <td><span class="badge badge-red">${session.absent_count}</span></td>
       <td>${pctBadge(session.attendance_pct)}</td>
-    </tr>`).join('') : '<tr><td colspan="10"><div class="empty"><div class="ei">📅</div>No attendance sessions uploaded for these filters.</div></td></tr>';
+      <td><button class="btn btn-danger btn-sm" onclick="deleteAttendanceSession(${session.id})">Delete</button></td>
+    </tr>`).join('') : '<tr><td colspan="11"><div class="empty"><div class="ei">📅</div>No attendance sessions uploaded for these filters.</div></td></tr>';
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="10"><div class="empty">Could not load attendance history.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty">Could not load attendance history.</div></td></tr>';
+  }
+}
+
+async function deleteAttendanceSession(sessionId) {
+  if (!confirm('Delete this attendance session and all of its student attendance records? This cannot be undone.')) return;
+  try {
+    await api('DELETE', `/sessions/${sessionId}/`);
+    toast('Attendance session deleted.', 'var(--green)');
+    await loadAttendanceHistory();
+  } catch (e) {
+    toast(e?.detail || 'Could not delete attendance session', 'var(--red)');
   }
 }
 

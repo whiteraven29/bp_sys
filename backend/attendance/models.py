@@ -316,6 +316,12 @@ class Session(models.Model):
 
     class Meta:
         ordering = ['-date', '-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['module', 'session_type', 'exam_period', 'date', 'label'],
+                name='unique_attendance_session',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.module.code} | {self.get_session_type_display()} | {self.date} – {self.label}"
