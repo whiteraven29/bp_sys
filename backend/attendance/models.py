@@ -109,6 +109,21 @@ class AssetCategory(models.Model):
         return self.name
 
 
+class InventoryItemType(models.Model):
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    category = models.ForeignKey(AssetCategory, on_delete=models.PROTECT, related_name='item_types')
+    default_tag_prefix = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name']
+        constraints = [models.UniqueConstraint(fields=['name', 'category'], name='unique_inventory_item_type_category')]
+
+    def __str__(self):
+        return self.name
+
+
 class Asset(models.Model):
     NEW = 'new'
     GOOD = 'good'
@@ -124,6 +139,7 @@ class Asset(models.Model):
     name = models.CharField(max_length=200, verbose_name='Asset name')
     description = models.TextField(blank=True)
     category = models.ForeignKey(AssetCategory, on_delete=models.PROTECT, related_name='assets')
+    item_type = models.ForeignKey(InventoryItemType, on_delete=models.PROTECT, null=True, blank=True, related_name='assets')
     location = models.ForeignKey(InventoryLocation, on_delete=models.PROTECT, related_name='assets')
     responsible_office = models.CharField(max_length=200, verbose_name='Person/office responsible')
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])

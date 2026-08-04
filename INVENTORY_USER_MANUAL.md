@@ -42,8 +42,8 @@ The Inventory sidebar contains:
 - **Overview** — summary cards and inventory graphs.
 - **Assets**
   - **Asset Register** — search, review, and edit registered assets.
-  - **Register Asset** — manually register assets or import them from Excel.
-- **Locations** — manage college locations and asset categories.
+  - **Register Asset** — register the stock found in one office or import it from Excel.
+- **Inventory Setup** — define offices, rooms, floors, corridors, common areas, categories, and reusable item types before stock registration.
 - **Transfers** — move assets between locations.
 - **Maintenance** — record faults, repairs, costs, and completion details.
 - **Physical Inspections** — conduct and record physical stock checks.
@@ -83,7 +83,7 @@ Continue the number for additional items:
 - Use consistent uppercase prefixes such as `BPCH/CPU`, `BPCH/MON`, `BPCH/CH`, and `BPCH/TB`.
 - Check the Asset Register before starting a new number sequence.
 
-For 30 chairs, use 30 individual tags rather than one tag with quantity 30. Excel import makes this faster.
+For 30 chairs, use 30 individual tags rather than one tag with quantity 30. Automatic numbering or Excel import makes this faster.
 
 ---
 
@@ -100,36 +100,50 @@ Select **Overview** to see:
 
 Use the Overview to identify locations or conditions requiring attention. Detailed changes must be made from the appropriate menu, such as Asset Register, Transfers, or Maintenance.
 
+### Office Asset Map
+
+The **Office Asset Map** on the Overview shows the relationship between the college, its inventory locations, and registered assets.
+
+1. Select an office/location node to expand it.
+2. Review every asset connected to that office. Node colors show good, fair, or attention-needed condition.
+3. Select an asset node to see its tag, category, quantity, condition, location, and responsible office.
+4. Select **Edit asset** from the details panel when a record needs updating.
+5. Select **All offices** or the central office node to return to the complete location map.
+
 ---
 
-## 6. Registering One Asset
+## 6. Initial Inventory Setup
 
-1. Expand **Assets**.
-2. Select **Register Asset**.
-3. Complete the registration form.
-4. Select **Save Item**.
+Before recording physical stock, open **Inventory Setup** and define:
 
-### Required fields
+- Every relevant location in the managed building. A location can be an office, room, floor, corridor, stairway, store, reception, outdoor area, or other common space.
+- The asset categories used by the college.
+- Reusable item types such as Office Chair, Desk, CPU, Monitor, and Cabinet.
 
-| Field | What to enter |
-|---|---|
-| Asset Number/Tag | Unique college tag, such as `BPCH/CPU/1` |
-| Asset Name | Clear asset name, such as `Dell Desktop CPU` |
-| Category | Appropriate asset category |
-| Current Location | Office, classroom, library, or other location |
-| Person/Office Responsible | Person or office accountable for the asset |
-| Quantity | Normally `1` for tagged assets |
-| Condition | New, Good, Fair, Poor, or Unserviceable |
+Each reusable item type records its name, category, optional description, and default tag prefix. This setup is completed once and reused across every office.
 
-**Description is optional.** It may contain useful details such as colour, model, size, or distinguishing marks.
+The system includes an initial catalogue containing Office Chair, Student Chair, Office Table, Student Table, Fixed Desk, Shelf, Cabinet, Mouse, Keyboard, CPU, Monitor, Printer, Projector, Projecting Board, Notice Board, Whiteboard, Dustbin, Mop, Fire Extinguisher, Safe Custody Box, and Extension Cable. Add other small items from **Reusable Item Types** when required.
 
-The system will reject a duplicate asset tag or a quantity below 1.
+### Register stock by office
+
+1. Open **Assets → Register Asset**.
+2. Under **Register Stock by Location**, choose the office, room, floor, corridor, or common area.
+3. Enter the responsible person or office once.
+4. Select **Add Item** for every type of asset found in that office.
+5. For each row, choose the item type and confirm its tag prefix, starting number, quantity, and condition.
+6. Select **Register Location Stock**.
+
+For a chair row with prefix `BPCH/CH`, starting number `1`, and quantity `30`, the system creates 30 individually tracked assets from `BPCH/CH/1` through `BPCH/CH/30`. The complete office submission is atomic: if any generated tag conflicts, nothing from that submission is saved.
+
+The **Single Asset / Edit Existing Asset** form remains available for exceptional one-off assets and corrections to existing records.
 
 ---
 
 ## 7. Registering Many Assets with Excel
 
-Use Excel import when registering many assets, such as 30 separately tagged chairs.
+### Excel registration
+
+Excel follows the same office-first quantity-expansion workflow.
 
 ### Download the template
 
@@ -139,15 +153,15 @@ Use Excel import when registering many assets, such as 30 separately tagged chai
 
 ### Complete the Assets worksheet
 
-Enter one asset per row. For 30 chairs, enter 30 rows with tags `BPCH/CH/1` through `BPCH/CH/30`, each with quantity `1`.
+Enter one office/item-type combination per row. A quantity of 30 is expanded into 30 separately tagged records.
 
 Columns marked with `*` are required:
 
-- Asset Number/Tag
-- Asset Name
-- Category
-- Current Location
+- Office/Location
 - Responsible Person/Office
+- Item Type
+- Tag Prefix
+- Starting Number
 - Quantity
 - Condition
 
@@ -438,4 +452,3 @@ Use Transfers to move it to the correct location. Do not simply overwrite the lo
 ### The sidebar is hidden
 
 Use the menu button in the top header to reopen it. On mobile, the same button opens the navigation drawer.
-

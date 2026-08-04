@@ -5,7 +5,7 @@ from .models import (
     AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord,
     StudentResult, PaymentCategory, StudentFinanceObligation, StudentPayment,
     StudentFinanceClearance,
-    EstateOfficerProfile, InventoryLocation, AssetCategory, Asset,
+    EstateOfficerProfile, InventoryLocation, AssetCategory, InventoryItemType, Asset,
     AssetTransfer, AssetMaintenance, InventoryInspection, InventoryInspectionItem, AssetDisposal,
 )
 
@@ -71,6 +71,24 @@ class AssetCategorySerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
 
+class InventoryItemTypeSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+
+    class Meta:
+        model = InventoryItemType
+        fields = ['id', 'name', 'description', 'category', 'category_name', 'default_tag_prefix', 'is_active']
+        read_only_fields = ['id']
+
+    def validate_default_tag_prefix(self, value):
+        value = value.strip().rstrip('/')
+        qs = InventoryItemType.objects.filter(default_tag_prefix__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('This tag prefix is already assigned to another item type.')
+        return value
+
+
 class AssetSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     location_name = serializers.CharField(source='location.name', read_only=True)
@@ -79,7 +97,7 @@ class AssetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asset
         fields = [
-            'id', 'asset_tag', 'name', 'description', 'category', 'category_name',
+            'id', 'asset_tag', 'name', 'description', 'category', 'category_name', 'item_type',
             'location', 'location_name', 'responsible_office', 'quantity',
             'condition', 'condition_display', 'created_at', 'updated_at',
         ]

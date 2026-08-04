@@ -25,7 +25,7 @@ from .models import (
     Student, Session, AttendanceRecord, TeacherProfile, AccountantProfile,
     StudentResult, PaymentCategory, StudentFinanceObligation, StudentPayment,
     StudentFinanceClearance,
-    EstateOfficerProfile, InventoryLocation, AssetCategory, Asset, AssetImport,
+    EstateOfficerProfile, InventoryLocation, AssetCategory, InventoryItemType, Asset, AssetImport,
     AssetTransfer, AssetMaintenance, InventoryInspection, InventoryInspectionItem, AssetDisposal,
 )
 from .serializers import (
@@ -36,7 +36,7 @@ from .serializers import (
     FinanceStudentSerializer, PaymentCategorySerializer,
     StudentFinanceObligationSerializer, StudentPaymentSerializer,
     StudentFinanceClearanceSerializer,
-    InventoryLocationSerializer, AssetCategorySerializer, AssetSerializer,
+    InventoryLocationSerializer, AssetCategorySerializer, InventoryItemTypeSerializer, AssetSerializer,
     AssetTransferSerializer, AssetMaintenanceSerializer, InventoryInspectionSerializer,
     InventoryInspectionItemSerializer, AssetDisposalSerializer,
 )
@@ -999,6 +999,12 @@ class AssetCategoryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsEstateOfficer]
 
 
+class InventoryItemTypeViewSet(viewsets.ModelViewSet):
+    queryset = InventoryItemType.objects.select_related('category')
+    serializer_class = InventoryItemTypeSerializer
+    permission_classes = [IsEstateOfficer]
+
+
 class AssetViewSet(viewsets.ModelViewSet):
     serializer_class = AssetSerializer
     permission_classes = [IsEstateOfficer]
@@ -1110,8 +1116,8 @@ class AssetDisposalViewSet(viewsets.ModelViewSet):
 
 
 INVENTORY_HEADERS = [
-    'Asset Number/Tag *', 'Asset Name *', 'Description', 'Category *',
-    'Current Location *', 'Responsible Person/Office *', 'Quantity *', 'Condition *',
+    'Office/Location *', 'Responsible Person/Office *', 'Item Type *',
+    'Tag Prefix *', 'Starting Number *', 'Quantity *', 'Condition *', 'Description',
 ]
 
 
@@ -1127,28 +1133,31 @@ def inventory_template(request):
         cell.font = Font(bold=True, color='FFFFFF')
         cell.fill = PatternFill('solid', fgColor='C0392B')
     ws.freeze_panes = 'A2'
-    widths = [22, 28, 38, 28, 30, 32, 14, 20]
+    widths = [30, 32, 32, 22, 18, 14, 20, 38]
     for idx, width in enumerate(widths, 1):
         ws.column_dimensions[chr(64 + idx)].width = width
     lists = wb.create_sheet('Lists')
     categories = list(AssetCategory.objects.filter(is_active=True).values_list('name', flat=True))
     locations = list(InventoryLocation.objects.filter(is_active=True).values_list('name', flat=True))
+    item_types = [f'{item.name} — {item.category.name}' for item in InventoryItemType.objects.filter(is_active=True).select_related('category')]
     conditions = [label for _, label in Asset.CONDITION_CHOICES]
     for row, value in enumerate(categories, 1): lists.cell(row, 1, value)
     for row, value in enumerate(locations, 1): lists.cell(row, 2, value)
     for row, value in enumerate(conditions, 1): lists.cell(row, 3, value)
-    if categories:
-        dv = DataValidation(type='list', formula1=f"'Lists'!$A$1:$A${len(categories)}")
-        ws.add_data_validation(dv); dv.add('D2:D5000')
+    for row, value in enumerate(item_types, 1): lists.cell(row, 4, value)
     if locations:
         dv = DataValidation(type='list', formula1=f"'Lists'!$B$1:$B${len(locations)}")
-        ws.add_data_validation(dv); dv.add('E2:E5000')
+        ws.add_data_validation(dv); dv.add('A2:A5000')
+    if item_types:
+        dv = DataValidation(type='list', formula1=f"'Lists'!$D$1:$D${len(item_types)}")
+        ws.add_data_validation(dv); dv.add('C2:C5000')
     dv = DataValidation(type='list', formula1=f"'Lists'!$C$1:$C${len(conditions)}")
-    ws.add_data_validation(dv); dv.add('H2:H5000')
+    ws.add_data_validation(dv); dv.add('G2:G5000')
     instructions = wb.create_sheet('Instructions', 0)
     instructions.append(['COLLEGE INVENTORY IMPORT TEMPLATE — Version 1'])
     instructions.append(['Every column marked * is required. Do not rename or reorder headings.'])
-    instructions.append(['Use quantity 1 for individually tagged equipment; group only identical items.'])
+    instructions.append(['Choose one office and item type per row. Quantity is expanded into separate tags.'])
+    instructions.append(['Example: prefix BPCH/CH, start 1, quantity 30 creates BPCH/CH/1 through BPCH/CH/30.'])
     instructions.append(['Validate the file in the system before confirming import.'])
     output = BytesIO(); wb.save(output)
     response = HttpResponse(output.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -1167,12 +1176,12 @@ def _parse_inventory_upload(upload):
     headers = [str(c.value or '').strip() for c in ws[1]]
     if headers[:len(INVENTORY_HEADERS)] != INVENTORY_HEADERS:
         return [], [{'row': 1, 'field': 'Headings', 'message': 'Use the latest system template without changing headings.'}]
-    categories = {x.name.casefold(): x for x in AssetCategory.objects.filter(is_active=True)}
     locations = {x.name.casefold(): x for x in InventoryLocation.objects.filter(is_active=True)}
+    item_types = {f'{x.name} — {x.category.name}'.casefold(): x for x in InventoryItemType.objects.filter(is_active=True).select_related('category')}
     conditions = {label.casefold(): value for value, label in Asset.CONDITION_CHOICES}
     existing = {x.casefold() for x in Asset.objects.values_list('asset_tag', flat=True)}
     seen, rows, errors = set(), [], []
-    fields = ['asset_tag', 'name', 'description', 'category', 'location', 'responsible_office', 'quantity', 'condition']
+    fields = ['location', 'responsible_office', 'item_type', 'tag_prefix', 'start_number', 'quantity', 'condition', 'description']
     for number, values in enumerate(ws.iter_rows(min_row=2, max_col=8, values_only=True), 2):
         if not any(v not in (None, '') for v in values): continue
         data = dict(zip(fields, values))
@@ -1180,25 +1189,30 @@ def _parse_inventory_upload(upload):
             if key == 'description':
                 continue
             if value is None or str(value).strip() == '': errors.append({'row': number, 'field': key, 'message': 'Required.'})
-        tag = str(data['asset_tag'] or '').strip()
-        if tag.casefold() in existing or tag.casefold() in seen:
-            errors.append({'row': number, 'field': 'asset_tag', 'message': 'Asset number/tag already exists or is duplicated.'})
-        seen.add(tag.casefold())
-        category = categories.get(str(data['category'] or '').strip().casefold())
         location = locations.get(str(data['location'] or '').strip().casefold())
+        item_type = item_types.get(str(data['item_type'] or '').strip().casefold())
         condition = conditions.get(str(data['condition'] or '').strip().casefold())
-        if data['category'] and not category: errors.append({'row': number, 'field': 'category', 'message': 'Choose a category from the template list.'})
         if data['location'] and not location: errors.append({'row': number, 'field': 'location', 'message': 'Choose a location from the template list.'})
+        if data['item_type'] and not item_type: errors.append({'row': number, 'field': 'item_type', 'message': 'Choose an item type from the template list.'})
         if data['condition'] and not condition: errors.append({'row': number, 'field': 'condition', 'message': 'Choose a condition from the template list.'})
         try:
             quantity = int(data['quantity'])
-            if quantity < 1 or float(data['quantity']) != quantity: raise ValueError
+            start = int(data['start_number'])
+            if quantity < 1 or quantity > 500 or start < 1 or float(data['quantity']) != quantity or float(data['start_number']) != start: raise ValueError
         except (TypeError, ValueError):
-            quantity = 0; errors.append({'row': number, 'field': 'quantity', 'message': 'Enter a positive whole number.'})
-        rows.append({**data, 'asset_tag': tag, 'name': str(data['name'] or '').strip(),
-                     'description': str(data['description'] or '').strip(), 'category': category,
-                     'location': location, 'responsible_office': str(data['responsible_office'] or '').strip(),
-                     'quantity': quantity, 'condition': condition})
+            quantity, start = 0, 0; errors.append({'row': number, 'field': 'quantity', 'message': 'Use quantity 1–500 and a positive starting number.'})
+        prefix = str(data['tag_prefix'] or '').strip().rstrip('/')
+        if item_type and location and condition and quantity:
+            for sequence in range(start, start + quantity):
+                tag = f'{prefix}/{sequence}'
+                if tag.casefold() in existing or tag.casefold() in seen:
+                    errors.append({'row': number, 'field': 'tag_prefix', 'message': f'Generated tag {tag} already exists or is duplicated.'})
+                seen.add(tag.casefold())
+                rows.append({'asset_tag': tag, 'name': item_type.name,
+                             'description': str(data['description'] or item_type.description).strip(),
+                             'category': item_type.category, 'item_type': item_type, 'location': location,
+                             'responsible_office': str(data['responsible_office'] or '').strip(),
+                             'quantity': 1, 'condition': condition})
     if not rows: errors.append({'row': 0, 'field': 'File', 'message': 'No item rows were found.'})
     return rows, errors
 
@@ -1220,6 +1234,133 @@ def inventory_import(request):
             Asset.objects.create(**row, created_by=request.user, updated_by=request.user)
         AssetImport.objects.create(uploaded_by=request.user, file_name=upload.name, imported_rows=len(rows))
     return Response({'valid': True, 'imported': len(rows)}, status=201)
+
+
+@api_view(['POST'])
+def inventory_bulk_create(request):
+    """Create individually tagged assets from a shared tag prefix and quantity."""
+    if not is_estate_officer(request.user):
+        return Response({'detail': 'Estate Officer access required.'}, status=403)
+
+    try:
+        count = int(request.data.get('count'))
+        start_number = int(request.data.get('start_number', 1))
+    except (TypeError, ValueError):
+        return Response({'detail': 'Quantity and starting number must be positive whole numbers.'}, status=400)
+    if count < 1 or count > 500 or start_number < 1:
+        return Response({'detail': 'Enter a quantity from 1 to 500 and a starting number of at least 1.'}, status=400)
+
+    prefix = str(request.data.get('asset_tag_prefix', '')).strip().rstrip('/')
+    if not prefix:
+        return Response({'asset_tag_prefix': ['Enter an asset tag prefix.']}, status=400)
+    tags = [f'{prefix}/{number}' for number in range(start_number, start_number + count)]
+    conflicts = list(Asset.objects.filter(asset_tag__in=tags).values_list('asset_tag', flat=True))
+    if conflicts:
+        return Response({
+            'detail': 'One or more generated asset tags are already registered.',
+            'conflicting_tags': conflicts[:20],
+        }, status=400)
+
+    shared = {
+        'name': request.data.get('name'),
+        'description': request.data.get('description', ''),
+        'category': request.data.get('category'),
+        'location': request.data.get('location'),
+        'responsible_office': request.data.get('responsible_office'),
+        'condition': request.data.get('condition'),
+        'quantity': 1,
+    }
+    validated = []
+    for tag in tags:
+        serializer = AssetSerializer(data={**shared, 'asset_tag': tag})
+        serializer.is_valid(raise_exception=True)
+        validated.append(serializer.validated_data)
+
+    with transaction.atomic():
+        # Lock matching records so concurrent requests cannot both pass validation.
+        if Asset.objects.select_for_update().filter(asset_tag__in=tags).exists():
+            return Response({'detail': 'A generated tag was registered by another request. Please try again.'}, status=409)
+        Asset.objects.bulk_create([
+            Asset(**data, created_by=request.user, updated_by=request.user)
+            for data in validated
+        ])
+    return Response({
+        'created': count,
+        'first_tag': tags[0],
+        'last_tag': tags[-1],
+    }, status=201)
+
+
+@api_view(['POST'])
+def inventory_office_register(request):
+    """Register multiple item types for one office and expand each quantity into tagged assets."""
+    if not is_estate_officer(request.user):
+        return Response({'detail': 'Estate Officer access required.'}, status=403)
+    location_id = request.data.get('location')
+    responsible = str(request.data.get('responsible_office', '')).strip()
+    rows = request.data.get('items')
+    if not InventoryLocation.objects.filter(pk=location_id, is_active=True).exists():
+        return Response({'location': ['Choose an active office/location.']}, status=400)
+    if not responsible:
+        return Response({'responsible_office': ['Enter the responsible person or office.']}, status=400)
+    if not isinstance(rows, list) or not rows:
+        return Response({'items': ['Add at least one item type.']}, status=400)
+
+    generated, prepared, errors = [], [], []
+    for index, row in enumerate(rows, 1):
+        try:
+            item_type = InventoryItemType.objects.select_related('category').get(pk=row.get('item_type'), is_active=True)
+            count = int(row.get('quantity'))
+            start = int(row.get('start_number', 1))
+        except InventoryItemType.DoesNotExist:
+            errors.append({'row': index, 'field': 'item_type', 'message': 'Choose an active item type.'})
+            continue
+        except (TypeError, ValueError):
+            errors.append({'row': index, 'field': 'quantity', 'message': 'Quantity and starting number must be whole numbers.'})
+            continue
+        if count < 1 or count > 500 or start < 1:
+            errors.append({'row': index, 'field': 'quantity', 'message': 'Use quantity 1–500 and starting number 1 or greater.'})
+            continue
+        prefix = str(row.get('tag_prefix') or item_type.default_tag_prefix).strip().rstrip('/')
+        condition = row.get('condition')
+        tags = [f'{prefix}/{number}' for number in range(start, start + count)]
+        generated.extend(tags)
+        for tag in tags:
+            prepared.append({
+                'asset_tag': tag, 'name': item_type.name, 'description': item_type.description,
+                'category': item_type.category_id, 'item_type': item_type.id,
+                'location': location_id, 'responsible_office': responsible,
+                'quantity': 1, 'condition': condition,
+            })
+    if len(generated) > 1000:
+        errors.append({'row': 0, 'field': 'items', 'message': 'One office submission may create at most 1,000 asset records.'})
+    generated_seen, duplicate_generated = set(), set()
+    for tag in generated:
+        key = tag.casefold()
+        if key in generated_seen:
+            duplicate_generated.add(tag)
+        generated_seen.add(key)
+    existing = {tag.casefold() for tag in Asset.objects.values_list('asset_tag', flat=True)}
+    conflicts = [tag for tag in generated if tag.casefold() in existing]
+    if duplicate_generated:
+        errors.append({'row': 0, 'field': 'tag_prefix', 'message': 'Item rows generate duplicate tags.'})
+    if conflicts:
+        errors.append({'row': 0, 'field': 'tag_prefix', 'message': f'Already registered: {", ".join(conflicts[:10])}'})
+    if errors:
+        return Response({'detail': 'Correct the office stock rows.', 'errors': errors}, status=400)
+
+    serializers = [AssetSerializer(data=data) for data in prepared]
+    for serializer in serializers:
+        serializer.is_valid(raise_exception=True)
+    with transaction.atomic():
+        # Recheck inside the transaction before creating the complete office batch.
+        if Asset.objects.filter(asset_tag__in=generated).exists():
+            return Response({'detail': 'A generated tag was registered by another request. Please try again.'}, status=409)
+        Asset.objects.bulk_create([
+            Asset(**serializer.validated_data, created_by=request.user, updated_by=request.user)
+            for serializer in serializers
+        ])
+    return Response({'created': len(prepared), 'item_types': len(rows)}, status=201)
 
 
 @api_view(['GET'])

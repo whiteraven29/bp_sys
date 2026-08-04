@@ -25,7 +25,7 @@ from .models import (
     StudentPayment,
     StudentResult,
     TeacherProfile,
-    EstateOfficerProfile, InventoryLocation, AssetCategory, Asset, AssetTransfer,
+    EstateOfficerProfile, InventoryLocation, AssetCategory, InventoryItemType, Asset, AssetTransfer,
 )
 from .serializers import StudentResultSerializer
 from .grading import gpa_classification
@@ -41,7 +41,15 @@ class InventoryManagementTests(TestCase):
         EstateOfficerProfile.objects.create(user=self.officer, full_name='Estate Officer')
         self.location = InventoryLocation.objects.create(name='Test Inventory Office')
         self.category = AssetCategory.objects.create(name='Test Equipment')
+        self.item_type = InventoryItemType.objects.create(
+            name='Office Chair', category=self.category, description='Standard chair',
+            default_tag_prefix='BPCH/CH',
+        )
         self.client = APIClient()
+
+    def test_default_inventory_catalog_is_available(self):
+        expected = {'Office Chair', 'Student Chair', 'CPU', 'Monitor', 'Fire Extinguisher', 'Dustbin', 'Extension Cable'}
+        self.assertTrue(expected.issubset(set(InventoryItemType.objects.values_list('name', flat=True))))
 
     def test_admin_can_create_estate_account_but_cannot_access_inventory(self):
         self.client.force_authenticate(self.admin)
@@ -112,10 +120,10 @@ class InventoryManagementTests(TestCase):
         template = self.client.get('/api/inventory/template/')
         self.assertEqual(template.status_code, 200)
         wb = load_workbook(BytesIO(template.content))
-        self.assertEqual(wb['Assets']['A1'].value, 'Asset Number/Tag *')
+        self.assertEqual(wb['Assets']['A1'].value, 'Office/Location *')
         ws = wb['Assets']
-        ws.append(['TAG-2', 'Chairs', 'Student chairs', self.category.name,
-                   self.location.name, 'Level 4', 20, 'Good'])
+        ws.append([self.location.name, 'Level 4', f'{self.item_type.name} — {self.category.name}',
+                   'TEST/CH', 1, 20, 'Good', 'Student chairs'])
         output = BytesIO(); wb.save(output); output.seek(0)
         output.name = 'inventory.xlsx'
         checked = self.client.post('/api/inventory/import/', {'file': output, 'confirm': 'false'}, format='multipart')
@@ -124,19 +132,67 @@ class InventoryManagementTests(TestCase):
         output.seek(0)
         imported = self.client.post('/api/inventory/import/', {'file': output, 'confirm': 'true'}, format='multipart')
         self.assertEqual(imported.status_code, 201)
-        self.assertEqual(Asset.objects.get(asset_tag='TAG-2').quantity, 20)
+        self.assertEqual(Asset.objects.filter(asset_tag__startswith='TEST/CH/').count(), 20)
+        self.assertEqual(Asset.objects.get(asset_tag='TEST/CH/1').quantity, 1)
 
     def test_invalid_excel_row_imports_nothing(self):
         self.client.force_authenticate(self.officer)
         wb = Workbook(); ws = wb.active; ws.title = 'Assets'
-        ws.append(['Asset Number/Tag *', 'Asset Name *', 'Description', 'Category *',
-                   'Current Location *', 'Responsible Person/Office *', 'Quantity *', 'Condition *'])
-        ws.append(['TAG-3', 'Valid item', 'Description', self.category.name, self.location.name, 'Office', 1, 'Good'])
-        ws.append(['TAG-4', '', 'Description', self.category.name, self.location.name, 'Office', 1, 'Good'])
+        ws.append(['Office/Location *', 'Responsible Person/Office *', 'Item Type *',
+                   'Tag Prefix *', 'Starting Number *', 'Quantity *', 'Condition *', 'Description'])
+        item_label = f'{self.item_type.name} — {self.category.name}'
+        ws.append([self.location.name, 'Office', item_label, 'TAG-3', 1, 1, 'Good', 'Description'])
+        ws.append([self.location.name, '', item_label, 'TAG-4', 1, 1, 'Good', 'Description'])
         output = BytesIO(); wb.save(output); output.seek(0); output.name = 'invalid.xlsx'
         response = self.client.post('/api/inventory/import/', {'file': output, 'confirm': 'true'}, format='multipart')
         self.assertEqual(response.status_code, 400)
-        self.assertFalse(Asset.objects.filter(asset_tag__in=['TAG-3', 'TAG-4']).exists())
+        self.assertFalse(Asset.objects.filter(asset_tag__in=['TAG-3/1', 'TAG-4/1']).exists())
+
+    def test_office_first_registration_expands_multiple_item_quantities(self):
+        desk = InventoryItemType.objects.create(
+            name='Office Desk', category=self.category, default_tag_prefix='BPCH/DK',
+        )
+        self.client.force_authenticate(self.officer)
+        response = self.client.post('/api/inventory/office-register/', {
+            'location': self.location.id, 'responsible_office': 'Registry',
+            'items': [
+                {'item_type': self.item_type.id, 'tag_prefix': 'BPCH/CH', 'start_number': 1, 'quantity': 3, 'condition': 'good'},
+                {'item_type': desk.id, 'tag_prefix': 'BPCH/DK', 'start_number': 10, 'quantity': 2, 'condition': 'fair'},
+            ],
+        }, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['created'], 5)
+        self.assertTrue(Asset.objects.filter(asset_tag='BPCH/CH/3', item_type=self.item_type, quantity=1).exists())
+        self.assertTrue(Asset.objects.filter(asset_tag='BPCH/DK/11', item_type=desk, location=self.location).exists())
+
+    def test_auto_numbered_bulk_registration_creates_individual_assets(self):
+        self.client.force_authenticate(self.officer)
+        response = self.client.post('/api/inventory/bulk-create/', {
+            'asset_tag_prefix': 'BPCH/CH', 'start_number': 1, 'count': 30,
+            'name': 'Chair', 'description': 'Office chair',
+            'category': self.category.id, 'location': self.location.id,
+            'responsible_office': 'Administration Office', 'condition': 'good',
+        }, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['created'], 30)
+        self.assertTrue(Asset.objects.filter(asset_tag='BPCH/CH/1', quantity=1).exists())
+        self.assertTrue(Asset.objects.filter(asset_tag='BPCH/CH/30', quantity=1).exists())
+        self.assertEqual(Asset.objects.filter(asset_tag__startswith='BPCH/CH/').count(), 30)
+
+    def test_auto_numbered_bulk_registration_is_atomic_on_tag_conflict(self):
+        self.client.force_authenticate(self.officer)
+        Asset.objects.create(
+            asset_tag='BPCH/CH/2', name='Existing Chair', category=self.category,
+            location=self.location, responsible_office='Office', quantity=1,
+            condition='good', created_by=self.officer, updated_by=self.officer,
+        )
+        response = self.client.post('/api/inventory/bulk-create/', {
+            'asset_tag_prefix': 'BPCH/CH', 'start_number': 1, 'count': 3,
+            'name': 'Chair', 'category': self.category.id, 'location': self.location.id,
+            'responsible_office': 'Administration Office', 'condition': 'good',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Asset.objects.filter(asset_tag__in=['BPCH/CH/1', 'BPCH/CH/3']).count(), 0)
 
 
 class AttendanceSecurityTests(TestCase):
