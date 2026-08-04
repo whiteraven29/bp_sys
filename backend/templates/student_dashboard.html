@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
 <title>Student Portal — EduTrack</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
 <style>
   :root {
     --bg: #070b12;
@@ -294,35 +295,35 @@
     </div>
     <nav class="nav" aria-label="Student portal navigation">
       <div class="nav-label">Overview</div>
-      <button class="nav-item active" data-view="dashboard"><span class="nav-icon">▦</span>Dashboard</button>
+      <button class="nav-item active" data-view="dashboard"><span class="nav-icon"><i class="bi bi-grid-1x2"></i></span>Dashboard</button>
       <div class="nav-label">Academic</div>
       <div class="nav-group">
-        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="attendance-menu"><span class="nav-icon">✓</span>Attendance<span class="nav-caret">⌄</span></button>
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="attendance-menu"><span class="nav-icon"><i class="bi bi-calendar-check"></i></span>Attendance<span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
         <div class="nav-submenu" id="attendance-menu">
           <button class="nav-item" data-view="attendance-sem1"><span class="nav-icon">1</span>Semester 1<span class="nav-badge">{{ semester1_modules|length }}</span></button>
           <button class="nav-item" data-view="attendance-sem2"><span class="nav-icon">2</span>Semester 2<span class="nav-badge">{{ semester2_modules|length }}</span></button>
         </div>
       </div>
       <div class="nav-group">
-        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="results-menu"><span class="nav-icon">▤</span>Results<span class="nav-caret">⌄</span></button>
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="results-menu"><span class="nav-icon"><i class="bi bi-file-earmark-text"></i></span>Results<span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
         <div class="nav-submenu" id="results-menu">
           <button class="nav-item" data-view="ca-sem1"><span class="nav-icon">1</span>CA · Semester 1<span class="nav-badge">{{ semester1_modules|length }}</span></button>
           <button class="nav-item" data-view="ca-sem2"><span class="nav-icon">2</span>CA · Semester 2<span class="nav-badge">{{ semester2_modules|length }}</span></button>
-          <button class="nav-item" data-view="final-results"><span class="nav-icon">★</span>Semester Results</button>
-          <button class="nav-item" data-view="obligations"><span class="nav-icon">!</span>Obligations</button>
+          <button class="nav-item" data-view="final-results"><span class="nav-icon"><i class="bi bi-award"></i></span>Semester Results</button>
+          <button class="nav-item" data-view="obligations"><span class="nav-icon"><i class="bi bi-exclamation-triangle"></i></span>Obligations</button>
         </div>
       </div>
-      <button class="nav-item" data-view="modules"><span class="nav-icon">▥</span>Enrolled Modules<span class="nav-badge">{{ module_count }}</span></button>
-      <button class="nav-item" data-view="eligibility"><span class="nav-icon">✓</span>Exam Eligibility</button>
+      <button class="nav-item" data-view="modules"><span class="nav-icon"><i class="bi bi-journal-bookmark"></i></span>Enrolled Modules<span class="nav-badge">{{ module_count }}</span></button>
+      <button class="nav-item" data-view="eligibility"><span class="nav-icon"><i class="bi bi-person-check"></i></span>Exam Eligibility</button>
       <div class="nav-group">
-        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="payments-menu"><span class="nav-icon">₵</span>Payments<span class="nav-caret">⌄</span></button>
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="payments-menu"><span class="nav-icon"><i class="bi bi-credit-card"></i></span>Payments<span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
         <div class="nav-submenu" id="payments-menu">
-          <button class="nav-item" data-view="payments"><span class="nav-icon">▤</span>Payment History</button>
-          <button class="nav-item" data-view="payment-summary"><span class="nav-icon">Σ</span>Payment Summary</button>
+          <button class="nav-item" data-view="payments"><span class="nav-icon"><i class="bi bi-receipt"></i></span>Payment History</button>
+          <button class="nav-item" data-view="payment-summary"><span class="nav-icon"><i class="bi bi-calculator"></i></span>Payment Summary</button>
         </div>
       </div>
       <div class="nav-label">Account</div>
-      <button class="nav-item" data-view="profile"><span class="nav-icon">●</span>My Profile</button>
+      <button class="nav-item" data-view="profile"><span class="nav-icon"><i class="bi bi-person-circle"></i></span>My Profile</button>
     </nav>
     <a href="{% url 'student-logout' %}" class="logout"><span>↪</span> Sign out</a>
   </aside>
@@ -330,7 +331,7 @@
 
   <div class="workspace">
     <header class="topbar">
-      <button class="menu-button" id="menu-button" aria-label="Open navigation">☰</button>
+      <button class="menu-button" id="menu-button" aria-label="Open navigation"><i class="bi bi-list"></i></button>
       <label class="search"><span>⌕</span><input id="portal-search" type="search" placeholder="Search modules..." aria-label="Search modules"></label>
       <div class="top-meta">
         <span class="semester-pill">{{ active_semester }}</span>
@@ -346,10 +347,10 @@
           <div class="hero-side"><div class="year-card"><span>Current period</span><strong>{{ active_semester }}</strong></div></div>
         </div>
         <div class="stats">
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon">%</div></div><strong>{% if overall_attendance is not None %}{{ overall_attendance }}%{% else %}—{% endif %}</strong><p>Overall attendance</p></article>
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon">▥</div></div><strong>{{ active_module_count }}</strong><p>Active semester modules</p></article>
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon">✓</div></div><strong>{{ total_present }}</strong><p>Sessions present</p></article>
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon">!</div></div><strong>{{ total_absent }}</strong><p>Sessions absent</p></article>
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-percent"></i></div></div><strong>{% if overall_attendance is not None %}{{ overall_attendance }}%{% else %}—{% endif %}</strong><p>Overall attendance</p></article>
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-journals"></i></div></div><strong>{{ active_module_count }}</strong><p>Active semester modules</p></article>
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-check-circle"></i></div></div><strong>{{ total_present }}</strong><p>Sessions present</p></article>
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-x-circle"></i></div></div><strong>{{ total_absent }}</strong><p>Sessions absent</p></article>
         </div>
         <div class="grid-main">
           <section class="panel">
@@ -364,9 +365,9 @@
             </div>
           </section>
           <div class="side-stack">
-            <button class="quick-link" data-go="attendance-sem1"><span class="quick-link-icon">✓</span><span><strong>Check attendance</strong><span>See module percentages</span></span></button>
+            <button class="quick-link" data-go="attendance-sem1"><span class="quick-link-icon"><i class="bi bi-calendar-check"></i></span><span><strong>Check attendance</strong><span>See module percentages</span></span></button>
             <button class="quick-link" data-go="ca-sem1"><span class="quick-link-icon">1</span><span><strong>Semester 1 CA</strong><span>Assignments and CATs</span></span></button>
-            <button class="quick-link" data-go="final-results"><span class="quick-link-icon">★</span><span><strong>Final results</strong><span>Weighted totals</span></span></button>
+            <button class="quick-link" data-go="final-results"><span class="quick-link-icon"><i class="bi bi-award"></i></span><span><strong>Final results</strong><span>Weighted totals</span></span></button>
           </div>
         </div>
       </section>
@@ -521,9 +522,9 @@
       <section class="view" id="view-payment-summary">
         <div class="section-title"><p class="eyebrow">Finance</p><h2>Payment Summary</h2><p>Your overall financial position.</p></div>
         <div class="stats">
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon">▥</div></div><strong>{{ finance_required|floatformat:2 }}</strong><p>Total required</p></article>
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon">✓</div></div><strong>{{ finance_paid|floatformat:2 }}</strong><p>Total paid</p></article>
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon">!</div></div><strong>{{ finance_balance|floatformat:2 }}</strong><p>Outstanding</p></article>
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-wallet2"></i></div></div><strong>{{ finance_required|floatformat:2 }}</strong><p>Total required</p></article>
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-check-circle"></i></div></div><strong>{{ finance_paid|floatformat:2 }}</strong><p>Total paid</p></article>
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-exclamation-circle"></i></div></div><strong>{{ finance_balance|floatformat:2 }}</strong><p>Outstanding</p></article>
         </div>
       </section>
 
@@ -643,7 +644,7 @@
 
   const initialView = location.hash.slice(1);
   if (initialView) showView(initialView, false);
-  document.querySelectorAll('input[type="password"]').forEach(input=>{const wrap=document.createElement('div');wrap.className='password-wrap';input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);const button=document.createElement('button');button.type='button';button.className='password-toggle';button.setAttribute('aria-label','Show password');button.textContent='👁';button.onclick=()=>{const hidden=input.type==='password';input.type=hidden?'text':'password';button.textContent=hidden?'◉':'👁';button.setAttribute('aria-label',hidden?'Hide password':'Show password');input.focus()};wrap.appendChild(button)});
+  document.querySelectorAll('input[type="password"]').forEach(input=>{const wrap=document.createElement('div');wrap.className='password-wrap';input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);const button=document.createElement('button');button.type='button';button.className='password-toggle';button.setAttribute('aria-label','Show password');button.innerHTML='<i class="bi bi-eye"></i>';button.onclick=()=>{const hidden=input.type==='password';input.type=hidden?'text':'password';button.innerHTML=hidden?'<i class="bi bi-eye-slash"></i>':'<i class="bi bi-eye"></i>';button.setAttribute('aria-label',hidden?'Hide password':'Show password');input.focus()};wrap.appendChild(button)});
   document.querySelectorAll('table').forEach(table => {
     const labels = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
     table.querySelectorAll('tbody tr').forEach(row => {

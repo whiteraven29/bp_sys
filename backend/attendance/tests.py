@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib.sessions.models import Session as DjangoSession
 from django.test import TestCase
 from django.urls import reverse
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 from docx import Document
 from rest_framework.test import APIClient
 
@@ -25,12 +25,118 @@ from .models import (
     StudentPayment,
     StudentResult,
     TeacherProfile,
+    EstateOfficerProfile, InventoryLocation, AssetCategory, Asset, AssetTransfer,
 )
 from .serializers import StudentResultSerializer
 from .grading import gpa_classification
 
 
 User = get_user_model()
+
+
+class InventoryManagementTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser('inventory-admin', 'admin@example.com', 'password123')
+        self.officer = User.objects.create_user('estate', password='password123')
+        EstateOfficerProfile.objects.create(user=self.officer, full_name='Estate Officer')
+        self.location = InventoryLocation.objects.create(name='Test Inventory Office')
+        self.category = AssetCategory.objects.create(name='Test Equipment')
+        self.client = APIClient()
+
+    def test_admin_can_create_estate_account_but_cannot_access_inventory(self):
+        self.client.force_authenticate(self.admin)
+        created = self.client.post('/api/staff-accounts/', {
+            'role': 'estate_officer', 'full_name': 'Property Officer',
+            'username': 'property', 'password': 'secret12',
+        }, format='json')
+        self.assertEqual(created.status_code, 201)
+        self.assertTrue(EstateOfficerProfile.objects.filter(user__username='property').exists())
+        self.assertEqual(self.client.get('/api/assets/').status_code, 403)
+        self.assertEqual(self.client.get('/api/inventory/template/').status_code, 403)
+
+    def test_all_manual_asset_fields_are_required_and_tag_is_case_insensitive_unique(self):
+        self.client.force_authenticate(self.officer)
+        missing = self.client.post('/api/assets/', {'asset_tag': 'TAG-1'}, format='json')
+        self.assertEqual(missing.status_code, 400)
+        payload = {
+            'asset_tag': 'TAG-1', 'name': 'Desktop', 'description': 'Office desktop',
+            'category': self.category.id, 'location': self.location.id,
+            'responsible_office': 'ICT Office', 'quantity': 1, 'condition': 'good',
+        }
+        self.assertEqual(self.client.post('/api/assets/', payload, format='json').status_code, 201)
+        payload['asset_tag'] = 'tag-1'
+        self.assertEqual(self.client.post('/api/assets/', payload, format='json').status_code, 400)
+
+    def test_description_is_optional_and_transfer_updates_current_assignment(self):
+        self.client.force_authenticate(self.officer)
+        payload = {'asset_tag': 'NO-DESC', 'name': 'Projector', 'category': self.category.id,
+                   'location': self.location.id, 'responsible_office': 'ICT Office',
+                   'quantity': 1, 'condition': 'good'}
+        created = self.client.post('/api/assets/', payload, format='json')
+        self.assertEqual(created.status_code, 201)
+        destination = InventoryLocation.objects.create(name='Destination Office')
+        moved = self.client.post('/api/asset-transfers/', {
+            'asset': created.data['id'], 'to_location': destination.id,
+            'new_responsible_office': 'Principal Office', 'reason': 'Official allocation',
+            'transferred_at': '2026-08-04',
+        }, format='json')
+        self.assertEqual(moved.status_code, 201)
+        asset = Asset.objects.get(pk=created.data['id'])
+        self.assertEqual(asset.location, destination)
+        self.assertEqual(asset.responsible_office, 'Principal Office')
+        self.assertEqual(AssetTransfer.objects.get(asset=asset).from_location, self.location)
+
+    def test_partial_batch_transfer_creates_traceable_split_tag(self):
+        self.client.force_authenticate(self.officer)
+        batch = Asset.objects.create(
+            asset_tag='BPHACOH/L4/CHAIR/001', name='Class chairs', description='',
+            category=self.category, location=self.location, responsible_office='Level 4',
+            quantity=30, condition='good', created_by=self.officer, updated_by=self.officer,
+        )
+        destination = InventoryLocation.objects.create(name='Level 5 Test Classroom')
+        response = self.client.post('/api/asset-transfers/', {
+            'asset': batch.id, 'quantity': 1, 'to_location': destination.id,
+            'new_responsible_office': 'Level 5', 'reason': 'Replacement chair',
+            'transferred_at': '2026-08-04',
+        }, format='json')
+        self.assertEqual(response.status_code, 201)
+        batch.refresh_from_db()
+        self.assertEqual(batch.quantity, 29)
+        split = Asset.objects.get(asset_tag='BPHACOH/L4/CHAIR/001/001')
+        self.assertEqual(split.quantity, 1)
+        self.assertEqual(split.location, destination)
+        self.assertEqual(response.data['resulting_asset_tag'], split.asset_tag)
+
+    def test_template_contains_required_headers_and_valid_file_imports_atomically(self):
+        self.client.force_authenticate(self.officer)
+        template = self.client.get('/api/inventory/template/')
+        self.assertEqual(template.status_code, 200)
+        wb = load_workbook(BytesIO(template.content))
+        self.assertEqual(wb['Assets']['A1'].value, 'Asset Number/Tag *')
+        ws = wb['Assets']
+        ws.append(['TAG-2', 'Chairs', 'Student chairs', self.category.name,
+                   self.location.name, 'Level 4', 20, 'Good'])
+        output = BytesIO(); wb.save(output); output.seek(0)
+        output.name = 'inventory.xlsx'
+        checked = self.client.post('/api/inventory/import/', {'file': output, 'confirm': 'false'}, format='multipart')
+        self.assertEqual(checked.status_code, 200)
+        self.assertFalse(Asset.objects.filter(asset_tag='TAG-2').exists())
+        output.seek(0)
+        imported = self.client.post('/api/inventory/import/', {'file': output, 'confirm': 'true'}, format='multipart')
+        self.assertEqual(imported.status_code, 201)
+        self.assertEqual(Asset.objects.get(asset_tag='TAG-2').quantity, 20)
+
+    def test_invalid_excel_row_imports_nothing(self):
+        self.client.force_authenticate(self.officer)
+        wb = Workbook(); ws = wb.active; ws.title = 'Assets'
+        ws.append(['Asset Number/Tag *', 'Asset Name *', 'Description', 'Category *',
+                   'Current Location *', 'Responsible Person/Office *', 'Quantity *', 'Condition *'])
+        ws.append(['TAG-3', 'Valid item', 'Description', self.category.name, self.location.name, 'Office', 1, 'Good'])
+        ws.append(['TAG-4', '', 'Description', self.category.name, self.location.name, 'Office', 1, 'Good'])
+        output = BytesIO(); wb.save(output); output.seek(0); output.name = 'invalid.xlsx'
+        response = self.client.post('/api/inventory/import/', {'file': output, 'confirm': 'true'}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Asset.objects.filter(asset_tag__in=['TAG-3', 'TAG-4']).exists())
 
 
 class AttendanceSecurityTests(TestCase):
@@ -241,7 +347,7 @@ class AttendanceSecurityTests(TestCase):
         response = self.client.get(reverse('login'))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Register here')
-        self.assertContains(response, 'Accounts are created by the administrator.')
+        self.assertNotContains(response, 'Accounts are created by the administrator.')
 
     def test_register_page_is_admin_only(self):
         anonymous = self.client.get(reverse('register'))

@@ -15,6 +15,14 @@ router.register('payment-categories', views.PaymentCategoryViewSet, basename='pa
 router.register('finance-obligations', views.StudentFinanceObligationViewSet, basename='finance-obligation')
 router.register('student-payments', views.StudentPaymentViewSet, basename='student-payment')
 router.register('finance-clearances', views.StudentFinanceClearanceViewSet, basename='finance-clearance')
+router.register('inventory-locations', views.InventoryLocationViewSet, basename='inventory-location')
+router.register('asset-categories', views.AssetCategoryViewSet, basename='asset-category')
+router.register('assets', views.AssetViewSet, basename='asset')
+router.register('asset-transfers', views.AssetTransferViewSet, basename='asset-transfer')
+router.register('asset-maintenance', views.AssetMaintenanceViewSet, basename='asset-maintenance')
+router.register('inventory-inspections', views.InventoryInspectionViewSet, basename='inventory-inspection')
+router.register('inventory-inspection-items', views.InventoryInspectionItemViewSet, basename='inventory-inspection-item')
+router.register('asset-disposals', views.AssetDisposalViewSet, basename='asset-disposal')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -27,6 +35,9 @@ urlpatterns = [
     path('records/<int:pk>/status/', views.update_attendance_status, name='update-attendance-status'),
     path('change-password/', views.change_password, name='change-password'),
     path('staff-accounts/', views.create_staff_account, name='staff-accounts'),
+    path('inventory/template/', views.inventory_template, name='inventory-template'),
+    path('inventory/import/', views.inventory_import, name='inventory-import'),
+    path('inventory/report/', views.inventory_report, name='inventory-report'),
     path('results/download/', views.download_results, name='results-download'),
     path('results/download/ca-signoff/', views.download_ca_signoff, name='results-download-ca-signoff'),
     path('results/download/final/', views.download_final_results, name='results-download-final'),

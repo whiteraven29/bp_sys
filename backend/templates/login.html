@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
 <title>EduTrack — Sign In</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -61,7 +62,6 @@
 <body>
   <div class="card">
   <div class="logo">Edu<span>Track</span></div>
-  <div class="subtitle">Tutors use their username and password. Students use their registration number and portal PIN.</div>
 
   {% if error %}
     <div class="errors">{{ error }}</div>
@@ -74,16 +74,15 @@
       <input type="text" name="identifier" value="{{ identifier|default:'' }}" required placeholder="username or NACTVET reg no" />
     </div>
     <div class="field">
-      <label>Password or Student Portal PIN</label>
-      <input type="password" name="secret" required placeholder="password or 6+ character PIN" />
+      <label>Password</label>
+      <input type="password" name="secret" required placeholder="password" />
     </div>
     <button type="submit" class="btn">Sign In</button>
   </form>
+  </div>
 
-  <div class="footer">Accounts are created by the administrator.</div>
-</div>
 <script>
-document.querySelectorAll('input[type="password"]').forEach(input=>{const wrap=document.createElement('div');wrap.className='password-wrap';input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);const button=document.createElement('button');button.type='button';button.className='password-toggle';button.setAttribute('aria-label','Show password');button.textContent='👁';button.onclick=()=>{const hidden=input.type==='password';input.type=hidden?'text':'password';button.textContent=hidden?'◉':'👁';button.setAttribute('aria-label',hidden?'Hide password':'Show password');input.focus()};wrap.appendChild(button)});
+document.querySelectorAll('input[type="password"]').forEach(input=>{const wrap=document.createElement('div');wrap.className='password-wrap';input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);const button=document.createElement('button');button.type='button';button.className='password-toggle';button.setAttribute('aria-label','Show password');button.innerHTML='<i class="bi bi-eye"></i>';button.onclick=()=>{const hidden=input.type==='password';input.type=hidden?'text':'password';button.innerHTML=hidden?'<i class="bi bi-eye-slash"></i>':'<i class="bi bi-eye"></i>';button.setAttribute('aria-label',hidden?'Hide password':'Show password');input.focus()};wrap.appendChild(button)});
 </script>
 </body>
 </html>

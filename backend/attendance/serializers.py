@@ -5,6 +5,8 @@ from .models import (
     AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord,
     StudentResult, PaymentCategory, StudentFinanceObligation, StudentPayment,
     StudentFinanceClearance,
+    EstateOfficerProfile, InventoryLocation, AssetCategory, Asset,
+    AssetTransfer, AssetMaintenance, InventoryInspection, InventoryInspectionItem, AssetDisposal,
 )
 
 
@@ -53,6 +55,129 @@ class ClassLevelSerializer(serializers.ModelSerializer):
 
     def get_module_count(self, obj):
         return obj.modules.count()
+
+
+class InventoryLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InventoryLocation
+        fields = ['id', 'name', 'is_active']
+        read_only_fields = ['id']
+
+
+class AssetCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssetCategory
+        fields = ['id', 'name', 'is_active']
+        read_only_fields = ['id']
+
+
+class AssetSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    location_name = serializers.CharField(source='location.name', read_only=True)
+    condition_display = serializers.CharField(source='get_condition_display', read_only=True)
+
+    class Meta:
+        model = Asset
+        fields = [
+            'id', 'asset_tag', 'name', 'description', 'category', 'category_name',
+            'location', 'location_name', 'responsible_office', 'quantity',
+            'condition', 'condition_display', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_asset_tag(self, value):
+        qs = Asset.objects.filter(asset_tag__iexact=value.strip())
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('This asset number/tag is already registered.')
+        return value.strip()
+
+
+class AssetTransferSerializer(serializers.ModelSerializer):
+    asset_tag = serializers.CharField(source='asset.asset_tag', read_only=True)
+    asset_name = serializers.CharField(source='asset.name', read_only=True)
+    from_location_name = serializers.CharField(source='from_location.name', read_only=True)
+    to_location_name = serializers.CharField(source='to_location.name', read_only=True)
+    resulting_asset_tag = serializers.CharField(source='resulting_asset.asset_tag', read_only=True)
+
+    class Meta:
+        model = AssetTransfer
+        fields = ['id', 'asset', 'asset_tag', 'asset_name', 'from_location', 'from_location_name',
+                  'to_location', 'to_location_name', 'quantity', 'resulting_asset', 'resulting_asset_tag', 'new_responsible_office', 'reason',
+                  'transferred_at', 'created_at']
+        read_only_fields = ['id', 'from_location', 'resulting_asset', 'created_at']
+
+    def validate(self, attrs):
+        asset = attrs.get('asset', getattr(self.instance, 'asset', None))
+        quantity = attrs.get('quantity', getattr(self.instance, 'quantity', 1))
+        if asset and quantity > asset.quantity:
+            raise serializers.ValidationError({'quantity': f'Only {asset.quantity} item(s) are available in this batch.'})
+        return attrs
+
+
+class AssetMaintenanceSerializer(serializers.ModelSerializer):
+    asset_tag = serializers.CharField(source='asset.asset_tag', read_only=True)
+    asset_name = serializers.CharField(source='asset.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = AssetMaintenance
+        fields = ['id', 'asset', 'asset_tag', 'asset_name', 'quantity', 'issue', 'action_taken', 'provider',
+                  'cost', 'status', 'status_display', 'reported_date', 'completed_date', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def validate(self, attrs):
+        asset = attrs.get('asset', getattr(self.instance, 'asset', None))
+        quantity = attrs.get('quantity', getattr(self.instance, 'quantity', 1))
+        if asset and quantity > asset.quantity:
+            raise serializers.ValidationError({'quantity': f'Only {asset.quantity} item(s) are registered in this batch.'})
+        if attrs.get('status') == AssetMaintenance.COMPLETED and not attrs.get('completed_date', getattr(self.instance, 'completed_date', None)):
+            raise serializers.ValidationError({'completed_date': 'Completion date is required when maintenance is completed.'})
+        return attrs
+
+
+class InventoryInspectionItemSerializer(serializers.ModelSerializer):
+    asset_tag = serializers.CharField(source='asset.asset_tag', read_only=True)
+    asset_name = serializers.CharField(source='asset.name', read_only=True)
+    result_display = serializers.CharField(source='get_result_display', read_only=True)
+
+    class Meta:
+        model = InventoryInspectionItem
+        fields = ['id', 'inspection', 'asset', 'asset_tag', 'asset_name', 'result', 'result_display', 'note']
+        read_only_fields = ['id']
+
+
+class InventoryInspectionSerializer(serializers.ModelSerializer):
+    location_name = serializers.CharField(source='location.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    item_count = serializers.IntegerField(source='items.count', read_only=True)
+
+    class Meta:
+        model = InventoryInspection
+        fields = ['id', 'location', 'location_name', 'inspection_date', 'inspector_name',
+                  'notes', 'status', 'status_display', 'item_count', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class AssetDisposalSerializer(serializers.ModelSerializer):
+    asset_tag = serializers.CharField(source='asset.asset_tag', read_only=True)
+    asset_name = serializers.CharField(source='asset.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = AssetDisposal
+        fields = ['id', 'asset', 'asset_tag', 'asset_name', 'reason', 'method', 'status',
+                  'status_display', 'proposed_date', 'disposal_date', 'reference', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def validate(self, attrs):
+        if attrs.get('status') == AssetDisposal.DISPOSED:
+            if not attrs.get('disposal_date', getattr(self.instance, 'disposal_date', None)):
+                raise serializers.ValidationError({'disposal_date': 'Disposal date is required when marked disposed.'})
+            if not attrs.get('method', getattr(self.instance, 'method', '')):
+                raise serializers.ValidationError({'method': 'Disposal method is required when marked disposed.'})
+        return attrs
 
 
 class ModuleSerializer(serializers.ModelSerializer):

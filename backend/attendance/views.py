@@ -1,5 +1,6 @@
 from functools import wraps
 import re
+from io import BytesIO
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
@@ -14,6 +15,9 @@ from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission, IsAuthenticated, SAFE_METHODS
 from rest_framework.response import Response
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font, PatternFill
+from openpyxl.worksheet.datavalidation import DataValidation
 
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
 from .models import (
@@ -21,6 +25,8 @@ from .models import (
     Student, Session, AttendanceRecord, TeacherProfile, AccountantProfile,
     StudentResult, PaymentCategory, StudentFinanceObligation, StudentPayment,
     StudentFinanceClearance,
+    EstateOfficerProfile, InventoryLocation, AssetCategory, Asset, AssetImport,
+    AssetTransfer, AssetMaintenance, InventoryInspection, InventoryInspectionItem, AssetDisposal,
 )
 from .serializers import (
     AcademicYearSerializer, SemesterSerializer, ClassLevelSerializer,
@@ -30,6 +36,9 @@ from .serializers import (
     FinanceStudentSerializer, PaymentCategorySerializer,
     StudentFinanceObligationSerializer, StudentPaymentSerializer,
     StudentFinanceClearanceSerializer,
+    InventoryLocationSerializer, AssetCategorySerializer, AssetSerializer,
+    AssetTransferSerializer, AssetMaintenanceSerializer, InventoryInspectionSerializer,
+    InventoryInspectionItemSerializer, AssetDisposalSerializer,
 )
 from .grading import grade_for_mark, gpa_classification, parse_authority_grade
 
@@ -71,6 +80,13 @@ def can_manage_finance(user):
     return bool(user and user.is_authenticated and (user.is_staff or is_accountant(user)))
 
 
+def is_estate_officer(user):
+    return bool(
+        user and user.is_authenticated
+        and EstateOfficerProfile.objects.filter(user=user, is_active=True).exists()
+    )
+
+
 def active_semester():
     return Semester.objects.filter(is_active=True).select_related('academic_year').first()
 
@@ -94,6 +110,11 @@ class IsAuthenticatedReadOnlyOrAdmin(BasePermission):
 class IsFinanceUser(BasePermission):
     def has_permission(self, request, view):
         return can_manage_finance(request.user)
+
+
+class IsEstateOfficer(BasePermission):
+    def has_permission(self, request, view):
+        return is_estate_officer(request.user)
 
 
 def _make_both_semesters(year):
@@ -519,8 +540,8 @@ def create_staff_account(request):
     password = str(request.data.get('password', '')).strip()
     module_ids = request.data.get('module_ids') or []
 
-    if role not in ('tutor', 'accountant'):
-        return Response({'detail': 'Role must be tutor or accountant.'}, status=status.HTTP_400_BAD_REQUEST)
+    if role not in ('tutor', 'accountant', 'estate_officer'):
+        return Response({'detail': 'Role must be tutor, accountant, or estate officer.'}, status=status.HTTP_400_BAD_REQUEST)
     if not full_name or not username or len(password) < 6:
         return Response({'detail': 'Full name, username, and a 6+ character password are required.'}, status=status.HTTP_400_BAD_REQUEST)
     if User.objects.filter(username__iexact=username).exists():
@@ -536,6 +557,8 @@ def create_staff_account(request):
         )
         if role == 'accountant':
             AccountantProfile.objects.create(user=user, full_name=full_name)
+        elif role == 'estate_officer':
+            EstateOfficerProfile.objects.create(user=user, full_name=full_name)
         else:
             TeacherProfile.objects.create(user=user, full_name=full_name)
             modules = Module.objects.filter(id__in=module_ids)
@@ -849,6 +872,13 @@ class SessionViewSet(viewsets.ModelViewSet):
 @api_view(['GET'])
 @login_required
 def dashboard(request):
+    estate_user = is_estate_officer(request.user)
+    if estate_user:
+        return Response({
+            'modules': 0, 'students': 0, 'sessions_today': 0, 'avg_attendance': None,
+            'active_semester': None, 'recent_sessions': [], 'levels': [],
+            'is_staff': False, 'is_accountant': False, 'is_estate_officer': True,
+        })
     today = timezone.localdate()
     my_modules = user_modules(request.user)
     sem = active_semester()
@@ -951,7 +981,291 @@ def dashboard(request):
         'levels': levels,
         'is_staff': request.user.is_staff,
         'is_accountant': is_accountant(request.user),
+        'is_estate_officer': False,
     })
+
+
+# ── INVENTORY ─────────────────────────────────────────────────────────────────
+
+class InventoryLocationViewSet(viewsets.ModelViewSet):
+    queryset = InventoryLocation.objects.all()
+    serializer_class = InventoryLocationSerializer
+    permission_classes = [IsEstateOfficer]
+
+
+class AssetCategoryViewSet(viewsets.ModelViewSet):
+    queryset = AssetCategory.objects.all()
+    serializer_class = AssetCategorySerializer
+    permission_classes = [IsEstateOfficer]
+
+
+class AssetViewSet(viewsets.ModelViewSet):
+    serializer_class = AssetSerializer
+    permission_classes = [IsEstateOfficer]
+
+    def get_queryset(self):
+        qs = Asset.objects.select_related('category', 'location')
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            qs = qs.filter(Q(asset_tag__icontains=search) | Q(name__icontains=search) |
+                           Q(description__icontains=search) | Q(responsible_office__icontains=search))
+        for field in ('category', 'location', 'condition'):
+            value = self.request.query_params.get(field)
+            if value:
+                qs = qs.filter(**{field: value})
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user, updated_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+
+class AssetTransferViewSet(viewsets.ModelViewSet):
+    queryset = AssetTransfer.objects.select_related('asset', 'from_location', 'to_location', 'resulting_asset')
+    serializer_class = AssetTransferSerializer
+    permission_classes = [IsEstateOfficer]
+
+    def perform_create(self, serializer):
+        asset = serializer.validated_data['asset']
+        to_location = serializer.validated_data['to_location']
+        if asset.location_id == to_location.id:
+            raise PermissionDenied('Choose a different destination location.')
+        with transaction.atomic():
+            quantity = serializer.validated_data.get('quantity', 1)
+            responsible = serializer.validated_data['new_responsible_office']
+            from_location = asset.location
+            if quantity < asset.quantity:
+                suffix = 1
+                while Asset.objects.filter(asset_tag=f'{asset.asset_tag}/{suffix:03d}').exists():
+                    suffix += 1
+                moved_asset = Asset.objects.create(
+                    asset_tag=f'{asset.asset_tag}/{suffix:03d}', name=asset.name,
+                    description=asset.description, category=asset.category, location=to_location,
+                    responsible_office=responsible, quantity=quantity, condition=asset.condition,
+                    created_by=self.request.user, updated_by=self.request.user,
+                )
+                asset.quantity -= quantity
+                asset.updated_by = self.request.user
+                asset.save(update_fields=['quantity', 'updated_by', 'updated_at'])
+            else:
+                moved_asset = asset
+                asset.location = to_location
+                asset.responsible_office = responsible
+                asset.updated_by = self.request.user
+                asset.save(update_fields=['location', 'responsible_office', 'updated_by', 'updated_at'])
+            serializer.save(from_location=from_location, resulting_asset=moved_asset, recorded_by=self.request.user)
+
+
+class AssetMaintenanceViewSet(viewsets.ModelViewSet):
+    queryset = AssetMaintenance.objects.select_related('asset')
+    serializer_class = AssetMaintenanceSerializer
+    permission_classes = [IsEstateOfficer]
+
+    def perform_create(self, serializer):
+        asset = serializer.validated_data['asset']
+        quantity = serializer.validated_data.get('quantity', 1)
+        with transaction.atomic():
+            if quantity < asset.quantity:
+                suffix = 1
+                while Asset.objects.filter(asset_tag=f'{asset.asset_tag}/{suffix:03d}').exists():
+                    suffix += 1
+                maintenance_asset = Asset.objects.create(
+                    asset_tag=f'{asset.asset_tag}/{suffix:03d}', name=asset.name,
+                    description=asset.description, category=asset.category, location=asset.location,
+                    responsible_office=asset.responsible_office, quantity=quantity,
+                    condition=asset.condition, created_by=self.request.user, updated_by=self.request.user,
+                )
+                asset.quantity -= quantity
+                asset.updated_by = self.request.user
+                asset.save(update_fields=['quantity', 'updated_by', 'updated_at'])
+                serializer.save(asset=maintenance_asset, recorded_by=self.request.user)
+            else:
+                serializer.save(recorded_by=self.request.user)
+
+
+class InventoryInspectionViewSet(viewsets.ModelViewSet):
+    queryset = InventoryInspection.objects.select_related('location').prefetch_related('items')
+    serializer_class = InventoryInspectionSerializer
+    permission_classes = [IsEstateOfficer]
+
+    def perform_create(self, serializer):
+        serializer.save(recorded_by=self.request.user)
+
+
+class InventoryInspectionItemViewSet(viewsets.ModelViewSet):
+    queryset = InventoryInspectionItem.objects.select_related('inspection', 'asset')
+    serializer_class = InventoryInspectionItemSerializer
+    permission_classes = [IsEstateOfficer]
+
+
+class AssetDisposalViewSet(viewsets.ModelViewSet):
+    queryset = AssetDisposal.objects.select_related('asset')
+    serializer_class = AssetDisposalSerializer
+    permission_classes = [IsEstateOfficer]
+
+    def perform_create(self, serializer):
+        serializer.save(recorded_by=self.request.user)
+
+
+INVENTORY_HEADERS = [
+    'Asset Number/Tag *', 'Asset Name *', 'Description', 'Category *',
+    'Current Location *', 'Responsible Person/Office *', 'Quantity *', 'Condition *',
+]
+
+
+@api_view(['GET'])
+def inventory_template(request):
+    if not is_estate_officer(request.user):
+        return Response({'detail': 'Estate Officer access required.'}, status=403)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Assets'
+    ws.append(INVENTORY_HEADERS)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill('solid', fgColor='C0392B')
+    ws.freeze_panes = 'A2'
+    widths = [22, 28, 38, 28, 30, 32, 14, 20]
+    for idx, width in enumerate(widths, 1):
+        ws.column_dimensions[chr(64 + idx)].width = width
+    lists = wb.create_sheet('Lists')
+    categories = list(AssetCategory.objects.filter(is_active=True).values_list('name', flat=True))
+    locations = list(InventoryLocation.objects.filter(is_active=True).values_list('name', flat=True))
+    conditions = [label for _, label in Asset.CONDITION_CHOICES]
+    for row, value in enumerate(categories, 1): lists.cell(row, 1, value)
+    for row, value in enumerate(locations, 1): lists.cell(row, 2, value)
+    for row, value in enumerate(conditions, 1): lists.cell(row, 3, value)
+    if categories:
+        dv = DataValidation(type='list', formula1=f"'Lists'!$A$1:$A${len(categories)}")
+        ws.add_data_validation(dv); dv.add('D2:D5000')
+    if locations:
+        dv = DataValidation(type='list', formula1=f"'Lists'!$B$1:$B${len(locations)}")
+        ws.add_data_validation(dv); dv.add('E2:E5000')
+    dv = DataValidation(type='list', formula1=f"'Lists'!$C$1:$C${len(conditions)}")
+    ws.add_data_validation(dv); dv.add('H2:H5000')
+    instructions = wb.create_sheet('Instructions', 0)
+    instructions.append(['COLLEGE INVENTORY IMPORT TEMPLATE — Version 1'])
+    instructions.append(['Every column marked * is required. Do not rename or reorder headings.'])
+    instructions.append(['Use quantity 1 for individually tagged equipment; group only identical items.'])
+    instructions.append(['Validate the file in the system before confirming import.'])
+    output = BytesIO(); wb.save(output)
+    response = HttpResponse(output.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="college_inventory_template.xlsx"'
+    return response
+
+
+def _parse_inventory_upload(upload):
+    try:
+        wb = load_workbook(upload, read_only=True, data_only=True)
+    except Exception:
+        return [], [{'row': 0, 'field': 'File', 'message': 'Upload a valid .xlsx workbook.'}]
+    if 'Assets' not in wb.sheetnames:
+        return [], [{'row': 0, 'field': 'Worksheet', 'message': 'The Assets worksheet is missing.'}]
+    ws = wb['Assets']
+    headers = [str(c.value or '').strip() for c in ws[1]]
+    if headers[:len(INVENTORY_HEADERS)] != INVENTORY_HEADERS:
+        return [], [{'row': 1, 'field': 'Headings', 'message': 'Use the latest system template without changing headings.'}]
+    categories = {x.name.casefold(): x for x in AssetCategory.objects.filter(is_active=True)}
+    locations = {x.name.casefold(): x for x in InventoryLocation.objects.filter(is_active=True)}
+    conditions = {label.casefold(): value for value, label in Asset.CONDITION_CHOICES}
+    existing = {x.casefold() for x in Asset.objects.values_list('asset_tag', flat=True)}
+    seen, rows, errors = set(), [], []
+    fields = ['asset_tag', 'name', 'description', 'category', 'location', 'responsible_office', 'quantity', 'condition']
+    for number, values in enumerate(ws.iter_rows(min_row=2, max_col=8, values_only=True), 2):
+        if not any(v not in (None, '') for v in values): continue
+        data = dict(zip(fields, values))
+        for key, value in data.items():
+            if key == 'description':
+                continue
+            if value is None or str(value).strip() == '': errors.append({'row': number, 'field': key, 'message': 'Required.'})
+        tag = str(data['asset_tag'] or '').strip()
+        if tag.casefold() in existing or tag.casefold() in seen:
+            errors.append({'row': number, 'field': 'asset_tag', 'message': 'Asset number/tag already exists or is duplicated.'})
+        seen.add(tag.casefold())
+        category = categories.get(str(data['category'] or '').strip().casefold())
+        location = locations.get(str(data['location'] or '').strip().casefold())
+        condition = conditions.get(str(data['condition'] or '').strip().casefold())
+        if data['category'] and not category: errors.append({'row': number, 'field': 'category', 'message': 'Choose a category from the template list.'})
+        if data['location'] and not location: errors.append({'row': number, 'field': 'location', 'message': 'Choose a location from the template list.'})
+        if data['condition'] and not condition: errors.append({'row': number, 'field': 'condition', 'message': 'Choose a condition from the template list.'})
+        try:
+            quantity = int(data['quantity'])
+            if quantity < 1 or float(data['quantity']) != quantity: raise ValueError
+        except (TypeError, ValueError):
+            quantity = 0; errors.append({'row': number, 'field': 'quantity', 'message': 'Enter a positive whole number.'})
+        rows.append({**data, 'asset_tag': tag, 'name': str(data['name'] or '').strip(),
+                     'description': str(data['description'] or '').strip(), 'category': category,
+                     'location': location, 'responsible_office': str(data['responsible_office'] or '').strip(),
+                     'quantity': quantity, 'condition': condition})
+    if not rows: errors.append({'row': 0, 'field': 'File', 'message': 'No item rows were found.'})
+    return rows, errors
+
+
+@api_view(['POST'])
+def inventory_import(request):
+    if not is_estate_officer(request.user):
+        return Response({'detail': 'Estate Officer access required.'}, status=403)
+    upload = request.FILES.get('file')
+    if not upload:
+        return Response({'detail': 'Choose an Excel file.'}, status=400)
+    rows, errors = _parse_inventory_upload(upload)
+    if errors:
+        return Response({'valid': False, 'row_count': len(rows), 'errors': errors}, status=400)
+    if str(request.data.get('confirm', '')).lower() not in ('1', 'true', 'yes'):
+        return Response({'valid': True, 'row_count': len(rows), 'errors': []})
+    with transaction.atomic():
+        for row in rows:
+            Asset.objects.create(**row, created_by=request.user, updated_by=request.user)
+        AssetImport.objects.create(uploaded_by=request.user, file_name=upload.name, imported_rows=len(rows))
+    return Response({'valid': True, 'imported': len(rows)}, status=201)
+
+
+@api_view(['GET'])
+def inventory_report(request):
+    if not is_estate_officer(request.user):
+        return Response({'detail': 'Estate Officer access required.'}, status=403)
+    report_type = request.query_params.get('type', 'assets')
+    wb = Workbook(); ws = wb.active
+    if report_type == 'transfers':
+        ws.title = 'Transfers'; ws.append(['Source Tag', 'Resulting Tag', 'Asset', 'Quantity', 'From', 'To', 'Responsible Office', 'Date', 'Reason'])
+        for row in AssetTransfer.objects.select_related('asset', 'from_location', 'to_location'):
+            ws.append([row.asset.asset_tag, row.resulting_asset.asset_tag if row.resulting_asset else '', row.asset.name, row.quantity, row.from_location.name, row.to_location.name,
+                       row.new_responsible_office, row.transferred_at, row.reason])
+    elif report_type == 'maintenance':
+        ws.title = 'Maintenance'; ws.append(['Asset Tag', 'Asset', 'Quantity', 'Issue', 'Status', 'Provider', 'Cost', 'Reported', 'Completed'])
+        for row in AssetMaintenance.objects.select_related('asset'):
+            ws.append([row.asset.asset_tag, row.asset.name, row.quantity, row.issue, row.get_status_display(), row.provider,
+                       row.cost, row.reported_date, row.completed_date])
+    elif report_type == 'inspections':
+        ws.title = 'Inspections'; ws.append(['Inspection Date', 'Location', 'Inspector', 'Status', 'Asset Tag', 'Asset', 'Result', 'Note'])
+        for inspection in InventoryInspection.objects.select_related('location').prefetch_related('items__asset'):
+            if inspection.items.exists():
+                for item in inspection.items.all():
+                    ws.append([inspection.inspection_date, inspection.location.name, inspection.inspector_name,
+                               inspection.get_status_display(), item.asset.asset_tag, item.asset.name,
+                               item.get_result_display(), item.note])
+            else:
+                ws.append([inspection.inspection_date, inspection.location.name, inspection.inspector_name,
+                           inspection.get_status_display(), '', '', 'No items checked', ''])
+    elif report_type == 'disposals':
+        ws.title = 'Disposals'; ws.append(['Asset Tag', 'Asset', 'Status', 'Reason', 'Method', 'Proposed', 'Disposed', 'Reference'])
+        for row in AssetDisposal.objects.select_related('asset'):
+            ws.append([row.asset.asset_tag, row.asset.name, row.get_status_display(), row.reason, row.method,
+                       row.proposed_date, row.disposal_date, row.reference])
+    else:
+        report_type = 'assets'; ws.title = 'Asset Register'
+        ws.append(['Asset Tag', 'Asset Name', 'Description', 'Category', 'Location', 'Responsible Office', 'Quantity', 'Condition'])
+        for row in Asset.objects.select_related('category', 'location'):
+            ws.append([row.asset_tag, row.name, row.description, row.category.name, row.location.name,
+                       row.responsible_office, row.quantity, row.get_condition_display()])
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF'); cell.fill = PatternFill('solid', fgColor='1F4E78')
+    ws.freeze_panes = 'A2'; output = BytesIO(); wb.save(output)
+    response = HttpResponse(output.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="inventory_{report_type}_report.xlsx"'
+    return response
 
 
 # ── FINANCE ───────────────────────────────────────────────────────────────────

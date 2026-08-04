@@ -77,6 +77,166 @@ class AccountantProfile(models.Model):
         return self.full_name
 
 
+class EstateOfficerProfile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='estate_officer_profile')
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
+class InventoryLocation(models.Model):
+    name = models.CharField(max_length=160, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class AssetCategory(models.Model):
+    name = models.CharField(max_length=160, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name_plural = 'asset categories'
+
+    def __str__(self):
+        return self.name
+
+
+class Asset(models.Model):
+    NEW = 'new'
+    GOOD = 'good'
+    FAIR = 'fair'
+    POOR = 'poor'
+    UNSERVICEABLE = 'unserviceable'
+    CONDITION_CHOICES = [
+        (NEW, 'New'), (GOOD, 'Good'), (FAIR, 'Fair'),
+        (POOR, 'Poor'), (UNSERVICEABLE, 'Unserviceable'),
+    ]
+
+    asset_tag = models.CharField(max_length=100, unique=True, verbose_name='Asset number/tag')
+    name = models.CharField(max_length=200, verbose_name='Asset name')
+    description = models.TextField(blank=True)
+    category = models.ForeignKey(AssetCategory, on_delete=models.PROTECT, related_name='assets')
+    location = models.ForeignKey(InventoryLocation, on_delete=models.PROTECT, related_name='assets')
+    responsible_office = models.CharField(max_length=200, verbose_name='Person/office responsible')
+    quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    condition = models.CharField(max_length=20, choices=CONDITION_CHOICES)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='assets_created')
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='assets_updated')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['asset_tag']
+
+    def __str__(self):
+        return f'{self.asset_tag} – {self.name}'
+
+
+class AssetImport(models.Model):
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='asset_imports')
+    file_name = models.CharField(max_length=255)
+    imported_rows = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class AssetTransfer(models.Model):
+    asset = models.ForeignKey(Asset, on_delete=models.PROTECT, related_name='transfers')
+    from_location = models.ForeignKey(InventoryLocation, on_delete=models.PROTECT, related_name='transfers_from')
+    to_location = models.ForeignKey(InventoryLocation, on_delete=models.PROTECT, related_name='transfers_to')
+    quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    resulting_asset = models.ForeignKey(Asset, on_delete=models.PROTECT, null=True, blank=True, related_name='split_from_transfers')
+    new_responsible_office = models.CharField(max_length=200)
+    reason = models.TextField()
+    transferred_at = models.DateField()
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='asset_transfers_recorded')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-transferred_at', '-created_at']
+
+
+class AssetMaintenance(models.Model):
+    REPORTED = 'reported'
+    IN_PROGRESS = 'in_progress'
+    COMPLETED = 'completed'
+    STATUS_CHOICES = [(REPORTED, 'Reported'), (IN_PROGRESS, 'In progress'), (COMPLETED, 'Completed')]
+    asset = models.ForeignKey(Asset, on_delete=models.PROTECT, related_name='maintenance_records')
+    quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    issue = models.TextField()
+    action_taken = models.TextField(blank=True)
+    provider = models.CharField(max_length=200, blank=True)
+    cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=REPORTED)
+    reported_date = models.DateField()
+    completed_date = models.DateField(null=True, blank=True)
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='asset_maintenance_recorded')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-reported_date', '-created_at']
+
+
+class InventoryInspection(models.Model):
+    OPEN = 'open'
+    CLOSED = 'closed'
+    STATUS_CHOICES = [(OPEN, 'Open'), (CLOSED, 'Closed')]
+    location = models.ForeignKey(InventoryLocation, on_delete=models.PROTECT, related_name='inspections')
+    inspection_date = models.DateField()
+    inspector_name = models.CharField(max_length=200)
+    notes = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=OPEN)
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='inventory_inspections_recorded')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-inspection_date', '-created_at']
+
+
+class InventoryInspectionItem(models.Model):
+    FOUND = 'found'
+    MISSING = 'missing'
+    DAMAGED = 'damaged'
+    RELOCATED = 'relocated'
+    RESULT_CHOICES = [(FOUND, 'Found'), (MISSING, 'Missing'), (DAMAGED, 'Damaged'), (RELOCATED, 'Relocated')]
+    inspection = models.ForeignKey(InventoryInspection, on_delete=models.CASCADE, related_name='items')
+    asset = models.ForeignKey(Asset, on_delete=models.PROTECT, related_name='inspection_items')
+    result = models.CharField(max_length=20, choices=RESULT_CHOICES)
+    note = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ('inspection', 'asset')
+        ordering = ['asset__asset_tag']
+
+
+class AssetDisposal(models.Model):
+    PROPOSED = 'proposed'
+    DISPOSED = 'disposed'
+    STATUS_CHOICES = [(PROPOSED, 'Proposed'), (DISPOSED, 'Disposed')]
+    asset = models.OneToOneField(Asset, on_delete=models.PROTECT, related_name='disposal')
+    reason = models.TextField()
+    method = models.CharField(max_length=160, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=PROPOSED)
+    proposed_date = models.DateField()
+    disposal_date = models.DateField(null=True, blank=True)
+    reference = models.CharField(max_length=160, blank=True)
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='asset_disposals_recorded')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-proposed_date', '-created_at']
+
+
 class Module(models.Model):
     name = models.CharField(max_length=200)
     code = models.CharField(max_length=50)

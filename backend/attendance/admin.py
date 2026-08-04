@@ -3,6 +3,7 @@ from .models import (
     AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord,
     TeacherProfile, AccountantProfile, StudentResult, PaymentCategory, StudentPayment,
     StudentFinanceObligation, StudentFinanceClearance,
+    EstateOfficerProfile,
 )
 
 
@@ -37,6 +38,12 @@ class AccountantProfileAdmin(admin.ModelAdmin):
     list_display = ['full_name', 'user', 'is_active']
     list_filter = ['is_active']
     search_fields = ['full_name', 'user__username']
+
+
+@admin.register(EstateOfficerProfile)
+class EstateOfficerProfileAdmin(admin.ModelAdmin):
+    list_display = ['full_name', 'user', 'is_active']
+    list_filter = ['is_active']
 
 
 @admin.register(Module)

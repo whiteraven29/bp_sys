@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EduTrack — Attendance Management</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
 <style>
   :root {
     --bg: #0f1117; --surface: #181c27; --surface2: #1e2335; --border: #2a3050;
@@ -83,6 +85,9 @@
     transition: transform .28s cubic-bezier(.4,0,.2,1);
   }
   .sidebar-overlay { display: none; position: fixed; inset: 0; z-index: 99; background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
+  body.is-estate .hamburger { display: flex; }
+  body.is-estate.sidebar-collapsed aside { transform: translateX(calc(-1 * var(--sidebar-w))); }
+  body.is-estate.sidebar-collapsed main { margin-left: 0; }
   .aside-label { font-size: .62rem; font-family: var(--font-mono); color: var(--muted); letter-spacing: .12em; text-transform: uppercase; padding: 8px 10px 4px; }
   .nav-btn {
     display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px;
@@ -268,6 +273,17 @@
   body.is-finance .finance-only { display: flex !important; }
   body.is-finance .finance-only.card { display: block !important; }
   body.is-finance:not(.is-admin) .academic-only { display: none !important; }
+  .estate-only { display: none !important; }
+  body.is-estate .estate-only { display: flex !important; }
+  body.is-estate .estate-only.card { display: block !important; }
+  body.is-estate .academic-only, body.is-estate .finance-only { display: none !important; }
+  body.is-estate .non-estate-only { display: none !important; }
+  body.is-estate #page-inventory .inventory-section { display: none !important; }
+  body.is-estate #page-inventory .inventory-section.active { display: block !important; }
+  body.is-estate .estate-only.card.inventory-section { display: none !important; }
+  body.is-estate .estate-only.card.inventory-section.active { display: block !important; }
+  body.is-estate .inventory-section.stats-grid { display: none !important; }
+  body.is-estate .inventory-section.stats-grid.active { display: grid !important; }
   .finance-section { display: none; }
   .finance-section.active { display: block; }
 
@@ -440,7 +456,7 @@
   </div>
   <div class="header-right">
     <div class="user-chip" onclick="openProfileModal()" title="My modules">
-      <div class="user-avatar" id="user-avatar">👤</div>
+      <div class="user-avatar" id="user-avatar"><i class="bi bi-person"></i></div>
       <span class="uname" id="user-name">Me</span>
       <span class="role-badge" id="role-badge">—</span>
     </div>
@@ -452,32 +468,44 @@
 
 <div class="app">
   <aside id="sidebar">
-    <div class="aside-label">Navigation</div>
-    <button class="nav-btn active academic-only" data-page="dashboard" onclick="showPage('dashboard',this)"><span class="icon">📊</span> Dashboard</button>
-    <button class="nav-btn admin-only" data-page="accounts" onclick="showPage('accounts',this)"><span class="icon">👤</span> User Accounts</button>
+    <div class="aside-label non-estate-only">Navigation</div>
+    <button class="nav-btn active academic-only" data-page="dashboard" onclick="showPage('dashboard',this)"><span class="icon"><i class="bi bi-speedometer2"></i></span> Dashboard</button>
+    <button class="nav-btn admin-only" data-page="accounts" onclick="showPage('accounts',this)"><span class="icon"><i class="bi bi-people"></i></span> User Accounts</button>
+    <div class="aside-label estate-only">Inventory</div>
+    <button class="nav-btn estate-only inventory-nav-btn active" data-page="inventory" data-inventory-section="overview" onclick="showInventorySection('overview',this)"><span class="icon"><i class="bi bi-grid-1x2"></i></span> Overview</button>
+    <div class="nav-group estate-only" id="inventory-assets-nav-group">
+      <button class="nav-btn" data-page="inventory" onclick="toggleInventoryAssetsMenu(event)"><span class="icon"><i class="bi bi-box-seam"></i></span> Assets <span class="nav-caret">›</span></button>
+      <div class="nav-submenu"><button class="nav-sub-btn" data-inventory-section="register-list" onclick="showInventorySection('register-list',this)">Asset Register</button><button class="nav-sub-btn" data-inventory-section="register" onclick="showInventorySection('register',this)">Register Asset</button></div>
+    </div>
+    <button class="nav-btn estate-only inventory-nav-btn" data-page="inventory" data-inventory-section="locations" onclick="showInventorySection('locations',this)"><span class="icon"><i class="bi bi-geo-alt"></i></span> Locations</button>
+    <button class="nav-btn estate-only inventory-nav-btn" data-page="inventory" data-inventory-section="transfers" onclick="showInventorySection('transfers',this)"><span class="icon"><i class="bi bi-arrow-left-right"></i></span> Transfers</button>
+    <button class="nav-btn estate-only inventory-nav-btn" data-page="inventory" data-inventory-section="maintenance" onclick="showInventorySection('maintenance',this)"><span class="icon"><i class="bi bi-tools"></i></span> Maintenance</button>
+    <button class="nav-btn estate-only inventory-nav-btn" data-page="inventory" data-inventory-section="inspections" onclick="showInventorySection('inspections',this)"><span class="icon"><i class="bi bi-clipboard-check"></i></span> Physical Inspections</button>
+    <button class="nav-btn estate-only inventory-nav-btn" data-page="inventory" data-inventory-section="disposal" onclick="showInventorySection('disposal',this)"><span class="icon"><i class="bi bi-archive"></i></span> Disposal</button>
+    <button class="nav-btn estate-only inventory-nav-btn" data-page="inventory" data-inventory-section="reports" onclick="showInventorySection('reports',this)"><span class="icon"><i class="bi bi-file-earmark-arrow-down"></i></span> Reports</button>
     <div class="nav-group admin-only" id="modules-nav-group">
-      <button class="nav-btn" data-page="modules" onclick="toggleModulesMenu(event)"><span class="icon">📚</span> Modules <span class="nav-caret">›</span></button>
+      <button class="nav-btn" data-page="modules" onclick="toggleModulesMenu(event)"><span class="icon"><i class="bi bi-journal-bookmark"></i></span> Modules <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn active" data-module-section="register" onclick="showModuleSection('register', this)">Register Module</button>
         <button class="nav-sub-btn" data-module-section="manage" onclick="showModuleSection('manage', this)">Manage Modules</button>
       </div>
     </div>
     <div class="nav-group admin-only" id="students-nav-group">
-      <button class="nav-btn" data-page="students" onclick="toggleStudentsMenu(event)"><span class="icon">🎓</span> Students <span class="nav-caret">›</span></button>
+      <button class="nav-btn" data-page="students" onclick="toggleStudentsMenu(event)"><span class="icon"><i class="bi bi-mortarboard"></i></span> Students <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn active" data-student-section="register" onclick="showStudentSection('register', this)">Upload / Register</button>
         <button class="nav-sub-btn" data-student-section="manage" onclick="showStudentSection('manage', this)">Manage Enrollments</button>
       </div>
     </div>
     <div class="nav-group academic-only" id="attendance-nav-group">
-      <button class="nav-btn" data-page="attendance" onclick="toggleAttendanceMenu(event)"><span class="icon">✅</span> Attendance <span class="nav-caret">›</span></button>
+      <button class="nav-btn" data-page="attendance" onclick="toggleAttendanceMenu(event)"><span class="icon"><i class="bi bi-calendar-check"></i></span> Attendance <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn active" data-attendance-section="take" onclick="showAttendanceSection('take', this)">Take Attendance</button>
         <button class="nav-sub-btn" data-attendance-section="report" onclick="showAttendanceSection('report', this)">Attendance Report</button>
       </div>
     </div>
     <div class="nav-group academic-only" id="results-nav-group">
-      <button class="nav-btn" data-page="results" onclick="toggleResultsMenu(event)"><span class="icon">📝</span> Results <span class="nav-caret">›</span></button>
+      <button class="nav-btn" data-page="results" onclick="toggleResultsMenu(event)"><span class="icon"><i class="bi bi-file-earmark-text"></i></span> Results <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn active" data-results-section="ca" onclick="showResultsSection('ca', this)">CA Results</button>
         <button class="nav-sub-btn" data-results-section="final" onclick="showResultsSection('final', this)">End of Semester</button>
@@ -486,7 +514,7 @@
       </div>
     </div>
     <div class="nav-group admin-only" id="declarations-nav-group">
-      <button class="nav-btn" data-page="declarations" onclick="toggleDeclarationsMenu(event)"><span class="icon">📌</span> Exam Declarations <span class="nav-caret">›</span></button>
+      <button class="nav-btn" data-page="declarations" onclick="toggleDeclarationsMenu(event)"><span class="icon"><i class="bi bi-pin-angle"></i></span> Exam Declarations <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn active" data-declaration-type="special_exam" onclick="showDeclarationType('special_exam', this)">Special</button>
         <button class="nav-sub-btn" data-declaration-type="supp_exam" onclick="showDeclarationType('supp_exam', this)">Supplementary</button>
@@ -495,34 +523,34 @@
       </div>
     </div>
     <div class="nav-group admin-only" id="eligibility-nav-group">
-      <button class="nav-btn" data-page="eligibility" onclick="toggleEligibilityMenu(event)"><span class="icon">🎫</span> Eligibility <span class="nav-caret">›</span></button>
+      <button class="nav-btn" data-page="eligibility" onclick="toggleEligibilityMenu(event)"><span class="icon"><i class="bi bi-person-check"></i></span> Eligibility <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn active" data-eligibility-section="cats" onclick="showEligibilitySection('cats', this)">CATs</button>
         <button class="nav-sub-btn" data-eligibility-section="ese" onclick="showEligibilitySection('ese', this)">ESE</button>
       </div>
     </div>
-    <button class="nav-btn finance-only" data-page="finance" data-finance-section="dashboard" onclick="showFinanceSection('dashboard', this)"><span class="icon">📈</span> Finance Overview</button>
+    <button class="nav-btn finance-only" data-page="finance" data-finance-section="dashboard" onclick="showFinanceSection('dashboard', this)"><span class="icon"><i class="bi bi-graph-up-arrow"></i></span> Finance Overview</button>
     <div class="nav-group finance-only" id="finance-payments-nav-group">
-      <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'payments')"><span class="icon">💳</span> Payments <span class="nav-caret">›</span></button>
+      <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'payments')"><span class="icon"><i class="bi bi-credit-card"></i></span> Payments <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-finance-section="payments" onclick="showFinanceSection('payments', this)">Record &amp; Track</button>
         <button class="nav-sub-btn" data-finance-section="categories" onclick="showFinanceSection('categories', this)">Payment Categories</button>
       </div>
     </div>
     <div class="nav-group finance-only" id="finance-students-nav-group">
-      <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'students')"><span class="icon">🎓</span> Students <span class="nav-caret">›</span></button>
+      <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'students')"><span class="icon"><i class="bi bi-mortarboard"></i></span> Students <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-finance-section="students" onclick="showFinanceSection('students', this)">Paid / Balance Status</button>
         <button class="nav-sub-btn" data-finance-section="obligations" onclick="showFinanceSection('obligations', this)">Special Obligations</button>
       </div>
     </div>
     <div class="nav-group finance-only" id="finance-clearance-nav-group">
-      <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'clearance')"><span class="icon">✅</span> Clearance <span class="nav-caret">›</span></button>
+      <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'clearance')"><span class="icon"><i class="bi bi-patch-check"></i></span> Clearance <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-finance-section="clearance" onclick="showFinanceSection('clearance', this)">Exam &amp; Registration</button>
       </div>
     </div>
-    <button class="nav-btn admin-only" data-page="sick" onclick="showPage('sick',this)"><span class="icon">🤒</span> Sick Records</button>
+    <button class="nav-btn admin-only" data-page="sick" onclick="showPage('sick',this)"><span class="icon"><i class="bi bi-bandaid"></i></span> Sick Records</button>
     <div class="aside-label academic-only" style="margin-top:10px;">My Modules</div>
     <div class="academic-only" id="sidebar-levels"></div>
   </aside>
@@ -609,6 +637,7 @@
             <select id="acct-role" onchange="toggleAccountRoleFields()">
               <option value="tutor">Tutor</option>
               <option value="accountant">Accountant</option>
+              <option value="estate_officer">Estate Officer</option>
             </select>
           </div>
           <div class="field"><label>Full Name</label><input id="acct-full-name" placeholder="e.g. Jane Mwangi" /></div>
@@ -1283,6 +1312,124 @@
       </div>
     </div>
 
+    <!-- INVENTORY -->
+    <div class="page" id="page-inventory">
+      <div class="page-title" id="inventory-view-title">Inventory Overview</div>
+      <div class="page-sub" id="inventory-view-subtitle">A summary of registered college assets and items needing attention.</div>
+      <div class="inventory-section active" id="inventory-section-overview">
+      <div class="stats-grid">
+        <div class="stat-card" style="--c:var(--accent)"><div class="label">Asset Records</div><div class="value" id="inv-records">0</div></div>
+        <div class="stat-card" style="--c:var(--green)"><div class="label">Total Quantity</div><div class="value" id="inv-quantity">0</div></div>
+        <div class="stat-card" style="--c:var(--yellow)"><div class="label">Locations</div><div class="value" id="inv-locations">0</div></div>
+        <div class="stat-card" style="--c:var(--red)"><div class="label">Poor / Unserviceable</div><div class="value" id="inv-attention">0</div></div>
+      </div>
+      <div class="form-grid">
+        <div class="card" style="min-height:310px"><div class="card-title"><i class="bi bi-pie-chart"></i> Assets by Condition</div><div style="height:240px"><canvas id="inventory-condition-chart"></canvas></div></div>
+        <div class="card" style="min-height:310px"><div class="card-title"><i class="bi bi-bar-chart"></i> Quantity by Location</div><div style="height:240px"><canvas id="inventory-location-chart"></canvas></div></div>
+      </div>
+      </div>
+
+      <div class="card estate-only inventory-section" id="inventory-section-register">
+        <div class="card-title">Register Item</div>
+        <input type="hidden" id="inv-id" />
+        <div class="form-grid-3">
+          <div class="field"><label>Asset Number/Tag *</label><input id="inv-tag" /></div>
+          <div class="field"><label>Asset Name *</label><input id="inv-name" /></div>
+          <div class="field"><label>Category *</label><select id="inv-category"></select></div>
+          <div class="field"><label>Current Location *</label><select id="inv-location"></select></div>
+          <div class="field"><label>Person/Office Responsible *</label><input id="inv-responsible" /></div>
+          <div class="field"><label>Quantity *</label><input id="inv-qty" type="number" min="1" value="1" /></div>
+          <div class="field"><label>Condition *</label><select id="inv-condition"><option value="new">New</option><option value="good">Good</option><option value="fair">Fair</option><option value="poor">Poor</option><option value="unserviceable">Unserviceable</option></select></div>
+        </div>
+        <div class="field" style="margin:12px 0"><label>Description (optional)</label><textarea id="inv-description" rows="3"></textarea></div>
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:12px"><i class="bi bi-info-circle"></i> Every physical asset must have its own tag and quantity 1. For 30 chairs, register 30 records such as <strong>BPCH/CH/1</strong> through <strong>BPCH/CH/30</strong>. Use the Excel import to register them together without entering each item manually.</div>
+        <button class="btn btn-primary btn-sm" onclick="saveAsset()">Save Item</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearAssetForm()">Clear</button>
+      </div>
+
+      <div class="card estate-only inventory-section" id="inventory-section-bulk">
+        <div class="card-title">Bulk Register from Excel</div>
+        <p style="font-size:.8rem;color:var(--muted)">Download the controlled template. All columns marked * are mandatory.</p>
+        <a class="btn btn-ghost btn-sm" href="/api/inventory/template/">Download Excel Template</a>
+        <input id="inv-file" type="file" accept=".xlsx" style="margin:10px" />
+        <button class="btn btn-primary btn-sm" onclick="validateInventoryFile(false)">Validate File</button>
+        <button class="btn btn-success btn-sm" id="inv-import-btn" disabled onclick="validateInventoryFile(true)">Confirm Import</button>
+        <div id="inv-import-result" style="margin-top:12px;font-size:.78rem"></div>
+      </div>
+
+      <div class="card estate-only inventory-section" id="inventory-section-locations">
+        <div class="card-title">Locations and Categories</div>
+        <div class="form-grid">
+          <div class="field"><label>Add Location</label><div style="display:flex;gap:8px"><input id="inv-new-location" /><button class="btn btn-primary btn-sm" onclick="addInventoryReference('location')">Add</button></div></div>
+          <div class="field"><label>Add Category</label><div style="display:flex;gap:8px"><input id="inv-new-category" /><button class="btn btn-primary btn-sm" onclick="addInventoryReference('category')">Add</button></div></div>
+        </div>
+      </div>
+
+      <div class="card estate-only inventory-section" id="inventory-section-register-list">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+          <div class="card-title">Item Register</div>
+          <input id="inv-search" placeholder="Search tag, name, description or office" oninput="renderInventory()" style="max-width:340px" />
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Asset Tag</th><th>Item</th><th>Category</th><th>Location</th><th>Responsible</th><th>Qty</th><th>Condition</th><th>Actions</th></tr></thead><tbody id="inv-tbody"></tbody></table></div>
+      </div>
+
+      <div class="card estate-only inventory-section" id="inventory-section-transfers">
+        <div class="card-title">Transfer Asset</div>
+        <div class="form-grid-3">
+          <div class="field"><label>Asset/Batch *</label><select id="tr-asset" onchange="updateTransferBatchHelp()"></select></div>
+          <div class="field"><label>New Location *</label><select id="tr-location"></select></div>
+          <div class="field"><label>New Responsible Person/Office *</label><input id="tr-responsible" /></div>
+          <div class="field"><label>Quantity to Transfer *</label><input id="tr-quantity" type="number" min="1" value="1" /></div>
+          <div class="field"><label>Transfer Date *</label><input id="tr-date" type="date" /></div>
+        </div>
+        <div class="field" style="margin:12px 0"><label>Reason *</label><textarea id="tr-reason"></textarea></div>
+        <button class="btn btn-primary btn-sm" onclick="saveTransfer()">Record Transfer</button>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:10px" id="tr-batch-help"></div>
+        <div class="table-wrap" style="margin-top:16px"><table><thead><tr><th>Date</th><th>Source / New Tag</th><th>Qty</th><th>From</th><th>To</th><th>Responsible</th><th>Reason</th></tr></thead><tbody id="tr-tbody"></tbody></table></div>
+      </div>
+
+      <div class="card estate-only inventory-section" id="inventory-section-maintenance">
+      <div class="card-title">Maintenance Record</div>
+        <input type="hidden" id="mt-id" />
+        <div class="form-grid-3">
+          <div class="field"><label>Asset *</label><select id="mt-asset"></select></div>
+          <div class="field"><label>Reported Date *</label><input id="mt-reported" type="date" /></div>
+          <div class="field"><label>Status *</label><select id="mt-status"><option value="reported">Reported</option><option value="in_progress">In progress</option><option value="completed">Completed</option></select></div>
+          <div class="field"><label>Quantity Affected *</label><input id="mt-quantity" type="number" min="1" value="1" /></div>
+          <div class="field"><label>Provider</label><input id="mt-provider" /></div>
+          <div class="field"><label>Cost</label><input id="mt-cost" type="number" min="0" step="0.01" value="0" /></div>
+          <div class="field"><label>Completion Date</label><input id="mt-completed" type="date" /></div>
+        </div>
+        <div class="form-grid"><div class="field"><label>Issue *</label><textarea id="mt-issue"></textarea></div><div class="field"><label>Action Taken</label><textarea id="mt-action"></textarea></div></div>
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:12px"><i class="bi bi-info-circle"></i> If only part of a batch needs maintenance, the selected quantity is split into its own traceable tag automatically.</div>
+        <button class="btn btn-primary btn-sm" onclick="saveMaintenance()">Save Maintenance</button>
+        <div class="table-wrap" style="margin-top:16px"><table><thead><tr><th>Reported</th><th>Asset</th><th>Issue</th><th>Status</th><th>Provider</th><th>Cost</th></tr></thead><tbody id="mt-tbody"></tbody></table></div>
+      </div>
+
+      <div class="card estate-only inventory-section" id="inventory-section-inspections">
+        <div class="card-title">Physical Inspection</div>
+        <div class="form-grid-3"><div class="field"><label>Location *</label><select id="in-location"></select></div><div class="field"><label>Inspection Date *</label><input id="in-date" type="date" /></div><div class="field"><label>Inspector *</label><input id="in-inspector" /></div><div class="field"><label>Status</label><select id="in-status"><option value="open">Open</option><option value="closed">Closed</option></select></div></div>
+        <div class="field" style="margin:12px 0"><label>Notes</label><textarea id="in-notes"></textarea></div>
+        <button class="btn btn-primary btn-sm" onclick="saveInspection()">Create Inspection</button>
+        <div class="table-wrap" style="margin-top:16px"><table><thead><tr><th>Date</th><th>Location</th><th>Inspector</th><th>Status</th><th>Items Checked</th></tr></thead><tbody id="in-tbody"></tbody></table></div>
+        <div id="inspection-items-panel" style="margin-top:16px"></div>
+      </div>
+
+      <div class="card estate-only inventory-section" id="inventory-section-disposal">
+      <div class="card-title">Asset Disposal</div>
+        <input type="hidden" id="ds-id" />
+        <div class="form-grid-3"><div class="field"><label>Asset *</label><select id="ds-asset"></select></div><div class="field"><label>Proposed Date *</label><input id="ds-proposed" type="date" /></div><div class="field"><label>Status *</label><select id="ds-status"><option value="proposed">Proposed</option><option value="disposed">Disposed</option></select></div><div class="field"><label>Method</label><input id="ds-method" /></div><div class="field"><label>Disposal Date</label><input id="ds-date" type="date" /></div><div class="field"><label>Reference</label><input id="ds-reference" /></div></div>
+        <div class="field" style="margin:12px 0"><label>Reason *</label><textarea id="ds-reason"></textarea></div>
+        <button class="btn btn-primary btn-sm" onclick="saveDisposal()">Save Disposal</button>
+        <div class="table-wrap" style="margin-top:16px"><table><thead><tr><th>Asset</th><th>Status</th><th>Reason</th><th>Method</th><th>Proposed</th><th>Disposed</th></tr></thead><tbody id="ds-tbody"></tbody></table></div>
+      </div>
+
+      <div class="card estate-only inventory-section" id="inventory-section-reports">
+        <div class="card-title">Inventory Reports</div>
+        <p style="font-size:.82rem;color:var(--muted)">Download current, auditable Excel registers.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-primary btn-sm" href="/api/inventory/report/?type=assets">Asset Register</a><a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=transfers">Transfers</a><a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=maintenance">Maintenance</a><a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=inspections">Inspections</a><a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=disposals">Disposals</a></div>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -1385,6 +1532,7 @@ const API = '/api';
 const state = {
   isStaff: false,
   isAccountant: false,
+  isEstateOfficer: false,
   levels: [],
   semesters: [],
   modules: [],
@@ -1398,6 +1546,15 @@ const state = {
   studentPayments: [],
   financeObligations: [],
   financeClearances: [],
+  inventoryAssets: [],
+  inventoryLocations: [],
+  inventoryCategories: [],
+  inventoryTransfers: [],
+  inventoryMaintenance: [],
+  inventoryInspections: [],
+  inventoryInspectionItems: [],
+  inventoryDisposals: [],
+  inventorySection: 'overview',
 };
 
 // ── UTILS ──────────────────────────────────────────────────────────────────────
@@ -1417,6 +1574,8 @@ async function api(method, path, body) {
   return data;
 }
 let _toastTimer;
+let inventoryConditionChart = null;
+let inventoryLocationChart = null;
 function toast(msg, color) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -1445,6 +1604,11 @@ function appendParam(url, name, value) {
 
 // ── SIDEBAR / MOBILE ───────────────────────────────────────────────────────────
 function toggleSidebar() {
+  if (window.innerWidth > 768 && document.body.classList.contains('is-estate')) {
+    document.body.classList.toggle('sidebar-collapsed');
+    localStorage.setItem('inventorySidebarCollapsed', document.body.classList.contains('sidebar-collapsed') ? '1' : '0');
+    return;
+  }
   document.getElementById('sidebar').classList.toggle('open');
   document.getElementById('hamburger').classList.toggle('open');
   document.getElementById('sidebar-overlay').classList.toggle('show');
@@ -1535,6 +1699,7 @@ function showPage(name, btn) {
   if (name === 'declarations') loadDeclarationModule();
   if (name === 'eligibility') loadEligibility();
   if (name === 'finance') loadFinance();
+  if (name === 'inventory') loadInventory();
   if (name === 'sick') loadSickRecords();
 }
 
@@ -1677,6 +1842,40 @@ function showFinanceSection(section, btn) {
   if (state.financeStudents.length || state.paymentCategories.length || state.studentPayments.length) renderFinance();
 }
 
+function showInventorySection(section, btn) {
+  state.inventorySection = section || 'overview';
+  showPage('inventory', btn || document.querySelector(`[data-inventory-section="${state.inventorySection}"]`));
+  document.querySelectorAll('[data-inventory-section]').forEach(el => el.classList.toggle('active', el.dataset.inventorySection === state.inventorySection));
+  document.querySelectorAll('.inventory-section').forEach(el => el.classList.remove('active'));
+  document.getElementById(`inventory-section-${state.inventorySection}`)?.classList.add('active');
+  if (state.inventorySection === 'register') document.getElementById('inventory-section-bulk')?.classList.add('active');
+  const viewCopy = {
+    overview: ['Inventory Overview', 'A summary of registered college assets and items needing attention.'],
+    'register-list': ['Asset Register', 'Search and review the complete college asset register.'],
+    register: ['Register Asset', 'Register one asset manually or import multiple assets using the controlled Excel template.'],
+    locations: ['Locations', 'Manage college locations and asset categories used by the register.'],
+    transfers: ['Asset Transfers', 'Move assets between locations while preserving their movement history.'],
+    maintenance: ['Maintenance', 'Record faults, repairs, providers, costs and completion details.'],
+    inspections: ['Physical Inspections', 'Create stocktaking exercises and record the result for every asset.'],
+    disposal: ['Asset Disposal', 'Propose and record asset disposal without deleting historical records.'],
+    reports: ['Inventory Reports', 'Download separate auditable registers for each inventory workflow.'],
+  };
+  const copy = viewCopy[state.inventorySection] || viewCopy.overview;
+  document.getElementById('inventory-view-title').textContent = copy[0];
+  document.getElementById('inventory-view-subtitle').textContent = copy[1];
+  if (btn) btn.classList.add('active');
+  if (['register', 'register-list'].includes(state.inventorySection)) {
+    const group = document.getElementById('inventory-assets-nav-group');
+    group.classList.add('open'); group.querySelector('.nav-btn').classList.add('active');
+  }
+}
+
+function toggleInventoryAssetsMenu(event) {
+  const group = document.getElementById('inventory-assets-nav-group'); group.classList.toggle('open');
+  if (!['register', 'register-list'].includes(state.inventorySection)) showInventorySection('register-list', group.querySelector('[data-inventory-section="register-list"]'));
+  event.stopPropagation();
+}
+
 // ── BOOT ───────────────────────────────────────────────────────────────────────
 async function boot() {
   try {
@@ -1687,10 +1886,19 @@ async function boot() {
     ]);
     state.isStaff = dash.is_staff;
     state.isAccountant = dash.is_accountant;
+    state.isEstateOfficer = dash.is_estate_officer;
     if (state.isAccountant) document.body.classList.add('is-finance');
     if (!state.isStaff && state.isAccountant) {
       document.getElementById('role-badge').textContent = 'Accountant';
       document.getElementById('role-badge').className = 'role-badge admin';
+    }
+    if (state.isEstateOfficer) {
+      document.body.classList.add('is-estate');
+      document.body.classList.toggle('sidebar-collapsed', localStorage.getItem('inventorySidebarCollapsed') === '1');
+      document.getElementById('role-badge').textContent = 'Estate Officer';
+      document.getElementById('role-badge').className = 'role-badge tutor';
+      document.getElementById('header-sem-badge').textContent = 'College Inventory';
+      document.getElementById('header-sem-badge').className = 'sem-badge active';
     }
     state.levels = levels.results ?? levels;
     state.semesters = sems.results ?? sems;
@@ -1698,7 +1906,10 @@ async function boot() {
 
     // Header semester badge
     const badge = document.getElementById('header-sem-badge');
-    if (state.activeSem) {
+    if (state.isEstateOfficer) {
+      badge.textContent = 'College Inventory';
+      badge.className = 'sem-badge active';
+    } else if (state.activeSem) {
       badge.textContent = state.activeSem.label;
       badge.className = 'sem-badge active';
     } else {
@@ -1716,6 +1927,7 @@ async function boot() {
         updateCutoffStatuses(state.activeSem);
       }
     }
+    if (state.isEstateOfficer) showInventorySection('overview', document.querySelector('[data-inventory-section="overview"]'));
     updatePeriodLocks();
 
     // Dashboard stats
@@ -1884,7 +2096,7 @@ function renderAccountModuleList() {
 
 function toggleAccountRoleFields() {
   const role = document.getElementById('acct-role').value;
-  document.getElementById('acct-modules-wrap').style.display = role === 'accountant' ? 'none' : '';
+  document.getElementById('acct-modules-wrap').style.display = role === 'tutor' ? '' : 'none';
 }
 
 async function createStaffAccount() {
@@ -4164,7 +4376,218 @@ async function advanceSemester() {
   } catch(e) { toast(e?.detail || 'Error', 'var(--red)'); }
 }
 
+// ── INVENTORY ─────────────────────────────────────────────────────────────────
+function safeText(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+
+function installWebIconReplacements() {
+  const icons = {'🎓':'mortarboard','👁':'eye','👥':'people','💰':'cash-coin','💳':'credit-card','💾':'floppy','📅':'calendar3','📊':'bar-chart','📋':'clipboard','📌':'pin-angle','📚':'journal-bookmark','📝':'file-earmark-text','📤':'cloud-upload','📥':'cloud-download','🔍':'search','🔑':'key','🔒':'lock','🔴':'circle-fill','🖨':'printer','🗓':'calendar-week','🟢':'circle-fill','🤒':'bandaid'};
+  const pattern = new RegExp(`[${Object.keys(icons).join('')}]`, 'u');
+  const convert = root => {
+    if (!root || ['SCRIPT','STYLE'].includes(root.nodeName)) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const targets = [];
+    while (walker.nextNode()) if (pattern.test(walker.currentNode.nodeValue)) targets.push(walker.currentNode);
+    targets.forEach(node => {
+      const fragment = document.createDocumentFragment();
+      Array.from(node.nodeValue).forEach(char => {
+        if (icons[char]) { const icon=document.createElement('i'); icon.className=`bi bi-${icons[char]}`; icon.setAttribute('aria-hidden','true'); fragment.appendChild(icon); }
+        else fragment.appendChild(document.createTextNode(char));
+      });
+      node.replaceWith(fragment);
+    });
+  };
+  convert(document.body);
+  new MutationObserver(changes => changes.forEach(change => {
+    change.addedNodes.forEach(node => convert(node));
+    if (change.type === 'characterData') convert(change.target.parentNode);
+  })).observe(document.body, {subtree:true, childList:true, characterData:true});
+}
+
+async function loadInventory() {
+  try {
+    const [assets, locations, categories, transfers, maintenance, inspections, inspectionItems, disposals] = await Promise.all([
+      api('GET', '/assets/'), api('GET', '/inventory-locations/'), api('GET', '/asset-categories/'),
+      api('GET', '/asset-transfers/'), api('GET', '/asset-maintenance/'), api('GET', '/inventory-inspections/'),
+      api('GET', '/inventory-inspection-items/'), api('GET', '/asset-disposals/')
+    ]);
+    state.inventoryAssets = assets.results ?? assets;
+    state.inventoryLocations = locations.results ?? locations;
+    state.inventoryCategories = categories.results ?? categories;
+    state.inventoryTransfers = transfers.results ?? transfers;
+    state.inventoryMaintenance = maintenance.results ?? maintenance;
+    state.inventoryInspections = inspections.results ?? inspections;
+    state.inventoryInspectionItems = inspectionItems.results ?? inspectionItems;
+    state.inventoryDisposals = disposals.results ?? disposals;
+    const locationSelect = document.getElementById('inv-location');
+    const categorySelect = document.getElementById('inv-category');
+    locationSelect.innerHTML = '<option value="">— select location —</option>' + state.inventoryLocations.filter(x => x.is_active).map(x => `<option value="${x.id}">${safeText(x.name)}</option>`).join('');
+    categorySelect.innerHTML = '<option value="">— select category —</option>' + state.inventoryCategories.filter(x => x.is_active).map(x => `<option value="${x.id}">${safeText(x.name)}</option>`).join('');
+    const assetOptions = '<option value="">— select asset —</option>' + state.inventoryAssets.map(x => `<option value="${x.id}">${safeText(x.asset_tag)} — ${safeText(x.name)}</option>`).join('');
+    ['tr-asset','mt-asset','ds-asset'].forEach(id => document.getElementById(id).innerHTML = assetOptions);
+    const locationOptions = '<option value="">— select location —</option>' + state.inventoryLocations.filter(x => x.is_active).map(x => `<option value="${x.id}">${safeText(x.name)}</option>`).join('');
+    ['tr-location','in-location'].forEach(id => document.getElementById(id).innerHTML = locationOptions);
+    renderInventory();
+    renderInventoryWorkflows();
+  } catch (e) { toast(e?.detail || 'Failed to load inventory', 'var(--red)'); }
+}
+
+function renderInventory() {
+  const query = document.getElementById('inv-search').value.trim().toLowerCase();
+  const rows = state.inventoryAssets.filter(a => !query || [a.asset_tag, a.name, a.description, a.responsible_office, a.location_name, a.category_name].some(v => String(v || '').toLowerCase().includes(query)));
+  document.getElementById('inv-records').textContent = state.inventoryAssets.length;
+  document.getElementById('inv-quantity').textContent = state.inventoryAssets.reduce((sum, a) => sum + Number(a.quantity || 0), 0);
+  document.getElementById('inv-locations').textContent = new Set(state.inventoryAssets.map(a => a.location)).size;
+  document.getElementById('inv-attention').textContent = state.inventoryAssets.filter(a => ['poor', 'unserviceable'].includes(a.condition)).length;
+  document.getElementById('inv-tbody').innerHTML = rows.length ? rows.map(a => `<tr>
+    <td style="font-family:var(--font-mono)">${safeText(a.asset_tag)}</td><td><strong>${safeText(a.name)}</strong><br><small>${safeText(a.description)}</small></td>
+    <td>${safeText(a.category_name)}</td><td>${safeText(a.location_name)}</td><td>${safeText(a.responsible_office)}</td><td>${a.quantity}</td>
+    <td><span class="badge ${['poor','unserviceable'].includes(a.condition) ? 'badge-red' : a.condition === 'fair' ? 'badge-yellow' : 'badge-green'}">${safeText(a.condition_display)}</span></td>
+    <td><button class="btn btn-ghost btn-sm" onclick="editAsset(${a.id})">Edit</button></td></tr>`).join('') : '<tr><td colspan="8"><div class="empty">No inventory items found</div></td></tr>';
+  renderInventoryCharts();
+}
+
+function renderInventoryCharts() {
+  if (typeof Chart === 'undefined') return;
+  const conditionLabels = ['New','Good','Fair','Poor','Unserviceable'];
+  const conditionValues = ['new','good','fair','poor','unserviceable'].map(c => state.inventoryAssets.filter(a => a.condition === c).reduce((s,a)=>s+Number(a.quantity),0));
+  const locationTotals = {};
+  state.inventoryAssets.forEach(a => locationTotals[a.location_name] = (locationTotals[a.location_name] || 0) + Number(a.quantity));
+  inventoryConditionChart?.destroy(); inventoryLocationChart?.destroy();
+  const common = {responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#c7ccda'}}},scales:{x:{ticks:{color:'#9aa2b8'},grid:{color:'rgba(122,130,153,.12)'}},y:{ticks:{color:'#9aa2b8',precision:0},grid:{color:'rgba(122,130,153,.12)'}}}};
+  inventoryConditionChart = new Chart(document.getElementById('inventory-condition-chart'), {type:'doughnut',data:{labels:conditionLabels,datasets:[{data:conditionValues,backgroundColor:['#4f8ef7','#22c55e','#f59e0b','#f97316','#ef4444'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#c7ccda'}}}}});
+  inventoryLocationChart = new Chart(document.getElementById('inventory-location-chart'), {type:'bar',data:{labels:Object.keys(locationTotals),datasets:[{label:'Items',data:Object.values(locationTotals),backgroundColor:'#4f8ef7',borderRadius:6}]},options:common});
+}
+
+function inventoryPayload() {
+  return {
+    asset_tag: document.getElementById('inv-tag').value.trim(), name: document.getElementById('inv-name').value.trim(),
+    description: document.getElementById('inv-description').value.trim(), category: document.getElementById('inv-category').value,
+    location: document.getElementById('inv-location').value, responsible_office: document.getElementById('inv-responsible').value.trim(),
+    quantity: Number(document.getElementById('inv-qty').value), condition: document.getElementById('inv-condition').value,
+  };
+}
+
+async function saveAsset() {
+  const payload = inventoryPayload();
+  if (!payload.asset_tag || !payload.name || !payload.category || !payload.location || !payload.responsible_office || !Number.isInteger(payload.quantity) || payload.quantity < 1 || !payload.condition) {
+    toast('Complete every required item field', 'var(--red)'); return;
+  }
+  const id = document.getElementById('inv-id').value;
+  try {
+    await api(id ? 'PATCH' : 'POST', id ? `/assets/${id}/` : '/assets/', payload);
+    toast(id ? 'Item updated' : 'Item registered', 'var(--green)'); clearAssetForm(); await loadInventory();
+  } catch (e) { toast(e?.asset_tag?.[0] || e?.detail || 'Could not save item', 'var(--red)'); }
+}
+
+function editAsset(id) {
+  const a = state.inventoryAssets.find(x => x.id === id); if (!a) return;
+  document.getElementById('inv-id').value = a.id; document.getElementById('inv-tag').value = a.asset_tag;
+  document.getElementById('inv-name').value = a.name; document.getElementById('inv-description').value = a.description;
+  document.getElementById('inv-category').value = a.category; document.getElementById('inv-location').value = a.location;
+  document.getElementById('inv-responsible').value = a.responsible_office; document.getElementById('inv-qty').value = a.quantity;
+  document.getElementById('inv-condition').value = a.condition; document.getElementById('inv-tag').scrollIntoView({behavior:'smooth'});
+}
+
+function clearAssetForm() {
+  ['inv-id','inv-tag','inv-name','inv-description','inv-responsible'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('inv-category').value = ''; document.getElementById('inv-location').value = '';
+  document.getElementById('inv-qty').value = 1; document.getElementById('inv-condition').value = 'new';
+}
+
+async function addInventoryReference(kind) {
+  const input = document.getElementById(kind === 'location' ? 'inv-new-location' : 'inv-new-category');
+  if (!input.value.trim()) { toast(`Enter a ${kind} name`, 'var(--red)'); return; }
+  try {
+    await api('POST', kind === 'location' ? '/inventory-locations/' : '/asset-categories/', {name: input.value.trim(), is_active: true});
+    input.value = ''; await loadInventory(); toast(`${kind === 'location' ? 'Location' : 'Category'} added`, 'var(--green)');
+  } catch (e) { toast(e?.name?.[0] || 'Could not add entry', 'var(--red)'); }
+}
+
+async function validateInventoryFile(confirmImport) {
+  const file = document.getElementById('inv-file').files[0];
+  if (!file) { toast('Choose the completed Excel template', 'var(--red)'); return; }
+  const form = new FormData(); form.append('file', file); form.append('confirm', confirmImport ? 'true' : 'false');
+  const response = await fetch('/api/inventory/import/', {method:'POST', headers:{'X-CSRFToken':getCookie('csrftoken')}, credentials:'same-origin', body:form});
+  const data = await response.json().catch(() => ({}));
+  const result = document.getElementById('inv-import-result');
+  if (!response.ok) {
+    const errors = data.errors || [{row:0, field:'File', message:data.detail || 'Import failed'}];
+    result.innerHTML = `<strong style="color:var(--red)">Fix ${errors.length} error(s):</strong><br>` + errors.slice(0, 50).map(e => `Row ${e.row}: ${safeText(e.field)} — ${safeText(e.message)}`).join('<br>');
+    document.getElementById('inv-import-btn').disabled = true; return;
+  }
+  if (confirmImport) {
+    result.innerHTML = `<strong style="color:var(--green)">${data.imported} item row(s) imported successfully.</strong>`;
+    document.getElementById('inv-file').value = ''; document.getElementById('inv-import-btn').disabled = true; await loadInventory();
+  } else {
+    result.innerHTML = `<strong style="color:var(--green)">Valid file: ${data.row_count} row(s) ready to import.</strong>`;
+    document.getElementById('inv-import-btn').disabled = false;
+  }
+}
+
+function renderInventoryWorkflows() {
+  document.getElementById('tr-tbody').innerHTML = state.inventoryTransfers.length ? state.inventoryTransfers.map(x => `<tr><td>${x.transferred_at}</td><td>${safeText(x.asset_tag)}<br><small>${safeText(x.resulting_asset_tag || x.asset_tag)}</small></td><td>${x.quantity}</td><td>${safeText(x.from_location_name)}</td><td>${safeText(x.to_location_name)}</td><td>${safeText(x.new_responsible_office)}</td><td>${safeText(x.reason)}</td></tr>`).join('') : '<tr><td colspan="7">No transfers recorded</td></tr>';
+  document.getElementById('mt-tbody').innerHTML = state.inventoryMaintenance.length ? state.inventoryMaintenance.map(x => `<tr><td>${x.reported_date}</td><td>${safeText(x.asset_tag)} — ${safeText(x.asset_name)}</td><td>${safeText(x.issue)}<br><small>${x.quantity} item(s)</small></td><td>${safeText(x.status_display)}</td><td>${safeText(x.provider || '—')}</td><td>${Number(x.cost).toLocaleString()}</td><td><button class="btn btn-ghost btn-sm" onclick="editMaintenance(${x.id})">Edit</button></td></tr>`).join('') : '<tr><td colspan="7">No maintenance records</td></tr>';
+  document.getElementById('in-tbody').innerHTML = state.inventoryInspections.length ? state.inventoryInspections.map(x => `<tr><td>${x.inspection_date}</td><td>${safeText(x.location_name)}</td><td>${safeText(x.inspector_name)}</td><td>${safeText(x.status_display)}</td><td>${x.item_count}</td><td><button class="btn btn-ghost btn-sm" onclick="openInspection(${x.id})">Inspect Items</button></td></tr>`).join('') : '<tr><td colspan="6">No inspections recorded</td></tr>';
+  document.getElementById('ds-tbody').innerHTML = state.inventoryDisposals.length ? state.inventoryDisposals.map(x => `<tr><td>${safeText(x.asset_tag)} — ${safeText(x.asset_name)}</td><td>${safeText(x.status_display)}</td><td>${safeText(x.reason)}</td><td>${safeText(x.method || '—')}</td><td>${x.proposed_date}</td><td>${x.disposal_date || '—'}</td><td><button class="btn btn-ghost btn-sm" onclick="editDisposal(${x.id})">Edit</button></td></tr>`).join('') : '<tr><td colspan="7">No disposal records</td></tr>';
+}
+
+function updateTransferBatchHelp() {
+  const asset = state.inventoryAssets.find(a => String(a.id) === String(document.getElementById('tr-asset').value));
+  const help = document.getElementById('tr-batch-help');
+  if (!asset) { help.textContent = ''; return; }
+  document.getElementById('tr-quantity').max = asset.quantity;
+  help.innerHTML = `<i class="bi bi-boxes"></i> ${safeText(asset.asset_tag)} contains <strong>${asset.quantity}</strong> item(s) at ${safeText(asset.location_name)}. Transferring fewer than ${asset.quantity} will create a new split tag automatically.`;
+}
+
+async function saveTransfer() {
+  const payload = {asset:document.getElementById('tr-asset').value, quantity:Number(document.getElementById('tr-quantity').value), to_location:document.getElementById('tr-location').value, new_responsible_office:document.getElementById('tr-responsible').value.trim(), transferred_at:document.getElementById('tr-date').value, reason:document.getElementById('tr-reason').value.trim()};
+  if (Object.values(payload).some(v => !v)) { toast('Complete every required transfer field', 'var(--red)'); return; }
+  try { await api('POST','/asset-transfers/',payload); ['tr-responsible','tr-date','tr-reason'].forEach(id=>document.getElementById(id).value=''); await loadInventory(); toast('Asset transferred and register updated','var(--green)'); } catch(e) { toast(e?.detail || 'Could not record transfer','var(--red)'); }
+}
+
+async function saveMaintenance() {
+  const id = document.getElementById('mt-id').value;
+  const payload = {asset:document.getElementById('mt-asset').value, quantity:Number(document.getElementById('mt-quantity').value), reported_date:document.getElementById('mt-reported').value, status:document.getElementById('mt-status').value, provider:document.getElementById('mt-provider').value.trim(), cost:document.getElementById('mt-cost').value || 0, completed_date:document.getElementById('mt-completed').value || null, issue:document.getElementById('mt-issue').value.trim(), action_taken:document.getElementById('mt-action').value.trim()};
+  if (!payload.asset || !payload.reported_date || !payload.issue) { toast('Asset, reported date and issue are required','var(--red)'); return; }
+  try { await api(id?'PATCH':'POST', id?`/asset-maintenance/${id}/`:'/asset-maintenance/',payload); ['mt-id','mt-provider','mt-completed','mt-issue','mt-action'].forEach(x=>document.getElementById(x).value=''); await loadInventory(); toast('Maintenance record saved','var(--green)'); } catch(e) { toast(e?.completed_date?.[0] || e?.detail || 'Could not save maintenance','var(--red)'); }
+}
+
+function editMaintenance(id) {
+  const x=state.inventoryMaintenance.find(v=>v.id===id); if(!x)return;
+  document.getElementById('mt-id').value=x.id; document.getElementById('mt-asset').value=x.asset; document.getElementById('mt-quantity').value=x.quantity; document.getElementById('mt-reported').value=x.reported_date; document.getElementById('mt-status').value=x.status; document.getElementById('mt-provider').value=x.provider; document.getElementById('mt-cost').value=x.cost; document.getElementById('mt-completed').value=x.completed_date||''; document.getElementById('mt-issue').value=x.issue; document.getElementById('mt-action').value=x.action_taken;
+}
+
+async function saveInspection() {
+  const payload={location:document.getElementById('in-location').value,inspection_date:document.getElementById('in-date').value,inspector_name:document.getElementById('in-inspector').value.trim(),status:document.getElementById('in-status').value,notes:document.getElementById('in-notes').value.trim()};
+  if(!payload.location||!payload.inspection_date||!payload.inspector_name){toast('Location, date and inspector are required','var(--red)');return;}
+  try { const created=await api('POST','/inventory-inspections/',payload); await loadInventory(); openInspection(created.id); toast('Inspection created; record each item result','var(--green)'); } catch(e){toast(e?.detail||'Could not create inspection','var(--red)');}
+}
+
+function openInspection(id) {
+  const inspection=state.inventoryInspections.find(x=>x.id===id); if(!inspection)return;
+  const assets=state.inventoryAssets.filter(a=>String(a.location)===String(inspection.location));
+  document.getElementById('inspection-items-panel').innerHTML=`<div class="card-title">Items at ${safeText(inspection.location_name)}</div>`+(assets.length?assets.map(a=>{const item=state.inventoryInspectionItems.find(i=>i.inspection===id&&i.asset===a.id);return `<div style="display:grid;grid-template-columns:1fr 180px;gap:10px;margin:8px 0;align-items:center"><span>${safeText(a.asset_tag)} — ${safeText(a.name)}</span><select onchange="saveInspectionItem(${id},${a.id},this)"><option value="">— result —</option>${['found','missing','damaged','relocated'].map(v=>`<option value="${v}" ${item?.result===v?'selected':''}>${v[0].toUpperCase()+v.slice(1)}</option>`).join('')}</select></div>`}).join(''):'<p>No assets are currently assigned to this location.</p>');
+}
+
+async function saveInspectionItem(inspection,asset,select) {
+  if(!select.value)return; const existing=state.inventoryInspectionItems.find(i=>i.inspection===inspection&&i.asset===asset);
+  try { await api(existing?'PATCH':'POST',existing?`/inventory-inspection-items/${existing.id}/`:'/inventory-inspection-items/',{inspection,asset,result:select.value,note:''}); await loadInventory(); openInspection(inspection); toast('Inspection result saved','var(--green)'); } catch(e){toast(e?.detail||'Could not save result','var(--red)');}
+}
+
+async function saveDisposal() {
+  const id=document.getElementById('ds-id').value; const payload={asset:document.getElementById('ds-asset').value,proposed_date:document.getElementById('ds-proposed').value,status:document.getElementById('ds-status').value,method:document.getElementById('ds-method').value.trim(),disposal_date:document.getElementById('ds-date').value||null,reference:document.getElementById('ds-reference').value.trim(),reason:document.getElementById('ds-reason').value.trim()};
+  if(!payload.asset||!payload.proposed_date||!payload.reason){toast('Asset, proposed date and reason are required','var(--red)');return;}
+  try { await api(id?'PATCH':'POST',id?`/asset-disposals/${id}/`:'/asset-disposals/',payload); ['ds-id','ds-method','ds-date','ds-reference','ds-reason'].forEach(x=>document.getElementById(x).value=''); await loadInventory(); toast('Disposal record saved','var(--green)'); } catch(e){toast(e?.method?.[0]||e?.disposal_date?.[0]||e?.asset?.[0]||e?.detail||'Could not save disposal','var(--red)');}
+}
+
+function editDisposal(id) {
+  const x=state.inventoryDisposals.find(v=>v.id===id);if(!x)return; document.getElementById('ds-id').value=x.id;document.getElementById('ds-asset').value=x.asset;document.getElementById('ds-proposed').value=x.proposed_date;document.getElementById('ds-status').value=x.status;document.getElementById('ds-method').value=x.method;document.getElementById('ds-date').value=x.disposal_date||'';document.getElementById('ds-reference').value=x.reference;document.getElementById('ds-reason').value=x.reason;
+}
+
 // ── INIT ───────────────────────────────────────────────────────────────────────
+installWebIconReplacements();
 // Inject user info from Django template context immediately (no API round-trip needed)
 (function initUser() {
   const username = '{{ request.user.username|escapejs }}';
@@ -4184,6 +4607,7 @@ async function advanceSemester() {
 
 document.getElementById('att-date').value = new Date().toISOString().split('T')[0];
 document.getElementById('fin-pay-date').value = new Date().toISOString().split('T')[0];
+['tr-date','mt-reported','in-date','ds-proposed'].forEach(id => document.getElementById(id).value = new Date().toISOString().split('T')[0]);
 boot();
 </script>
 </body>
