@@ -1307,60 +1307,65 @@ def inventory_office_register(request):
         return Response({'items': ['Add at least one item type.']}, status=400)
 
     generated, prepared, errors = [], [], []
-    for index, row in enumerate(rows, 1):
-        try:
-            item_type = InventoryItemType.objects.select_related('category').get(pk=row.get('item_type'), is_active=True)
-            count = int(row.get('quantity'))
-            start = int(row.get('start_number', 1))
-        except InventoryItemType.DoesNotExist:
-            errors.append({'row': index, 'field': 'item_type', 'message': 'Choose an active item type.'})
-            continue
-        except (TypeError, ValueError):
-            errors.append({'row': index, 'field': 'quantity', 'message': 'Quantity and starting number must be whole numbers.'})
-            continue
-        if count < 1 or count > 500 or start < 1:
-            errors.append({'row': index, 'field': 'quantity', 'message': 'Use quantity 1–500 and starting number 1 or greater.'})
-            continue
-        prefix = str(row.get('tag_prefix') or item_type.default_tag_prefix).strip().rstrip('/')
-        condition = row.get('condition')
-        tags = [f'{prefix}/{number}' for number in range(start, start + count)]
-        generated.extend(tags)
-        for tag in tags:
-            prepared.append({
-                'asset_tag': tag, 'name': item_type.name, 'description': item_type.description,
-                'category': item_type.category_id, 'item_type': item_type.id,
-                'location': location_id, 'responsible_office': responsible,
-                'quantity': 1, 'condition': condition,
-            })
-    if len(generated) > 1000:
-        errors.append({'row': 0, 'field': 'items', 'message': 'One office submission may create at most 1,000 asset records.'})
-    generated_seen, duplicate_generated = set(), set()
-    for tag in generated:
-        key = tag.casefold()
-        if key in generated_seen:
-            duplicate_generated.add(tag)
-        generated_seen.add(key)
-    existing = {tag.casefold() for tag in Asset.objects.values_list('asset_tag', flat=True)}
-    conflicts = [tag for tag in generated if tag.casefold() in existing]
-    if duplicate_generated:
-        errors.append({'row': 0, 'field': 'tag_prefix', 'message': 'Item rows generate duplicate tags.'})
-    if conflicts:
-        errors.append({'row': 0, 'field': 'tag_prefix', 'message': f'Already registered: {", ".join(conflicts[:10])}'})
-    if errors:
-        return Response({'detail': 'Correct the office stock rows.', 'errors': errors}, status=400)
-
-    serializers = [AssetSerializer(data=data) for data in prepared]
-    for serializer in serializers:
-        serializer.is_valid(raise_exception=True)
+    # Numbering is global per prefix, not per office. Work inside one transaction and
+    # lock the asset rows so two simultaneous office submissions cannot reuse a tag.
     with transaction.atomic():
-        # Recheck inside the transaction before creating the complete office batch.
+        existing_tags = list(Asset.objects.select_for_update().values_list('asset_tag', flat=True))
+        next_numbers = {}
+
+        def next_number_for(prefix):
+            key = prefix.casefold()
+            if key not in next_numbers:
+                pattern = re.compile(rf'^{re.escape(prefix)}/(\d+)$', re.IGNORECASE)
+                numbers = [int(match.group(1)) for tag in existing_tags if (match := pattern.match(tag))]
+                next_numbers[key] = max(numbers, default=0) + 1
+            number = next_numbers[key]
+            next_numbers[key] += 1
+            return number
+
+        for index, row in enumerate(rows, 1):
+            try:
+                item_type = InventoryItemType.objects.select_related('category').get(pk=row.get('item_type'), is_active=True)
+                count = int(row.get('quantity'))
+            except InventoryItemType.DoesNotExist:
+                errors.append({'row': index, 'field': 'item_type', 'message': 'Choose an active item type.'})
+                continue
+            except (TypeError, ValueError):
+                errors.append({'row': index, 'field': 'quantity', 'message': 'Quantity must be a whole number.'})
+                continue
+            if count < 1 or count > 500:
+                errors.append({'row': index, 'field': 'quantity', 'message': 'Use quantity 1–500.'})
+                continue
+            prefix = str(row.get('tag_prefix') or item_type.default_tag_prefix).strip().rstrip('/')
+            condition = row.get('condition')
+            tags = [f'{prefix}/{next_number_for(prefix)}' for _ in range(count)]
+            generated.extend(tags)
+            for tag in tags:
+                prepared.append({
+                    'asset_tag': tag, 'name': item_type.name, 'description': item_type.description,
+                    'category': item_type.category_id, 'item_type': item_type.id,
+                    'location': location_id, 'responsible_office': responsible,
+                    'quantity': 1, 'condition': condition,
+                })
+        if len(generated) > 1000:
+            errors.append({'row': 0, 'field': 'items', 'message': 'One office submission may create at most 1,000 asset records.'})
+        if errors:
+            return Response({'detail': 'Correct the office stock rows.', 'errors': errors}, status=400)
+
+        serializers = [AssetSerializer(data=data) for data in prepared]
+        for serializer in serializers:
+            serializer.is_valid(raise_exception=True)
         if Asset.objects.filter(asset_tag__in=generated).exists():
             return Response({'detail': 'A generated tag was registered by another request. Please try again.'}, status=409)
         Asset.objects.bulk_create([
             Asset(**serializer.validated_data, created_by=request.user, updated_by=request.user)
             for serializer in serializers
         ])
-    return Response({'created': len(prepared), 'item_types': len(rows)}, status=201)
+    return Response({
+        'created': len(prepared), 'item_types': len(rows),
+        'first_tag': generated[0] if generated else None,
+        'last_tag': generated[-1] if generated else None,
+    }, status=201)
 
 
 @api_view(['GET'])

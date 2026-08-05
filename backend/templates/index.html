@@ -184,9 +184,25 @@
   .asset-map-side dd { color:var(--text); overflow-wrap:anywhere; }
   .asset-map-legend { display:flex; flex-wrap:wrap; gap:12px; color:var(--muted); font-size:.7rem; margin-left:auto; }
   .asset-map-legend span::before { content:''; display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--c); margin-right:5px; }
+  .inventory-charts-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-bottom:20px; }
+  .inventory-chart-card { min-width:0; min-height:340px; margin-bottom:0; }
+  .inventory-chart-wrap { position:relative; width:100%; height:270px; }
+  .inventory-summary-toggle { margin-bottom:20px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); }
+  .inventory-summary-toggle > summary { cursor:pointer; padding:14px 18px; color:var(--accent); font-size:.82rem; font-weight:600; list-style:none; }
+  .inventory-summary-toggle > summary::-webkit-details-marker { display:none; }
+  .inventory-summary-toggle > summary::before { content:'+'; display:inline-block; width:18px; font-size:1rem; }
+  .inventory-summary-toggle[open] > summary::before { content:'−'; }
+  .inventory-item-summary { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px; padding:0 14px 14px; }
+  .inventory-item-summary .stat-card .label { white-space:normal; }
+  .asset-map-item-list { display:grid; gap:10px; margin-top:12px; }
+  .asset-map-item { padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--surface2); }
+  .asset-map-item strong { display:flex; justify-content:space-between; gap:10px; font-size:.78rem; }
+  .asset-map-tag-list { display:grid; gap:7px; margin-top:12px; }
+  .asset-map-tag { padding:8px 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface2); font: .72rem var(--font-mono); overflow-wrap:anywhere; }
   @media (max-width:900px) { .inventory-filter-bar { grid-template-columns:1fr 1fr; } }
   @media (max-width:560px) { .inventory-filter-bar { grid-template-columns:1fr; } }
   @media (max-width:760px) { .asset-map-layout { grid-template-columns:1fr; } }
+  @media (max-width:900px) { .inventory-charts-grid { grid-template-columns:1fr; } }
   input[type="date"] { color-scheme: dark; }
   input[type="date"]::-webkit-calendar-picker-indicator {
     cursor: pointer; opacity: 1; filter: invert(72%) sepia(87%) saturate(1414%) hue-rotate(184deg) brightness(104%);
@@ -1367,9 +1383,13 @@
         <div class="stat-card" style="--c:var(--yellow)"><div class="label">Locations</div><div class="value" id="inv-locations">0</div></div>
         <div class="stat-card" style="--c:var(--red)"><div class="label">Poor / Unserviceable</div><div class="value" id="inv-attention">0</div></div>
       </div>
-      <div class="form-grid">
-        <div class="card" style="min-height:310px"><div class="card-title"><i class="bi bi-pie-chart"></i> Assets by Condition</div><div style="height:240px"><canvas id="inventory-condition-chart"></canvas></div></div>
-        <div class="card" style="min-height:310px"><div class="card-title"><i class="bi bi-bar-chart"></i> Quantity by Location</div><div style="height:240px"><canvas id="inventory-location-chart"></canvas></div></div>
+      <details class="inventory-summary-toggle">
+        <summary>Show college-wide item totals</summary>
+        <div class="inventory-item-summary" id="inventory-item-summary"></div>
+      </details>
+      <div class="inventory-charts-grid">
+        <div class="card inventory-chart-card"><div class="card-title"><i class="bi bi-pie-chart"></i> Assets by Condition</div><div class="inventory-chart-wrap"><canvas id="inventory-condition-chart"></canvas></div></div>
+        <div class="card inventory-chart-card"><div class="card-title"><i class="bi bi-bar-chart"></i> Quantity by Location</div><div class="inventory-chart-wrap"><canvas id="inventory-location-chart"></canvas></div></div>
       </div>
       <div class="card">
         <div class="card-title"><i class="bi bi-diagram-3"></i> Location Asset Map <small style="font-weight:400;color:var(--muted)">Explore offices, floors, corridors and common areas</small><div class="asset-map-legend"><span style="--c:#22c55e">Good</span><span style="--c:#f59e0b">Fair</span><span style="--c:#ef4444">Needs attention</span></div></div>
@@ -1387,7 +1407,7 @@
           <div class="field"><label>Office / Area / Location *</label><select id="office-stock-location"></select></div>
           <div class="field"><label>Responsible Person / Office *</label><input id="office-stock-responsible" /></div>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>Item Type</th><th>Tag Prefix</th><th>Start</th><th>Quantity</th><th>Condition</th><th></th></tr></thead><tbody id="office-stock-rows"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Item Type</th><th>Tag Prefix</th><th>Next Tag</th><th>Quantity</th><th>Condition</th><th></th></tr></thead><tbody id="office-stock-rows"></tbody></table></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
           <button class="btn btn-ghost btn-sm" onclick="addOfficeStockRow()"><i class="bi bi-plus-circle"></i> Add Item</button>
           <button class="btn btn-primary btn-sm" onclick="saveOfficeStock()"><i class="bi bi-box-seam"></i> Register Location Stock</button>
@@ -4553,6 +4573,7 @@ function renderInventory() {
   document.getElementById('inv-quantity').textContent = state.inventoryAssets.reduce((sum, a) => sum + Number(a.quantity || 0), 0);
   document.getElementById('inv-locations').textContent = new Set(state.inventoryAssets.map(a => a.location)).size;
   document.getElementById('inv-attention').textContent = state.inventoryAssets.filter(a => ['poor', 'unserviceable'].includes(a.condition)).length;
+  renderInventoryItemSummary();
   document.getElementById('inv-tbody').innerHTML = rows.length ? rows.map(a => `<tr>
     <td style="font-family:var(--font-mono)">${safeText(a.asset_tag)}</td><td><strong>${safeText(a.name)}</strong><br><small>${safeText(a.description)}</small></td>
     <td>${safeText(a.category_name)}</td><td>${safeText(a.location_name)}</td><td>${safeText(a.responsible_office)}</td><td>${a.quantity}</td>
@@ -4560,6 +4581,20 @@ function renderInventory() {
     <td><button class="btn btn-ghost btn-sm" onclick="editAsset(${a.id})">Edit</button></td></tr>`).join('') : '<tr><td colspan="8"><div class="empty">No inventory items found</div></td></tr>';
   renderInventoryCharts();
   renderAssetMap();
+}
+
+function renderInventoryItemSummary() {
+  const totals = new Map();
+  state.inventoryAssets.forEach(asset => {
+    const key = asset.item_type ? `type-${asset.item_type}` : `name-${String(asset.name || '').toLowerCase()}`;
+    const current = totals.get(key) || {name: asset.name || 'Unnamed item', quantity: 0};
+    current.quantity += Number(asset.quantity || 0);
+    totals.set(key, current);
+  });
+  const items = [...totals.values()].sort((a,b) => b.quantity - a.quantity || a.name.localeCompare(b.name));
+  document.getElementById('inventory-item-summary').innerHTML = items.length ? items.map((item, index) =>
+    `<div class="stat-card" style="--c:${['var(--accent)','var(--green)','var(--yellow)','var(--purple)'][index % 4]}"><div class="label">${safeText(item.name)}</div><div class="value">${item.quantity}</div><div class="sub">across all offices</div></div>`
+  ).join('') : '<div class="empty">Item totals will appear after stock is registered.</div>';
 }
 
 function clearInventoryFilters() {
@@ -4608,20 +4643,26 @@ function renderAssetMap() {
   }
 
   const assets = state.inventoryAssets.filter(asset => String(asset.location) === String(selected.id));
-  const columns = 4, rows = Math.ceil(assets.length / columns);
+  const groups = [...assets.reduce((map, asset) => {
+    const key = asset.item_type ? `type-${asset.item_type}` : `name-${String(asset.name).toLowerCase()}`;
+    if (!map.has(key)) map.set(key, {name:asset.name, assets:[]});
+    map.get(key).assets.push(asset); return map;
+  }, new Map()).values()];
+  const columns = 4, rows = Math.ceil(groups.length / columns);
   const width = Math.max(980, 390 + Math.min(columns, Math.max(assets.length, 1)) * 210);
   const height = Math.max(390, rows * 92 + 70), officeY = height / 2;
-  const edges = assets.map((asset, index) => {
+  const edges = groups.map((group, index) => {
     const x = 370 + (index % columns) * 210, y = 35 + Math.floor(index / columns) * 92;
-    return `<line class="asset-map-line ${assetMapConditionClass(asset.condition) === 'attention' ? 'attention' : ''}" x1="250" y1="${officeY}" x2="${x}" y2="${y + 29}" />`;
+    return `<line class="asset-map-line ${group.assets.some(a=>['poor','unserviceable'].includes(a.condition)) ? 'attention' : ''}" x1="250" y1="${officeY}" x2="${x}" y2="${y + 29}" />`;
   }).join('');
-  const nodes = assets.map((asset, index) => {
+  const nodes = groups.map((group, index) => {
     const x = 370 + (index % columns) * 210, y = 35 + Math.floor(index / columns) * 92;
-    const conditionClass = assetMapConditionClass(asset.condition);
-    return `<g class="asset-map-node asset ${conditionClass}" tabindex="0" role="button" aria-label="View ${safeText(asset.asset_tag)}" onclick="selectAssetMapAsset(${asset.id})" onkeydown="if(event.key==='Enter')selectAssetMapAsset(${asset.id})"><rect x="${x}" y="${y}" width="180" height="58" rx="9"/><text x="${x + 12}" y="${y + 22}">${assetMapLabel(asset.asset_tag,22)}</text><text class="sub" x="${x + 12}" y="${y + 41}">${assetMapLabel(asset.name,17)} · Qty ${asset.quantity}</text></g>`;
+    const quantity = group.assets.reduce((sum,a)=>sum+Number(a.quantity||0),0);
+    const conditionClass = group.assets.some(a=>['poor','unserviceable'].includes(a.condition)) ? 'attention' : group.assets.some(a=>a.condition==='fair') ? 'fair' : 'good';
+    return `<g class="asset-map-node asset ${conditionClass}" tabindex="0" role="button" aria-label="View tags for ${safeText(group.name)}" onclick="selectAssetMapGroup(${index})" onkeydown="if(event.key==='Enter')selectAssetMapGroup(${index})"><rect x="${x}" y="${y}" width="180" height="58" rx="9"/><text x="${x + 12}" y="${y + 22}">${assetMapLabel(group.name,22)}</text><text class="sub" x="${x + 12}" y="${y + 41}">Qty ${quantity} · ${group.assets.length} tags</text></g>`;
   }).join('');
   canvas.innerHTML = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-label="Assets in ${safeText(selected.name)}">${edges}<g class="asset-map-node" tabindex="0" role="button" onclick="closeAssetMapLocation()" onkeydown="if(event.key==='Enter')closeAssetMapLocation()"><rect x="60" y="${officeY - 39}" width="190" height="78" rx="12"/><text x="78" y="${officeY - 10}">${assetMapLabel(selected.name,23)}</text><text class="sub" x="78" y="${officeY + 12}">${assets.length} asset records</text><text class="sub" x="78" y="${officeY + 28}">Click to return to offices</text></g>${nodes}</svg>`;
-  document.getElementById('asset-map-details').innerHTML = `<h4>${safeText(selected.name)}</h4><dl><dt>Records</dt><dd>${assets.length}</dd><dt>Total items</dt><dd>${assets.reduce((sum,a)=>sum+Number(a.quantity || 0),0)}</dd><dt>Responsible</dt><dd>${safeText([...new Set(assets.map(a=>a.responsible_office))].join(', ') || '—')}</dd><dt>Attention</dt><dd>${assets.filter(a=>['poor','unserviceable'].includes(a.condition)).length}</dd></dl><button class="btn btn-ghost btn-sm" style="margin-top:14px" onclick="closeAssetMapLocation()"><i class="bi bi-arrow-left"></i> All locations</button>`;
+  document.getElementById('asset-map-details').innerHTML = `<h4>${safeText(selected.name)}</h4><dl><dt>Total items</dt><dd>${assets.reduce((sum,a)=>sum+Number(a.quantity || 0),0)}</dd><dt>Item types</dt><dd>${groups.length}</dd><dt>Responsible</dt><dd>${safeText([...new Set(assets.map(a=>a.responsible_office))].join(', ') || '—')}</dd></dl><div class="asset-map-item-list">${groups.map(group=>`<div class="asset-map-item"><strong><span>${safeText(group.name)}</span><span>Qty ${group.assets.reduce((s,a)=>s+Number(a.quantity||0),0)}</span></strong></div>`).join('')}</div><button class="btn btn-ghost btn-sm" style="margin-top:14px" onclick="closeAssetMapLocation()"><i class="bi bi-arrow-left"></i> All locations</button>`;
 }
 
 function openAssetMapLocation(locationId) {
@@ -4632,6 +4673,19 @@ function openAssetMapLocation(locationId) {
 function closeAssetMapLocation() {
   state.inventoryMapLocation = null;
   renderAssetMap();
+}
+
+function selectAssetMapGroup(groupIndex) {
+  const assets = state.inventoryAssets.filter(asset => String(asset.location) === String(state.inventoryMapLocation));
+  const groups = [...assets.reduce((map, asset) => {
+    const key = asset.item_type ? `type-${asset.item_type}` : `name-${String(asset.name).toLowerCase()}`;
+    if (!map.has(key)) map.set(key, {name:asset.name, assets:[]});
+    map.get(key).assets.push(asset); return map;
+  }, new Map()).values()];
+  const group = groups[groupIndex];
+  if (!group) return;
+  const quantity = group.assets.reduce((sum, asset) => sum + Number(asset.quantity || 0), 0);
+  document.getElementById('asset-map-details').innerHTML = `<h4>${safeText(group.name)}</h4><dl><dt>Quantity</dt><dd>${quantity}</dd><dt>Tags</dt><dd>${group.assets.length}</dd></dl><div class="asset-map-tag-list">${group.assets.map(asset => `<div class="asset-map-tag">${safeText(asset.asset_tag)}</div>`).join('')}</div><button class="btn btn-ghost btn-sm" style="margin-top:14px" onclick="renderAssetMap()"><i class="bi bi-arrow-left"></i> Office summary</button>`;
 }
 
 function selectAssetMapAsset(assetId) {
@@ -4757,13 +4811,26 @@ function officeStockItemOptions() {
 function addOfficeStockRow() {
   const tbody = document.getElementById('office-stock-rows');
   const row = document.createElement('tr');
-  row.innerHTML = `<td><select class="inventory-filter-control office-stock-item" onchange="updateOfficeStockPrefix(this)">${officeStockItemOptions()}</select></td><td><input class="inventory-filter-control office-stock-prefix" placeholder="BPCH/CH" /></td><td><input class="inventory-filter-control office-stock-start" type="number" min="1" value="1" /></td><td><input class="inventory-filter-control office-stock-qty" type="number" min="1" max="500" value="1" /></td><td><select class="inventory-filter-control office-stock-condition"><option value="new">New</option><option value="good">Good</option><option value="fair">Fair</option><option value="poor">Poor</option><option value="unserviceable">Unserviceable</option></select></td><td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()" aria-label="Remove item"><i class="bi bi-trash"></i></button></td>`;
+  row.innerHTML = `<td><select class="inventory-filter-control office-stock-item" onchange="updateOfficeStockPrefix(this)">${officeStockItemOptions()}</select></td><td><input class="inventory-filter-control office-stock-prefix" placeholder="BPCH/CH" oninput="updateOfficeStockNextTag(this.closest('tr'))" /></td><td><span class="office-stock-next" style="font-family:var(--font-mono);white-space:nowrap">—</span></td><td><input class="inventory-filter-control office-stock-qty" type="number" min="1" max="500" value="1" /></td><td><select class="inventory-filter-control office-stock-condition"><option value="new">New</option><option value="good">Good</option><option value="fair">Fair</option><option value="poor">Poor</option><option value="unserviceable">Unserviceable</option></select></td><td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()" aria-label="Remove item"><i class="bi bi-trash"></i></button></td>`;
   tbody.appendChild(row);
 }
 
 function updateOfficeStockPrefix(select) {
   const item = state.inventoryItemTypes.find(entry => String(entry.id) === select.value);
   if (item) select.closest('tr').querySelector('.office-stock-prefix').value = item.default_tag_prefix;
+  updateOfficeStockNextTag(select.closest('tr'));
+}
+
+function nextAssetNumber(prefix) {
+  const clean = String(prefix || '').trim().replace(/\/$/, '');
+  const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const matcher = new RegExp(`^${escaped}/(\\d+)$`, 'i');
+  return state.inventoryAssets.reduce((max, asset) => { const match=String(asset.asset_tag||'').match(matcher); return match ? Math.max(max, Number(match[1])) : max; }, 0) + 1;
+}
+
+function updateOfficeStockNextTag(row) {
+  const prefix = row.querySelector('.office-stock-prefix').value.trim().replace(/\/$/, '');
+  row.querySelector('.office-stock-next').textContent = prefix ? `${prefix}/${nextAssetNumber(prefix)}` : '—';
 }
 
 function clearOfficeStock() {
@@ -4777,12 +4844,11 @@ async function saveOfficeStock() {
   const items = [...document.querySelectorAll('#office-stock-rows tr')].map(row => ({
     item_type: row.querySelector('.office-stock-item').value,
     tag_prefix: row.querySelector('.office-stock-prefix').value.trim(),
-    start_number: Number(row.querySelector('.office-stock-start').value),
     quantity: Number(row.querySelector('.office-stock-qty').value),
     condition: row.querySelector('.office-stock-condition').value,
   }));
   const payload = {location: document.getElementById('office-stock-location').value, responsible_office: document.getElementById('office-stock-responsible').value.trim(), items};
-  if (!payload.location || !payload.responsible_office || !items.length || items.some(item => !item.item_type || !item.tag_prefix || !Number.isInteger(item.quantity) || item.quantity < 1 || !Number.isInteger(item.start_number) || item.start_number < 1)) {
+  if (!payload.location || !payload.responsible_office || !items.length || items.some(item => !item.item_type || !item.tag_prefix || !Number.isInteger(item.quantity) || item.quantity < 1)) {
     toast('Complete the office and every stock row', 'var(--red)'); return;
   }
   try {

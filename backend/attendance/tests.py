@@ -163,7 +163,27 @@ class InventoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data['created'], 5)
         self.assertTrue(Asset.objects.filter(asset_tag='BPCH/CH/3', item_type=self.item_type, quantity=1).exists())
-        self.assertTrue(Asset.objects.filter(asset_tag='BPCH/DK/11', item_type=desk, location=self.location).exists())
+        self.assertTrue(Asset.objects.filter(asset_tag='BPCH/DK/2', item_type=desk, location=self.location).exists())
+
+    def test_office_registration_automatically_continues_item_tag_sequence(self):
+        other_office = InventoryLocation.objects.create(name='Second Office')
+        Asset.objects.create(
+            asset_tag='BPCH/CH/3', name=self.item_type.name, category=self.category,
+            item_type=self.item_type, location=self.location, responsible_office='First Office',
+            quantity=1, condition='good', created_by=self.officer, updated_by=self.officer,
+        )
+        self.client.force_authenticate(self.officer)
+        response = self.client.post('/api/inventory/office-register/', {
+            'location': other_office.id, 'responsible_office': 'Second Office',
+            'items': [{'item_type': self.item_type.id, 'tag_prefix': 'BPCH/CH', 'quantity': 3, 'condition': 'good'}],
+        }, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['first_tag'], 'BPCH/CH/4')
+        self.assertEqual(response.data['last_tag'], 'BPCH/CH/6')
+        self.assertEqual(
+            list(Asset.objects.filter(location=other_office).order_by('asset_tag').values_list('asset_tag', flat=True)),
+            ['BPCH/CH/4', 'BPCH/CH/5', 'BPCH/CH/6'],
+        )
 
     def test_auto_numbered_bulk_registration_creates_individual_assets(self):
         self.client.force_authenticate(self.officer)
