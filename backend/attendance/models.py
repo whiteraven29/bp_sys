@@ -87,7 +87,12 @@ class EstateOfficerProfile(models.Model):
 
 
 class InventoryLocation(models.Model):
+    LOCATION_TYPE_CHOICES = [
+        ('office', 'College Offices'), ('classroom', 'Classrooms'),
+        ('lab', 'Laboratories'), ('other', 'Other Areas'),
+    ]
     name = models.CharField(max_length=160, unique=True)
+    location_type = models.CharField(max_length=20, choices=LOCATION_TYPE_CHOICES, default='other')
     is_active = models.BooleanField(default=True)
 
     class Meta:

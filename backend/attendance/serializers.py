@@ -58,9 +58,11 @@ class ClassLevelSerializer(serializers.ModelSerializer):
 
 
 class InventoryLocationSerializer(serializers.ModelSerializer):
+    location_type_display = serializers.CharField(source='get_location_type_display', read_only=True)
+
     class Meta:
         model = InventoryLocation
-        fields = ['id', 'name', 'is_active']
+        fields = ['id', 'name', 'location_type', 'location_type_display', 'is_active']
         read_only_fields = ['id']
 
 

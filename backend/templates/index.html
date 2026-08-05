@@ -1452,7 +1452,7 @@
         <div class="card-title">Step 1: Define Locations, Categories and Item Types</div>
         <p style="font-size:.8rem;color:var(--muted);margin-bottom:14px">A location can be an office, room, floor, corridor, stairway, store, reception, outdoor area or other shared space.</p>
         <div class="form-grid">
-          <div class="field"><label>Add Office / Area / Location</label><div style="display:flex;gap:8px"><input id="inv-new-location" placeholder="e.g. Ground Floor Corridor" /><button class="btn btn-primary btn-sm" onclick="addInventoryReference('location')">Add</button></div></div>
+          <div class="field"><label>Add Location</label><div style="display:grid;grid-template-columns:145px 1fr auto;gap:8px"><select id="inv-new-location-type"><option value="office">College Office</option><option value="classroom">Classroom</option><option value="lab">Laboratory</option><option value="other">Other Area</option></select><input id="inv-new-location" placeholder="e.g. Registry Office" /><button class="btn btn-primary btn-sm" onclick="addInventoryReference('location')">Add</button></div></div>
           <div class="field"><label>Add Category</label><div style="display:flex;gap:8px"><input id="inv-new-category" /><button class="btn btn-primary btn-sm" onclick="addInventoryReference('category')">Add</button></div></div>
         </div>
         <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px">
@@ -1665,6 +1665,7 @@ const state = {
   inventoryInspectionItems: [],
   inventoryDisposals: [],
   inventorySection: 'overview',
+  inventoryMapArea: null,
   inventoryMapLocation: null,
 };
 
@@ -4620,9 +4621,28 @@ function renderAssetMap() {
   const selected = state.inventoryLocations.find(location => String(location.id) === String(selectedId));
   if (!selected) {
     state.inventoryMapLocation = null;
-    const locations = state.inventoryLocations.filter(location =>
+    const allLocations = state.inventoryLocations.filter(location =>
       state.inventoryAssets.some(asset => String(asset.location) === String(location.id))
     );
+    const areaTypes = [
+      {key:'office', label:'College Offices'}, {key:'classroom', label:'Classrooms'},
+      {key:'lab', label:'Laboratories'}, {key:'other', label:'Other Areas'},
+    ];
+    if (!state.inventoryMapArea) {
+      const areas = areaTypes.map(area => ({...area, locations:allLocations.filter(location => (location.location_type || 'other') === area.key)})).filter(area => area.locations.length);
+      const height = Math.max(390, Math.ceil(areas.length / 2) * 115 + 70), rootY = height / 2, width = 900;
+      const edges = areas.map((area,index) => { const x=355+(index%2)*245,y=55+Math.floor(index/2)*115; return `<line class="asset-map-line" x1="250" y1="${rootY}" x2="${x}" y2="${y+34}" />`; }).join('');
+      const nodes = areas.map((area,index) => {
+        const x=355+(index%2)*245,y=55+Math.floor(index/2)*115;
+        const assets=state.inventoryAssets.filter(asset=>area.locations.some(location=>String(location.id)===String(asset.location)));
+        return `<g class="asset-map-node" tabindex="0" role="button" aria-label="Open ${safeText(area.label)}" onclick="openAssetMapArea('${area.key}')" onkeydown="if(event.key==='Enter')openAssetMapArea('${area.key}')"><rect x="${x}" y="${y}" width="200" height="68" rx="10"/><text x="${x+14}" y="${y+27}">${safeText(area.label)}</text><text class="sub" x="${x+14}" y="${y+48}">${area.locations.length} locations · ${assets.length} items</text></g>`;
+      }).join('');
+      canvas.innerHTML = areas.length ? `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-label="College inventory areas">${edges}<g class="asset-map-node"><rect x="60" y="${rootY-38}" width="190" height="76" rx="12"/><text x="78" y="${rootY-8}">College Inventory</text><text class="sub" x="78" y="${rootY+14}">${allLocations.length} tracked locations</text></g>${nodes}</svg>` : '<div class="empty"><div class="ei"><i class="bi bi-diagram-3"></i></div>No mapped inventory locations yet</div>';
+      document.getElementById('asset-map-details').innerHTML = '<h4>College inventory</h4><p style="font-size:.76rem;color:var(--muted);line-height:1.5">Select a general area to see its offices, classrooms, laboratories or other tracked locations.</p>';
+      return;
+    }
+    const area = areaTypes.find(entry => entry.key === state.inventoryMapArea) || areaTypes[3];
+    const locations = allLocations.filter(location => (location.location_type || 'other') === area.key);
     const columns = 3;
     const height = Math.max(390, Math.ceil(locations.length / columns) * 105 + 60);
     const width = 1060;
@@ -4637,8 +4657,8 @@ function renderAssetMap() {
       const x = 365 + (index % columns) * 220, y = 45 + Math.floor(index / columns) * 105;
       return `<g class="asset-map-node" tabindex="0" role="button" aria-label="Open ${safeText(location.name)}" onclick="openAssetMapLocation(${location.id})" onkeydown="if(event.key==='Enter')openAssetMapLocation(${location.id})"><rect x="${x}" y="${y}" width="180" height="64" rx="10"/><text x="${x + 14}" y="${y + 25}">${assetMapLabel(location.name,22)}</text><text class="sub" x="${x + 14}" y="${y + 45}">${assets.length} records · ${quantity} items</text></g>`;
     }).join('');
-    canvas.innerHTML = locations.length ? `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-label="Office asset relationship map">${edges}<g class="asset-map-node"><rect x="70" y="${rootY - 38}" width="180" height="76" rx="12"/><text x="88" y="${rootY - 8}">College Inventory</text><text class="sub" x="88" y="${rootY + 14}">${locations.length} locations · ${state.inventoryAssets.length} records</text></g>${nodes}</svg>` : '<div class="empty"><div class="ei"><i class="bi bi-diagram-3"></i></div>No mapped inventory locations yet</div>';
-    document.getElementById('asset-map-details').innerHTML = '<h4>College inventory</h4><p style="font-size:.76rem;color:var(--muted);line-height:1.5">Select an office, floor, corridor, room or common-area node to display its assets.</p>';
+    canvas.innerHTML = locations.length ? `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-label="${safeText(area.label)} locations">${edges}<g class="asset-map-node" tabindex="0" role="button" onclick="closeAssetMapArea()" onkeydown="if(event.key==='Enter')closeAssetMapArea()"><rect x="70" y="${rootY - 38}" width="180" height="76" rx="12"/><text x="88" y="${rootY - 8}">${safeText(area.label)}</text><text class="sub" x="88" y="${rootY + 14}">${locations.length} tracked locations</text><text class="sub" x="88" y="${rootY + 29}">Click for all areas</text></g>${nodes}</svg>` : '<div class="empty">No locations in this area yet</div>';
+    document.getElementById('asset-map-details').innerHTML = `<h4>${safeText(area.label)}</h4><p style="font-size:.76rem;color:var(--muted);line-height:1.5">Select a location to display its item quantities.</p><button class="btn btn-ghost btn-sm" style="margin-top:14px" onclick="closeAssetMapArea()"><i class="bi bi-arrow-left"></i> All areas</button>`;
     return;
   }
 
@@ -4667,6 +4687,18 @@ function renderAssetMap() {
 
 function openAssetMapLocation(locationId) {
   state.inventoryMapLocation = locationId;
+  renderAssetMap();
+}
+
+function openAssetMapArea(area) {
+  state.inventoryMapArea = area;
+  state.inventoryMapLocation = null;
+  renderAssetMap();
+}
+
+function closeAssetMapArea() {
+  state.inventoryMapArea = null;
+  state.inventoryMapLocation = null;
   renderAssetMap();
 }
 
@@ -4779,7 +4811,9 @@ async function addInventoryReference(kind) {
   const input = document.getElementById(kind === 'location' ? 'inv-new-location' : 'inv-new-category');
   if (!input.value.trim()) { toast(`Enter a ${kind} name`, 'var(--red)'); return; }
   try {
-    await api('POST', kind === 'location' ? '/inventory-locations/' : '/asset-categories/', {name: input.value.trim(), is_active: true});
+    const payload = {name: input.value.trim(), is_active: true};
+    if (kind === 'location') payload.location_type = document.getElementById('inv-new-location-type').value;
+    await api('POST', kind === 'location' ? '/inventory-locations/' : '/asset-categories/', payload);
     input.value = ''; await loadInventory(); toast(`${kind === 'location' ? 'Location' : 'Category'} added`, 'var(--green)');
   } catch (e) { toast(e?.name?.[0] || 'Could not add entry', 'var(--red)'); }
 }
