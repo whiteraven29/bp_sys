@@ -269,6 +269,11 @@ class Module(models.Model):
         verbose_name='Has Practical Component',
         help_text='Enable for modules assessed with both theory and practical components.',
     )
+    is_field_module = models.BooleanField(
+        default=False,
+        verbose_name='Field Results Module',
+        help_text='Use one CA mark weighted to 40% and one final mark weighted to 60%.',
+    )
     credits = models.PositiveSmallIntegerField(
         default=1,
         validators=[MinValueValidator(1)],
@@ -562,6 +567,7 @@ class StudentResult(models.Model):
     """
 
     student        = models.OneToOneField(Student, on_delete=models.CASCADE, related_name='result')
+    field_ca       = _mark_field(verbose_name='Field CA (raw /100)')
     assign1        = _mark_field(verbose_name='Assignment 1 (raw /100)')
     assign2        = _mark_field(verbose_name='Assignment 2 (raw /100)')
     cat1_theory    = _mark_field(verbose_name='CAT 1 – Theory (raw /100)')

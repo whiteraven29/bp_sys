@@ -1742,6 +1742,15 @@ CA_ELIGIBILITY_THRESHOLD = 20
 
 def ca_eligibility_for_student(student):
     result = getattr(student, 'result', None)
+    if student.module.is_field_module:
+        if result is None or result.field_ca is None:
+            return None, None, 'Pending Field CA mark'
+        total_ca = round(float(result.field_ca) * 0.4, 2)
+        eligible = float(result.field_ca) >= 50
+        return total_ca, eligible, (
+            f'Field CA {result.field_ca}/100 meets the requirement'
+            if eligible else f'Field CA {result.field_ca}/100 is below the required 50/100'
+        )
     has_practical = student.module.has_practical
     required_fields = [
         ('assign1', 'Assignment 1'),
@@ -2177,6 +2186,7 @@ class ResultViewSet(viewsets.ModelViewSet):
                 'name':         module.name,
                 'code':         module.code,
                 'has_practical': module.has_practical,
+                'is_field_module': module.is_field_module,
                 'credits':       module.credits,
                 'class_level':  module.class_level.name,
                 'semester_id':   module.semester_id,
@@ -2439,7 +2449,7 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         mod_ids   = set(user_modules(request.user).values_list('id', flat=True))
         CA_MARKS = ['assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical']
-        CA_FIELDS = CA_MARKS + [f'{field}_absent' for field in CA_MARKS]
+        CA_FIELDS = ['field_ca'] + CA_MARKS + [f'{field}_absent' for field in CA_MARKS]
         END_MARKS = ['end_theory', 'end_practical', 'supplementary_mark']
         END_FIELDS = END_MARKS + [f'{field}_absent' for field in END_MARKS] + ['ca_approved', 'final_approved']
         FIELDS     = CA_FIELDS + (END_FIELDS if request.user.is_staff else [])
@@ -2486,7 +2496,9 @@ class ResultViewSet(viewsets.ModelViewSet):
                             errors.append(f'Result {item.get("id")}: {field} must be 0–100')
                             continue
                         setattr(result, field, v)
-                        setattr(result, f'{field}_absent', False)
+                        absent_field = f'{field}_absent'
+                        if hasattr(result, absent_field):
+                            setattr(result, absent_field, False)
                     except (TypeError, ValueError):
                         errors.append(f'Result {item.get("id")}: invalid value for {field}')
                         continue
@@ -2899,11 +2911,12 @@ def download_eligibility_excel(request):
     module_id      = request.GET.get('module_id')
     semester_id    = request.GET.get('semester_id')
     class_level_id = request.GET.get('class_level_id')
+    basis           = request.GET.get('basis', 'all')
 
     my_modules = user_modules(request.user)
     students = (
         Student.objects.filter(module__in=my_modules)
-        .select_related('module__class_level', 'module__semester__academic_year')
+        .select_related('module__class_level', 'module__semester__academic_year', 'result')
         .prefetch_related('attendance_records__session')
         .order_by('module__class_level__order', 'module__name', 'name')
     )
@@ -2925,6 +2938,99 @@ def download_eligibility_excel(request):
     GREEN_F  = Font(bold=True, color='16A34A')
     RED_F    = Font(bold=True, color='DC2626')
     BLACK_F  = Font(color='000000')
+
+    if basis == 'performance':
+        from collections import defaultdict
+
+        enrollments = list(students)
+        levels = defaultdict(list)
+        for student in enrollments:
+            levels[student.module.class_level.name].append(student)
+
+        wb.remove(ws)
+        used_titles = set()
+        for level_name, level_students in levels.items():
+            base_title = ''.join(c for c in level_name if c not in '[]:*?/\\')[:31] or 'Class'
+            title = base_title
+            suffix = 2
+            while title in used_titles:
+                title = f'{base_title[:27]} {suffix}'
+                suffix += 1
+            used_titles.add(title)
+            level_ws = wb.create_sheet(title)
+            module_codes = sorted({student.module.code for student in level_students})
+            headers = ['Student Reg. No.', 'Name', *module_codes]
+            level_ws.append(headers)
+            for cell in level_ws[1]:
+                cell.fill = HDR_FILL
+                cell.font = HDR_FONT
+                cell.alignment = CENTER
+
+            student_rows = defaultdict(dict)
+            student_names = {}
+            module_summary = {code: {'eligible': 0, 'ineligible': 0} for code in module_codes}
+            for student in level_students:
+                _total_ca, eligible, _note = ca_eligibility_for_student(student)
+                is_eligible = eligible is True
+                student_names[student.nactvet_reg_no] = student.name
+                student_rows[student.nactvet_reg_no][student.module.code] = is_eligible
+                module_summary[student.module.code]['eligible' if is_eligible else 'ineligible'] += 1
+
+            for reg_no in sorted(student_rows, key=lambda key: student_names[key].lower()):
+                values = [reg_no, student_names[reg_no]]
+                for code in module_codes:
+                    values.append(
+                        'Eligible' if student_rows[reg_no].get(code) is True
+                        else ('Ineligible' if code in student_rows[reg_no] else '')
+                    )
+                level_ws.append(values)
+                row_number = level_ws.max_row
+                for column, code in enumerate(module_codes, 3):
+                    cell = level_ws.cell(row=row_number, column=column)
+                    if cell.value == 'Eligible':
+                        cell.font = GREEN_F
+                    elif cell.value == 'Ineligible':
+                        cell.font = RED_F
+                    cell.alignment = CENTER
+
+            summary_start = level_ws.max_row + 3
+            level_ws.cell(row=summary_start, column=1, value='Summary by Module').font = Font(bold=True, size=12)
+            summary_headers = ['Module Code', 'Eligible', 'Ineligible', 'Total']
+            for column, value in enumerate(summary_headers, 1):
+                cell = level_ws.cell(row=summary_start + 1, column=column, value=value)
+                cell.fill = HDR_FILL
+                cell.font = HDR_FONT
+                cell.alignment = CENTER
+
+            class_eligible = class_ineligible = 0
+            for offset, code in enumerate(module_codes, summary_start + 2):
+                counts = module_summary[code]
+                class_eligible += counts['eligible']
+                class_ineligible += counts['ineligible']
+                level_ws.append([code, counts['eligible'], counts['ineligible'], counts['eligible'] + counts['ineligible']])
+                level_ws.cell(row=offset, column=2).font = GREEN_F
+                level_ws.cell(row=offset, column=3).font = RED_F
+
+            class_row = level_ws.max_row + 2
+            level_ws.cell(row=class_row, column=1, value=f'{level_name} Total').font = Font(bold=True)
+            level_ws.cell(row=class_row, column=2, value=class_eligible).font = GREEN_F
+            level_ws.cell(row=class_row, column=3, value=class_ineligible).font = RED_F
+            level_ws.cell(row=class_row, column=4, value=class_eligible + class_ineligible).font = Font(bold=True)
+            level_ws.freeze_panes = 'C2'
+
+            for column_cells in level_ws.columns:
+                width = max(len(str(cell.value or '')) for cell in column_cells)
+                level_ws.column_dimensions[get_column_letter(column_cells[0].column)].width = min(max(width + 3, 12), 28)
+
+        if not wb.worksheets:
+            empty_ws = wb.create_sheet('Eligibility')
+            empty_ws.append(['No eligibility records found'])
+
+        fname = f'module_eligibility_{timezone.localdate()}.xlsx'
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="{fname}"'
+        wb.save(response)
+        return response
 
     headers = [
         '#', 'NACTVET Reg No', 'Student Name', 'Module', 'Code', 'Level', 'Semester',

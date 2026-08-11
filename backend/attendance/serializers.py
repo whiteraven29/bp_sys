@@ -211,13 +211,18 @@ class ModuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Module
         fields = [
-            'id', 'name', 'code', 'teacher', 'has_practical', 'credits',
+            'id', 'name', 'code', 'teacher', 'has_practical', 'is_field_module', 'credits',
             'class_level', 'class_level_name',
             'semester', 'semester_label',
             'student_count', 'session_count', 'theory_count', 'practical_count',
             'created_at',
         ]
-        read_only_fields = ['id', 'created_at']
+    read_only_fields = ['id', 'created_at']
+
+    def validate(self, attrs):
+        if attrs.get('is_field_module'):
+            attrs['has_practical'] = False
+        return attrs
 
     def get_student_count(self, obj):
         return obj.students.count()
@@ -500,6 +505,7 @@ class StudentResultSerializer(serializers.ModelSerializer):
     student_reg_no = serializers.CharField(source='student.nactvet_reg_no', read_only=True)
     module_id      = serializers.IntegerField(source='student.module.id',   read_only=True)
     has_practical  = serializers.BooleanField(source='student.module.has_practical', read_only=True)
+    is_field_module = serializers.BooleanField(source='student.module.is_field_module', read_only=True)
 
     # Weighted marks (read-only, computed)
     assign1_w      = serializers.SerializerMethodField()
@@ -533,7 +539,8 @@ class StudentResultSerializer(serializers.ModelSerializer):
     class Meta:
         model  = StudentResult
         fields = [
-            'id', 'student', 'student_name', 'student_reg_no', 'module_id', 'has_practical',
+            'id', 'student', 'student_name', 'student_reg_no', 'module_id', 'has_practical', 'is_field_module',
+            'field_ca',
             'assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical',
             'assign1_absent', 'assign2_absent', 'cat1_theory_absent', 'cat2_theory_absent',
             'cat1_practical_absent', 'cat2_practical_absent',
@@ -554,6 +561,9 @@ class StudentResultSerializer(serializers.ModelSerializer):
 
     def _hp(self, obj):
         return obj.student.module.has_practical
+
+    def _field(self, obj):
+        return obj.student.module.is_field_module
 
     def _mark(self, obj, field):
         """An explicitly absent assessment is complete and contributes zero."""
@@ -584,6 +594,8 @@ class StudentResultSerializer(serializers.ModelSerializer):
 
     # ── Sub-totals ──────────────────────────────────────────────────────────────
     def get_theory_ca(self, obj):
+        if self._field(obj):
+            return _wt(obj.field_ca, 40)
         vals = [self.get_assign1_w(obj), self.get_assign2_w(obj),
                 self.get_cat1_theory_w(obj), self.get_cat2_theory_w(obj)]
         filled = [v for v in vals if v is not None]
@@ -597,6 +609,8 @@ class StudentResultSerializer(serializers.ModelSerializer):
         return round(sum(filled), 2) if filled else None
 
     def get_total_ca(self, obj):
+        if self._field(obj):
+            return _wt(obj.field_ca, 40)
         required = ['assign1', 'assign2', 'cat1_theory', 'cat2_theory']
         if self._hp(obj):
             required += ['cat1_practical', 'cat2_practical']
@@ -610,6 +624,8 @@ class StudentResultSerializer(serializers.ModelSerializer):
 
     # ── Eligibility (only set when all required marks are present) ──────────────
     def get_theory_eligible(self, obj):
+        if self._field(obj):
+            return None if obj.field_ca is None else float(obj.field_ca) >= 50
         if not self._complete(obj, ['assign1', 'assign2', 'cat1_theory', 'cat2_theory']):
             return None
         t = self.get_theory_ca(obj)

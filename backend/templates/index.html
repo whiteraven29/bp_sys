@@ -569,6 +569,7 @@
       <div class="nav-submenu">
         <button class="nav-sub-btn active" data-results-section="ca" onclick="showResultsSection('ca', this)">CA Results</button>
         <button class="nav-sub-btn" data-results-section="final" onclick="showResultsSection('final', this)">End of Semester</button>
+        <button class="nav-sub-btn" data-results-section="field" onclick="showResultsSection('field', this)">Field Results</button>
         <button class="nav-sub-btn" data-results-section="analysis" onclick="showResultsSection('analysis', this)">CAT Analysis</button>
         <button class="nav-sub-btn admin-only" data-finance-section="obligations" onclick="showFinanceSection('obligations', this)">Obligations</button>
       </div>
@@ -585,8 +586,9 @@
     <div class="nav-group admin-only" id="eligibility-nav-group">
       <button class="nav-btn" data-page="eligibility" onclick="toggleEligibilityMenu(event)"><span class="icon"><i class="bi bi-person-check"></i></span> Eligibility <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
-        <button class="nav-sub-btn active" data-eligibility-section="cats" onclick="showEligibilitySection('cats', this)">CATs</button>
-        <button class="nav-sub-btn" data-eligibility-section="ese" onclick="showEligibilitySection('ese', this)">ESE</button>
+        <button class="nav-sub-btn active" data-eligibility-basis="all" onclick="showEligibilityBasis('all', this)">All</button>
+        <button class="nav-sub-btn" data-eligibility-basis="performance" onclick="showEligibilityBasis('performance', this)">Module Performance</button>
+        <button class="nav-sub-btn" data-eligibility-basis="payments" onclick="showEligibilityBasis('payments', this)">Payments</button>
       </div>
     </div>
     <button class="nav-btn finance-only" data-page="finance" data-finance-section="dashboard" onclick="showFinanceSection('dashboard', this)"><span class="icon"><i class="bi bi-graph-up-arrow"></i></span> Finance Overview</button>
@@ -681,6 +683,7 @@
             <tbody id="recent-sessions-tbody"><tr><td colspan="10"><div class="empty"><div class="ei">🗓️</div>No sessions yet</div></td></tr></tbody>
           </table>
         </div>
+        <div id="elig-performance-summary" style="display:none;margin-top:22px;"></div>
       </div>
     </div>
 
@@ -731,6 +734,10 @@
         <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;margin-bottom:14px;cursor:pointer;">
           <input type="checkbox" id="mod-has-practical" style="width:16px;height:16px;">
           <span>Has Practical Component <span style="color:var(--muted);font-size:.78rem;">(theory + practical CA weighting)</span></span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;margin-bottom:14px;cursor:pointer;">
+          <input type="checkbox" id="mod-is-field" style="width:16px;height:16px;">
+          <span>Field Results Module <span style="color:var(--muted);font-size:.78rem;">(single CA 40% + final 60%)</span></span>
         </label>
         <button class="btn btn-primary" onclick="createModule()">➕ Add Module</button>
       </div>
@@ -920,7 +927,7 @@
           <input id="res-search" type="text" placeholder="Search by name or reg no" oninput="onResSearchChange()" style="width:100%;" />
         </div>
       </div>
-      <div class="card admin-only">
+      <div class="card admin-only" id="authority-grade-card" style="display:none;">
         <div class="card-title">📥 Authority Grade Import</div>
         <p style="font-size:.78rem;color:var(--muted);margin-bottom:14px;">Download a level template, then enter the authority value beneath each module code. Stars are interpreted using the official grading key.</p>
         <div class="form-grid-3">
@@ -1001,6 +1008,26 @@
           <div style="font-size:.78rem;color:var(--muted);margin-top:10px;" id="res-save-info"></div>
         </div>
 
+        <!-- Field Results (shown only in the Field Results menu) -->
+        <div class="card" id="field-results-card" style="display:none;">
+          <div class="print-header" id="field-print-header"></div>
+          <div class="card-title">
+            🌾 Field Results <span style="font-size:.75rem;font-weight:400;color:var(--muted);">(CA 40% + Final 60%)</span>
+            <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;">
+              <button class="btn btn-green btn-sm admin-only" onclick="setFinalApproval(true)">Approve Results</button>
+              <button class="btn btn-danger btn-sm admin-only" onclick="setFinalApproval(false)">Unapprove</button>
+              <button class="btn btn-primary btn-sm" onclick="saveAllResults()">💾 Save</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="field-results-table">
+              <thead id="field-res-thead"></thead>
+              <tbody id="field-res-tbody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:.78rem;color:var(--muted);margin-top:10px;" id="field-save-info"></div>
+        </div>
+
         <!-- End-of-Semester Exam (admin only, shown by JS) -->
         <div class="card" id="end-exam-card" style="display:none;">
           <div class="print-header" id="final-print-header"></div>
@@ -1074,13 +1101,14 @@
         </div>
         <div class="form-grid-3" style="margin-bottom:14px;">
           <div class="field" id="elig-exam-wrap">
-            <label>Attendance Exam</label>
+            <label>Exam</label>
             <select id="elig-exam-type" onchange="renderEligibilityTable()">
               <option value="cat1">CAT 1</option>
               <option value="cat2">CAT 2</option>
+              <option value="end">End-of-Semester Exam</option>
             </select>
           </div>
-          <div class="field">
+          <div class="field" id="elig-helper-wrap">
             <label>Helper Filter</label>
             <select id="elig-helper-filter" onchange="renderEligibilityTable()">
               <option value="needs_action">Ineligible & Pending</option>
@@ -1095,18 +1123,18 @@
           <button class="btn btn-green btn-sm" onclick="downloadEligibilityExcel()">⬇ Download Excel</button>
         </div>
       </div>
-      <div class="stats-grid">
+      <div class="stats-grid" id="elig-stats-grid">
         <div class="stat-card" style="--c:var(--accent)"><div class="label">Total Students</div><div class="value" id="elig-stat-total">—</div></div>
-        <div class="stat-card" style="--c:var(--green)"><div class="label">Eligible</div><div class="value" id="elig-stat-eligible">—</div><div class="sublabel">≥90%</div></div>
-        <div class="stat-card" style="--c:var(--red)"><div class="label">Not Eligible</div><div class="value" id="elig-stat-ineligible">—</div><div class="sublabel">&lt;90%</div></div>
-        <div class="stat-card" style="--c:var(--muted)"><div class="label">No Period Data</div><div class="value" id="elig-stat-na">—</div></div>
+        <div class="stat-card" style="--c:var(--green)"><div class="label">Eligible</div><div class="value" id="elig-stat-eligible">—</div><div class="sublabel" id="elig-stat-eligible-note">All requirements met</div></div>
+        <div class="stat-card" style="--c:var(--red)"><div class="label">Not Eligible</div><div class="value" id="elig-stat-ineligible">—</div><div class="sublabel" id="elig-stat-ineligible-note">Action required</div></div>
+        <div class="stat-card" style="--c:var(--muted)"><div class="label" id="elig-stat-na-label">Pending Data</div><div class="value" id="elig-stat-na">—</div></div>
       </div>
       <div class="card" id="elig-print-area">
         <div class="print-header" id="elig-print-header"></div>
         <div class="card-title" id="elig-table-title">📋 Eligibility List</div>
         <div class="table-wrap">
           <table>
-            <thead>
+            <thead id="elig-thead">
               <tr><th>#</th><th>Reg. No.</th><th>Name</th><th>Module</th><th>Level</th><th>Semester</th><th id="elig-metric-a">Sessions</th><th id="elig-metric-b">Attended</th><th id="elig-metric-c">%</th><th>Eligibility</th><th>Note</th></tr>
             </thead>
             <tbody id="elig-tbody"></tbody>
@@ -1556,6 +1584,7 @@
       <div class="field"><label>Credits *</label><input id="edit-mod-credits" type="number" min="1"></div>
     </div>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input id="edit-mod-practical" type="checkbox"> Has Practical Component</label>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input id="edit-mod-field" type="checkbox"> Field Results Module (CA 40% + Final 60%)</label>
     <button class="btn btn-primary btn-sm" onclick="saveModuleEdit()">Save Changes</button>
   </div>
 </div>
@@ -1647,7 +1676,7 @@ const state = {
   modules: [],
   allModules: [],
   activeSem: null,
-  eligibilityMode: 'cats',
+  eligibilityBasis: 'all',
   declarationType: 'special_exam',
   financeSection: 'dashboard',
   financeStudents: [],
@@ -1793,7 +1822,7 @@ function showPage(name, btn) {
     const group = document.getElementById('eligibility-nav-group');
     group.classList.add('open');
     group.querySelector('.nav-btn').classList.add('active');
-    document.querySelector(`[data-eligibility-section="${state.eligibilityMode || 'cats'}"]`)?.classList.add('active');
+    document.querySelector(`[data-eligibility-basis="${state.eligibilityBasis || 'all'}"]`)?.classList.add('active');
   }
   if (name === 'finance') {
     const group = financeNavGroupFor();
@@ -1876,7 +1905,7 @@ function toggleEligibilityMenu(event) {
   const group = document.getElementById('eligibility-nav-group');
   group.classList.toggle('open');
   if (!document.getElementById('page-eligibility').classList.contains('active')) {
-    showEligibilitySection('cats', group.querySelector('[data-eligibility-section="cats"]'));
+    showEligibilityBasis(state.eligibilityBasis || 'all', group.querySelector(`[data-eligibility-basis="${state.eligibilityBasis || 'all'}"]`));
   }
   event.stopPropagation();
 }
@@ -1911,18 +1940,25 @@ function showResultsSection(section, btn) {
   const analysisCard = document.getElementById('cat-analysis-card');
   if (analysisCard) analysisCard.style.display = section === 'analysis' ? 'block' : 'none';
   const caCard = document.getElementById('res-ca-print-area');
+  const fieldCard = document.getElementById('field-results-card');
   const legend = document.getElementById('res-weight-legend');
   const endCard = document.getElementById('end-exam-card');
+  const authorityCard = document.getElementById('authority-grade-card');
+  const showField = section === 'field' && resModuleInfo?.is_field_module;
   if (caCard) caCard.style.display = section === 'ca' ? 'block' : 'none';
-  if (legend) legend.style.display = section === 'ca' ? 'block' : 'none';
-  if (endCard) endCard.style.display = section === 'final' && resModuleInfo && state.isStaff ? 'block' : 'none';
+  if (fieldCard) fieldCard.style.display = showField ? 'block' : 'none';
+  if (legend) legend.style.display = section === 'ca' || showField ? 'block' : 'none';
+  if (endCard) endCard.style.display = section === 'final' && resModuleInfo && !resModuleInfo.is_field_module && state.isStaff ? 'block' : 'none';
+  if (authorityCard) authorityCard.style.display = section === 'final' ? 'block' : 'none';
   if (section === 'analysis') loadCatAnalysis();
   requestAnimationFrame(() => {
     const target = section === 'analysis'
       ? analysisCard
       : section === 'final'
         ? document.getElementById('end-exam-card')
-        : document.getElementById('res-ca-print-area');
+        : section === 'field'
+          ? document.getElementById('field-results-card')
+          : document.getElementById('res-ca-print-area');
     if (target && target.offsetParent !== null) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 }
@@ -1937,10 +1973,11 @@ function showDeclarationType(type, btn) {
   renderExamDeclarations();
 }
 
-function showEligibilitySection(section, btn) {
-  state.eligibilityMode = section === 'ese' ? 'ese' : 'cats';
+function showEligibilityBasis(basis, btn) {
+  state.eligibilityBasis = ['performance', 'payments'].includes(basis) ? basis : 'all';
+  if (state.eligibilityBasis === 'performance') document.getElementById('elig-helper-filter').value = 'all';
   showPage('eligibility', document.querySelector('#eligibility-nav-group .nav-btn'));
-  document.querySelectorAll('[data-eligibility-section]').forEach(el => el.classList.toggle('active', el.dataset.eligibilitySection === state.eligibilityMode));
+  document.querySelectorAll('[data-eligibility-basis]').forEach(el => el.classList.toggle('active', el.dataset.eligibilityBasis === state.eligibilityBasis));
   if (btn) btn.classList.add('active');
   onEligibilityModeChange();
 }
@@ -2285,14 +2322,16 @@ async function createModule() {
   const teacher = document.getElementById('mod-teacher').value.trim();
   const credits = parseInt(document.getElementById('mod-credits').value, 10);
   const has_practical = document.getElementById('mod-has-practical').checked;
+  const is_field_module = document.getElementById('mod-is-field').checked;
   if (!semId || !lvlId || !name || !code || !teacher || !credits || credits < 1) {
     toast('Please fill in all required fields', 'var(--red)'); return;
   }
   try {
-    await api('POST', '/modules/', { semester: semId, class_level: lvlId, name, code, teacher, credits, has_practical });
+    await api('POST', '/modules/', { semester: semId, class_level: lvlId, name, code, teacher, credits, has_practical: is_field_module ? false : has_practical, is_field_module });
     toast('Module added!', 'var(--green)');
     ['mod-name','mod-code','mod-teacher'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('mod-has-practical').checked = false;
+    document.getElementById('mod-is-field').checked = false;
     document.getElementById('mod-credits').value = 1;
     loadModules(); buildSidebarModules();
   } catch(e) { toast(e?.detail || JSON.stringify(e), 'var(--red)'); }
@@ -2357,6 +2396,7 @@ function openModuleEditModal(id) {
   document.getElementById('edit-mod-teacher').value = module.teacher;
   document.getElementById('edit-mod-credits').value = module.credits;
   document.getElementById('edit-mod-practical').checked = module.has_practical;
+  document.getElementById('edit-mod-field').checked = module.is_field_module;
   document.getElementById('module-edit-modal').classList.add('open');
 }
 function closeModuleEditModal() { document.getElementById('module-edit-modal').classList.remove('open'); }
@@ -2366,7 +2406,8 @@ async function saveModuleEdit() {
     semester: Number(document.getElementById('edit-mod-semester').value), class_level: Number(document.getElementById('edit-mod-level').value),
     name: document.getElementById('edit-mod-name').value.trim(), code: document.getElementById('edit-mod-code').value.trim().toUpperCase(),
     teacher: document.getElementById('edit-mod-teacher').value.trim(), credits: Number(document.getElementById('edit-mod-credits').value),
-    has_practical: document.getElementById('edit-mod-practical').checked
+    has_practical: document.getElementById('edit-mod-field').checked ? false : document.getElementById('edit-mod-practical').checked,
+    is_field_module: document.getElementById('edit-mod-field').checked
   };
   if (!payload.semester || !payload.class_level || !payload.name || !payload.code || !payload.teacher || payload.credits < 1) {
     toast('Please fill in all required module details', 'var(--red)'); return;
@@ -3107,6 +3148,21 @@ async function loadResultsModule() {
   }
   try {
     const data = await api('GET', `/results/module/?module_id=${modId}`);
+    if (state.resultsSection === 'field' && !data.module.is_field_module) {
+      resModuleInfo = null;
+      document.getElementById('res-module-info').style.display = 'none';
+      document.getElementById('field-results-card').style.display = 'none';
+      toast('Select a module registered as a Field Results Module.', 'var(--yellow)');
+      return;
+    }
+    if (state.resultsSection !== 'field' && data.module.is_field_module) {
+      resModuleInfo = null;
+      document.getElementById('res-module-info').style.display = 'none';
+      document.getElementById('res-ca-print-area').style.display = 'none';
+      document.getElementById('end-exam-card').style.display = 'none';
+      toast('Open Field Results to enter or view this module.', 'var(--yellow)');
+      return;
+    }
     resModuleInfo = data.module;
     resData = data.results;
     document.getElementById('res-search').value = '';
@@ -3119,16 +3175,21 @@ async function loadResultsModule() {
 function renderResultsPage() {
   if (!resModuleInfo) return;
   const hp = resModuleInfo.has_practical;
+  const fieldModule = resModuleInfo.is_field_module;
 
   document.getElementById('res-mod-name').textContent = `${resModuleInfo.code} — ${resModuleInfo.name}`;
   document.getElementById('res-mod-meta').textContent = `${resModuleInfo.class_level} · ${resModuleInfo.semester}`;
-  document.getElementById('res-mod-type-badge').innerHTML = hp
+  document.getElementById('res-mod-type-badge').innerHTML = fieldModule
+    ? '<span class="badge badge-green">Field Results · CA 40% + Final 60%</span>'
+    : hp
     ? '<span class="badge badge-purple">Theory + Practical</span>'
     : '<span class="badge badge-blue">Theory Only</span>';
 
   // Weight legend
   const legendEl = document.getElementById('res-weight-legend');
-  if (hp) {
+  if (fieldModule) {
+    legendEl.innerHTML = '<strong style="color:var(--text)">Field weighting:</strong> Enter CA /100 → 40% and Final /100 → 60%. The total and grade are calculated automatically.';
+  } else if (hp) {
     legendEl.innerHTML = `
       <strong style="color:var(--text)">CA Weighting (40% total):</strong>
       Theory — A1: 2% · A2: 2% · CAT1: 8% · CAT2: 8% = <strong>20%</strong>&nbsp;&nbsp;|&nbsp;&nbsp;
@@ -3144,8 +3205,18 @@ function renderResultsPage() {
   }
 
   // Table headers
-  const theadEl = document.getElementById('res-thead');
-  if (hp) {
+  const theadEl = document.getElementById(fieldModule ? 'field-res-thead' : 'res-thead');
+  if (fieldModule) {
+    theadEl.innerHTML = `<tr>
+      <th>#</th><th>Reg. No.</th><th>Name</th>
+      <th>CA<br><span style="color:var(--muted);font-size:.6rem">/100</span></th>
+      <th>CA Weighted<br><span style="color:var(--muted);font-size:.6rem">/40</span></th>
+      <th>Final<br><span style="color:var(--muted);font-size:.6rem">/100</span></th>
+      <th>Final Weighted<br><span style="color:var(--muted);font-size:.6rem">/60</span></th>
+      <th>Total<br><span style="color:var(--muted);font-size:.6rem">/100</span></th>
+      <th>Grade</th><th>Status</th><th>Student Portal</th>
+    </tr>`;
+  } else if (hp) {
     theadEl.innerHTML = `<tr>
       <th>#</th><th>Reg. No.</th><th>Name</th>
       <th>A1<br><span style="color:var(--muted);font-size:.6rem">/100 → 2%</span></th>
@@ -3172,10 +3243,12 @@ function renderResultsPage() {
   }
 
   renderResultsTable();
-  if (state.isStaff) renderEndExamTable();
+  if (state.isStaff && !fieldModule) renderEndExamTable();
   document.getElementById('res-ca-print-area').style.display = state.resultsSection === 'ca' ? 'block' : 'none';
-  document.getElementById('res-weight-legend').style.display = state.resultsSection === 'ca' ? 'block' : 'none';
-  document.getElementById('end-exam-card').style.display = state.resultsSection === 'final' && state.isStaff ? 'block' : 'none';
+  document.getElementById('field-results-card').style.display = state.resultsSection === 'field' && fieldModule ? 'block' : 'none';
+  document.getElementById('res-weight-legend').style.display = state.resultsSection === 'ca' || (state.resultsSection === 'field' && fieldModule) ? 'block' : 'none';
+  document.getElementById('end-exam-card').style.display = !fieldModule && state.resultsSection === 'final' && state.isStaff ? 'block' : 'none';
+  document.getElementById('authority-grade-card').style.display = state.resultsSection === 'final' ? 'block' : 'none';
 }
 
 function mkInput(resultId, field, value, absent=false) {
@@ -3265,7 +3338,7 @@ function onResInput(el) {
   const rid   = el.dataset.rid;
   const field = el.dataset.field;
   el.dataset.dirty = String(el.value !== el.dataset.original);
-  updateResultRowCalc(rid);
+  if (!resModuleInfo?.is_field_module) updateResultRowCalc(rid);
   if (field === 'end_theory' || field === 'end_practical') updateEndExamRowCalc(rid);
 }
 
@@ -3461,15 +3534,35 @@ async function declareSelectedExamStudents() {
 
 function renderResultsTable() {
   const hp = resModuleInfo.has_practical;
-  const tbody = document.getElementById('res-tbody');
+  const fieldModule = resModuleInfo.is_field_module;
+  const tbody = document.getElementById(fieldModule ? 'field-res-tbody' : 'res-tbody');
   const filtered = resData.filter(r => {
     if (!resSearchTerm) return true;
     return r.student_name.toLowerCase().includes(resSearchTerm)
         || r.student_reg_no.toLowerCase().includes(resSearchTerm);
   });
   if (!filtered.length) {
-    const cols = hp ? 14 : 10;
+    const cols = fieldModule ? 11 : (hp ? 14 : 10);
     tbody.innerHTML = `<tr><td colspan="${cols}"><div class="empty"><div class="ei">🎓</div>No students match that search</div></td></tr>`;
+    return;
+  }
+
+  if (fieldModule) {
+    tbody.innerHTML = filtered.map((r, i) => {
+      const caWeighted = r.total_ca !== null ? Number(r.total_ca).toFixed(2) : '—';
+      const finalWeighted = r.end_exam_total !== null ? Number(r.end_exam_total).toFixed(2) : '—';
+      const total = r.final_total !== null ? Number(r.final_total).toFixed(2) : '—';
+      const grade = r.grade || '—';
+      const statusClass = r.result_status === 'PASS' ? 'badge-green' : r.result_status === 'INCOMPLETE' ? 'badge-yellow' : 'badge-red';
+      const approvalBadge = r.final_approved ? '<span class="badge badge-green">Approved</span>' : '<span class="badge badge-yellow">Hidden</span>';
+      return `<tr>
+        <td>${i + 1}</td><td><span style="font-family:var(--font-mono);font-size:.75rem">${r.student_reg_no}</span></td><td>${r.student_name}</td>
+        <td>${mkInput(r.id, 'field_ca', r.field_ca)}</td><td><strong>${caWeighted}</strong></td>
+        <td>${mkInput(r.id, 'end_theory', r.end_theory, r.end_theory_absent)}</td><td><strong>${finalWeighted}</strong></td>
+        <td><strong>${total}</strong></td><td><span class="badge ${grade === 'F' ? 'badge-red' : 'badge-blue'}">${grade}</span></td>
+        <td><span class="badge ${statusClass}">${r.result_status}</span></td><td>${approvalBadge}</td>
+      </tr>`;
+    }).join('');
     return;
   }
 
@@ -3508,9 +3601,12 @@ function renderResultsTable() {
 async function saveAllResults() {
   if (!resData.length) { toast('No results to save', 'var(--red)'); return; }
 
-  const FIELDS = ['assign1','assign2','cat1_theory','cat2_theory','cat1_practical','cat2_practical'];
+  const FIELDS = resModuleInfo?.is_field_module
+    ? ['field_ca', 'end_theory']
+    : ['assign1','assign2','cat1_theory','cat2_theory','cat1_practical','cat2_practical'];
   const byResult = {};
-  document.querySelectorAll('#res-tbody input[data-rid][data-field]').forEach(el => {
+  const resultsBodyId = resModuleInfo?.is_field_module ? 'field-res-tbody' : 'res-tbody';
+  document.querySelectorAll(`#${resultsBodyId} input[data-rid][data-field]`).forEach(el => {
     const field = el.dataset.field;
     if (!FIELDS.includes(field)) return;
     if (el.value === el.dataset.original && el.dataset.dirty !== 'true') return;
@@ -3529,7 +3625,7 @@ async function saveAllResults() {
     const fresh = await api('GET', `/results/module/?module_id=${resModuleInfo.id}`);
     resData = fresh.results;
     renderResultsPage();
-    document.getElementById('res-save-info').textContent = `Last saved: ${new Date().toLocaleTimeString()}`;
+    document.getElementById(resModuleInfo?.is_field_module ? 'field-save-info' : 'res-save-info').textContent = `Last saved: ${new Date().toLocaleTimeString()}`;
   } catch(e) { toast(e?.detail || 'Save failed', 'var(--red)'); }
 }
 
@@ -3566,11 +3662,12 @@ async function autoSaveResult(el) {
     el.dataset.dirty = 'false';
     el.style.borderColor = 'var(--green)';
     const isEndField = field === 'end_theory' || field === 'end_practical' || field === 'supplementary_mark';
-    const infoId = isEndField ? 'end-exam-save-info' : 'res-save-info';
+    const infoId = resModuleInfo?.is_field_module ? 'field-save-info' : (isEndField ? 'end-exam-save-info' : 'res-save-info');
     const infoEl = document.getElementById(infoId);
     if (infoEl) infoEl.textContent = `Auto-saved at ${new Date().toLocaleTimeString()}`;
     // Refresh calc cells
-    if (isEndField) updateEndExamRowCalc(rid);
+    if (resModuleInfo?.is_field_module) renderResultsTable();
+    else if (isEndField) updateEndExamRowCalc(rid);
     setTimeout(() => { el.style.borderColor = ''; }, 1200);
   } catch(e) {
     el.style.borderColor = 'var(--red)';
@@ -3771,62 +3868,126 @@ async function loadEligibility() {
 }
 
 function onEligibilityModeChange() {
-  const mode = state.eligibilityMode || 'cats';
-  document.getElementById('elig-exam-wrap').style.display = mode === 'ese' ? 'none' : '';
-  document.querySelectorAll('[data-eligibility-section]').forEach(el => el.classList.toggle('active', el.dataset.eligibilitySection === mode));
+  document.querySelectorAll('[data-eligibility-basis]').forEach(el => el.classList.toggle('active', el.dataset.eligibilityBasis === (state.eligibilityBasis || 'all')));
+  const isPerformance = (state.eligibilityBasis || 'all') === 'performance';
+  document.getElementById('elig-exam-wrap').style.display = isPerformance ? 'none' : '';
+  document.getElementById('elig-helper-wrap').style.display = isPerformance ? 'none' : '';
   renderEligibilityTable();
 }
 
 function renderEligibilityTable() {
-  const mode = state.eligibilityMode || 'cats';
+  const basis = state.eligibilityBasis || 'all';
+  document.getElementById('elig-stats-grid').style.display = basis === 'performance' ? 'none' : '';
+  const performanceSummary = document.getElementById('elig-performance-summary');
+  performanceSummary.style.display = basis === 'performance' ? '' : 'none';
+  if (basis !== 'performance') performanceSummary.innerHTML = '';
   const helperFilter = document.getElementById('elig-helper-filter').value || 'needs_action';
   const examType = document.getElementById('elig-exam-type').value || 'cat1';
-  const metric = mode === 'ese' ? 'end_exam' : `${examType}_exam`;
-  const label = mode === 'ese' ? 'End-of-Semester Exam' : `${examType === 'cat1' ? 'CAT 1' : 'CAT 2'} Exam`;
-  const s = eligibilityData.stats;
-
-  const eligKey   = `${metric}_eligible`;
-  const ineligKey = `${metric}_ineligible`;
-  const naKey     = `${metric}_na`;
-  document.getElementById('elig-stat-total').textContent = s.total_students ?? '—';
-  document.getElementById('elig-stat-eligible').textContent = s[eligKey] ?? '—';
-  document.getElementById('elig-stat-ineligible').textContent = s[ineligKey] ?? '—';
-  document.getElementById('elig-stat-na').textContent = s[naKey] ?? '—';
-
-  const attendanceMetric = mode === 'ese' ? 'end' : examType;
+  const isEse = examType === 'end';
+  const label = isEse ? 'End-of-Semester Exam' : `${examType === 'cat1' ? 'CAT 1' : 'CAT 2'} Exam`;
+  const basisLabel = { all: 'All Requirements', performance: 'Module Performance', payments: 'Payments' }[basis];
+  const attendanceMetric = isEse ? 'end' : examType;
   const pctKey  = `${attendanceMetric}_pct`;
-  const attKey  = `${attendanceMetric}_attended`;
   const sesKey  = `${attendanceMetric}_sessions`;
-  const eligBool = `${metric}_eligible`;
-  const noteKey = `${metric}_note`;
-
-  document.getElementById('elig-metric-a').textContent = 'Sessions';
-  document.getElementById('elig-metric-b').textContent = mode === 'ese' ? 'CA / Finance' : 'Finance';
-  document.getElementById('elig-metric-c').textContent = 'Attendance';
-
-  document.getElementById('elig-table-title').textContent = `📋 ${label} Eligibility List`;
-  document.getElementById('elig-print-header').textContent =
-    mode === 'ese'
-      ? `${label} Eligibility — Attendance ${eligibilityData.threshold}% + CA ${eligibilityData.ca_threshold}/40 + Finance`
-      : `${label} Eligibility — Attendance ${eligibilityData.threshold}% + Finance`;
+  const eligibilityFor = r => {
+    if (basis === 'payments') return isEse ? r.end_finance_eligible : r[`${examType}_finance_eligible`];
+    if (basis === 'performance') return r.ca_eligible === true;
+    return r[`${isEse ? 'end' : examType}_exam_eligible`];
+  };
+  const noteFor = r => {
+    if (basis === 'payments') return isEse ? r.end_finance_note : r[`${examType}_finance_note`];
+    if (basis === 'performance') return isEse
+      ? [r.end_note, r.ca_note].filter(Boolean).join('; ')
+      : r[`${examType}_note`];
+    return r[`${isEse ? 'end' : examType}_exam_note`];
+  };
 
   let rows = eligibilityData.rows || [];
+  const eligibleCount = rows.filter(r => eligibilityFor(r) === true).length;
+  const ineligibleCount = rows.filter(r => eligibilityFor(r) === false).length;
+  document.getElementById('elig-stat-total').textContent = rows.length;
+  document.getElementById('elig-stat-eligible').textContent = eligibleCount;
+  document.getElementById('elig-stat-ineligible').textContent = ineligibleCount;
+  document.getElementById('elig-stat-na').textContent = rows.length - eligibleCount - ineligibleCount;
+  document.getElementById('elig-stat-eligible-note').textContent = basis === 'payments' ? 'Payment cleared' : basis === 'performance' ? 'Performance requirements met' : 'All requirements met';
+  document.getElementById('elig-stat-ineligible-note').textContent = basis === 'payments' ? 'Payment pending' : 'Action required';
+  document.getElementById('elig-stat-na-label').textContent = basis === 'payments' ? 'Pending Data' : 'No Period Data';
+
+  const thead = document.getElementById('elig-thead');
+  if (basis !== 'performance') {
+    thead.innerHTML = '<tr><th>#</th><th>Reg. No.</th><th>Name</th><th>Module</th><th>Level</th><th>Semester</th><th id="elig-metric-a">Sessions</th><th id="elig-metric-b">Attended</th><th id="elig-metric-c">%</th><th>Eligibility</th><th>Note</th></tr>';
+    document.getElementById('elig-metric-b').textContent = isEse ? 'CA / Finance' : 'Finance';
+    document.getElementById('elig-metric-c').textContent = 'Attendance';
+  }
+
+  document.getElementById('elig-table-title').textContent = basis === 'performance'
+    ? '📋 Module Performance Eligibility'
+    : `📋 ${label} Eligibility — ${basisLabel}`;
+  document.getElementById('elig-print-header').textContent =
+    basis === 'performance' ? 'Module Performance Eligibility' : `${label} Eligibility — ${basisLabel}`;
+
   if (helperFilter === 'needs_action') {
-    rows = rows.filter(r => r[eligBool] !== true);
+    rows = rows.filter(r => eligibilityFor(r) !== true);
   } else if (helperFilter === 'will_sit') {
-    rows = rows.filter(r => r[eligBool] === true);
+    rows = rows.filter(r => eligibilityFor(r) === true);
+  }
+
+  if (basis === 'performance') {
+    const moduleCodes = [...new Set(rows.map(r => r.module_code))].sort((a, b) => a.localeCompare(b));
+    const students = new Map();
+    rows.forEach(r => {
+      if (!students.has(r.nactvet_reg_no)) {
+        students.set(r.nactvet_reg_no, { regNo: r.nactvet_reg_no, name: r.name, modules: {} });
+      }
+      students.get(r.nactvet_reg_no).modules[r.module_code] = eligibilityFor(r);
+    });
+
+    thead.innerHTML = `<tr><th>Student Reg. No.</th><th>Name</th>${moduleCodes.map(code => `<th>${code}</th>`).join('')}</tr>`;
+    const studentRows = [...students.values()];
+    document.getElementById('elig-tbody').innerHTML = studentRows.length ? studentRows.map(student => {
+      const moduleCells = moduleCodes.map(code => {
+        if (!(code in student.modules)) return '<td><span class="elig-na">—</span></td>';
+        return student.modules[code]
+          ? '<td><span class="badge badge-green">Eligible</span></td>'
+          : '<td><span class="badge badge-red">Ineligible</span></td>';
+      }).join('');
+      return `<tr>
+        <td><span style="font-family:var(--font-mono);font-size:.78rem">${student.regNo}</span></td>
+        <td>${student.name}</td>
+        ${moduleCells}
+      </tr>`;
+    }).join('') : '<tr><td colspan="2"><div class="empty"><div class="ei">📋</div>No students match this eligibility filter</div></td></tr>';
+
+    const moduleSummary = new Map();
+    const classSummary = new Map();
+    rows.forEach(r => {
+      const eligible = eligibilityFor(r);
+      const moduleKey = `${r.class_level}|||${r.module_code}`;
+      if (!moduleSummary.has(moduleKey)) moduleSummary.set(moduleKey, { level: r.class_level, code: r.module_code, eligible: 0, ineligible: 0 });
+      if (!classSummary.has(r.class_level)) classSummary.set(r.class_level, { eligible: 0, ineligible: 0 });
+      moduleSummary.get(moduleKey)[eligible ? 'eligible' : 'ineligible']++;
+      classSummary.get(r.class_level)[eligible ? 'eligible' : 'ineligible']++;
+    });
+    const moduleSummaryRows = [...moduleSummary.values()].map(s => `<tr><td>${s.level}</td><td>${s.code}</td><td class="elig-yes">${s.eligible}</td><td class="elig-no">${s.ineligible}</td><td>${s.eligible + s.ineligible}</td></tr>`).join('');
+    const classSummaryRows = [...classSummary.entries()].map(([level, s]) => `<tr><td>${level}</td><td class="elig-yes">${s.eligible}</td><td class="elig-no">${s.ineligible}</td><td>${s.eligible + s.ineligible}</td></tr>`).join('');
+    performanceSummary.innerHTML = rows.length ? `
+      <div class="card-title">Summary by Module</div>
+      <div class="table-wrap"><table><thead><tr><th>Class Level</th><th>Module Code</th><th>Eligible</th><th>Ineligible</th><th>Total</th></tr></thead><tbody>${moduleSummaryRows}</tbody></table></div>
+      <div class="card-title" style="margin-top:20px;">Summary by Class</div>
+      <div class="table-wrap"><table><thead><tr><th>Class Level</th><th>Eligible</th><th>Ineligible</th><th>Total</th></tr></thead><tbody>${classSummaryRows}</tbody></table></div>` : '';
+    return;
   }
 
   document.getElementById('elig-tbody').innerHTML = rows.length ? rows.map((r, i) => {
-    const elig = r[eligBool];
+    const elig = eligibilityFor(r);
     const pct  = r[pctKey];
-    const financeOk = mode === 'ese' ? r.end_finance_eligible : r[`${examType}_finance_eligible`];
+    const financeOk = isEse ? r.end_finance_eligible : r[`${examType}_finance_eligible`];
     const financeCell = financeOk ? '<span class="badge badge-green">Cleared</span>' : '<span class="badge badge-red">Pending</span>';
-    const att  = mode === 'ese'
+    const att  = isEse
       ? `${r.ca_total ?? '—'} / ${financeCell}`
       : financeCell;
     const ses  = r[sesKey];
-    const note = r[noteKey] || '';
+    const note = noteFor(r) || '';
     let eligCell;
     if (elig === null || elig === undefined) {
       eligCell = '<span class="elig-na">PENDING</span>';
@@ -3853,13 +4014,13 @@ function renderEligibilityTable() {
 }
 
 function printEligibility() {
-  const mode = state.eligibilityMode || 'cats';
   const examType = document.getElementById('elig-exam-type').value || 'cat1';
-  const examLabels = { cat1: 'CAT 1', cat2: 'CAT 2' };
+  const examLabels = { cat1: 'CAT 1', cat2: 'CAT 2', end: 'End-of-Semester' };
+  const basisLabels = { all: 'All Requirements', performance: 'Module Performance', payments: 'Payments' };
   document.getElementById('elig-print-header').textContent =
-    mode === 'ese'
-      ? `End-of-Semester Eligibility — Attendance, CA, and Finance — ${new Date().toLocaleDateString()}`
-      : `${examLabels[examType]} Eligibility — Attendance and Finance — ${new Date().toLocaleDateString()}`;
+    (state.eligibilityBasis || 'all') === 'performance'
+      ? `Module Performance Eligibility — ${new Date().toLocaleDateString()}`
+      : `${examLabels[examType]} Eligibility — ${basisLabels[state.eligibilityBasis || 'all']} — ${new Date().toLocaleDateString()}`;
   document.body.classList.add('print-elig');
   window.print();
   document.body.classList.remove('print-elig');
@@ -3891,6 +4052,7 @@ function downloadEligibilityExcel() {
   if (modId) url += `module_id=${modId}&`;
   if (lvlId) url += `class_level_id=${lvlId}&`;
   if (semId) url += `semester_id=${semId}&`;
+  url += `basis=${encodeURIComponent(state.eligibilityBasis || 'all')}&`;
   window.location.href = url;
 }
 
