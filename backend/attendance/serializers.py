@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
+from django.db import transaction
 from .grading import result_outcome
 from .models import (
     AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord,
@@ -455,7 +456,9 @@ class SessionSerializer(serializers.ModelSerializer):
 
 
 class SessionCreateSerializer(serializers.ModelSerializer):
-    records = serializers.ListField(child=serializers.DictField(), write_only=True)
+    records = serializers.ListField(
+        child=serializers.DictField(), write_only=True, required=False
+    )
 
     class Meta:
         model = Session
@@ -463,15 +466,19 @@ class SessionCreateSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
     def validate(self, attrs):
-        label = str(attrs.get('label', '')).strip()
-        attrs['label'] = label
+        current = self.instance
+        label = str(attrs.get('label', current.label if current else '')).strip()
+        if 'label' in attrs:
+            attrs['label'] = label
         duplicate = Session.objects.filter(
-            module=attrs.get('module'),
-            session_type=attrs.get('session_type', Session.THEORY),
-            exam_period=attrs.get('exam_period', Session.GENERAL),
-            date=attrs.get('date'),
+            module=attrs.get('module', current.module if current else None),
+            session_type=attrs.get('session_type', current.session_type if current else Session.THEORY),
+            exam_period=attrs.get('exam_period', current.exam_period if current else Session.GENERAL),
+            date=attrs.get('date', current.date if current else None),
             label__iexact=label,
         )
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
         if duplicate.exists():
             raise serializers.ValidationError({
                 'detail': (
@@ -482,7 +489,7 @@ class SessionCreateSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        records_data = validated_data.pop('records')
+        records_data = validated_data.pop('records', [])
         session = Session.objects.create(**validated_data)
         for rec in records_data:
             reg_no = rec.get('nactvet_reg_no', '')
@@ -498,6 +505,40 @@ class SessionCreateSerializer(serializers.ModelSerializer):
             except Student.DoesNotExist:
                 pass
         return session
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        """Update session details and any submitted attendance roster in place."""
+        records_data = validated_data.pop('records', None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+
+        if records_data is not None:
+            students = {
+                student.nactvet_reg_no: student
+                for student in Student.objects.filter(module=instance.module)
+            }
+            for rec in records_data:
+                reg_no = str(rec.get('nactvet_reg_no', '')).strip()
+                student = students.get(reg_no)
+                if not student:
+                    continue
+                record_status = str(rec.get('status', AttendanceRecord.PRESENT)).upper()
+                if record_status not in (
+                    AttendanceRecord.PRESENT,
+                    AttendanceRecord.ABSENT,
+                    AttendanceRecord.SICK,
+                ):
+                    raise serializers.ValidationError({'detail': f'Invalid attendance status for {reg_no}.'})
+                sick_note = str(rec.get('sick_note', '')).strip() if record_status == AttendanceRecord.SICK else ''
+                defaults = {'status': record_status, 'sick_note': sick_note}
+                if record_status != AttendanceRecord.SICK:
+                    defaults['certificate_submitted'] = False
+                AttendanceRecord.objects.update_or_create(
+                    session=instance, student=student, defaults=defaults
+                )
+        return instance
 
 
 class StudentResultSerializer(serializers.ModelSerializer):

@@ -888,7 +888,8 @@
           </table>
         </div>
         <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <button class="btn btn-primary" onclick="submitAttendance()">💾 Save Session</button>
+          <button class="btn btn-primary" id="att-save-btn" onclick="submitAttendance()">💾 Save Session</button>
+          <button class="btn btn-secondary" id="att-cancel-edit-btn" style="display:none" onclick="cancelAttendanceEdit()">Cancel Edit</button>
           <span id="att-count-info" style="font-size:.82rem;color:var(--muted);"></span>
         </div>
       </div>
@@ -2623,6 +2624,7 @@ function handleExcelUpload(event) {
 
 // ── ATTENDANCE PAGE ─────────────────────────────────────────────────────────────
 let rosterStudents = [];
+let editingAttendanceSessionId = null;
 
 async function onAttFilterChange() {
   const semId = document.getElementById('att-flt-sem').value;
@@ -2729,13 +2731,15 @@ async function submitAttendance() {
     sick_note: s.status === 'S' ? (s.sick_note || '') : '',
   }));
   try {
-    await api('POST', '/sessions/', { module: parseInt(modId), session_type: sessionType, exam_period: examPeriod, date, label, topic, records });
-    toast('Session saved!', 'var(--green)');
+    const payload = { module: parseInt(modId), session_type: sessionType, exam_period: examPeriod, date, label, topic, records };
+    await api(editingAttendanceSessionId ? 'PATCH' : 'POST', editingAttendanceSessionId ? `/sessions/${editingAttendanceSessionId}/` : '/sessions/', payload);
+    toast(editingAttendanceSessionId ? 'Attendance corrections saved!' : 'Session saved!', 'var(--green)');
     document.getElementById('att-date').value = '';
     document.getElementById('att-label').value = '';
     document.getElementById('att-topic').value = '';
     document.getElementById('att-roster-card').style.display = 'none';
     rosterStudents = [];
+    setAttendanceEditMode(null);
     await loadAttendanceHistory();
   } catch(e) { toast(e?.detail || 'Error saving session', 'var(--red)'); }
 }
@@ -2770,10 +2774,54 @@ async function loadAttendanceHistory() {
       <td><span class="badge badge-orange">${session.sick_count}</span></td>
       <td><span class="badge badge-red">${session.absent_count}</span></td>
       <td>${pctBadge(session.attendance_pct)}</td>
-      <td><button class="btn btn-danger btn-sm" onclick="deleteAttendanceSession(${session.id})">Delete</button></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-secondary btn-sm" onclick="editAttendanceSession(${session.id})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteAttendanceSession(${session.id})">Delete</button>
+      </td>
     </tr>`).join('') : '<tr><td colspan="11"><div class="empty"><div class="ei">📅</div>No attendance sessions uploaded for these filters.</div></td></tr>';
   } catch(e) {
     tbody.innerHTML = '<tr><td colspan="11"><div class="empty">Could not load attendance history.</div></td></tr>';
+  }
+}
+
+function setAttendanceEditMode(sessionId) {
+  editingAttendanceSessionId = sessionId;
+  document.getElementById('att-save-btn').textContent = sessionId ? '💾 Save Corrections' : '💾 Save Session';
+  document.getElementById('att-cancel-edit-btn').style.display = sessionId ? '' : 'none';
+}
+
+function cancelAttendanceEdit() {
+  setAttendanceEditMode(null);
+  document.getElementById('att-date').value = '';
+  document.getElementById('att-label').value = '';
+  document.getElementById('att-topic').value = '';
+  loadAttendanceRoster();
+}
+
+async function editAttendanceSession(sessionId) {
+  try {
+    const session = await api('GET', `/sessions/${sessionId}/`);
+    document.getElementById('att-module').value = String(session.module);
+    document.getElementById('att-date').value = session.date;
+    document.getElementById('att-label').value = session.label;
+    document.getElementById('att-topic').value = session.topic || '';
+    document.querySelector(`input[name="att-type"][value="${session.session_type}"]`).checked = true;
+    document.querySelector(`input[name="att-period"][value="${session.exam_period}"]`).checked = true;
+
+    const data = await api('GET', `/students/?module_id=${session.module}`);
+    const saved = new Map(session.records.map(record => [record.student, record]));
+    rosterStudents = (data.results ?? data).map(student => {
+      const record = saved.get(student.id);
+      return { ...student, status: record?.status || 'P', sick_note: record?.sick_note || '' };
+    });
+    setAttendanceEditMode(sessionId);
+    renderRoster();
+    updateSessionTypeLabel();
+    updateAttCount();
+    document.getElementById('att-roster-card').style.display = 'block';
+    document.getElementById('att-roster-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    toast(e?.detail || 'Could not open this attendance session', 'var(--red)');
   }
 }
 

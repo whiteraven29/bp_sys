@@ -533,6 +533,42 @@ class AttendanceSecurityTests(TestCase):
         self.assertEqual(deleted.status_code, 204)
         self.assertFalse(Session.objects.filter(id=created.data['id']).exists())
 
+    def test_teacher_can_correct_attendance_for_assigned_session(self):
+        session = Session.objects.create(
+            module=self.module, session_type=Session.THEORY,
+            exam_period=Session.GENERAL, date=date.today(), label='Week 2'
+        )
+        record = AttendanceRecord.objects.create(
+            session=session, student=self.student, status=AttendanceRecord.PRESENT
+        )
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.patch(f'/api/sessions/{session.id}/', {
+            'records': [{
+                'nactvet_reg_no': self.student.nactvet_reg_no,
+                'status': AttendanceRecord.SICK,
+                'sick_note': 'Clinic visit',
+            }],
+        }, format='json')
+
+        self.assertEqual(response.status_code, 200)
+        record.refresh_from_db()
+        self.assertEqual(record.status, AttendanceRecord.SICK)
+        self.assertEqual(record.sick_note, 'Clinic visit')
+
+    def test_teacher_cannot_correct_attendance_for_unassigned_session(self):
+        session = Session.objects.create(
+            module=self.other_module, session_type=Session.THEORY,
+            exam_period=Session.GENERAL, date=date.today(), label='Week 2'
+        )
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.patch(f'/api/sessions/{session.id}/', {
+            'records': [],
+        }, format='json')
+
+        self.assertEqual(response.status_code, 404)
+
     def test_end_exam_below_50_requires_supplementary_only_for_end_exam(self):
         result = StudentResult.objects.create(
             student=self.student,
