@@ -589,6 +589,7 @@
         <button class="nav-sub-btn active" data-eligibility-basis="all" onclick="showEligibilityBasis('all', this)">All</button>
         <button class="nav-sub-btn" data-eligibility-basis="performance" onclick="showEligibilityBasis('performance', this)">Module Performance</button>
         <button class="nav-sub-btn" data-eligibility-basis="payments" onclick="showEligibilityBasis('payments', this)">Payments</button>
+        <button class="nav-sub-btn" onclick="downloadFinalEligibilityExcel()">Final Eligibility</button>
       </div>
     </div>
     <button class="nav-btn finance-only" data-page="finance" data-finance-section="dashboard" onclick="showFinanceSection('dashboard', this)"><span class="icon"><i class="bi bi-graph-up-arrow"></i></span> Finance Overview</button>
@@ -4102,6 +4103,10 @@ function downloadEligibilityExcel() {
   if (semId) url += `semester_id=${semId}&`;
   url += `basis=${encodeURIComponent(state.eligibilityBasis || 'all')}&`;
   window.location.href = url;
+}
+
+function downloadFinalEligibilityExcel() {
+  window.location.href = '/api/eligibility/final/download/';
 }
 
 // ── FINANCE PAGE ───────────────────────────────────────────────────────────────

@@ -3102,3 +3102,316 @@ def download_eligibility_excel(request):
     response['Content-Disposition'] = f'attachment; filename="{fname}"'
     wb.save(response)
     return response
+
+
+@login_required
+def download_final_eligibility_excel(request):
+    """Export attendance, CA marks and combined eligibility for NTA 4–6."""
+    if not request.user.is_staff:
+        return HttpResponseForbidden('Administrator access required.')
+
+    from collections import defaultdict
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    semester_id = request.GET.get('semester_id')
+    modules = (
+        user_modules(request.user)
+        .filter(class_level__order__in=(4, 5, 6))
+        .select_related('class_level', 'semester__academic_year')
+        .order_by('class_level__order', 'code')
+    )
+    if semester_id:
+        modules = modules.filter(semester_id=semester_id)
+    modules = list(modules)
+
+    enrollments = list(
+        Student.objects.filter(module__in=modules)
+        .select_related('module', 'result')
+        .prefetch_related('attendance_records__session')
+        .order_by('name', 'nactvet_reg_no', 'module__code')
+    )
+
+    module_session_counts = {
+        module.id: Session.objects.filter(module=module).count()
+        for module in modules
+    }
+    enrollment_data = {}
+    students_by_level = defaultdict(dict)
+    for student in enrollments:
+        records = list(student.attendance_records.all())
+        total_sessions = module_session_counts[student.module_id]
+        attended = sum(1 for record in records if attendance_is_effective(record))
+        attendance_pct = round(attended / total_sessions * 100, 1) if total_sessions else None
+        ca_total, ca_eligible, _ca_note = ca_eligibility_for_student(student)
+        attendance_eligible = (
+            attendance_pct >= ELIGIBILITY_THRESHOLD
+            if attendance_pct is not None else None
+        )
+        final_eligible = (
+            None if ca_eligible is None or attendance_eligible is None
+            else ca_eligible and attendance_eligible
+        )
+        enrollment_data[(student.nactvet_reg_no, student.module_id)] = {
+            'student': student,
+            'sessions': total_sessions,
+            'attended': attended,
+            'attendance_pct': attendance_pct,
+            'ca_total': ca_total,
+            'ca_eligible': ca_eligible,
+            'final_eligible': final_eligible,
+        }
+        students_by_level[student.module.class_level.order][student.nactvet_reg_no] = student.name
+
+    level_modules = defaultdict(list)
+    for module in modules:
+        level_modules[module.class_level.order].append(module)
+
+    navy = '1E2D78'
+    blue = 'D9EAF7'
+    green = 'C6EFCE'
+    green_text = '006100'
+    red = 'FFC7CE'
+    red_text = '9C0006'
+    yellow = 'FFF2CC'
+    yellow_text = '7F6000'
+    white = 'FFFFFF'
+    thin = Side(style='thin', color='808080')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    def style_header(cell, fill=navy):
+        cell.fill = PatternFill('solid', fgColor=fill)
+        cell.font = Font(bold=True, color=white)
+        cell.alignment = center
+        cell.border = border
+
+    def style_status(cell, status):
+        if status is True or status == 'Eligible':
+            cell.fill = PatternFill('solid', fgColor=green)
+            cell.font = Font(bold=True, color=green_text)
+        elif status is False or status == 'Ineligible':
+            cell.fill = PatternFill('solid', fgColor=red)
+            cell.font = Font(bold=True, color=red_text)
+        else:
+            cell.fill = PatternFill('solid', fgColor=yellow)
+            cell.font = Font(bold=True, color=yellow_text)
+        cell.alignment = center
+        cell.border = border
+
+    def finish_sheet(ws):
+        ws.freeze_panes = 'D8'
+        ws.auto_filter.ref = f'A7:{get_column_letter(ws.max_column)}{ws.max_row}'
+        ws.sheet_view.showGridLines = False
+        ws.page_setup.orientation = 'landscape'
+        ws.page_setup.fitToWidth = 1
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        for column in range(1, ws.max_column + 1):
+            width = max(len(str(ws.cell(row=row, column=column).value or '')) for row in range(1, ws.max_row + 1))
+            ws.column_dimensions[get_column_letter(column)].width = min(max(width + 2, 11), 24)
+        ws.column_dimensions['B'].width = max(ws.column_dimensions['B'].width, 24)
+        ws.column_dimensions['C'].width = max(ws.column_dimensions['C'].width, 23)
+
+    def prepare_sheet(ws, level, title, last_column):
+        last_letter = get_column_letter(max(last_column, 3))
+        headings = [
+            'BLUE PHARMA COLLEGE OF HEALTH',
+            'DEPARTMENT OF PHARMACEUTICAL SCIENCES',
+            f'NTA LEVEL {level}',
+            title,
+        ]
+        for row, heading in enumerate(headings, 1):
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=max(last_column, 3))
+            cell = ws.cell(row=row, column=1, value=heading)
+            cell.font = Font(bold=True, size=14 if row == 1 else 11, color=navy)
+            cell.alignment = center
+        for column, value in enumerate(('SN', 'Name', 'NACTVET Registration Number'), 1):
+            style_header(ws.cell(row=5, column=column, value=value))
+            ws.merge_cells(start_row=5, start_column=column, end_row=7, end_column=column)
+        ws.row_dimensions[5].height = 36
+        ws.print_title_rows = '1:7'
+        ws.print_area = f'A1:{last_letter}{max(ws.max_row, 5)}'
+
+    def result_values(data):
+        result = getattr(data['student'], 'result', None) if data else None
+        if result is None:
+            return result, ('', '', '', ''), '', '', ''
+        serializer = StudentResultSerializer()
+        theory = serializer.get_theory_ca(result)
+        practical = serializer.get_practical_ca(result)
+        return result, (
+            result.cat1_theory, result.cat2_theory,
+            result.assign1, result.assign2,
+        ), theory, practical, data['ca_total']
+
+    def write_mark(cell, value, pass_mark=50):
+        cell.value = value if value is not None else ''
+        cell.alignment = center
+        cell.border = border
+        if value is not None and value != '':
+            style_status(cell, float(value) >= pass_mark)
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    for level in (4, 5, 6):
+        level_module_list = level_modules[level]
+        student_map = students_by_level[level]
+
+        assignments_ws = wb.create_sheet(f'NTA {level} Assignments')
+        assignment_width = 2 * len(level_module_list)
+        prepare_sheet(assignments_ws, level, 'ASSIGNMENT RESULTS', 3 + assignment_width)
+        assignment_starts = {}
+        column = 4
+        for module in level_module_list:
+            assignment_starts[module.id] = column
+            assignments_ws.merge_cells(start_row=5, start_column=column, end_row=5, end_column=column + 1)
+            style_header(assignments_ws.cell(row=5, column=column, value=f'{module.name} ({module.code})'))
+            assignments_ws.merge_cells(start_row=6, start_column=column, end_row=6, end_column=column + 1)
+            style_header(assignments_ws.cell(row=6, column=column, value='Assignments'), blue)
+            assignments_ws.cell(row=6, column=column).font = Font(bold=True, color='000000')
+            for offset, heading in enumerate(('ASS1', 'ASS2')):
+                style_header(assignments_ws.cell(row=7, column=column + offset, value=heading), blue)
+                assignments_ws.cell(row=7, column=column + offset).font = Font(bold=True, color='000000')
+            column += 2
+        for row_number, (reg_no, name) in enumerate(sorted(student_map.items(), key=lambda item: item[1].lower()), 8):
+            assignments_ws.append([row_number - 7, name, reg_no])
+            for module in level_module_list:
+                data = enrollment_data.get((reg_no, module.id))
+                result = getattr(data['student'], 'result', None) if data else None
+                a1 = result.assign1 if result else None
+                a2 = result.assign2 if result else None
+                start = assignment_starts[module.id]
+                for offset, value in enumerate((a1, a2)):
+                    write_mark(assignments_ws.cell(row=row_number, column=start + offset), value)
+        finish_sheet(assignments_ws)
+
+        cats_ws = wb.create_sheet(f'NTA {level} CATs')
+        cat_width = sum(9 if module.has_practical else 5 for module in level_module_list)
+        prepare_sheet(cats_ws, level, 'CONTINUOUS ASSESSMENT RESULTS', 3 + cat_width)
+        cat_starts = {}
+        column = 4
+        for module in level_module_list:
+            width = 9 if module.has_practical else 5
+            cat_starts[module.id] = column
+            cats_ws.merge_cells(start_row=5, start_column=column, end_row=5, end_column=column + width - 1)
+            style_header(cats_ws.cell(row=5, column=column, value=f'{module.name} ({module.code})'))
+            cats_ws.merge_cells(start_row=6, start_column=column, end_row=6, end_column=column + 4)
+            style_header(cats_ws.cell(row=6, column=column, value='Theory'), blue)
+            cats_ws.cell(row=6, column=column).font = Font(bold=True, color='000000')
+            for offset, heading in enumerate(('WR1', 'WR2', 'AS1', 'ASS2', 'AV')):
+                style_header(cats_ws.cell(row=7, column=column + offset, value=heading), blue)
+                cats_ws.cell(row=7, column=column + offset).font = Font(bold=True, color='000000')
+            if module.has_practical:
+                cats_ws.merge_cells(start_row=6, start_column=column + 5, end_row=6, end_column=column + 7)
+                style_header(cats_ws.cell(row=6, column=column + 5, value='Practical'), blue)
+                cats_ws.cell(row=6, column=column + 5).font = Font(bold=True, color='000000')
+                for offset, heading in enumerate(('PRAC1', 'PRAC2', 'AV'), 5):
+                    style_header(cats_ws.cell(row=7, column=column + offset, value=heading), blue)
+                    cats_ws.cell(row=7, column=column + offset).font = Font(bold=True, color='000000')
+                style_header(cats_ws.cell(row=6, column=column + 8, value='Total'), blue)
+                cats_ws.cell(row=6, column=column + 8).font = Font(bold=True, color='000000')
+                style_header(cats_ws.cell(row=7, column=column + 8, value='AV'), blue)
+                cats_ws.cell(row=7, column=column + 8).font = Font(bold=True, color='000000')
+            column += width
+        for row_number, (reg_no, name) in enumerate(sorted(student_map.items(), key=lambda item: item[1].lower()), 8):
+            cats_ws.append([row_number - 7, name, reg_no])
+            for module in level_module_list:
+                data = enrollment_data.get((reg_no, module.id))
+                result, theory_raw, theory_av, practical_av, total_av = result_values(data)
+                start = cat_starts[module.id]
+                for offset, value in enumerate(theory_raw):
+                    write_mark(cats_ws.cell(row=row_number, column=start + offset), value)
+                write_mark(cats_ws.cell(row=row_number, column=start + 4), theory_av, 10 if module.has_practical else 20)
+                if module.has_practical:
+                    practical_raw = (result.cat1_practical, result.cat2_practical) if result else ('', '')
+                    write_mark(cats_ws.cell(row=row_number, column=start + 5), practical_raw[0])
+                    write_mark(cats_ws.cell(row=row_number, column=start + 6), practical_raw[1])
+                    write_mark(cats_ws.cell(row=row_number, column=start + 7), practical_av, 10)
+                    write_mark(cats_ws.cell(row=row_number, column=start + 8), total_av, CA_ELIGIBILITY_THRESHOLD)
+        finish_sheet(cats_ws)
+
+        eligibility_ws = wb.create_sheet(f'NTA {level} Eligibility')
+        eligibility_width = sum((11 if module.has_practical else 7) for module in level_module_list)
+        prepare_sheet(eligibility_ws, level, 'FINAL ELIGIBILITY TO END-OF-SEMESTER EXAMINATION', 3 + eligibility_width)
+        eligibility_starts = {}
+        column = 4
+        for module in level_module_list:
+            mark_width = 9 if module.has_practical else 5
+            width = mark_width + 2
+            eligibility_starts[module.id] = column
+            eligibility_ws.merge_cells(start_row=5, start_column=column, end_row=5, end_column=column + width - 1)
+            style_header(eligibility_ws.cell(row=5, column=column, value=f'{module.name} ({module.code})'))
+            eligibility_ws.merge_cells(start_row=6, start_column=column, end_row=6, end_column=column + 4)
+            style_header(eligibility_ws.cell(row=6, column=column, value='Theory'), blue)
+            eligibility_ws.cell(row=6, column=column).font = Font(bold=True, color='000000')
+            for offset, heading in enumerate(('WR1', 'WR2', 'AS1', 'ASS2', 'AV')):
+                style_header(eligibility_ws.cell(row=7, column=column + offset, value=heading), blue)
+                eligibility_ws.cell(row=7, column=column + offset).font = Font(bold=True, color='000000')
+            if module.has_practical:
+                eligibility_ws.merge_cells(start_row=6, start_column=column + 5, end_row=6, end_column=column + 7)
+                style_header(eligibility_ws.cell(row=6, column=column + 5, value='Practical'), blue)
+                eligibility_ws.cell(row=6, column=column + 5).font = Font(bold=True, color='000000')
+                for offset, heading in enumerate(('PRAC1', 'PRAC2', 'AV'), 5):
+                    style_header(eligibility_ws.cell(row=7, column=column + offset, value=heading), blue)
+                    eligibility_ws.cell(row=7, column=column + offset).font = Font(bold=True, color='000000')
+                style_header(eligibility_ws.cell(row=6, column=column + 8, value='Total'), blue)
+                eligibility_ws.cell(row=6, column=column + 8).font = Font(bold=True, color='000000')
+                style_header(eligibility_ws.cell(row=7, column=column + 8, value='AV'), blue)
+                eligibility_ws.cell(row=7, column=column + 8).font = Font(bold=True, color='000000')
+            for offset, heading in enumerate(('Attendance (%)', 'Final Eligibility'), mark_width):
+                style_header(eligibility_ws.cell(row=6, column=column + offset, value=heading), blue)
+                eligibility_ws.cell(row=6, column=column + offset).font = Font(bold=True, color='000000')
+                eligibility_ws.merge_cells(start_row=6, start_column=column + offset, end_row=7, end_column=column + offset)
+            column += width
+        for row_number, (reg_no, name) in enumerate(sorted(student_map.items(), key=lambda item: item[1].lower()), 8):
+            eligibility_ws.append([row_number - 7, name, reg_no])
+            for module in level_module_list:
+                data = enrollment_data.get((reg_no, module.id))
+                result, theory_raw, theory_av, practical_av, total_av = result_values(data)
+                start = eligibility_starts[module.id]
+                for offset, value in enumerate(theory_raw):
+                    write_mark(eligibility_ws.cell(row=row_number, column=start + offset), value)
+                write_mark(eligibility_ws.cell(row=row_number, column=start + 4), theory_av, 10 if module.has_practical else 20)
+                mark_width = 5
+                if module.has_practical:
+                    practical_raw = (result.cat1_practical, result.cat2_practical) if result else ('', '')
+                    write_mark(eligibility_ws.cell(row=row_number, column=start + 5), practical_raw[0])
+                    write_mark(eligibility_ws.cell(row=row_number, column=start + 6), practical_raw[1])
+                    write_mark(eligibility_ws.cell(row=row_number, column=start + 7), practical_av, 10)
+                    write_mark(eligibility_ws.cell(row=row_number, column=start + 8), total_av, CA_ELIGIBILITY_THRESHOLD)
+                    mark_width = 9
+                attendance_cell = eligibility_ws.cell(row=row_number, column=start + mark_width, value=data['attendance_pct'] if data and data['attendance_pct'] is not None else '')
+                style_status(attendance_cell, None if not data or data['attendance_pct'] is None else data['attendance_pct'] >= ELIGIBILITY_THRESHOLD)
+                status = 'INCOMPLETE' if not data or data['final_eligible'] is None else ('Eligible' if data['final_eligible'] else 'Ineligible')
+                eligibility_cell = eligibility_ws.cell(row=row_number, column=start + mark_width + 1, value=status)
+                style_status(eligibility_cell, data['final_eligible'] if data else None)
+        summary_start = eligibility_ws.max_row + 2
+        summary_labels = ('Number of Eligible Students', 'Number of Ineligible Students', 'Number of Incomplete Students')
+        for offset, label in enumerate(summary_labels):
+            cell = eligibility_ws.cell(row=summary_start + offset, column=2, value=label)
+            cell.font = Font(bold=True)
+            cell.border = border
+        for module in level_module_list:
+            statuses = [
+                enrollment_data[(reg_no, module.id)]['final_eligible']
+                for reg_no in student_map
+                if (reg_no, module.id) in enrollment_data
+            ]
+            counts = (
+                sum(status is True for status in statuses),
+                sum(status is False for status in statuses),
+                sum(status is None for status in statuses),
+            )
+            mark_width = 9 if module.has_practical else 5
+            status_column = eligibility_starts[module.id] + mark_width + 1
+            for offset, count in enumerate(counts):
+                cell = eligibility_ws.cell(row=summary_start + offset, column=status_column, value=count)
+                style_status(cell, True if offset == 0 else (False if offset == 1 else None))
+        finish_sheet(eligibility_ws)
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="final_eligibility_{timezone.localdate()}.xlsx"'
+    wb.save(response)
+    return response

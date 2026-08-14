@@ -1200,6 +1200,67 @@ class AttendanceSecurityTests(TestCase):
         sheet = workbook.active
         self.assertEqual(sheet.cell(row=2, column=9).value, 0)
 
+    def test_final_eligibility_excel_has_three_sheets_per_level_and_colours(self):
+        session = Session.objects.create(
+            module=self.module,
+            session_type=Session.THEORY,
+            exam_period=Session.GENERAL,
+            date=date.today(),
+            label='Final eligibility session',
+        )
+        AttendanceRecord.objects.create(
+            session=session,
+            student=self.student,
+            status=AttendanceRecord.PRESENT,
+        )
+        StudentResult.objects.create(
+            student=self.student,
+            assign1=60,
+            assign2=60,
+            cat1_theory=60,
+            cat2_theory=60,
+        )
+        self.other_module.has_practical = True
+        self.other_module.save(update_fields=['has_practical'])
+        practical_student = Student.objects.create(
+            nactvet_reg_no='REG-002',
+            name='Baraka Juma',
+            module=self.other_module,
+        )
+        StudentResult.objects.create(
+            student=practical_student,
+            assign1=70,
+            assign2=70,
+            cat1_theory=70,
+            cat2_theory=70,
+            cat1_practical=70,
+            cat2_practical=70,
+        )
+        self.client.force_login(self.admin)
+
+        response = self.client.get('/api/eligibility/final/download/')
+
+        self.assertEqual(response.status_code, 200)
+        workbook = load_workbook(BytesIO(response.content))
+        self.assertEqual(workbook.sheetnames, [
+            'NTA 4 Assignments', 'NTA 4 CATs', 'NTA 4 Eligibility',
+            'NTA 5 Assignments', 'NTA 5 CATs', 'NTA 5 Eligibility',
+            'NTA 6 Assignments', 'NTA 6 CATs', 'NTA 6 Eligibility',
+        ])
+        eligibility_sheet = workbook['NTA 4 Eligibility']
+        self.assertEqual(eligibility_sheet['J8'].value, 'Eligible')
+        self.assertEqual(eligibility_sheet['J8'].fill.fgColor.rgb, '00C6EFCE')
+        assignments_sheet = workbook['NTA 4 Assignments']
+        self.assertEqual(assignments_sheet['D7'].value, 'ASS1')
+        self.assertEqual(assignments_sheet['E7'].value, 'ASS2')
+        self.assertEqual(assignments_sheet['D8'].value, 60)
+        self.assertEqual(assignments_sheet['E8'].value, 60)
+        self.assertEqual(workbook['NTA 4 CATs']['H8'].value, 24)
+        cats_sheet = workbook['NTA 4 CATs']
+        self.assertNotEqual(cats_sheet['D6'].value, 'Practical')
+        self.assertEqual(cats_sheet['N6'].value, 'Practical')
+        self.assertEqual(cats_sheet['Q6'].value, 'Total')
+
     def test_accountant_can_manage_payments_but_tutor_cannot(self):
         accountant = User.objects.create_user('accountant', password='safe-password')
         AccountantProfile.objects.create(user=accountant, full_name='Finance Officer')
