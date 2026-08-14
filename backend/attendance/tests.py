@@ -1,10 +1,12 @@
 from datetime import date
 from io import BytesIO
+from io import StringIO
 
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.contrib.sessions.models import Session as DjangoSession
 from django.test import TestCase
+from django.core.management import call_command
 from django.urls import reverse
 from openpyxl import Workbook, load_workbook
 from docx import Document
@@ -508,6 +510,46 @@ class AttendanceSecurityTests(TestCase):
             'records': [],
         }, format='json')
         self.assertEqual(response.status_code, 403)
+
+    def test_hims_fill_command_creates_sheet_sessions_and_preserves_existing_records(self):
+        self.module.code = 'PST05209'
+        self.module.name = 'Health Information Management'
+        self.module.save(update_fields=['code', 'name'])
+        existing = Session.objects.create(
+            module=self.module,
+            session_type=Session.THEORY,
+            exam_period=Session.GENERAL,
+            date=date(2026, 4, 7),
+            label='01',
+        )
+        AttendanceRecord.objects.create(
+            session=existing,
+            student=self.student,
+            status=AttendanceRecord.ABSENT,
+        )
+
+        dry_run_output = StringIO()
+        call_command('fill_hims_attendance', stdout=dry_run_output)
+        self.assertEqual(Session.objects.filter(module=self.module).count(), 1)
+
+        call_command('fill_hims_attendance', '--confirm', stdout=StringIO())
+
+        self.assertEqual(Session.objects.filter(module=self.module).count(), 17)
+        self.assertFalse(Session.objects.filter(module=self.module, date=date(2026, 5, 20)).exists())
+        self.assertEqual(
+            AttendanceRecord.objects.get(session=existing, student=self.student).status,
+            AttendanceRecord.ABSENT,
+        )
+        self.assertEqual(
+            AttendanceRecord.objects.filter(
+                session__module=self.module,
+                status=AttendanceRecord.PRESENT,
+            ).count(),
+            16,
+        )
+
+        call_command('fill_hims_attendance', '--confirm', stdout=StringIO())
+        self.assertEqual(Session.objects.filter(module=self.module).count(), 17)
 
     def test_duplicate_attendance_session_is_rejected_and_can_be_deleted(self):
         self.client.force_authenticate(self.teacher)
