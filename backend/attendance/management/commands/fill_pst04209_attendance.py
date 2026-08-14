@@ -1,0 +1,132 @@
+from datetime import date
+
+from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
+
+from attendance.models import AttendanceRecord, Module, Session
+
+
+# Transcribed from the signed NTA Level 4 PST04209 attendance sheet supplied
+# on 14 August 2026. Session numbers are retained exactly as written; the sheet
+# contains two session 09 entries on different dates and skips 13 and 14.
+PST04209_SESSIONS = (
+    (date(2026, 4, 10), '01'),
+    (date(2026, 4, 13), '02'),
+    (date(2026, 4, 14), '03'),
+    (date(2026, 4, 14), '04'),
+    (date(2026, 4, 27), '05'),
+    (date(2026, 4, 29), '06'),
+    (date(2026, 4, 30), '07'),
+    (date(2026, 5, 4), '08'),
+    (date(2026, 4, 25), '09'),
+    (date(2026, 4, 20), '09'),
+    (date(2026, 5, 7), '10'),
+    (date(2026, 5, 7), '11'),
+    (date(2026, 5, 20), '12'),
+    (date(2026, 5, 8), '15'),
+    (date(2026, 7, 30), '16'),
+)
+
+
+class Command(BaseCommand):
+    help = (
+        'Load the signed NTA Level 4 PST04209 attendance sessions and mark '
+        'enrolled students present where an attendance record is missing.'
+    )
+
+    def add_arguments(self, parser):
+        parser.add_argument('--module-code', default='PST04209')
+        parser.add_argument('--academic-year', default='2025/2026')
+        parser.add_argument(
+            '--confirm', action='store_true',
+            help='Apply changes. Without this option the command is a dry run.',
+        )
+
+    def handle(self, *args, **options):
+        code = options['module_code'].strip()
+        academic_year = options['academic_year'].strip()
+        modules = Module.objects.filter(
+            code__iexact=code,
+            semester__academic_year__name=academic_year,
+        ).select_related('class_level', 'semester__academic_year')
+
+        if not modules.exists():
+            raise CommandError(
+                f'Module {code} was not found in academic year {academic_year}.'
+            )
+        if modules.count() != 1:
+            semesters = ', '.join(str(module.semester.number) for module in modules)
+            raise CommandError(
+                f'Module {code} is ambiguous in {academic_year}; found it in '
+                f'semesters {semesters}.'
+            )
+
+        module = modules.get()
+        if module.class_level.order != 4:
+            raise CommandError(
+                f'Module {module.code} belongs to {module.class_level}, not NTA Level 4.'
+            )
+
+        students = list(module.students.all())
+        existing_sessions = {
+            (session.date, session.label): session
+            for session in module.sessions.filter(
+                session_type=Session.THEORY,
+                exam_period=Session.GENERAL,
+            )
+        }
+        sessions_to_create = 0
+        records_to_create = 0
+        for day, number in PST04209_SESSIONS:
+            session = existing_sessions.get((day, number))
+            if session is None:
+                sessions_to_create += 1
+                records_to_create += len(students)
+            else:
+                records_to_create += len(students) - session.records.filter(
+                    student__in=students
+                ).count()
+
+        self.stdout.write(
+            f'{module.code} - {module.name} ({module.class_level}): '
+            f'{len(PST04209_SESSIONS)} sheet sessions, {sessions_to_create} new; '
+            f'{len(students)} enrolled students, {records_to_create} missing present records.'
+        )
+
+        if not options['confirm']:
+            self.stdout.write(self.style.WARNING(
+                'Dry run only. Re-run with --confirm to apply.'
+            ))
+            return
+
+        sessions_created = 0
+        records_created = 0
+        with transaction.atomic():
+            for day, number in PST04209_SESSIONS:
+                session, created = Session.objects.get_or_create(
+                    module=module,
+                    session_type=Session.THEORY,
+                    exam_period=Session.GENERAL,
+                    date=day,
+                    label=number,
+                )
+                sessions_created += int(created)
+                recorded_student_ids = set(
+                    session.records.values_list('student_id', flat=True)
+                )
+                missing_records = [
+                    AttendanceRecord(
+                        session=session,
+                        student=student,
+                        status=AttendanceRecord.PRESENT,
+                    )
+                    for student in students
+                    if student.id not in recorded_student_ids
+                ]
+                AttendanceRecord.objects.bulk_create(missing_records)
+                records_created += len(missing_records)
+
+        self.stdout.write(self.style.SUCCESS(
+            f'Created {sessions_created} sessions and {records_created} present records. '
+            'Existing attendance records were not changed.'
+        ))

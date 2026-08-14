@@ -551,6 +551,98 @@ class AttendanceSecurityTests(TestCase):
         call_command('fill_hims_attendance', '--confirm', stdout=StringIO())
         self.assertEqual(Session.objects.filter(module=self.module).count(), 17)
 
+    def test_pst04209_fill_command_loads_level_four_sheet_idempotently(self):
+        self.module.code = 'PST04209'
+        self.module.name = 'Level Four Module'
+        self.module.save(update_fields=['code', 'name'])
+        existing = Session.objects.create(
+            module=self.module,
+            session_type=Session.THEORY,
+            exam_period=Session.GENERAL,
+            date=date(2026, 4, 10),
+            label='01',
+        )
+        AttendanceRecord.objects.create(
+            session=existing,
+            student=self.student,
+            status=AttendanceRecord.ABSENT,
+        )
+
+        call_command('fill_pst04209_attendance', stdout=StringIO())
+        self.assertEqual(Session.objects.filter(module=self.module).count(), 1)
+
+        call_command('fill_pst04209_attendance', '--confirm', stdout=StringIO())
+
+        self.assertEqual(Session.objects.filter(module=self.module).count(), 15)
+        self.assertEqual(
+            AttendanceRecord.objects.get(session=existing, student=self.student).status,
+            AttendanceRecord.ABSENT,
+        )
+        self.assertEqual(
+            AttendanceRecord.objects.filter(
+                session__module=self.module,
+                status=AttendanceRecord.PRESENT,
+            ).count(),
+            14,
+        )
+        self.assertEqual(
+            Session.objects.filter(
+                module=self.module, label='09', date__in=(date(2026, 4, 20), date(2026, 4, 25))
+            ).count(),
+            2,
+        )
+
+        call_command('fill_pst04209_attendance', '--confirm', stdout=StringIO())
+        self.assertEqual(Session.objects.filter(module=self.module).count(), 15)
+
+    def test_pst05208_fill_command_loads_level_five_sheet_idempotently(self):
+        level_five = ClassLevel.objects.create(name='NTA Level 5', order=5)
+        self.module.code = 'PST05208'
+        self.module.name = 'Level Five Module'
+        self.module.class_level = level_five
+        self.module.save(update_fields=['code', 'name', 'class_level'])
+        existing = Session.objects.create(
+            module=self.module,
+            session_type=Session.THEORY,
+            exam_period=Session.GENERAL,
+            date=date(2026, 4, 10),
+            label='01',
+        )
+        AttendanceRecord.objects.create(
+            session=existing,
+            student=self.student,
+            status=AttendanceRecord.ABSENT,
+        )
+
+        call_command('fill_pst05208_attendance', stdout=StringIO())
+        self.assertEqual(Session.objects.filter(module=self.module).count(), 1)
+
+        call_command('fill_pst05208_attendance', '--confirm', stdout=StringIO())
+
+        self.assertEqual(Session.objects.filter(module=self.module).count(), 17)
+        self.assertEqual(
+            AttendanceRecord.objects.get(session=existing, student=self.student).status,
+            AttendanceRecord.ABSENT,
+        )
+        self.assertEqual(
+            AttendanceRecord.objects.filter(
+                session__module=self.module,
+                status=AttendanceRecord.PRESENT,
+            ).count(),
+            16,
+        )
+        self.assertEqual(
+            Session.objects.filter(
+                module=self.module,
+                date=date(2026, 4, 25),
+                label__in=('08', '08 (2)'),
+            ).count(),
+            2,
+        )
+
+        call_command('fill_pst05208_attendance', '--confirm', stdout=StringIO())
+        self.assertEqual(Session.objects.filter(module=self.module).count(), 17)
+
     def test_duplicate_attendance_session_is_rejected_and_can_be_deleted(self):
         self.client.force_authenticate(self.teacher)
         payload = {
