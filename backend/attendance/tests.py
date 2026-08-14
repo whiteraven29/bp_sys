@@ -1261,6 +1261,16 @@ class AttendanceSecurityTests(TestCase):
         self.assertEqual(cats_sheet['N6'].value, 'Practical')
         self.assertEqual(cats_sheet['Q6'].value, 'Total')
 
+        self.other_module.is_field_module = True
+        self.other_module.save(update_fields=['is_field_module'])
+        field_response = self.client.get(
+            '/api/eligibility/final/download/', {'scope': 'field'}
+        )
+        field_workbook = load_workbook(BytesIO(field_response.content))
+        field_sheet = field_workbook['NTA 4 CATs']
+        self.assertIn('Communication', field_sheet['D5'].value)
+        self.assertNotIn('Business Mathematics', field_sheet['D5'].value)
+
     def test_accountant_can_manage_payments_but_tutor_cannot(self):
         accountant = User.objects.create_user('accountant', password='safe-password')
         AccountantProfile.objects.create(user=accountant, full_name='Finance Officer')

@@ -589,7 +589,7 @@
         <button class="nav-sub-btn active" data-eligibility-basis="all" onclick="showEligibilityBasis('all', this)">All</button>
         <button class="nav-sub-btn" data-eligibility-basis="performance" onclick="showEligibilityBasis('performance', this)">Module Performance</button>
         <button class="nav-sub-btn" data-eligibility-basis="payments" onclick="showEligibilityBasis('payments', this)">Payments</button>
-        <button class="nav-sub-btn" onclick="downloadFinalEligibilityExcel()">Final Eligibility</button>
+        <button class="nav-sub-btn" onclick="showFinalEligibilityExport(this)">Final Eligibility</button>
       </div>
     </div>
     <button class="nav-btn finance-only" data-page="finance" data-finance-section="dashboard" onclick="showFinanceSection('dashboard', this)"><span class="icon"><i class="bi bi-graph-up-arrow"></i></span> Finance Overview</button>
@@ -1118,11 +1118,20 @@
               <option value="all">All Students</option>
             </select>
           </div>
+          <div class="field">
+            <label>Final Eligibility Export</label>
+            <select id="final-elig-scope">
+              <option value="semester_1">Semester 1</option>
+              <option value="semester_2">Semester 2</option>
+              <option value="field">Field Modules</option>
+            </select>
+          </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" onclick="loadEligibility()">🔍 Apply</button>
           <button class="btn btn-primary btn-sm" onclick="printEligibility()">🖨 Print</button>
           <button class="btn btn-green btn-sm" onclick="downloadEligibilityExcel()">⬇ Download Excel</button>
+          <button class="btn btn-green btn-sm" onclick="downloadFinalEligibilityExcel()">⬇ Final Eligibility</button>
         </div>
       </div>
       <div class="stats-grid" id="elig-stats-grid">
@@ -4106,7 +4115,14 @@ function downloadEligibilityExcel() {
 }
 
 function downloadFinalEligibilityExcel() {
-  window.location.href = '/api/eligibility/final/download/';
+  const scope = document.getElementById('final-elig-scope')?.value || 'semester_1';
+  window.location.href = `/api/eligibility/final/download/?scope=${encodeURIComponent(scope)}`;
+}
+
+function showFinalEligibilityExport(btn) {
+  showPage('eligibility', document.querySelector('#eligibility-nav-group .nav-btn'));
+  document.querySelectorAll('#eligibility-nav-group .nav-sub-btn').forEach(el => el.classList.toggle('active', el === btn));
+  document.getElementById('final-elig-scope')?.focus();
 }
 
 // ── FINANCE PAGE ───────────────────────────────────────────────────────────────

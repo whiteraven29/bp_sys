@@ -3116,6 +3116,7 @@ def download_final_eligibility_excel(request):
     from openpyxl.utils import get_column_letter
 
     semester_id = request.GET.get('semester_id')
+    scope = request.GET.get('scope', '').strip().lower()
     modules = (
         user_modules(request.user)
         .filter(class_level__order__in=(4, 5, 6))
@@ -3124,6 +3125,12 @@ def download_final_eligibility_excel(request):
     )
     if semester_id:
         modules = modules.filter(semester_id=semester_id)
+    if scope == 'semester_1':
+        modules = modules.filter(semester__number=Semester.SEM1)
+    elif scope == 'semester_2':
+        modules = modules.filter(semester__number=Semester.SEM2)
+    elif scope == 'field':
+        modules = modules.filter(is_field_module=True)
     modules = list(modules)
 
     enrollments = list(
