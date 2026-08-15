@@ -1263,6 +1263,10 @@ class AttendanceSecurityTests(TestCase):
 
         self.other_module.is_field_module = True
         self.other_module.save(update_fields=['is_field_module'])
+        field_result = practical_student.result
+        field_result.field_ca = 75
+        field_result.end_theory = 80
+        field_result.save(update_fields=['field_ca', 'end_theory'])
         field_response = self.client.get(
             '/api/eligibility/final/download/', {'scope': 'field'}
         )
@@ -1270,6 +1274,19 @@ class AttendanceSecurityTests(TestCase):
         field_sheet = field_workbook['NTA 4 CATs']
         self.assertIn('Communication', field_sheet['D5'].value)
         self.assertNotIn('Business Mathematics', field_sheet['D5'].value)
+        self.assertEqual(field_sheet['D6'].value, 'PPB/LOGBOOK')
+        self.assertEqual(field_sheet['E6'].value, 'AV')
+        self.assertEqual(field_sheet['D8'].value, 75)
+        self.assertEqual(field_sheet['E8'].value, 30)
+        field_eligibility = field_workbook['NTA 4 Eligibility']
+        self.assertEqual(field_eligibility['D6'].value, 'PPB/LOGBOOK')
+        self.assertEqual(field_eligibility['E6'].value, 'AV')
+        self.assertEqual(field_eligibility['F6'].value, 'REPORT')
+        self.assertEqual(field_eligibility['G6'].value, 'AV')
+        self.assertEqual(field_eligibility['D8'].value, 75)
+        self.assertEqual(field_eligibility['E8'].value, 30)
+        self.assertEqual(field_eligibility['F8'].value, 80)
+        self.assertEqual(field_eligibility['G8'].value, 48)
 
     def test_accountant_can_manage_payments_but_tutor_cannot(self):
         accountant = User.objects.create_user('accountant', password='safe-password')

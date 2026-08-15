@@ -3252,6 +3252,18 @@ def download_final_eligibility_excel(request):
             result.assign1, result.assign2,
         ), theory, practical, data['ca_total']
 
+    def field_result_values(data):
+        result = getattr(data['student'], 'result', None) if data else None
+        if result is None:
+            return '', '', '', ''
+        serializer = StudentResultSerializer()
+        return (
+            result.field_ca,
+            serializer.get_total_ca(result),
+            result.end_theory,
+            serializer.get_end_theory_w(result),
+        )
+
     def write_mark(cell, value, pass_mark=50):
         cell.value = value if value is not None else ''
         cell.alignment = center
@@ -3295,15 +3307,25 @@ def download_final_eligibility_excel(request):
         finish_sheet(assignments_ws)
 
         cats_ws = wb.create_sheet(f'NTA {level} CATs')
-        cat_width = sum(9 if module.has_practical else 5 for module in level_module_list)
+        cat_width = sum(
+            2 if module.is_field_module else (9 if module.has_practical else 5)
+            for module in level_module_list
+        )
         prepare_sheet(cats_ws, level, 'CONTINUOUS ASSESSMENT RESULTS', 3 + cat_width)
         cat_starts = {}
         column = 4
         for module in level_module_list:
-            width = 9 if module.has_practical else 5
+            width = 2 if module.is_field_module else (9 if module.has_practical else 5)
             cat_starts[module.id] = column
             cats_ws.merge_cells(start_row=5, start_column=column, end_row=5, end_column=column + width - 1)
             style_header(cats_ws.cell(row=5, column=column, value=f'{module.name} ({module.code})'))
+            if module.is_field_module:
+                for offset, heading in enumerate(('PPB/LOGBOOK', 'AV')):
+                    style_header(cats_ws.cell(row=6, column=column + offset, value=heading), blue)
+                    cats_ws.cell(row=6, column=column + offset).font = Font(bold=True, color='000000')
+                    cats_ws.merge_cells(start_row=6, start_column=column + offset, end_row=7, end_column=column + offset)
+                column += width
+                continue
             cats_ws.merge_cells(start_row=6, start_column=column, end_row=6, end_column=column + 4)
             style_header(cats_ws.cell(row=6, column=column, value='Theory'), blue)
             cats_ws.cell(row=6, column=column).font = Font(bold=True, color='000000')
@@ -3326,6 +3348,12 @@ def download_final_eligibility_excel(request):
             cats_ws.append([row_number - 7, name, reg_no])
             for module in level_module_list:
                 data = enrollment_data.get((reg_no, module.id))
+                if module.is_field_module:
+                    field_ca, field_ca_av, _report, _report_av = field_result_values(data)
+                    start = cat_starts[module.id]
+                    write_mark(cats_ws.cell(row=row_number, column=start), field_ca)
+                    write_mark(cats_ws.cell(row=row_number, column=start + 1), field_ca_av, 20)
+                    continue
                 result, theory_raw, theory_av, practical_av, total_av = result_values(data)
                 start = cat_starts[module.id]
                 for offset, value in enumerate(theory_raw):
@@ -3340,11 +3368,30 @@ def download_final_eligibility_excel(request):
         finish_sheet(cats_ws)
 
         eligibility_ws = wb.create_sheet(f'NTA {level} Eligibility')
-        eligibility_width = sum((11 if module.has_practical else 7) for module in level_module_list)
+        eligibility_width = sum(
+            6 if module.is_field_module else (11 if module.has_practical else 7)
+            for module in level_module_list
+        )
         prepare_sheet(eligibility_ws, level, 'FINAL ELIGIBILITY TO END-OF-SEMESTER EXAMINATION', 3 + eligibility_width)
         eligibility_starts = {}
         column = 4
         for module in level_module_list:
+            if module.is_field_module:
+                mark_width = 4
+                width = 6
+                eligibility_starts[module.id] = column
+                eligibility_ws.merge_cells(start_row=5, start_column=column, end_row=5, end_column=column + width - 1)
+                style_header(eligibility_ws.cell(row=5, column=column, value=f'{module.name} ({module.code})'))
+                for offset, heading in enumerate(('PPB/LOGBOOK', 'AV', 'REPORT', 'AV')):
+                    style_header(eligibility_ws.cell(row=6, column=column + offset, value=heading), blue)
+                    eligibility_ws.cell(row=6, column=column + offset).font = Font(bold=True, color='000000')
+                    eligibility_ws.merge_cells(start_row=6, start_column=column + offset, end_row=7, end_column=column + offset)
+                for offset, heading in enumerate(('Attendance (%)', 'Final Eligibility'), mark_width):
+                    style_header(eligibility_ws.cell(row=6, column=column + offset, value=heading), blue)
+                    eligibility_ws.cell(row=6, column=column + offset).font = Font(bold=True, color='000000')
+                    eligibility_ws.merge_cells(start_row=6, start_column=column + offset, end_row=7, end_column=column + offset)
+                column += width
+                continue
             mark_width = 9 if module.has_practical else 5
             width = mark_width + 2
             eligibility_starts[module.id] = column
@@ -3376,19 +3423,26 @@ def download_final_eligibility_excel(request):
             eligibility_ws.append([row_number - 7, name, reg_no])
             for module in level_module_list:
                 data = enrollment_data.get((reg_no, module.id))
-                result, theory_raw, theory_av, practical_av, total_av = result_values(data)
                 start = eligibility_starts[module.id]
-                for offset, value in enumerate(theory_raw):
-                    write_mark(eligibility_ws.cell(row=row_number, column=start + offset), value)
-                write_mark(eligibility_ws.cell(row=row_number, column=start + 4), theory_av, 10 if module.has_practical else 20)
-                mark_width = 5
-                if module.has_practical:
-                    practical_raw = (result.cat1_practical, result.cat2_practical) if result else ('', '')
-                    write_mark(eligibility_ws.cell(row=row_number, column=start + 5), practical_raw[0])
-                    write_mark(eligibility_ws.cell(row=row_number, column=start + 6), practical_raw[1])
-                    write_mark(eligibility_ws.cell(row=row_number, column=start + 7), practical_av, 10)
-                    write_mark(eligibility_ws.cell(row=row_number, column=start + 8), total_av, CA_ELIGIBILITY_THRESHOLD)
-                    mark_width = 9
+                if module.is_field_module:
+                    mark_width = 4
+                    field_marks = field_result_values(data)
+                    for offset, value in enumerate(field_marks):
+                        pass_mark = 20 if offset == 1 else (30 if offset == 3 else 50)
+                        write_mark(eligibility_ws.cell(row=row_number, column=start + offset), value, pass_mark)
+                else:
+                    result, theory_raw, theory_av, practical_av, total_av = result_values(data)
+                    for offset, value in enumerate(theory_raw):
+                        write_mark(eligibility_ws.cell(row=row_number, column=start + offset), value)
+                    write_mark(eligibility_ws.cell(row=row_number, column=start + 4), theory_av, 10 if module.has_practical else 20)
+                    mark_width = 5
+                    if module.has_practical:
+                        practical_raw = (result.cat1_practical, result.cat2_practical) if result else ('', '')
+                        write_mark(eligibility_ws.cell(row=row_number, column=start + 5), practical_raw[0])
+                        write_mark(eligibility_ws.cell(row=row_number, column=start + 6), practical_raw[1])
+                        write_mark(eligibility_ws.cell(row=row_number, column=start + 7), practical_av, 10)
+                        write_mark(eligibility_ws.cell(row=row_number, column=start + 8), total_av, CA_ELIGIBILITY_THRESHOLD)
+                        mark_width = 9
                 attendance_cell = eligibility_ws.cell(row=row_number, column=start + mark_width, value=data['attendance_pct'] if data and data['attendance_pct'] is not None else '')
                 style_status(attendance_cell, None if not data or data['attendance_pct'] is None else data['attendance_pct'] >= ELIGIBILITY_THRESHOLD)
                 status = 'INCOMPLETE' if not data or data['final_eligible'] is None else ('Eligible' if data['final_eligible'] else 'Ineligible')
@@ -3411,7 +3465,7 @@ def download_final_eligibility_excel(request):
                 sum(status is False for status in statuses),
                 sum(status is None for status in statuses),
             )
-            mark_width = 9 if module.has_practical else 5
+            mark_width = 4 if module.is_field_module else (9 if module.has_practical else 5)
             status_column = eligibility_starts[module.id] + mark_width + 1
             for offset, count in enumerate(counts):
                 cell = eligibility_ws.cell(row=summary_start + offset, column=status_column, value=count)
