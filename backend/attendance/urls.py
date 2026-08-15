@@ -44,6 +44,7 @@ urlpatterns = [
     path('results/download/', views.download_results, name='results-download'),
     path('results/download/ca-signoff/', views.download_ca_signoff, name='results-download-ca-signoff'),
     path('results/download/final/', views.download_final_results, name='results-download-final'),
+    path('results/download/field/', views.download_field_results, name='results-download-field'),
     path('eligibility/download/', views.download_eligibility_excel, name='eligibility-download'),
     path('eligibility/final/download/', views.download_final_eligibility_excel, name='final-eligibility-download'),
 ]

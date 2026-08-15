@@ -1262,7 +1262,8 @@ class AttendanceSecurityTests(TestCase):
         self.assertEqual(cats_sheet['Q6'].value, 'Total')
 
         self.other_module.is_field_module = True
-        self.other_module.save(update_fields=['is_field_module'])
+        self.other_module.has_practical = False
+        self.other_module.save(update_fields=['is_field_module', 'has_practical'])
         field_result = practical_student.result
         field_result.field_ca = 75
         field_result.end_theory = 80
@@ -1287,6 +1288,22 @@ class AttendanceSecurityTests(TestCase):
         self.assertEqual(field_eligibility['E8'].value, 30)
         self.assertEqual(field_eligibility['F8'].value, 80)
         self.assertEqual(field_eligibility['G8'].value, 48)
+
+        simple_response = self.client.get(
+            '/api/results/download/field/', {'module_id': self.other_module.id}
+        )
+        self.assertEqual(simple_response.status_code, 200)
+        simple_workbook = load_workbook(BytesIO(simple_response.content))
+        simple_sheet = simple_workbook['Field Results']
+        self.assertEqual(simple_sheet['D6'].value, 'PPB/LOGBOOK')
+        self.assertEqual(simple_sheet['E6'].value, 'AV')
+        self.assertEqual(simple_sheet['F6'].value, 'REPORT')
+        self.assertEqual(simple_sheet['G6'].value, 'AV')
+        self.assertEqual(simple_sheet['D7'].value, 75)
+        self.assertEqual(simple_sheet['E7'].value, 30)
+        self.assertEqual(simple_sheet['F7'].value, 80)
+        self.assertEqual(simple_sheet['G7'].value, 48)
+        self.assertEqual(simple_sheet['H7'].value, 78)
 
     def test_accountant_can_manage_payments_but_tutor_cannot(self):
         accountant = User.objects.create_user('accountant', password='safe-password')

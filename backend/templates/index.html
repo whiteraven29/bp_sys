@@ -1018,6 +1018,7 @@
             <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;">
               <button class="btn btn-green btn-sm admin-only" onclick="setFinalApproval(true)">Approve Results</button>
               <button class="btn btn-danger btn-sm admin-only" onclick="setFinalApproval(false)">Unapprove</button>
+              <button class="btn btn-secondary btn-sm admin-only" onclick="downloadFieldResultsExcel()">⬇ Export to Excel</button>
               <button class="btn btn-primary btn-sm" onclick="saveAllResults()">💾 Save</button>
             </div>
           </div>
@@ -3760,6 +3761,15 @@ function downloadFinalExcel() {
   if (semId) url += `semester_id=${semId}&`;
   if (lvlId) url += `class_level_id=${lvlId}&`;
   window.location.href = url;
+}
+
+function downloadFieldResultsExcel() {
+  const modId = document.getElementById('res-flt-module').value;
+  if (!modId || !resModuleInfo?.is_field_module) {
+    toast('Select a field results module before exporting.', 'var(--red)');
+    return;
+  }
+  window.location.href = `/api/results/download/field/?module_id=${encodeURIComponent(modId)}`;
 }
 
 // ── END-OF-SEMESTER EXAM TABLE ─────────────────────────────────────────────────

@@ -2753,6 +2753,108 @@ def download_results(request):
     return response
 
 
+# ── FIELD RESULTS EXCEL DOWNLOAD (admin only) ──────────────────────────────────
+
+@login_required
+def download_field_results(request):
+    """Export one field module in a compact CA 40% + report 60% workbook."""
+    if not request.user.is_staff:
+        return HttpResponseForbidden('Administrator access required.')
+
+    module_id = request.GET.get('module_id')
+    if not module_id:
+        return HttpResponse('module_id is required.', status=400)
+    try:
+        module = (
+            user_modules(request.user)
+            .select_related('class_level', 'semester__academic_year')
+            .get(pk=module_id, is_field_module=True)
+        )
+    except (Module.DoesNotExist, ValueError):
+        return HttpResponseForbidden('Select a valid field results module.')
+
+    students = (
+        Student.objects.filter(module=module)
+        .select_related('result')
+        .order_by('name', 'nactvet_reg_no')
+    )
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Field Results'
+    navy, blue = '1E2D78', 'D9EAF7'
+    thin = Side(style='thin', color='808080')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    title_rows = (
+        'BLUE PHARMA COLLEGE OF HEALTH', 'FIELD RESULTS',
+        f'{module.code} — {module.name}',
+        f'{module.class_level.name} · {module.semester.label} · {module.semester.academic_year.name}',
+    )
+    for row_number, value in enumerate(title_rows, 1):
+        ws.merge_cells(start_row=row_number, start_column=1, end_row=row_number, end_column=9)
+        cell = ws.cell(row=row_number, column=1, value=value)
+        cell.font = Font(bold=True, size=14 if row_number == 1 else 11, color=navy)
+        cell.alignment = center
+
+    headers = (
+        'SN', 'NACTVET Registration Number', 'Student Name',
+        'PPB/LOGBOOK', 'AV', 'REPORT', 'AV', 'TOTAL', 'STATUS',
+    )
+    for column, heading in enumerate(headers, 1):
+        cell = ws.cell(row=6, column=column, value=heading)
+        cell.fill = PatternFill('solid', fgColor=navy)
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.alignment = center
+        cell.border = border
+    for column, heading in enumerate(('Raw /100', '40%', 'Raw /100', '60%'), 4):
+        cell = ws.cell(row=5, column=column, value=heading)
+        cell.fill = PatternFill('solid', fgColor=blue)
+        cell.font = Font(bold=True, color='000000')
+        cell.alignment = center
+        cell.border = border
+
+    serializer = StudentResultSerializer()
+    for number, student in enumerate(students, 1):
+        result = getattr(student, 'result', None)
+        values = (
+            number, student.nactvet_reg_no, student.name,
+            result.field_ca if result else None,
+            serializer.get_total_ca(result) if result else None,
+            result.end_theory if result else None,
+            serializer.get_end_theory_w(result) if result else None,
+            serializer.get_final_total(result) if result else None,
+            serializer.get_result_status(result) if result else 'INCOMPLETE',
+        )
+        for column, value in enumerate(values, 1):
+            cell = ws.cell(row=6 + number, column=column, value='' if value is None else value)
+            cell.alignment = Alignment(horizontal='left' if column == 3 else 'center', vertical='center')
+            cell.border = border
+
+    for column, width in enumerate((7, 26, 28, 16, 11, 14, 11, 11, 16), 1):
+        ws.column_dimensions[get_column_letter(column)].width = width
+    ws.freeze_panes = 'D7'
+    ws.auto_filter.ref = f'A6:I{max(ws.max_row, 6)}'
+    ws.sheet_view.showGridLines = False
+    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.fitToWidth = 1
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+    safe_code = re.sub(r'[^A-Za-z0-9_-]+', '_', module.code).strip('_') or 'field'
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = (
+        f'attachment; filename="{safe_code}_field_results_{timezone.localdate()}.xlsx"'
+    )
+    wb.save(response)
+    return response
+
+
 # ── FINAL RESULTS EXCEL DOWNLOAD (admin only) ──────────────────────────────────
 
 @login_required
