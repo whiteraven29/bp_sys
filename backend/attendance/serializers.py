@@ -218,7 +218,7 @@ class ModuleSerializer(serializers.ModelSerializer):
             'student_count', 'session_count', 'theory_count', 'practical_count',
             'created_at',
         ]
-    read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
     def validate(self, attrs):
         if attrs.get('is_field_module'):
@@ -788,7 +788,7 @@ class BulkStudentSerializer(serializers.Serializer):
         if user and not user.is_staff:
             allowed_module_ids = set(user.modules_taught.values_list('id', flat=True))
 
-        added, skipped = 0, 0
+        added, skipped, pin_skipped = 0, 0, 0
         for row in rows:
             reg_no = str(row.get('nactvet_reg_no', '')).strip().upper()
             name = str(row.get('name', '')).strip()
@@ -812,17 +812,20 @@ class BulkStudentSerializer(serializers.Serializer):
                 defaults={'name': name}
             )
             if created:
+                # Only ever set a PIN here for the student we just created — a
+                # too-short PIN just means "no PIN yet", it must never discard
+                # the (valid) student record that was just added.
                 if portal_pin:
                     if len(portal_pin) < 6:
-                        student.delete()
-                        skipped += 1
-                        continue
-                    student.set_portal_pin(portal_pin)
-                    student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
+                        pin_skipped += 1
+                    else:
+                        student.set_portal_pin(portal_pin)
+                        student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
                 added += 1
             else:
-                if portal_pin and len(portal_pin) >= 6:
-                    student.set_portal_pin(portal_pin)
-                    student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
+                # An existing enrollment is just skipped. Re-uploading the same
+                # roster (which may still carry a PIN column from a previous
+                # import) must never silently reset an active student's login
+                # PIN — use the dedicated "Set Password/PIN" action for that.
                 skipped += 1
-        return {'added': added, 'skipped': skipped}
+        return {'added': added, 'skipped': skipped, 'pin_skipped': pin_skipped}

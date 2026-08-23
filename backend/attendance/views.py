@@ -10,6 +10,7 @@ from django.db.models import Count, Q, Sum
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import render, redirect
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
@@ -159,7 +160,12 @@ def login_view(request):
         user = authenticate(request, username=identifier, password=secret)
         if user is not None:
             login(request, user)
-            return redirect(request.GET.get('next', 'frontend'))
+            next_url = request.GET.get('next', '')
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+            ):
+                return redirect(next_url)
+            return redirect('frontend')
 
         # Otherwise try student login using registration number + portal PIN.
         reg_no = identifier
@@ -713,6 +719,12 @@ class ModuleViewSet(viewsets.ModelViewSet):
             m = Module.objects.get(pk=pk)
         except Module.DoesNotExist:
             return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        # Self-service claiming is only for picking up a module nobody teaches
+        # yet. Once a module has a tutor, moving/adding tutors is an admin
+        # action — otherwise any teacher account could grant themselves access
+        # to another module's students, attendance and CA marks at will.
+        if not request.user.is_staff and m.teachers.exists() and not m.teachers.filter(pk=request.user.pk).exists():
+            raise PermissionDenied('This module already has a tutor. Ask the administrator to add you.')
         m.teachers.add(request.user)
         return Response({'detail': f'Claimed: {m.name}'})
 
@@ -832,15 +844,11 @@ class SessionViewSet(viewsets.ModelViewSet):
             return SessionCreateSerializer
         return SessionSerializer
 
-    def perform_create(self, serializer):
-        """Reject new sessions whose exam period is past the semester cutoff date."""
-        module      = serializer.validated_data['module']
-        allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
-        if module.id not in allowed_module_ids:
-            raise PermissionDenied('You may only record attendance for modules you teach.')
-        period      = serializer.validated_data.get('exam_period', Session.GENERAL)
-        semester    = module.semester
-        today       = timezone.localdate()
+    @staticmethod
+    def _check_attendance_cutoff(module, period):
+        """Reject session writes whose exam period is past the semester cutoff date."""
+        semester = module.semester
+        today = timezone.localdate()
 
         CUTOFF_MAP = {
             Session.CAT1:    ('cat1_cutoff', 'CAT 1'),
@@ -857,6 +865,13 @@ class SessionViewSet(viewsets.ModelViewSet):
                 f'The cutoff date was {cutoff.strftime("%d %b %Y")}.'
             )
 
+    def perform_create(self, serializer):
+        module = serializer.validated_data['module']
+        allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
+        if module.id not in allowed_module_ids:
+            raise PermissionDenied('You may only record attendance for modules you teach.')
+        period = serializer.validated_data.get('exam_period', Session.GENERAL)
+        self._check_attendance_cutoff(module, period)
         serializer.save()
 
     def perform_update(self, serializer):
@@ -864,6 +879,8 @@ class SessionViewSet(viewsets.ModelViewSet):
         allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
         if module.id not in allowed_module_ids:
             raise PermissionDenied('You may only edit sessions for modules you teach.')
+        period = serializer.validated_data.get('exam_period', serializer.instance.exam_period)
+        self._check_attendance_cutoff(module, period)
         serializer.save()
 
 
@@ -2690,6 +2707,10 @@ def download_results(request):
     def fmt(v):
         return float(v) if v is not None else ''
 
+    def nz(v):
+        """Display substitution that keeps a real 0 distinct from 'not entered'."""
+        return v if v is not None else ''
+
     for rn, res in enumerate(qs, 2):
         m  = res.student.module
         hp = m.has_practical
@@ -2728,8 +2749,8 @@ def download_results(request):
             m.name, m.code, m.class_level.name, m.semester.label,
             'Theory + Practical' if hp else 'Theory Only',
             fmt(a1), fmt(a2), fmt(ct1), fmt(ct2), fmt(cp1), fmt(cp2),
-            a1w or '', a2w or '', ct1w or '', ct2w or '', cp1w or '', cp2w or '',
-            t_ca or '', p_ca or '', tot or '',
+            nz(a1w), nz(a2w), nz(ct1w), nz(ct2w), nz(cp1w), nz(cp2w),
+            nz(t_ca), nz(p_ca), nz(tot),
             yn(t_elig) if hp else 'N/A',
             yn(p_elig) if hp else 'N/A',
             yn(ca_elig),
@@ -2924,6 +2945,10 @@ def download_final_results(request):
     def fmt(v):
         return float(v) if v is not None else ''
 
+    def nz(v):
+        """Display substitution that keeps a real 0 distinct from 'not entered'."""
+        return v if v is not None else ''
+
     for rn, res in enumerate(qs, 2):
         m  = res.student.module
         hp = m.has_practical
@@ -2942,7 +2967,7 @@ def download_final_results(request):
             filled_p   = [v for v in [cp1w, cp2w]           if v is not None]
             t_ca       = round(sum(filled_t), 2) if filled_t else None
             p_ca       = round(sum(filled_p), 2) if filled_p else None
-            tot_ca     = round((t_ca or 0) + (p_ca or 0), 2) if (t_ca or p_ca) is not None else None
+            tot_ca     = round((t_ca or 0) + (p_ca or 0), 2) if (t_ca is not None or p_ca is not None) else None
             all_t      = all(v is not None for v in [a1, a2, ct1, ct2])
             all_p      = all(v is not None for v in [cp1, cp2])
             t_elig     = (t_ca >= 10) if (all_t and t_ca is not None) else None
@@ -2976,11 +3001,11 @@ def download_final_results(request):
             m.name, m.code, m.class_level.name, m.semester.label,
             'Theory + Practical' if hp else 'Theory Only',
             fmt(a1), fmt(a2), fmt(ct1), fmt(ct2), fmt(cp1), fmt(cp2),
-            t_ca or '', p_ca or '', tot_ca or '', yn(ca_elig),
+            nz(t_ca), nz(p_ca), nz(tot_ca), yn(ca_elig),
             fmt(et), fmt(ep) if hp else 'N/A',
-            etw or '', epw or '' if hp else 'N/A',
-            end_exam_total or '',
-            final or '', fmt(res.supplementary_mark), outcome['grade'] or '',
+            nz(etw), nz(epw) if hp else 'N/A',
+            nz(end_exam_total),
+            nz(final), fmt(res.supplementary_mark), outcome['grade'] or '',
             outcome['grade_point'] if outcome['grade_point'] is not None else '',
             pass_fail,
         ]

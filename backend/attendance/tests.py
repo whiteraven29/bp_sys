@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from io import BytesIO
 from io import StringIO
 
@@ -7,6 +7,7 @@ from django.conf import settings
 from django.contrib.sessions.models import Session as DjangoSession
 from django.test import TestCase
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.urls import reverse
 from openpyxl import Workbook, load_workbook
 from docx import Document
@@ -1391,3 +1392,155 @@ class AttendanceSecurityTests(TestCase):
         })
         self.assertEqual(clearance_response.status_code, 201)
         self.assertTrue(clearance_response.data['is_cleared'])
+
+
+class AuditFixRegressionTests(TestCase):
+    """Regression coverage for the issues fixed from AUDIT1.md."""
+
+    def setUp(self):
+        self.year = AcademicYear.objects.create(name='2025/2026', is_active=True)
+        self.semester = Semester.objects.create(academic_year=self.year, number=1, is_active=True)
+        self.level = ClassLevel.objects.create(name='NTA Level 4', order=4)
+        self.teacher = User.objects.create_user('teacher', password='safe-password')
+        self.other_teacher = User.objects.create_user('other', password='safe-password')
+        self.admin = User.objects.create_superuser('admin', 'admin@example.com', 'safe-password')
+        self.module = Module.objects.create(
+            name='Business Mathematics', code='BM401', teacher='Teacher One',
+            class_level=self.level, semester=self.semester,
+        )
+        self.module.teachers.add(self.teacher)
+        self.other_module = Module.objects.create(
+            name='Communication', code='CS401', teacher='Teacher Two',
+            class_level=self.level, semester=self.semester,
+        )
+        self.student = Student.objects.create(
+            nactvet_reg_no='REG-001', name='Asha Mollel', module=self.module,
+        )
+        self.student.set_portal_pin('482913')
+        self.student.must_change_portal_password = False
+        self.student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
+        self.client = APIClient()
+
+    # ── open redirect ───────────────────────────────────────────────────────
+    def test_login_next_param_rejects_external_redirect(self):
+        response = self.client.post(
+            f"{reverse('login')}?next=https://evil.example.com/phish",
+            {'identifier': self.teacher.username, 'secret': 'safe-password'},
+        )
+        self.assertRedirects(response, reverse('frontend'))
+
+    def test_login_next_param_honours_a_safe_local_url(self):
+        response = self.client.post(
+            f"{reverse('login')}?next=/register/",
+            {'identifier': self.teacher.username, 'secret': 'safe-password'},
+        )
+        self.assertRedirects(response, '/register/', fetch_redirect_response=False)
+
+    # ── create_admin management command ─────────────────────────────────────
+    def test_create_admin_requires_an_explicit_password(self):
+        with self.assertRaises(CommandError):
+            call_command('create_admin', '--username', 'newadmin')
+
+    def test_create_admin_refuses_to_reset_an_existing_account_without_force(self):
+        call_command('create_admin', '--username', 'siteadmin', '--password', 'FirstPass123')
+        with self.assertRaises(CommandError):
+            call_command('create_admin', '--username', 'siteadmin', '--password', 'SecondPass123')
+        user = User.objects.get(username='siteadmin')
+        self.assertTrue(user.check_password('FirstPass123'))
+
+        call_command('create_admin', '--username', 'siteadmin', '--password', 'SecondPass123', '--force')
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('SecondPass123'))
+
+    # ── zero marks in the Final Results Excel export ────────────────────────
+    def test_final_results_excel_shows_a_real_zero_mark_not_a_blank_cell(self):
+        StudentResult.objects.create(
+            student=self.student,
+            assign1=0, assign2=0, cat1_theory=0, cat2_theory=0, end_theory=0,
+        )
+        self.client.force_login(self.admin)
+        response = self.client.get('/api/results/download/final/', {'module_id': self.module.id})
+        self.assertEqual(response.status_code, 200)
+        workbook = load_workbook(BytesIO(response.content))
+        sheet = workbook.active
+        headers = [cell.value for cell in sheet[1]]
+        row = {headers[i]: cell.value for i, cell in enumerate(sheet[2])}
+        self.assertEqual(row['Total CA /40'], 0)
+        self.assertEqual(row['Final Total /100'], 0)
+        self.assertNotEqual(row['Total CA /40'], '')
+        self.assertNotEqual(row['Final Total /100'], '')
+
+    # ── attendance cutoff enforced on edit, not just create ─────────────────
+    def test_session_edit_is_blocked_once_the_cutoff_date_has_passed(self):
+        session = Session.objects.create(
+            module=self.module, session_type=Session.THEORY, exam_period=Session.GENERAL,
+            date=date.today(), label='Week 1',
+        )
+        self.semester.end_cutoff = date.today() - timedelta(days=1)
+        self.semester.save(update_fields=['end_cutoff'])
+
+        self.client.force_authenticate(self.teacher)
+        response = self.client.patch(f'/api/sessions/{session.id}/', {'topic': 'Late edit'}, format='json')
+        self.assertEqual(response.status_code, 400)
+        session.refresh_from_db()
+        self.assertNotEqual(session.topic, 'Late edit')
+
+    # ── module claim can no longer be taken from another tutor ──────────────
+    def test_claiming_an_already_tutored_module_is_forbidden(self):
+        self.client.force_authenticate(self.other_teacher)
+        response = self.client.post(f'/api/modules/{self.module.id}/claim/')
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn(self.other_teacher, self.module.teachers.all())
+
+    def test_claiming_an_unclaimed_module_still_works(self):
+        self.client.force_authenticate(self.other_teacher)
+        response = self.client.post(f'/api/modules/{self.other_module.id}/claim/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.other_teacher, self.other_module.teachers.all())
+
+    # ── bulk student import no longer resets an existing student's PIN ──────
+    def test_bulk_create_does_not_reset_an_existing_students_pin(self):
+        self.client.force_authenticate(self.admin)
+        response = self.client.post('/api/students/bulk_create/', {
+            'module': self.module.id,
+            'students': [{'nactvet_reg_no': 'REG-001', 'name': 'Asha Mollel', 'portal_pin': '999999'}],
+        }, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['skipped'], 1)
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.check_portal_pin('482913'))
+        self.assertFalse(self.student.check_portal_pin('999999'))
+
+    def test_bulk_create_keeps_the_student_when_the_pin_is_too_short(self):
+        self.client.force_authenticate(self.admin)
+        response = self.client.post('/api/students/bulk_create/', {
+            'module': self.module.id,
+            'students': [{'nactvet_reg_no': 'REG-002', 'name': 'New Student', 'portal_pin': '123'}],
+        }, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['added'], 1)
+        self.assertEqual(response.data['pin_skipped'], 1)
+        created = Student.objects.get(nactvet_reg_no='REG-002')
+        self.assertFalse(created.has_portal_pin)
+
+    # ── students filter: bulk PIN reset now respects the Module filter ──────
+    def test_bulk_set_pin_respects_the_module_filter(self):
+        other_student = Student.objects.create(
+            nactvet_reg_no='REG-003', name='Other Module Student', module=self.other_module,
+        )
+        other_student.set_portal_pin('111111')
+        other_student.save(update_fields=['portal_pin_hash'])
+
+        self.client.force_authenticate(self.admin)
+        response = self.client.post('/api/students/bulk_set_pin/', {
+            'portal_pin': '777777',
+            'module_id': self.module.id,
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['updated'], 1)
+
+        self.student.refresh_from_db()
+        other_student.refresh_from_db()
+        self.assertTrue(self.student.check_portal_pin('777777'))
+        self.assertFalse(other_student.check_portal_pin('777777'))
+        self.assertTrue(other_student.check_portal_pin('111111'))

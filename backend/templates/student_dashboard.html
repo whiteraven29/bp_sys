@@ -347,7 +347,7 @@
           <div class="hero-side"><div class="year-card"><span>Current period</span><strong>{{ active_semester }}</strong></div></div>
         </div>
         <div class="stats">
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-percent"></i></div></div><strong>{% if overall_attendance is not None %}{{ overall_attendance }}%{% else %}—{% endif %}</strong><p>Overall attendance</p></article>
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-percent"></i></div></div><strong>{% if overall_attendance is not None %}{{ overall_attendance }}%{% else %}—{% endif %}</strong><p>Overall attendance</p><p style="font-size:.72rem;opacity:.7;margin-top:2px;" title="Counts Present and all Sick days. Exam eligibility only counts Sick days backed by a submitted certificate — see the eligibility table below for that figure.">Includes uncertified sick days; not the exam-eligibility figure</p></article>
           <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-journals"></i></div></div><strong>{{ active_module_count }}</strong><p>Active semester modules</p></article>
           <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-check-circle"></i></div></div><strong>{{ total_present }}</strong><p>Sessions present</p></article>
           <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-x-circle"></i></div></div><strong>{{ total_absent }}</strong><p>Sessions absent</p></article>

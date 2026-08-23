@@ -638,7 +638,7 @@
         <div class="stat-card" style="--c:var(--accent)"><div class="label">My Modules</div><div class="value" id="stat-modules">—</div><div class="sublabel">registered</div></div>
         <div class="stat-card" style="--c:var(--green)"><div class="label">Total Students</div><div class="value" id="stat-students">—</div><div class="sublabel">enrolled</div></div>
         <div class="stat-card" style="--c:var(--yellow)"><div class="label">Sessions Today</div><div class="value" id="stat-sessions">—</div><div class="sublabel">conducted</div></div>
-        <div class="stat-card" style="--c:var(--accent2)"><div class="label">Avg Attendance</div><div class="value" id="stat-avg">—</div><div class="sublabel">P + Sick</div></div>
+        <div class="stat-card" style="--c:var(--accent2)"><div class="label">Avg Attendance</div><div class="value" id="stat-avg">—</div><div class="sublabel" title="Counts Present + all Sick marks. This is not the stricter exam-eligibility figure, which only counts Sick days with a submitted certificate — see the Eligibility page for that.">P + Sick (ⓘ not exam eligibility)</div></div>
       </div>
       <div class="stats-grid" id="level-stats"></div>
 
@@ -1378,7 +1378,7 @@
       </div>
       <div class="stats-grid">
         <div class="stat-card" style="--c:var(--accent)"><div class="label">Students</div><div class="value" id="rpt-stat-students">—</div></div>
-        <div class="stat-card" style="--c:var(--green)"><div class="label">Avg Rate</div><div class="value" id="rpt-stat-avg">—</div></div>
+        <div class="stat-card" style="--c:var(--green)"><div class="label">Avg Rate</div><div class="value" id="rpt-stat-avg">—</div><div class="sublabel" title="Counts Present + all Sick marks. See the Eligibility page for the stricter, certificate-gated exam-eligibility percentage.">ⓘ not exam eligibility</div></div>
         <div class="stat-card" style="--c:var(--yellow)"><div class="label">At Risk</div><div class="value" id="rpt-stat-risk">—</div><div class="sublabel">50–74 %</div></div>
         <div class="stat-card" style="--c:var(--red)"><div class="label">Critical</div><div class="value" id="rpt-stat-crit">—</div><div class="sublabel">&lt; 50 %</div></div>
         <div class="stat-card" style="--c:var(--orange)"><div class="label">Sick Total</div><div class="value" id="rpt-stat-sick">—</div></div>
@@ -2580,6 +2580,7 @@ async function bulkSetStudentPins() {
     portal_pin: pin.trim(),
     class_level_id: document.getElementById('stu-flt-level').value || null,
     semester_id: document.getElementById('stu-flt-sem').value || null,
+    module_id: document.getElementById('stu-flt-module').value || null,
     search: document.getElementById('stu-search').value.trim() || null,
   };
   if (!confirm('Update the password/PIN for every student currently matched by these filters?')) return;
@@ -4438,13 +4439,13 @@ function buildFinanceSelects() {
     if (!studentSelect) return;
     const curStudent = studentSelect.value;
     studentSelect.innerHTML = '<option value="">— select student —</option>' + state.financeStudents.map(s =>
-      `<option value="${s.id}">${s.nactvet_reg_no} · ${s.name} · ${s.class_level_name}</option>`
+      `<option value="${s.id}">${safeText(s.nactvet_reg_no)} · ${safeText(s.name)} · ${safeText(s.class_level_name)}</option>`
     ).join('');
     if (curStudent) studentSelect.value = curStudent;
   });
 
   const categoryOptions = '<option value="">— select category —</option>' + state.paymentCategories.filter(c => c.is_active).map(c =>
-    `<option value="${c.id}" data-type="${c.category_type}" data-installments="${c.installment_count || 1}" data-amount="${c.default_amount}">${c.category_type_display} · ${c.name}</option>`
+    `<option value="${c.id}" data-type="${safeText(c.category_type)}" data-installments="${c.installment_count || 1}" data-amount="${c.default_amount}">${safeText(c.category_type_display)} · ${safeText(c.name)}</option>`
   ).join('');
   ['fin-pay-category', 'fin-flt-category', 'fin-obl-category'].forEach(id => {
     const el = document.getElementById(id);
@@ -4456,7 +4457,7 @@ function buildFinanceSelects() {
   const obligationSelect = document.getElementById('fin-pay-obligation');
   const curObligation = obligationSelect.value;
   obligationSelect.innerHTML = '<option value="">No specific obligation</option>' + state.financeObligations.map(o =>
-    `<option value="${o.id}" data-student="${o.student}" data-category="${o.category || ''}" data-amount="${o.amount_required || 0}">${o.student_reg_no} · ${o.obligation_type_display} · ${money(o.balance)} balance</option>`
+    `<option value="${o.id}" data-student="${o.student}" data-category="${o.category || ''}" data-amount="${o.amount_required || 0}">${safeText(o.student_reg_no)} · ${safeText(o.obligation_type_display)} · ${money(o.balance)} balance</option>`
   ).join('');
   if (curObligation) obligationSelect.value = curObligation;
   syncObligationCategory();
