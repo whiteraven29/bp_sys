@@ -4,32 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EduTrack — Attendance Management</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg: #0f1117; --surface: #181c27; --surface2: #1e2335; --border: #2a3050;
-    --accent: #4f8ef7; --accent2: #7c3aed; --green: #22c55e; --red: #ef4444;
-    --yellow: #f59e0b; --orange: #f97316; --text: #e8eaf0; --muted: #7a8299;
-    --font-mono: 'Space Mono', monospace; --font-sans: 'DM Sans', sans-serif;
-    --radius: 12px; --sidebar-w: 250px; --header-h: 60px;
+    /* Grey page behind white panels, so panels read as panels without needing
+       shadows. Borders are dark enough to actually see — the structure comes
+       from rules and edges, not from rounding and glow. */
+    --bg: #eceff3; --surface: #ffffff; --surface2: #f3f5f7; --border: #ccd4dc;
+    --accent: #1565c0; --accent-dark: #10529e; --accent2: #1d4ed8;
+    --green: #16a34a; --red: #dc2626;
+    --yellow: #b45309; --orange: #c2410c; --text: #2b3440; --muted: #71808f;
+    --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --radius: 3px; --sidebar-w: 250px; --header-h: 56px;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: var(--font-sans); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
-  body::before {
-    content: ''; position: fixed; inset: 0;
-    background-image: linear-gradient(rgba(79,142,247,.04) 1px, transparent 1px),
-                      linear-gradient(90deg, rgba(79,142,247,.04) 1px, transparent 1px);
-    background-size: 40px 40px; pointer-events: none; z-index: 0;
-  }
 
   /* ── HEADER ── */
   header {
     position: fixed; top: 0; left: 0; right: 0; z-index: 200;
-    background: rgba(15,17,23,.92); backdrop-filter: blur(18px);
-    border-bottom: 1px solid var(--border);
+    background: var(--accent);
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 20px; height: var(--header-h); gap: 12px;
   }
@@ -37,39 +34,50 @@
   .hamburger {
     display: none; flex-direction: column; justify-content: center; gap: 5px;
     width: 36px; height: 36px; border: none; background: transparent; cursor: pointer;
-    border-radius: 8px; padding: 6px; transition: background .15s;
+    border-radius: var(--radius); padding: 6px; transition: background .15s;
   }
-  .hamburger:hover { background: var(--surface2); }
-  .hamburger span { display: block; height: 2px; background: var(--text); border-radius: 2px; transition: all .25s; }
+  .hamburger:hover { background: rgba(255,255,255,.15); }
+  .hamburger span { display: block; height: 2px; background: #fff; border-radius: 2px; transition: all .25s; }
   .hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
   .hamburger.open span:nth-child(2) { opacity: 0; }
   .hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
-  .logo { font-family: var(--font-mono); font-size: 1.05rem; color: var(--accent); letter-spacing: .04em; white-space: nowrap; }
-  .logo span { color: var(--text); }
+  .logo { font-size: 1.02rem; font-weight: 600; color: #fff; white-space: nowrap; }
+  .logo span { color: rgba(255,255,255,.82); font-weight: 400; }
   .sem-badge {
-    font-family: var(--font-mono); font-size: .68rem; color: var(--muted);
-    background: var(--surface2); border: 1px solid var(--border);
-    padding: 3px 9px; border-radius: 99px; white-space: nowrap;
+    font-size: .72rem; color: #fff;
+    background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.3);
+    padding: 3px 9px; border-radius: var(--radius); white-space: nowrap;
   }
-  .sem-badge.active { color: var(--green); border-color: rgba(34,197,94,.3); background: rgba(34,197,94,.08); }
+  .sem-badge.active { color: var(--accent); border-color: #fff; background: #fff; font-weight: 600; }
   .header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .user-chip {
-    display: flex; align-items: center; gap: 8px; font-size: .78rem; font-family: var(--font-mono);
-    padding: 5px 12px; border-radius: 999px;
-    background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+    display: flex; align-items: center; gap: 8px; font-size: .8rem;
+    padding: 4px 10px; border-radius: var(--radius);
+    background: transparent; border: 1px solid rgba(255,255,255,.3); color: #fff;
     cursor: pointer; transition: all .15s;
   }
-  .user-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .user-chip:hover { border-color: #fff; background: rgba(255,255,255,.14); }
   .user-avatar {
-    width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff;
+    width: 24px; height: 24px; border-radius: 50%; background: #fff; color: var(--accent);
     display: flex; align-items: center; justify-content: center; font-size: .72rem; font-weight: 700;
   }
   .logout-btn {
-    padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);
-    background: transparent; color: var(--muted); font-size: .78rem;
-    cursor: pointer; transition: all .15s; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,.3);
+    background: transparent; color: #fff; font-size: .8rem;
+    cursor: pointer; transition: all .15s; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
   }
-  .logout-btn:hover { border-color: var(--red); color: var(--red); }
+  .logout-btn:hover { background: var(--red); border-color: var(--red); color: #fff; }
+
+  /* ── BREADCRUMB / CONTEXT BAR ── */
+  .crumb-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 9px 24px; background: var(--surface); border-bottom: 1px solid var(--border);
+    font-size: .8rem; color: var(--muted);
+  }
+  .crumb-bar .crumb-here { color: var(--text); font-weight: 600; }
+  .crumb-bar .crumb-sep { margin: 0 7px; color: #b9c3cd; }
+  .crumb-bar .crumb-meta { color: var(--text); }
+  .crumb-bar .crumb-meta b { font-weight: 600; }
 
   /* ── LAYOUT ── */
   .app { display: flex; min-height: 100vh; padding-top: var(--header-h); }
@@ -79,7 +87,7 @@
     width: var(--sidebar-w); flex-shrink: 0;
     background: var(--surface); border-right: 1px solid var(--border);
     display: flex; flex-direction: column;
-    padding: 16px 10px; gap: 2px;
+    padding: 0; gap: 0;
     overflow-y: auto; position: fixed;
     top: var(--header-h); bottom: 0; left: 0; z-index: 100;
     transition: transform .28s cubic-bezier(.4,0,.2,1);
@@ -94,90 +102,126 @@
   body.is-estate.sidebar-collapsed aside .nav-btn { justify-content:center; gap:0; padding:10px 6px; font-size:0; }
   body.is-estate.sidebar-collapsed aside .nav-btn.active { padding-left:4px; }
   body.is-estate.sidebar-collapsed aside .nav-btn .icon { width:24px; font-size:1.05rem; }
-  .aside-label { font-size: .62rem; font-family: var(--font-mono); color: var(--muted); letter-spacing: .12em; text-transform: uppercase; padding: 8px 10px 4px; }
+  .aside-label { font-size: .7rem; font-weight: 600; color: var(--muted); padding: 12px 12px 5px; }
+  /* Full-width rows separated by hairlines, like the reference's menu —
+     not floating pills with gaps between them. */
   .nav-btn {
-    display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px;
-    border: none; background: transparent; color: var(--muted);
-    cursor: pointer; font-family: var(--font-sans); font-size: .85rem; font-weight: 500;
-    text-align: left; width: 100%; transition: all .15s;
+    display: flex; align-items: center; gap: 11px; padding: 11px 12px; border-radius: 0;
+    border: none; border-bottom: 1px solid var(--border); border-left: 3px solid transparent;
+    background: transparent; color: var(--text);
+    cursor: pointer; font-family: var(--font-sans); font-size: .84rem; font-weight: 400;
+    text-align: left; width: 100%; transition: background .12s, color .12s;
   }
-  .nav-btn:hover { background: var(--surface2); color: var(--text); }
-  .nav-btn.active { background: rgba(79,142,247,.15); color: var(--accent); border-left: 2px solid var(--accent); padding-left: 8px; }
-  .nav-btn .icon { font-size: .95rem; width: 20px; text-align: center; flex-shrink: 0; }
-  .nav-group { display: flex; flex-direction: column; gap: 2px; }
+  .nav-btn:hover { background: var(--surface2); }
+  .nav-btn.active { background: #e8f1fb; color: var(--accent-dark); border-left-color: var(--accent); font-weight: 600; }
+  .nav-btn .icon { font-size: 1rem; width: 20px; text-align: center; flex-shrink: 0; color: var(--muted); }
+  .nav-btn.active .icon { color: var(--accent); }
+  .nav-group { display: flex; flex-direction: column; }
   body.is-admin .nav-group.admin-only { display: flex !important; }
-  .nav-submenu { display: none; padding: 2px 0 5px 30px; }
-  .nav-group.open .nav-submenu { display: flex; flex-direction: column; gap: 2px; }
+  .nav-submenu { display: none; background: var(--surface2); border-bottom: 1px solid var(--border); }
+  .nav-group.open .nav-submenu { display: flex; flex-direction: column; }
   .nav-caret { margin-left: auto; color: var(--muted); font-size: .7rem; transition: transform .15s; }
   .nav-group.open .nav-caret { transform: rotate(90deg); }
   .nav-sub-btn {
     border: none; background: transparent; color: var(--muted); text-align: left;
-    border-radius: 7px; padding: 7px 9px; font-family: var(--font-sans);
-    font-size: .78rem; cursor: pointer; transition: all .13s;
+    border-radius: 0; padding: 8px 12px 8px 42px; font-family: var(--font-sans);
+    font-size: .8rem; cursor: pointer; transition: all .13s;
   }
-  .nav-sub-btn:hover { background: var(--surface2); color: var(--text); }
-  .nav-sub-btn.active { color: var(--accent); background: rgba(79,142,247,.1); }
-  .sidebar-level { padding: 6px 10px; font-size: .62rem; font-family: var(--font-mono); color: var(--accent2); letter-spacing: .08em; text-transform: uppercase; margin-top: 4px; }
+  .nav-sub-btn:hover { color: var(--text); }
+  .nav-sub-btn.active { color: var(--accent-dark); font-weight: 600; }
+  .sidebar-level { padding: 10px 12px 4px; font-size: .7rem; font-weight: 600; color: var(--muted); margin-top: 4px; }
   .sidebar-module {
-    display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 7px; cursor: pointer;
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--radius); cursor: pointer;
     font-size: .8rem; color: var(--muted); transition: all .13s; overflow: hidden;
   }
   .sidebar-module:hover { background: var(--surface2); color: var(--text); }
   .sidebar-module span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* ── MAIN ── */
-  main { flex: 1; overflow-y: auto; padding: 28px 24px; margin-left: var(--sidebar-w); position: relative; z-index: 1; }
+  main { flex: 1; overflow-y: auto; padding: 0; margin-left: var(--sidebar-w); position: relative; z-index: 1; }
+  .main-inner { padding: 18px 24px 40px; }
 
   /* ── PAGES ── */
   .page { display: none; }
   .page.active { display: block; }
-  .page-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
-  .page-sub { color: var(--muted); font-size: .88rem; margin-bottom: 24px; }
+  .page-title { font-size: 1.28rem; font-weight: 600; margin-bottom: 3px; }
+  .page-sub { color: var(--muted); font-size: .83rem; margin-bottom: 18px; }
 
   /* ── STAT CARDS ── */
   .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; margin-bottom: 24px; }
-  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; position: relative; overflow: hidden; }
-  .stat-card::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--c, var(--accent)); }
-  .stat-card .label { font-size: .68rem; color: var(--muted); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
-  .stat-card .value { font-size: 1.8rem; font-weight: 700; font-family: var(--font-mono); color: var(--c, var(--accent)); }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; position: relative; overflow: hidden; }
+  .stat-card .label { font-size: .74rem; color: var(--muted); margin-bottom: 5px; }
+  .stat-card .value { font-size: 1.55rem; font-weight: 600; color: var(--text); }
   .stat-card .sublabel { font-size: .72rem; color: var(--muted); margin-top: 3px; }
 
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
-  .card-title { font-size: .95rem; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  /* One plain status strip instead of a grid of stat cards — several small
+     cards saying one number each read as clutter; this reads as one card. */
+  .quick-facts { display: flex; flex-wrap: wrap; margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+  .quick-facts:empty { display: none; }
+  .qf-item { flex: 1 1 150px; padding: 11px 16px; border-right: 1px solid var(--border); }
+  .qf-item:last-child { border-right: 0; }
+  .qf-item span { display: block; margin-bottom: 3px; color: var(--muted); font-size: .75rem; }
+  .qf-item strong { font-size: 1.32rem; font-weight: 600; color: var(--text); }
+  .qf-item .qf-sub { margin-top: 2px; color: var(--muted); font-size: .7rem; }
+
+  /* Two cards side by side instead of stacked full-width — same content,
+     roughly half the vertical scrolling. */
+  .dash-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(260px, .7fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .dash-grid { grid-template-columns: 1fr; } }
+
+  /* Announcements as a plain news-style list, not a data table. */
+  .ann-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .ann-row:last-child { border-bottom: 0; }
+  .ann-row-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .ann-row-title { color: var(--accent); font-size: .86rem; font-weight: 600; }
+  .ann-row-title:hover { text-decoration: underline; }
+  .ann-row-note { margin-top: 3px; color: var(--muted); font-size: .78rem; }
+  .ann-row-meta { margin-top: 4px; color: var(--muted); font-size: .72rem; }
+
+  /* Card = plain white panel with a ruled header, like the reference's
+     "Published Results" / "News List" panels. No shadow, no rounding. */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+  /* Title spans the full panel width with a rule under it (negative margins
+     cancel the card padding), like the reference's panel headers. */
+  .card-title {
+    font-size: .92rem; font-weight: 600; color: var(--text);
+    padding: 11px 16px; margin: -16px -16px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
 
   .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 14px; }
   .form-grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; }
   .field { display: flex; flex-direction: column; gap: 5px; }
-  .field label { font-size: .75rem; color: var(--muted); font-weight: 500; }
+  .field label { font-size: .78rem; color: var(--text); font-weight: 500; }
   .field input, .field select, .field textarea {
-    background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    border-radius: 8px; padding: 9px 12px; font-family: var(--font-sans); font-size: .86rem;
+    background: #fff; border: 1px solid var(--border); color: var(--text);
+    border-radius: var(--radius); padding: 7px 10px; font-family: var(--font-sans); font-size: .85rem;
     outline: none; transition: border .13s; width: 100%;
   }
   .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
-  .inventory-bulk-toggle { display:flex; align-items:flex-start; gap:10px; padding:12px; margin:0 0 14px; border:1px solid rgba(79,142,247,.35); border-radius:10px; background:rgba(79,142,247,.08); cursor:pointer; }
+  .inventory-bulk-toggle { display:flex; align-items:flex-start; gap:10px; padding:12px; margin:0 0 14px; border:1px solid rgba(21,101,192,.35); border-radius:var(--radius); background:rgba(21,101,192,.08); cursor:pointer; }
   .inventory-bulk-toggle input { width:17px; height:17px; margin-top:2px; accent-color:var(--accent); }
   .inventory-bulk-toggle strong { display:block; font-size:.84rem; color:var(--accent); }
   .inventory-bulk-toggle small { display:block; margin-top:2px; color:var(--muted); line-height:1.4; }
   .inventory-filter-bar { display:grid; grid-template-columns:minmax(220px,2fr) repeat(3,minmax(140px,1fr)) auto; gap:9px; width:100%; margin:4px 0 14px; }
-  .inventory-filter-control { background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:9px 12px; font-family:var(--font-sans); font-size:.82rem; outline:none; min-width:0; }
-  .inventory-filter-control:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(79,142,247,.1); }
+  .inventory-filter-control { background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:var(--radius); padding:9px 12px; font-family:var(--font-sans); font-size:.82rem; outline:none; min-width:0; }
+  .inventory-filter-control:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(21,101,192,.1); }
   .inventory-filter-control option { background:var(--surface2); }
   .asset-map-layout { display:grid; grid-template-columns:minmax(0,1fr) 260px; gap:14px; }
-  .asset-map-canvas { min-height:390px; overflow:auto; border:1px solid var(--border); border-radius:10px; background:radial-gradient(circle at 1px 1px,rgba(122,130,153,.2) 1px,transparent 0); background-size:22px 22px; }
+  .asset-map-canvas { min-height:390px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius); background:radial-gradient(circle at 1px 1px,rgba(107,114,128,.15) 1px,transparent 0); background-size:22px 22px; }
   .asset-map-canvas svg { display:block; min-width:100%; }
-  .asset-map-line { stroke:#39415f; stroke-width:2; }
-  .asset-map-line.attention { stroke:rgba(239,68,68,.65); }
+  .asset-map-line { stroke:#c3cad2; stroke-width:2; }
+  .asset-map-line.attention { stroke:rgba(220,38,38,.65); }
   .asset-map-node { cursor:pointer; outline:none; }
-  .asset-map-node rect { fill:#1e2335; stroke:#4f8ef7; stroke-width:1.5; transition:.15s; }
-  .asset-map-node:hover rect, .asset-map-node:focus rect { fill:#273253; stroke:#80adfa; stroke-width:2.5; filter:drop-shadow(0 0 7px rgba(79,142,247,.45)); }
-  .asset-map-node.asset rect { stroke:#7a8299; }
-  .asset-map-node.asset.good rect { stroke:#22c55e; }
-  .asset-map-node.asset.fair rect { stroke:#f59e0b; }
-  .asset-map-node.asset.attention rect { stroke:#ef4444; }
-  .asset-map-node text { fill:#e8eaf0; font-family:var(--font-sans); font-size:12px; pointer-events:none; }
-  .asset-map-node text.sub { fill:#9aa2b8; font-size:10px; }
-  .asset-map-side { border:1px solid var(--border); border-radius:10px; background:var(--bg); padding:14px; min-height:160px; }
+  .asset-map-node rect { fill:#f1f4f6; stroke:#1565c0; stroke-width:1.5; transition:.15s; }
+  .asset-map-node:hover rect, .asset-map-node:focus rect { fill:#e8f1fb; stroke:#10529e; stroke-width:2.5; filter:drop-shadow(0 0 7px rgba(21,101,192,.35)); }
+  .asset-map-node.asset rect { stroke:#6b7280; }
+  .asset-map-node.asset.good rect { stroke:#16a34a; }
+  .asset-map-node.asset.fair rect { stroke:#b45309; }
+  .asset-map-node.asset.attention rect { stroke:#dc2626; }
+  .asset-map-node text { fill:#1f2937; font-family:var(--font-sans); font-size:12px; pointer-events:none; }
+  .asset-map-node text.sub { fill:#6b7280; font-size:10px; }
+  .asset-map-side { border:1px solid var(--border); border-radius:var(--radius); background:var(--bg); padding:14px; min-height:160px; }
   .asset-map-side h4 { color:var(--accent); margin-bottom:9px; font-size:.9rem; }
   .asset-map-side dl { display:grid; grid-template-columns:auto 1fr; gap:7px 10px; font-size:.76rem; }
   .asset-map-side dt { color:var(--muted); }
@@ -195,106 +239,111 @@
   .inventory-item-summary { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px; padding:0 14px 14px; }
   .inventory-item-summary .stat-card .label { white-space:normal; }
   .asset-map-item-list { display:grid; gap:10px; margin-top:12px; }
-  .asset-map-item { padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--surface2); }
+  .asset-map-item { padding:10px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface2); }
   .asset-map-item strong { display:flex; justify-content:space-between; gap:10px; font-size:.78rem; }
   .asset-map-tag-list { display:grid; gap:7px; margin-top:12px; }
-  .asset-map-tag { padding:8px 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface2); font: .72rem var(--font-mono); overflow-wrap:anywhere; }
+  .asset-map-tag { padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface2); font: .72rem var(--font-mono); overflow-wrap:anywhere; }
   @media (max-width:900px) { .inventory-filter-bar { grid-template-columns:1fr 1fr; } }
   @media (max-width:560px) { .inventory-filter-bar { grid-template-columns:1fr; } }
   @media (max-width:760px) { .asset-map-layout { grid-template-columns:1fr; } }
   @media (max-width:900px) { .inventory-charts-grid { grid-template-columns:1fr; } }
-  input[type="date"] { color-scheme: dark; }
-  input[type="date"]::-webkit-calendar-picker-indicator {
-    cursor: pointer; opacity: 1; filter: invert(72%) sepia(87%) saturate(1414%) hue-rotate(184deg) brightness(104%);
-  }
+  input[type="date"] { color-scheme: light; }
+  input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .65; }
   .password-wrap { position: relative; width: 100%; }
   .password-wrap > input { padding-right: 42px !important; }
-  .password-toggle { position: absolute; top: 50%; right: 7px; transform: translateY(-50%); display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 7px; color: var(--accent); background: transparent; cursor: pointer; font-size: 1rem; }
-  .password-toggle:hover, .password-toggle:focus-visible { background: rgba(79,142,247,.14); outline: none; }
+  .password-toggle { position: absolute; top: 50%; right: 7px; transform: translateY(-50%); display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius); color: var(--accent); background: transparent; cursor: pointer; font-size: 1rem; }
+  .password-toggle:hover, .password-toggle:focus-visible { background: rgba(21,101,192,.14); outline: none; }
   .field select option { background: var(--surface2); }
   .field-full { grid-column: 1 / -1; }
   .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
   .check-item {
-    display: flex; align-items: center; gap: 8px; padding: 9px 10px;
-    border: 1px solid var(--border); border-radius: 8px; background: var(--surface2);
-    font-size: .8rem; color: var(--text);
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius); background: #fff;
+    font-size: .82rem; color: var(--text);
   }
   .check-item input { width: auto; }
 
   /* Session type radio-style buttons */
-  .type-toggle { display: flex; gap: 8px; }
+  .type-toggle { display: flex; gap: 0; }
   .type-toggle label {
     flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
-    padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--bg); cursor: pointer; font-size: .86rem; transition: all .13s;
+    padding: 8px 12px; border-radius: 0; border: 1px solid var(--border); margin-left: -1px;
+    background: #fff; cursor: pointer; font-size: .84rem; transition: all .13s;
   }
+  .type-toggle label:first-child { margin-left: 0; border-radius: var(--radius) 0 0 var(--radius); }
+  .type-toggle label:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
   .type-toggle input[type=radio] { display: none; }
-  .type-toggle label:has(input:checked) { border-color: var(--accent); background: rgba(79,142,247,.12); color: var(--accent); }
-  .type-toggle label.practical:has(input:checked) { border-color: var(--accent2); background: rgba(124,58,237,.12); color: var(--accent2); }
+  .type-toggle label:has(input:checked) { border-color: var(--accent); background: var(--accent); color: #fff; position: relative; z-index: 1; }
+  .type-toggle label.practical:has(input:checked) { border-color: var(--accent2); background: var(--accent2); color: #fff; }
 
-  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 8px; border: none; font-family: var(--font-sans); font-size: .85rem; font-weight: 600; cursor: pointer; transition: all .15s; }
-  .btn-primary { background: var(--accent); color: #fff; }
-  .btn-primary:hover { background: #3a7de8; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(79,142,247,.3); }
-  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-  .btn-danger { background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.22); }
-  .btn-danger:hover { background: rgba(239,68,68,.22); }
-  .btn-green { background: rgba(34,197,94,.12); color: var(--green); border: 1px solid rgba(34,197,94,.22); }
-  .btn-green:hover { background: rgba(34,197,94,.22); }
-  .btn-warning { background: rgba(245,158,11,.12); color: var(--yellow); border: 1px solid rgba(245,158,11,.22); }
-  .btn-warning:hover { background: rgba(245,158,11,.22); }
-  .btn-sm { padding: 5px 10px; font-size: .75rem; }
+  /* Flat buttons — solid fill, square, no lift or glow on hover. */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius); border: 1px solid transparent; font-family: var(--font-sans); font-size: .83rem; font-weight: 500; cursor: pointer; transition: background .13s, border-color .13s, color .13s; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+  .btn-secondary { background: #fff; color: var(--text); border-color: var(--border); }
+  .btn-secondary:hover { background: var(--surface2); border-color: #b3bec9; }
+  .btn-danger { background: #fff; color: var(--red); border-color: #e5b4b4; }
+  .btn-danger:hover { background: var(--red); border-color: var(--red); color: #fff; }
+  .btn-green { background: #fff; color: var(--green); border-color: #b0d9bf; }
+  .btn-green:hover { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn-warning { background: #fff; color: var(--yellow); border-color: #ddc09b; }
+  .btn-warning:hover { background: var(--yellow); border-color: var(--yellow); color: #fff; }
+  .btn-sm { padding: 4px 9px; font-size: .76rem; }
 
-  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); -webkit-overflow-scrolling: touch; }
+  /* Full grid lines and a plain sentence-case header row, like the
+     reference's results tables — not a rounded card with hairline rows. */
+  .table-wrap { overflow-x: auto; border-radius: 0; border: 0; -webkit-overflow-scrolling: touch; }
   table { width: 100%; border-collapse: collapse; font-size: .82rem; min-width: 520px; }
   thead tr { background: var(--surface2); }
-  th { padding: 10px 12px; text-align: left; font-size: .67rem; font-family: var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; border-bottom: 1px solid var(--border); white-space: nowrap; }
-  td { padding: 10px 12px; border-bottom: 1px solid rgba(42,48,80,.5); vertical-align: middle; }
-  tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover td { background: rgba(79,142,247,.04); }
+  th { padding: 8px 11px; text-align: left; font-size: .8rem; font-weight: 600; color: var(--text); border: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 7px 11px; border: 1px solid var(--border); vertical-align: middle; }
+  tbody tr:hover td { background: #f5f9fd; }
 
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: .68rem; font-weight: 600; font-family: var(--font-mono); white-space: nowrap; }
-  .badge-green { background: rgba(34,197,94,.15); color: var(--green); }
-  .badge-red { background: rgba(239,68,68,.15); color: var(--red); }
-  .badge-yellow { background: rgba(245,158,11,.15); color: var(--yellow); }
-  .badge-orange { background: rgba(249,115,22,.15); color: var(--orange); }
-  .badge-blue { background: rgba(79,142,247,.15); color: var(--accent); }
-  .badge-purple { background: rgba(124,58,237,.15); color: var(--accent2); }
+  /* Small square tags, like the reference's blue "Important" label. */
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 2px; font-size: .72rem; font-weight: 600; white-space: nowrap; color: #fff; }
+  .badge-green { background: var(--green); }
+  .badge-red { background: var(--red); }
+  .badge-yellow { background: var(--yellow); }
+  .badge-orange { background: var(--orange); }
+  .badge-blue { background: var(--accent2); }
+  .badge-purple { background: #6d28d9; }
 
-  .progress-bar { height: 5px; background: var(--surface2); border-radius: 99px; overflow: hidden; width: 100%; min-width: 60px; }
-  .progress-fill { height: 100%; border-radius: 99px; transition: width .4s; }
+  .progress-bar { height: 5px; background: #dfe4ea; border-radius: 0; overflow: hidden; width: 100%; min-width: 60px; }
+  .progress-fill { height: 100%; transition: width .4s; }
 
   /* 3-state attendance toggle */
-  .att-toggle { display: inline-flex; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
-  .att-toggle button { border: none; background: var(--bg); color: var(--muted); padding: 5px 8px; font-size: .7rem; font-family: var(--font-mono); cursor: pointer; transition: all .1s; }
-  .att-toggle button.st-p { background: rgba(34,197,94,.18); color: var(--green); }
-  .att-toggle button.st-s { background: rgba(249,115,22,.18); color: var(--orange); }
-  .att-toggle button.st-a { background: rgba(239,68,68,.18); color: var(--red); }
+  .att-toggle { display: inline-flex; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+  .att-toggle button { border: none; background: #fff; color: var(--muted); padding: 4px 9px; font-size: .76rem; font-weight: 600; cursor: pointer; transition: all .1s; }
+  .att-toggle button.st-p { background: var(--green); color: #fff; }
+  .att-toggle button.st-s { background: var(--orange); color: #fff; }
+  .att-toggle button.st-a { background: var(--red); color: #fff; }
 
   .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 30px 20px; text-align: center; cursor: pointer; transition: all .2s; }
-  .upload-zone:hover { border-color: var(--accent); background: rgba(79,142,247,.04); }
+  .upload-zone:hover { border-color: var(--accent); background: rgba(21,101,192,.04); }
   .upload-zone .uz-icon { font-size: 2rem; margin-bottom: 8px; }
   .upload-zone .uz-title { font-weight: 600; margin-bottom: 4px; font-size: .9rem; }
   .upload-zone .uz-sub { font-size: .77rem; color: var(--muted); }
 
-  #toast { position: fixed; bottom: 24px; right: 20px; z-index: 9999; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 18px; font-size: .83rem; color: var(--text); transform: translateY(80px); opacity: 0; transition: all .28s cubic-bezier(.34,1.56,.64,1); pointer-events: none; max-width: calc(100vw - 40px); }
+  #toast { position: fixed; bottom: 24px; right: 20px; z-index: 9999; background: var(--text); border: 0; border-radius: var(--radius); padding: 11px 18px; font-size: .83rem; color: #fff; transform: translateY(80px); opacity: 0; transition: all .2s ease; pointer-events: none; max-width: calc(100vw - 40px); }
   #toast.show { transform: translateY(0); opacity: 1; }
 
-  .modal-overlay { position: fixed; inset: 0; z-index: 500; background: rgba(0,0,0,.65); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; padding: 20px; }
+  .modal-overlay { position: fixed; inset: 0; z-index: 500; background: rgba(20,28,38,.5); display: none; align-items: center; justify-content: center; padding: 20px; }
   .modal-overlay.open { display: flex; }
-  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
-  .modal-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; }
-  .modal-close { background: none; border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 20px 20px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
+  .modal-title { font-size: .98rem; font-weight: 600; margin: 0 -20px 18px; padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .modal-close { background: none; border: none; color: var(--muted); font-size: 1.1rem; cursor: pointer; padding: 2px 6px; border-radius: var(--radius); }
   .modal-close:hover { color: var(--text); background: var(--surface2); }
 
-  .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
-  .empty .ei { font-size: 2.2rem; margin-bottom: 10px; }
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
-  .level-tab-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
-  .level-tab { padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); font-size: .77rem; font-weight: 600; cursor: pointer; transition: all .13s; }
-  .level-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .empty { text-align: center; padding: 34px 20px; color: var(--muted); font-size: .85rem; }
+  .empty .ei { font-size: 1.7rem; margin-bottom: 8px; opacity: .5; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--surface2); }
+  ::-webkit-scrollbar-thumb { background: #bcc6d0; border-radius: 0; }
+  /* Tabs sit on a ruled baseline, the active one connected to the content. */
+  .level-tab-bar { display: flex; gap: 2px; flex-wrap: wrap; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .level-tab { padding: 7px 14px; border-radius: var(--radius) var(--radius) 0 0; border: 1px solid transparent; border-bottom: 0; background: transparent; color: var(--muted); font-size: .82rem; font-weight: 500; cursor: pointer; transition: all .13s; margin-bottom: -1px; }
+  .level-tab:hover { color: var(--text); background: var(--surface2); }
+  .level-tab.active { background: #fff; color: var(--accent-dark); border-color: var(--border); font-weight: 600; }
   .student-subview, .module-subview { display: none; }
   .student-subview.active, .module-subview.active { display: block; }
   .row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
@@ -303,13 +352,13 @@
   .claim-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 10px; }
   .claim-item {
     display: flex; align-items: center; gap: 8px;
-    padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--surface2); cursor: pointer; transition: all .13s;
+    padding: 9px 11px; border-radius: var(--radius); border: 1px solid var(--border);
+    background: #fff; cursor: pointer; transition: all .13s;
   }
-  .claim-item.claimed { border-color: var(--green); background: rgba(34,197,94,.08); }
+  .claim-item.claimed { border-color: var(--green); background: #f1faf4; }
   .claim-item .ci-info { flex: 1; min-width: 0; }
   .claim-item .ci-name { font-size: .8rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .claim-item .ci-code { font-size: .68rem; color: var(--muted); font-family: var(--font-mono); }
+  .claim-item .ci-code { font-size: .72rem; color: var(--muted); font-family: var(--font-mono); }
   .claim-item .ci-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background .13s; }
   .claim-item.claimed .ci-dot { background: var(--green); }
 
@@ -343,17 +392,18 @@
 
   /* role badge in header */
   .role-badge {
-    font-size: .65rem; font-family: var(--font-mono); font-weight: 700;
-    padding: 2px 8px; border-radius: 99px; letter-spacing: .06em;
+    font-size: .7rem; font-weight: 600;
+    padding: 2px 8px; border-radius: 2px; color: #fff;
   }
-  .role-badge.admin  { background: rgba(239,68,68,.15);  color: var(--red);    border: 1px solid rgba(239,68,68,.3); }
-  .role-badge.tutor{ background: rgba(79,142,247,.15); color: var(--accent); border: 1px solid rgba(79,142,247,.3); }
+  .role-badge.admin { background: rgba(255,255,255,.22); }
+  .role-badge.tutor { background: rgba(255,255,255,.22); }
 
-  /* tutor notice card */
+  /* Notice strip — a tinted bar with a coloured left edge, like the
+     reference's registration-status message. */
   .tutor-notice {
-    background: rgba(79,142,247,.06); border: 1px solid rgba(79,142,247,.2);
-    border-radius: var(--radius); padding: 14px 18px; margin-bottom: 20px;
-    font-size: .84rem; color: var(--muted); display: none;
+    background: #fff8ec; border: 1px solid #e8d3ae; border-left: 3px solid var(--yellow);
+    border-radius: var(--radius); padding: 11px 15px; margin-bottom: 16px;
+    font-size: .83rem; color: var(--text); display: none;
   }
   body:not(.is-admin) .tutor-notice { display: flex; align-items: flex-start; gap: 10px; }
 
@@ -384,14 +434,14 @@
   }
 
   /* ── PERIOD BADGES ── */
-  .badge-cat1 { background: rgba(34,197,94,.15); color: var(--green); }
-  .badge-cat2 { background: rgba(124,58,237,.15); color: var(--accent2); }
-  .badge-gen  { background: rgba(79,142,247,.1);  color: var(--muted); }
+  .badge-cat1 { background: var(--green); }
+  .badge-cat2 { background: var(--accent2); }
+  .badge-gen  { background: #8b98a5; }
 
   /* ── SICK INLINE INPUT ── */
   .sick-input {
     background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    border-radius: 6px; padding: 5px 9px; font-size: .78rem; outline: none;
+    border-radius: var(--radius); padding: 5px 9px; font-size: .78rem; outline: none;
     width: 100%; min-width: 140px; transition: border .13s;
   }
   .sick-input:focus { border-color: var(--orange); }
@@ -619,6 +669,11 @@
   </aside>
 
   <main>
+    <div class="crumb-bar">
+      <div><span>Home</span><span class="crumb-sep">/</span><span class="crumb-here" id="crumb-page">Dashboard</span></div>
+      <div class="crumb-meta">Active Academic Year: <b id="crumb-year">—</b></div>
+    </div>
+    <div class="main-inner">
 
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
@@ -634,18 +689,19 @@
         </div>
       </div>
 
-      <div class="stats-grid">
-        <div class="stat-card" style="--c:var(--accent)"><div class="label">My Modules</div><div class="value" id="stat-modules">—</div><div class="sublabel">registered</div></div>
-        <div class="stat-card" style="--c:var(--green)"><div class="label">Total Students</div><div class="value" id="stat-students">—</div><div class="sublabel">enrolled</div></div>
-        <div class="stat-card" style="--c:var(--yellow)"><div class="label">Sessions Today</div><div class="value" id="stat-sessions">—</div><div class="sublabel">conducted</div></div>
-        <div class="stat-card" style="--c:var(--accent2)"><div class="label">Avg Attendance</div><div class="value" id="stat-avg">—</div><div class="sublabel" title="Counts Present + all Sick marks. This is not the stricter exam-eligibility figure, which only counts Sick days with a submitted certificate — see the Eligibility page for that.">P + Sick (ⓘ not exam eligibility)</div></div>
+      <div class="quick-facts">
+        <div class="qf-item"><span>My Modules</span><strong id="stat-modules">—</strong></div>
+        <div class="qf-item"><span>Total Students</span><strong id="stat-students">—</strong></div>
+        <div class="qf-item"><span>Sessions Today</span><strong id="stat-sessions">—</strong></div>
+        <div class="qf-item"><span>Avg Attendance</span><strong id="stat-avg" title="Counts Present + all Sick marks. This is not the stricter exam-eligibility figure, which only counts Sick days with a submitted certificate — see the Eligibility page for that.">—</strong></div>
       </div>
-      <div class="stats-grid" id="level-stats"></div>
+      <div class="quick-facts" id="level-stats"></div>
 
-      <!-- Staff: Attendance cutoff dates -->
+      <!-- Staff: cutoff dates + semester advance share one card — two separate
+           admin controls that only need occasional attention, not two cards. -->
       <div class="card staff-only" id="cutoff-card">
-        <div class="card-title">🔒 Attendance Cutoff Dates
-          <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— tutors cannot record attendance after each date</span>
+        <div class="card-title">Academic Period
+          <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— cutoff dates and semester progression</span>
         </div>
         <div class="form-grid-3" style="margin-bottom:12px;">
           <div class="field">
@@ -664,27 +720,38 @@
             <span id="cutoff-end-status" style="font-size:.72rem;margin-top:3px;"></span>
           </div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="saveCutoffDates()">💾 Save Cutoff Dates</button>
-      </div>
-
-      <!-- Staff: Advance semester -->
-      <div class="card staff-only" id="advance-semester-card">
-        <div class="card-title">🗓️ Academic Year &amp; Semester</div>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-          <div id="advance-sem-info" style="font-size:.88rem;color:var(--muted);flex:1;">—</div>
-          <button class="btn btn-warning btn-sm" onclick="advanceSemester()">Advance Semester →</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--border);">
+          <button class="btn btn-primary btn-sm" onclick="saveCutoffDates()"><i class="bi bi-save"></i> Save Cutoff Dates</button>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div id="advance-sem-info" style="font-size:.82rem;color:var(--muted);">—</div>
+            <button class="btn btn-warning btn-sm" onclick="advanceSemester()">Advance Semester →</button>
+          </div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-title">📋 Recent Sessions</div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Module</th><th>Type</th><th>Topic</th><th>Level</th><th>Sem</th><th>Date</th><th>P</th><th>S</th><th>A</th><th>Rate</th></tr></thead>
-            <tbody id="recent-sessions-tbody"><tr><td colspan="10"><div class="empty"><div class="ei">🗓️</div>No sessions yet</div></td></tr></tbody>
-          </table>
+      <!-- Recent Sessions (main content) + Announcements side by side, instead
+           of two more full-width cards stacked underneath everything else. -->
+      <div class="dash-grid">
+        <div class="card">
+          <div class="card-title">Recent Sessions</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Module</th><th>Type</th><th>Topic</th><th>Level</th><th>Sem</th><th>Date</th><th>P</th><th>S</th><th>A</th><th>Rate</th></tr></thead>
+              <tbody id="recent-sessions-tbody"><tr><td colspan="10"><div class="empty"><div class="ei"><i class="bi bi-calendar-week"></i></div>No sessions yet</div></td></tr></tbody>
+            </table>
+          </div>
+          <div id="elig-performance-summary" style="display:none;margin-top:22px;"></div>
         </div>
-        <div id="elig-performance-summary" style="display:none;margin-top:22px;"></div>
+        <div class="card">
+          <div class="card-title">Announcements</div>
+          <div class="admin-only" style="margin-bottom:14px;flex-direction:column;align-items:stretch;gap:10px;">
+            <div class="field"><label>Title *</label><input id="ann-title" placeholder="e.g. Semester 1 timetable"></div>
+            <div class="field"><label>Note</label><input id="ann-note" placeholder="Optional short note"></div>
+            <div class="field"><label>PDF File *</label><input id="ann-file" type="file" accept="application/pdf"></div>
+            <button class="btn btn-primary btn-sm" style="width:fit-content;" onclick="uploadAnnouncement()">Post Announcement</button>
+          </div>
+          <div id="announcements-list"></div>
+        </div>
       </div>
     </div>
 
@@ -714,6 +781,16 @@
         </div>
         <button class="btn btn-primary btn-sm" onclick="createStaffAccount()">Create Account</button>
         <div id="acct-created-info" style="font-size:.78rem;color:var(--muted);margin-top:12px;"></div>
+      </div>
+
+      <div class="card admin-only">
+        <div class="card-title">Existing Staff</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Username</th><th>Full Name</th><th>Role</th><th>Modules</th><th></th></tr></thead>
+            <tbody id="staff-accounts-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -1432,7 +1509,7 @@
         <div class="card inventory-chart-card"><div class="card-title"><i class="bi bi-bar-chart"></i> Quantity by Location</div><div class="inventory-chart-wrap"><canvas id="inventory-location-chart"></canvas></div></div>
       </div>
       <div class="card">
-        <div class="card-title"><i class="bi bi-diagram-3"></i> Location Asset Map <small style="font-weight:400;color:var(--muted)">Explore offices, floors, corridors and common areas</small><div class="asset-map-legend"><span style="--c:#22c55e">Good</span><span style="--c:#f59e0b">Fair</span><span style="--c:#ef4444">Needs attention</span></div></div>
+        <div class="card-title"><i class="bi bi-diagram-3"></i> Location Asset Map <small style="font-weight:400;color:var(--muted)">Explore offices, floors, corridors and common areas</small><div class="asset-map-legend"><span style="--c:#16a34a">Good</span><span style="--c:#b45309">Fair</span><span style="--c:#dc2626">Needs attention</span></div></div>
         <div class="asset-map-layout">
           <div class="asset-map-canvas" id="asset-map-canvas"></div>
           <div class="asset-map-side" id="asset-map-details"><h4>College inventory</h4><p style="font-size:.76rem;color:var(--muted);line-height:1.5">Select any location node to display its assigned assets.</p></div>
@@ -1579,6 +1656,7 @@
         <div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-primary btn-sm" href="/api/inventory/report/?type=assets">Asset Register</a><a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=transfers">Transfers</a><a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=maintenance">Maintenance</a><a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=inspections">Inspections</a><a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=disposals">Disposals</a></div>
       </div>
     </div>
+    </div>
   </main>
 </div>
 
@@ -1598,6 +1676,20 @@
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input id="edit-mod-practical" type="checkbox"> Has Practical Component</label>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input id="edit-mod-field" type="checkbox"> Field Results Module (CA 40% + Final 60%)</label>
     <button class="btn btn-primary btn-sm" onclick="saveModuleEdit()">Save Changes</button>
+  </div>
+</div>
+
+<!-- TEACHER MODULES MODAL -->
+<div class="modal-overlay" id="teacher-modules-modal">
+  <div class="modal">
+    <div class="modal-title">
+      Assign Modules — <span id="teacher-modules-name"></span>
+      <button class="modal-close" onclick="closeTeacherModulesModal()">✕</button>
+    </div>
+    <input type="hidden" id="teacher-modules-user-id">
+    <p style="font-size:.78rem;color:var(--muted);margin:-6px 0 12px;">Check every module this tutor should have access to. A tutor can carry multiple modules across different class levels and semesters.</p>
+    <div id="teacher-modules-list" class="check-grid" style="margin-bottom:14px;"></div>
+    <button class="btn btn-primary btn-sm" onclick="saveTeacherModules()">Save Modules</button>
   </div>
 </div>
 
@@ -1639,10 +1731,10 @@
       Click a module to claim / unclaim it
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-      <select id="profile-flt-sem" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:.75rem;" onchange="renderClaimGrid()">
+      <select id="profile-flt-sem" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:5px 8px;font-size:.75rem;" onchange="renderClaimGrid()">
         <option value="">All Semesters</option>
       </select>
-      <select id="profile-flt-level" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:.75rem;" onchange="renderClaimGrid()">
+      <select id="profile-flt-level" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:5px 8px;font-size:.75rem;" onchange="renderClaimGrid()">
         <option value="">All Levels</option>
       </select>
     </div>
@@ -1687,6 +1779,8 @@ const state = {
   semesters: [],
   modules: [],
   allModules: [],
+  staffAccounts: [],
+  announcements: [],
   activeSem: null,
   eligibilityBasis: 'all',
   declarationType: 'special_exam',
@@ -1787,6 +1881,9 @@ function showPage(name, btn) {
   document.querySelectorAll('.nav-sub-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   if (btn) btn.classList.add('active');
+  const crumb = document.getElementById('crumb-page');
+  const pageTitle = document.querySelector('#page-' + name + ' .page-title');
+  if (crumb && pageTitle) crumb.textContent = pageTitle.textContent.trim();
   document.querySelectorAll('.nav-group').forEach(g => {
     const keep =
       (g.id === 'modules-nav-group' && name === 'modules') ||
@@ -2084,6 +2181,8 @@ async function boot() {
       badge.textContent = 'No active semester';
       badge.className = 'sem-badge';
     }
+    const crumbYear = document.getElementById('crumb-year');
+    if (crumbYear) crumbYear.textContent = state.activeSem ? state.activeSem.label : 'None set';
 
     if (state.isStaff) {
       document.querySelectorAll('.staff-only').forEach(el => el.classList.add('visible'));
@@ -2094,9 +2193,11 @@ async function boot() {
         document.getElementById('cutoff-end').value  = state.activeSem.end_cutoff  || '';
         updateCutoffStatuses(state.activeSem);
       }
+      loadStaffAccounts();
     }
     if (state.isEstateOfficer) showInventorySection('overview', document.querySelector('[data-inventory-section="overview"]'));
     updatePeriodLocks();
+    loadAnnouncements();
 
     // Dashboard stats
     document.getElementById('stat-modules').textContent = dash.modules;
@@ -2106,12 +2207,12 @@ async function boot() {
     document.getElementById('dash-sub').textContent =
       state.activeSem ? `${state.activeSem.label} — attendance overview` : 'Overview of your attendance activity';
 
-    // Level stats cards
+    // Level stats — same slim strip as the main stats, one row per level.
     document.getElementById('level-stats').innerHTML = dash.levels.map(l =>
-      `<div class="stat-card" style="--c:var(--accent2)">
-        <div class="label">${l.name}</div>
-        <div class="value">${l.avg_pct != null ? l.avg_pct + '%' : '—'}</div>
-        <div class="sublabel">${l.students} students · ${l.modules} modules</div>
+      `<div class="qf-item">
+        <span>${safeText(l.name)}</span>
+        <strong>${l.avg_pct != null ? l.avg_pct + '%' : '—'}</strong>
+        <div class="qf-sub">${l.students} students · ${l.modules} modules</div>
        </div>`
     ).join('');
 
@@ -2284,8 +2385,147 @@ async function createStaffAccount() {
     ['acct-full-name', 'acct-username', 'acct-password'].forEach(id => document.getElementById(id).value = '');
     document.querySelectorAll('input[name="acct-module"]').forEach(el => el.checked = false);
     toast('Staff account created', 'var(--green)');
+    loadStaffAccounts();
   } catch(e) {
     toast(e?.detail || 'Failed to create account', 'var(--red)');
+  }
+}
+
+async function loadStaffAccounts() {
+  if (!state.isStaff) return;
+  try {
+    state.staffAccounts = await api('GET', '/staff-accounts/');
+    if (!state.allModules.length) state.allModules = await api('GET', '/all-modules/');
+    renderStaffAccounts();
+  } catch(e) {
+    toast('Failed to load staff accounts', 'var(--red)');
+  }
+}
+
+function renderStaffAccounts() {
+  const tbody = document.getElementById('staff-accounts-tbody');
+  if (!tbody) return;
+  const rows = state.staffAccounts || [];
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty">No staff accounts yet</div></td></tr>';
+    return;
+  }
+  const roleLabel = { tutor: 'Tutor', accountant: 'Accountant', estate_officer: 'Estate Officer' };
+  tbody.innerHTML = rows.map(u => {
+    const modules = u.role === 'tutor'
+      ? (u.module_ids.length
+          ? u.module_ids.map(id => state.allModules.find(m => String(m.id) === String(id))?.code || '?').join(', ')
+          : '<span style="color:var(--muted)">none assigned</span>')
+      : '—';
+    const editBtn = u.role === 'tutor'
+      ? `<button class="btn btn-secondary btn-sm" onclick="openTeacherModulesModal(${u.id})">Edit Modules</button>`
+      : '';
+    return `<tr>
+      <td><span style="font-family:var(--font-mono)">${u.username}</span></td>
+      <td>${u.full_name}</td>
+      <td>${roleLabel[u.role] || u.role}</td>
+      <td style="font-size:.75rem">${modules}</td>
+      <td>${editBtn}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function openTeacherModulesModal(userId) {
+  const teacher = (state.staffAccounts || []).find(u => u.id === userId);
+  if (!teacher) return;
+  if (!state.allModules.length) state.allModules = await api('GET', '/all-modules/');
+  document.getElementById('teacher-modules-user-id').value = userId;
+  document.getElementById('teacher-modules-name').textContent = teacher.full_name;
+  const checked = new Set((teacher.module_ids || []).map(String));
+  document.getElementById('teacher-modules-list').innerHTML = state.allModules.length ? state.allModules.map(m => `
+    <label class="check-item">
+      <input type="checkbox" name="teacher-module" value="${m.id}" ${checked.has(String(m.id)) ? 'checked' : ''}>
+      <span>${m.code} · ${m.name} · ${m.class_level}</span>
+    </label>
+  `).join('') : '<div style="color:var(--muted);font-size:.83rem;">No modules available.</div>';
+  document.getElementById('teacher-modules-modal').classList.add('open');
+}
+function closeTeacherModulesModal() { document.getElementById('teacher-modules-modal').classList.remove('open'); }
+
+async function saveTeacherModules() {
+  const userId = document.getElementById('teacher-modules-user-id').value;
+  const module_ids = [...document.querySelectorAll('input[name="teacher-module"]:checked')].map(el => el.value);
+  try {
+    await api('POST', `/staff-accounts/${userId}/set-modules/`, { module_ids });
+    toast('Modules updated', 'var(--green)');
+    closeTeacherModulesModal();
+    loadStaffAccounts();
+    loadModules();
+  } catch(e) {
+    toast(e?.detail || 'Failed to update modules', 'var(--red)');
+  }
+}
+
+// ── ANNOUNCEMENTS ──────────────────────────────────────────────────────────────
+async function loadAnnouncements() {
+  try {
+    const data = await api('GET', '/announcements/');
+    state.announcements = data.results ?? data;
+    renderAnnouncements();
+  } catch(e) {
+    toast('Failed to load announcements', 'var(--red)');
+  }
+}
+
+function renderAnnouncements() {
+  const list = document.getElementById('announcements-list');
+  if (!list) return;
+  const rows = state.announcements || [];
+  if (!rows.length) {
+    list.innerHTML = '<div class="empty">No announcements posted yet</div>';
+    return;
+  }
+  // A plain list (title + tag + date), not a data table — this panel sits in
+  // a narrow column next to Recent Sessions, so it reads like a news feed.
+  list.innerHTML = rows.map(a => `
+    <div class="ann-row">
+      <div class="ann-row-top">
+        <a class="ann-row-title" href="${a.download_url}" target="_blank" rel="noopener">${safeText(a.title)}</a>
+        <button class="btn btn-danger btn-sm admin-only" title="Delete" onclick="deleteAnnouncement(${a.id},'${safeText(a.title).replace(/'/g,"\\'")}')">✕</button>
+      </div>
+      ${a.note ? `<div class="ann-row-note">${safeText(a.note)}</div>` : ''}
+      <div class="ann-row-meta">${safeText(a.uploaded_by_name)} · ${new Date(a.created_at).toLocaleDateString()}</div>
+    </div>
+  `).join('');
+}
+
+async function uploadAnnouncement() {
+  const title = document.getElementById('ann-title').value.trim();
+  const note = document.getElementById('ann-note').value.trim();
+  const file = document.getElementById('ann-file').files[0];
+  if (!title || !file) { toast('Title and a PDF file are required', 'var(--red)'); return; }
+  const form = new FormData();
+  form.append('title', title); form.append('note', note); form.append('file', file);
+  try {
+    const response = await fetch('/api/announcements/', {
+      method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') },
+      credentials: 'same-origin', body: form,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw data;
+    toast('Announcement posted', 'var(--green)');
+    document.getElementById('ann-title').value = '';
+    document.getElementById('ann-note').value = '';
+    document.getElementById('ann-file').value = '';
+    loadAnnouncements();
+  } catch(e) {
+    toast(e?.file?.[0] || e?.detail || 'Failed to post announcement', 'var(--red)');
+  }
+}
+
+async function deleteAnnouncement(id, title) {
+  if (!confirm(`Delete announcement "${title}"?`)) return;
+  try {
+    await api('DELETE', `/announcements/${id}/`);
+    toast('Announcement deleted', 'var(--orange)');
+    loadAnnouncements();
+  } catch(e) {
+    toast(e?.detail || 'Failed to delete announcement', 'var(--red)');
   }
 }
 
@@ -3318,11 +3558,11 @@ function mkInput(resultId, field, value, absent=false) {
     data-original="${v}"
     value="${v}" ${absent ? 'disabled' : ''}
     style="width:68px;background:var(--bg);border:1px solid var(--border);color:var(--text);
-           border-radius:6px;padding:4px 7px;font-size:.8rem;text-align:center;"
+           border-radius:var(--radius);padding:4px 7px;font-size:.8rem;text-align:center;"
     oninput="onResInput(this)" onblur="autoSaveResult(this)">
     <button type="button" data-abs-rid="${resultId}" data-abs-field="${field}"
       data-active="${absent}" onclick="toggleAbscond(this)" title="Mark student absent (Abscond)"
-      style="padding:4px;border-radius:5px;border:1px solid ${absent ? 'var(--red)' : 'var(--border)'};background:${absent ? 'rgba(239,68,68,.15)' : 'var(--bg)'};color:${absent ? 'var(--red)' : 'var(--muted)'};font-size:.62rem;font-weight:700">ABS</button></div>`;
+      style="padding:4px;border-radius:var(--radius);border:1px solid ${absent ? 'var(--red)' : 'var(--border)'};background:${absent ? 'rgba(220,38,38,.15)' : 'var(--bg)'};color:${absent ? 'var(--red)' : 'var(--muted)'};font-size:.62rem;font-weight:700">ABS</button></div>`;
 }
 
 async function toggleAbscond(button) {
@@ -4399,12 +4639,12 @@ function renderFinanceObligationsTable() {
       <td><span class="badge ${Number(o.balance || 0) > 0 ? 'badge-red' : 'badge-green'}">${money(o.balance)}</span></td>
       <td>
         <div style="display:grid;gap:6px;min-width:220px;">
-          <select id="obl-cat-${o.id}" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px;">
+          <select id="obl-cat-${o.id}" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:6px;">
             <option value="">— category —</option>
             ${state.paymentCategories.filter(c => c.is_active && (!o.obligation_type || c.category_type === o.obligation_type)).map(c => `<option value="${c.id}" data-amount="${c.default_amount}" ${String(o.category || '') === String(c.id) ? 'selected' : ''}>${c.name}</option>`).join('')}
           </select>
           <div style="display:flex;gap:6px;">
-            <input id="obl-amount-${o.id}" type="number" min="0" step="0.01" value="${o.amount_required || 0}" style="width:100px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px;" />
+            <input id="obl-amount-${o.id}" type="number" min="0" step="0.01" value="${o.amount_required || 0}" style="width:100px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:6px;" />
             <button class="btn btn-primary btn-sm" onclick="updateFinanceObligationSetup(${o.id})">Set</button>
           </div>
         </div>
@@ -4743,7 +4983,7 @@ function safeText(value) {
 }
 
 function installWebIconReplacements() {
-  const icons = {'🎓':'mortarboard','👁':'eye','👥':'people','💰':'cash-coin','💳':'credit-card','💾':'floppy','📅':'calendar3','📊':'bar-chart','📋':'clipboard','📌':'pin-angle','📚':'journal-bookmark','📝':'file-earmark-text','📤':'cloud-upload','📥':'cloud-download','🔍':'search','🔑':'key','🔒':'lock','🔴':'circle-fill','🖨':'printer','🗓':'calendar-week','🟢':'circle-fill','🤒':'bandaid'};
+  const icons = {'🎓':'mortarboard','👁':'eye','👥':'people','💰':'cash-coin','💳':'credit-card','💾':'floppy','📅':'calendar3','📊':'bar-chart','📋':'clipboard','📌':'pin-angle','📚':'journal-bookmark','📝':'file-earmark-text','📤':'cloud-upload','📥':'cloud-download','🔍':'search','🔑':'key','🔒':'lock','🔴':'circle-fill','🖨':'printer','🗓':'calendar-week','🟢':'circle-fill','🤒':'bandaid','📢':'megaphone','➕':'plus-lg','✕':'x-lg','✎':'pencil','✔':'check-lg','✘':'x-circle','🌾':'tree','✅':'check-circle','⬇':'download','⬆':'upload'};
   const pattern = new RegExp(`[${Object.keys(icons).join('')}]`, 'u');
   const convert = root => {
     if (!root || ['SCRIPT','STYLE'].includes(root.nodeName)) return;
@@ -4975,9 +5215,9 @@ function renderInventoryCharts() {
   const locationTotals = {};
   state.inventoryAssets.forEach(a => locationTotals[a.location_name] = (locationTotals[a.location_name] || 0) + Number(a.quantity));
   inventoryConditionChart?.destroy(); inventoryLocationChart?.destroy();
-  const common = {responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#c7ccda'}}},scales:{x:{ticks:{color:'#9aa2b8'},grid:{color:'rgba(122,130,153,.12)'}},y:{ticks:{color:'#9aa2b8',precision:0},grid:{color:'rgba(122,130,153,.12)'}}}};
-  inventoryConditionChart = new Chart(document.getElementById('inventory-condition-chart'), {type:'doughnut',data:{labels:conditionLabels,datasets:[{data:conditionValues,backgroundColor:['#4f8ef7','#22c55e','#f59e0b','#f97316','#ef4444'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#c7ccda'}}}}});
-  inventoryLocationChart = new Chart(document.getElementById('inventory-location-chart'), {type:'bar',data:{labels:Object.keys(locationTotals),datasets:[{label:'Items',data:Object.values(locationTotals),backgroundColor:'#4f8ef7',borderRadius:6}]},options:common});
+  const common = {responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#1f2937'}}},scales:{x:{ticks:{color:'#6b7280'},grid:{color:'rgba(31,41,55,.08)'}},y:{ticks:{color:'#6b7280',precision:0},grid:{color:'rgba(31,41,55,.08)'}}}};
+  inventoryConditionChart = new Chart(document.getElementById('inventory-condition-chart'), {type:'doughnut',data:{labels:conditionLabels,datasets:[{data:conditionValues,backgroundColor:['#1565c0','#16a34a','#b45309','#c2410c','#dc2626'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#1f2937'}}}}});
+  inventoryLocationChart = new Chart(document.getElementById('inventory-location-chart'), {type:'bar',data:{labels:Object.keys(locationTotals),datasets:[{label:'Items',data:Object.values(locationTotals),backgroundColor:'#1565c0',borderRadius:6}]},options:common});
 }
 
 function inventoryPayload() {

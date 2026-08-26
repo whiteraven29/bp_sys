@@ -12,5 +12,6 @@ urlpatterns = [
     path('register/', att_views.register_view, name='register'),
     path('student-logout/', att_views.student_logout_view, name='student-logout'),
     path('student-dashboard/', att_views.student_dashboard, name='student-dashboard'),
+    path('announcements/<int:pk>/download/', att_views.announcement_download, name='announcement-download'),
     path('', login_required(TemplateView.as_view(template_name='index.html')), name='frontend'),
 ]

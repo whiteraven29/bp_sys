@@ -3,82 +3,146 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
 <title>EduTrack — Sign In</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f1117; --surface: #181c27; --surface2: #1e2335; --border: #2a3050;
-    --accent: #4f8ef7; --green: #22c55e; --red: #ef4444; --text: #e8eaf0;
-    --muted: #7a8299; --font-mono: 'Space Mono', monospace; --font-sans: 'DM Sans', sans-serif;
+    --bg: #eceff3; --surface: #ffffff; --surface2: #f3f5f7; --border: #ccd4dc;
+    --accent: #1565c0; --accent-dark: #10529e; --accent-soft: #e8f1fb;
+    --green: #16a34a; --red: #dc2626; --text: #2b3440; --muted: #71808f;
+    --radius: 3px;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: var(--font-sans); background: var(--bg); color: var(--text);
     min-height: 100vh; display: flex; align-items: center; justify-content: center;
-    padding: 20px;
+    padding: 24px;
   }
-  body::before {
-    content: ''; position: fixed; inset: 0;
-    background-image: linear-gradient(rgba(79,142,247,.04) 1px, transparent 1px),
-                      linear-gradient(90deg, rgba(79,142,247,.04) 1px, transparent 1px);
-    background-size: 40px 40px; pointer-events: none;
+  /* Two panels: identity on the blue side, the form on the white side. */
+  .shell {
+    display: grid; grid-template-columns: 1fr 1fr;
+    width: 100%; max-width: 840px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); overflow: hidden;
   }
-  .card {
-    position: relative; z-index: 1;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 16px; padding: 40px 36px;
-    width: 100%; max-width: 420px;
+  .brand-side {
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 34px 32px; background: var(--accent); color: #fff;
   }
-  .logo { font-family: var(--font-mono); font-size: 1.4rem; color: var(--accent); margin-bottom: 6px; }
-  .logo span { color: var(--text); }
-  .subtitle { font-size: .88rem; color: var(--muted); margin-bottom: 32px; }
-  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
-  .field label { font-size: .78rem; color: var(--muted); font-weight: 500; }
+  .brand-lockup { display: flex; align-items: center; gap: 11px; }
+  .brand-mark {
+    display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 auto;
+    border-radius: var(--radius); background: #fff; color: var(--accent);
+    font-size: 1.05rem; font-weight: 700;
+  }
+  .brand-lockup strong { display: block; font-size: 1.1rem; font-weight: 600; letter-spacing: .01em; }
+  .brand-lockup small { display: block; margin-top: 2px; color: rgba(255,255,255,.85); font-size: .74rem; }
+  .brand-body { margin: 30px 0; }
+  .brand-body h1 { font-size: 1.32rem; font-weight: 600; line-height: 1.35; margin-bottom: 9px; }
+  .brand-body p { color: rgba(255,255,255,.88); font-size: .85rem; line-height: 1.65; }
+  .brand-points { display: grid; gap: 9px; margin-top: 20px; }
+  .brand-points div { display: flex; align-items: flex-start; gap: 9px; font-size: .82rem; color: rgba(255,255,255,.92); }
+  .brand-points i { flex: 0 0 auto; margin-top: 2px; }
+  .brand-foot { color: rgba(255,255,255,.7); font-size: .74rem; }
+
+  .form-side { padding: 34px 32px; }
+  .form-side h2 { font-size: 1.15rem; font-weight: 600; margin-bottom: 4px; }
+  .form-side .lead { color: var(--muted); font-size: .83rem; margin-bottom: 22px; }
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 15px; }
+  .field label { font-size: .8rem; color: var(--text); font-weight: 500; }
   .field input {
-    background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    border-radius: 8px; padding: 11px 14px; font-family: var(--font-sans); font-size: .9rem;
-    outline: none; transition: border .15s; width: 100%;
+    background: #fff; border: 1px solid var(--border); color: var(--text);
+    border-radius: var(--radius); padding: 9px 12px; font-family: var(--font-sans); font-size: .88rem;
+    outline: none; transition: border-color .13s; width: 100%;
   }
   .field input:focus { border-color: var(--accent); }
+  .field input::placeholder { color: #a8b3bf; }
   .password-wrap { position: relative; width: 100%; }
-  .password-wrap input { padding-right: 44px; }
-  .password-toggle { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border: 0; border-radius: 7px; color: var(--accent); background: transparent; cursor: pointer; }
-  .password-toggle:hover, .password-toggle:focus-visible { background: rgba(79,142,247,.14); outline: none; }
-  .errors { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.25); border-radius: 8px; padding: 10px 14px; font-size: .82rem; color: var(--red); margin-bottom: 16px; }
-  .errors ul { padding-left: 16px; }
-  .btn {
-    width: 100%; padding: 12px; border-radius: 8px; border: none;
-    background: var(--accent); color: #fff; font-family: var(--font-sans);
-    font-size: .95rem; font-weight: 600; cursor: pointer; transition: all .18s; margin-top: 8px;
+  .password-wrap input { padding-right: 40px; }
+  .password-toggle {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    display: grid; place-items: center; width: 30px; height: 30px;
+    border: 0; border-radius: var(--radius); color: var(--accent); background: transparent; cursor: pointer;
   }
-  .btn:hover { background: #3a7de8; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(79,142,247,.35); }
-  .footer { margin-top: 24px; text-align: center; font-size: .83rem; color: var(--muted); }
-  .footer a { color: var(--accent); text-decoration: none; }
-  .footer a:hover { text-decoration: underline; }
-  @media (max-width: 480px) { .card { padding: 28px 20px; } }
+  .password-toggle:hover, .password-toggle:focus-visible { background: var(--accent-soft); outline: none; }
+  /* Error strip with a coloured left edge, matching the portal's notices. */
+  .errors {
+    background: #fdeded; border: 1px solid #eab8b8; border-left: 3px solid var(--red);
+    border-radius: var(--radius); padding: 10px 13px; font-size: .82rem; color: var(--text); margin-bottom: 16px;
+  }
+  .btn {
+    width: 100%; padding: 10px; border-radius: var(--radius); border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; font-family: var(--font-sans);
+    font-size: .9rem; font-weight: 500; cursor: pointer; transition: background .13s, border-color .13s; margin-top: 6px;
+  }
+  .btn:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+  .helper {
+    margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: .78rem; line-height: 1.6;
+  }
+  .helper a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  .helper a:hover { text-decoration: underline; }
+
+  @media (max-width: 760px) {
+    body { padding: 0; align-items: stretch; }
+    .shell { grid-template-columns: 1fr; max-width: 460px; margin: auto; border: 0; border-radius: 0; }
+    /* On a phone the brand panel shrinks to a header strip — the form is
+       what matters on a small screen, so the sales copy is dropped. */
+    .brand-side { padding: 18px 20px; }
+    .brand-body, .brand-foot { display: none; }
+    .form-side { padding: 24px 20px 32px; }
+  }
 </style>
 </head>
 <body>
-  <div class="card">
-  <div class="logo">Edu<span>Track</span></div>
-
-  {% if error %}
-    <div class="errors">{{ error }}</div>
-  {% endif %}
-
-  <form method="post" action="{% url 'login' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}">
-    {% csrf_token %}
-    <div class="field">
-      <label>Username or Registration Number</label>
-      <input type="text" name="identifier" value="{{ identifier|default:'' }}" required placeholder="username or NACTVET reg no" />
+  <div class="shell">
+    <div class="brand-side">
+      <div class="brand-lockup">
+        <div class="brand-mark">ET</div>
+        <div><strong>EduTrack</strong><small>Academic Information System</small></div>
+      </div>
+      <div class="brand-body">
+        <h1>Attendance, results and finance in one place.</h1>
+        <p>Sign in to view your records for the active academic year.</p>
+        <div class="brand-points">
+          <div><i class="bi bi-calendar-check"></i><span>Track attendance by module and semester</span></div>
+          <div><i class="bi bi-file-earmark-text"></i><span>Check CA marks and published results</span></div>
+          <div><i class="bi bi-person-check"></i><span>Confirm your exam eligibility status</span></div>
+        </div>
+      </div>
+      <div class="brand-foot">Staff and students use the same sign-in.</div>
     </div>
-    <div class="field">
-      <label>Password</label>
-      <input type="password" name="secret" required placeholder="password" />
+
+    <div class="form-side">
+      <h2>Sign in</h2>
+      <p class="lead">Enter your credentials to continue.</p>
+
+      {% if error %}
+        <div class="errors">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" action="{% url 'login' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}">
+        {% csrf_token %}
+        <div class="field">
+          <label for="id-identifier">Username or Registration Number</label>
+          <input id="id-identifier" type="text" name="identifier" value="{{ identifier|default:'' }}" required
+                 autocomplete="username" placeholder="Username or NACTVET reg. no." />
+        </div>
+        <div class="field">
+          <label for="id-secret">Password</label>
+          <input id="id-secret" type="password" name="secret" required
+                 autocomplete="current-password" placeholder="Password" />
+        </div>
+        <button type="submit" class="btn">Sign In</button>
+      </form>
+
+      <div class="helper">
+        Students sign in with their NACTVET registration number and portal password.
+        Forgotten your password? Contact the administrator.
+      </div>
     </div>
-    <button type="submit" class="btn">Sign In</button>
-  </form>
   </div>
 
 <script>

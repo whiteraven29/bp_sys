@@ -3,38 +3,43 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="light">
 <title>Student Portal — EduTrack</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
 <style>
   :root {
-    --bg: #070b12;
-    --sidebar: #0b1b2d;
-    --sidebar-2: #10263d;
-    --surface: #101722;
-    --surface-2: #151f2d;
-    --surface-3: #1a2636;
-    --line: #243247;
-    --text: #f4f7fb;
-    --muted: #8d9aae;
-    --blue: #55a7ff;
-    --blue-soft: rgba(85, 167, 255, .13);
-    --green: #52d6a0;
-    --green-soft: rgba(82, 214, 160, .12);
-    --amber: #ffbf69;
-    --amber-soft: rgba(255, 191, 105, .12);
-    --red: #ff7b8a;
-    --red-soft: rgba(255, 123, 138, .12);
-    --violet: #b79cff;
-    --shadow: 0 18px 45px rgba(0, 0, 0, .22);
-    --sidebar-width: 264px;
+    /* Grey page, white panels, visible hairlines, square corners — structure
+       comes from rules and edges, not rounding or shadow. Matches the staff
+       panel token-for-token so both portals read as one system. */
+    --bg: #eceff3;
+    --sidebar: #ffffff;
+    --sidebar-2: #e8f1fb;
+    --surface: #ffffff;
+    --surface-2: #f3f5f7;
+    --surface-3: #e9edf1;
+    --line: #ccd4dc;
+    --text: #2b3440;
+    --muted: #71808f;
+    --blue: #1565c0;
+    --blue-dark: #10529e;
+    --blue-soft: #e8f1fb;
+    --green: #16a34a;
+    --green-soft: #eaf7ef;
+    --amber: #b45309;
+    --amber-soft: #fdf3e7;
+    --red: #dc2626;
+    --red-soft: #fdeded;
+    --violet: #6d28d9;
+    --shadow: none;
+    --radius: 3px;
+    --sidebar-width: 250px;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
     margin: 0; min-height: 100vh; overflow-x: hidden;
     color: var(--text); background: var(--bg);
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
   button, input, a { font: inherit; }
   button { color: inherit; }
@@ -42,246 +47,277 @@
   .app { min-height: 100vh; }
   .sidebar {
     position: fixed; inset: 0 auto 0 0; z-index: 30; width: var(--sidebar-width);
-    display: flex; flex-direction: column; overflow-y: auto;
-    background: linear-gradient(180deg, var(--sidebar), #081522);
-    border-right: 1px solid rgba(255,255,255,.06);
-    transition: transform .22s ease;
+    display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden;
+    background: var(--sidebar);
+    border-right: 1px solid var(--line);
+    transition: transform .22s ease, width .18s ease;
   }
   .brand {
-    display: flex; align-items: center; gap: 11px; min-height: 72px; padding: 0 22px;
-    border-bottom: 1px solid rgba(255,255,255,.08); font-weight: 850; letter-spacing: -.02em;
+    display: flex; align-items: center; gap: 11px; min-height: 56px; padding: 0 16px;
+    background: var(--blue); color: #fff; font-weight: 600;
   }
   .brand-mark {
-    display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px;
-    color: #07111c; background: linear-gradient(145deg, #8ec8ff, #55a7ff); font-size: .92rem;
-    box-shadow: 0 8px 20px rgba(85,167,255,.23);
+    display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius);
+    color: var(--blue); background: #fff; font-size: .9rem; font-weight: 700;
   }
-  .brand small { display: block; margin-top: 2px; color: #7890a9; font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .brand small { display: block; margin-top: 1px; color: rgba(255,255,255,.85); font-size: .66rem; font-weight: 400; }
   .student-mini {
-    display: flex; align-items: center; gap: 11px; margin: 16px 14px 8px; padding: 12px;
-    border: 1px solid rgba(255,255,255,.07); border-radius: 14px; background: rgba(255,255,255,.035);
+    display: flex; align-items: center; gap: 11px; margin: 0; padding: 13px 16px;
+    border-bottom: 1px solid var(--line); background: var(--surface-2);
   }
   .avatar {
-    display: grid; place-items: center; flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%;
-    color: #d9edff; background: #183b5a; font-weight: 850;
+    display: grid; place-items: center; flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%;
+    color: #fff; background: var(--blue); font-weight: 700;
   }
-  .student-mini strong { display: block; overflow: hidden; max-width: 150px; white-space: nowrap; text-overflow: ellipsis; font-size: .8rem; }
-  .student-mini span { display: block; margin-top: 3px; color: #7890a9; font-size: .66rem; }
-  .nav { padding: 10px 12px 18px; }
+  .student-mini strong { display: block; overflow: hidden; max-width: 150px; white-space: nowrap; text-overflow: ellipsis; font-size: .82rem; font-weight: 600; }
+  .student-mini span { display: block; margin-top: 2px; color: var(--muted); font-size: .72rem; }
+  .nav { padding: 0; }
   .nav-label {
-    margin: 19px 10px 8px; color: #607991; font-size: .61rem; font-weight: 850;
-    letter-spacing: .13em; text-transform: uppercase;
+    margin: 0; padding: 12px 16px 5px; color: var(--muted); font-size: .7rem; font-weight: 600;
   }
+  /* Full-width rows separated by hairlines, blue left edge when active. */
   .nav-item {
-    position: relative; display: flex; align-items: center; gap: 12px; width: 100%;
-    padding: 11px 12px; border: 0; border-radius: 10px; color: #9eb0c2;
-    background: transparent; cursor: pointer; text-align: left; font-size: .79rem; font-weight: 700;
+    position: relative; display: flex; align-items: center; gap: 11px; width: 100%;
+    padding: 11px 16px; border: 0; border-bottom: 1px solid var(--line);
+    border-left: 3px solid transparent; color: var(--text);
+    background: transparent; cursor: pointer; text-align: left; font-size: .84rem; font-weight: 400;
   }
-  .nav-item:hover { color: #fff; background: rgba(255,255,255,.05); }
-  .nav-item.active { color: #fff; background: var(--sidebar-2); }
-  .nav-item.active::before {
-    content: ""; position: absolute; left: -12px; width: 4px; height: 26px;
-    border-radius: 0 4px 4px 0; background: var(--blue);
-  }
-  .nav-group { margin-bottom: 3px; }
-  .nav-toggle .nav-caret { margin-left: auto; color: #6f879f; transition: transform .18s ease; }
+  .nav-item:hover { background: var(--surface-2); }
+  .nav-item.active { color: var(--blue-dark); background: var(--sidebar-2); border-left-color: var(--blue); font-weight: 600; }
+  .nav-group { margin: 0; }
+  .nav-toggle .nav-caret { margin-left: auto; color: var(--muted); transition: transform .18s ease; }
   .nav-toggle[aria-expanded="true"] .nav-caret { transform: rotate(180deg); }
-  .nav-submenu { display: none; margin: 2px 0 6px 31px; padding-left: 9px; border-left: 1px solid rgba(255,255,255,.08); }
-  .nav-submenu.open { display: grid; gap: 2px; }
-  .nav-submenu .nav-item { padding: 9px 10px; font-size: .74rem; }
-  .nav-submenu .nav-item.active::before { left: -10px; height: 20px; }
-  .nav-icon { display: grid; place-items: center; width: 19px; color: #cfe7ff; font-size: .95rem; }
-  .nav-badge { margin-left: auto; padding: 2px 7px; border-radius: 999px; color: var(--blue); background: var(--blue-soft); font-size: .62rem; }
-  .logout {
-    display: flex; align-items: center; gap: 12px; margin-top: auto; padding: 19px 24px;
-    border-top: 1px solid rgba(255,255,255,.08); color: #9eb0c2; font-size: .8rem; font-weight: 750;
-  }
-  .logout:hover { color: var(--red); }
-  .workspace { min-height: 100vh; margin-left: var(--sidebar-width); }
+  .nav-submenu { display: none; background: var(--surface-2); }
+  .nav-submenu.open { display: grid; }
+  .nav-submenu .nav-item { padding: 9px 16px 9px 42px; font-size: .79rem; background: transparent; }
+  .nav-icon { display: grid; place-items: center; width: 19px; color: var(--muted); font-size: .95rem; }
+  .nav-item.active .nav-icon { color: var(--blue); }
+  .nav-badge { margin-left: auto; padding: 1px 7px; border-radius: 2px; color: #fff; background: #96a2ae; font-size: .68rem; font-weight: 600; }
+  .nav-item.active .nav-badge { background: var(--blue); }
+  /* ── COLLAPSED RAIL (desktop) ──
+     Sidebar shrinks to an icon-only rail; labels, badges and carets are
+     hidden and submenus are suppressed so nothing overflows the 56px width. */
+  body.nav-collapsed .sidebar { width: 56px; }
+  body.nav-collapsed .workspace { margin-left: 56px; }
+  body.nav-collapsed .sidebar .brand small,
+  body.nav-collapsed .sidebar .brand > div:not(.brand-mark),
+  body.nav-collapsed .sidebar .student-mini > div:not(.avatar),
+  body.nav-collapsed .sidebar .nav-label,
+  body.nav-collapsed .sidebar .nav-caret,
+  body.nav-collapsed .sidebar .nav-badge,
+  body.nav-collapsed .sidebar .nav-item .nav-text { display: none; }
+  body.nav-collapsed .sidebar .nav-submenu { display: none !important; }
+  body.nav-collapsed .sidebar .brand { justify-content: center; padding: 0; }
+  body.nav-collapsed .sidebar .student-mini { justify-content: center; padding: 12px 0; }
+  body.nav-collapsed .sidebar .nav-item { justify-content: center; gap: 0; padding: 12px 0; border-left-width: 2px; }
+  body.nav-collapsed .sidebar .nav-icon { width: auto; font-size: 1.05rem; }
+
+  .workspace { min-height: 100vh; margin-left: var(--sidebar-width); transition: margin-left .18s ease; }
   .topbar {
-    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 16px;
-    min-height: 72px; padding: 0 28px; border-bottom: 1px solid var(--line);
-    background: rgba(7,11,18,.88); backdrop-filter: blur(16px);
+    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px;
+    min-height: 56px; padding: 0 20px; border-bottom: 1px solid var(--line);
+    background: var(--surface);
   }
+  /* Sign out lives in the top-right, next to the avatar. */
+  .logout {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    color: var(--muted); background: #fff; font-size: .8rem; font-weight: 500;
+  }
+  .logout:hover { background: var(--red); border-color: var(--red); color: #fff; }
+  /* Always visible: collapses the rail on desktop, opens the drawer on mobile. */
   .menu-button {
-    display: none; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 11px;
-    background: var(--surface); cursor: pointer;
+    display: grid; place-items: center; flex: 0 0 auto;
+    width: 34px; height: 34px; border: 1px solid var(--line); border-radius: var(--radius);
+    color: var(--text); background: #fff; cursor: pointer; font-size: 1rem;
   }
+  .menu-button:hover { background: var(--surface-2); }
   .search {
-    position: relative; width: min(390px, 45vw);
+    position: relative; width: min(340px, 42vw);
   }
-  .search span { position: absolute; left: 13px; top: 50%; color: var(--muted); transform: translateY(-50%); }
+  .search span { position: absolute; left: 11px; top: 50%; color: var(--muted); transform: translateY(-50%); }
   .search input {
-    width: 100%; padding: 10px 14px 10px 39px; border: 1px solid transparent; border-radius: 11px;
-    outline: none; color: var(--text); background: var(--surface); font-size: .78rem;
+    width: 100%; padding: 7px 12px 7px 32px; border: 1px solid var(--line); border-radius: var(--radius);
+    outline: none; color: var(--text); background: #fff; font-size: .82rem;
   }
-  .search input:focus { border-color: #31587d; }
+  .search input:focus { border-color: var(--blue); }
   .top-meta { display: flex; align-items: center; gap: 12px; margin-left: auto; }
   .semester-pill {
-    padding: 8px 11px; border: 1px solid #29405b; border-radius: 999px;
-    color: #b9d9f5; background: #102238; font-size: .7rem; font-weight: 750;
+    padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius);
+    color: var(--text); background: var(--surface-2); font-size: .78rem; font-weight: 500;
   }
-  .top-avatar { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; color: #d9edff; background: #183b5a; font-weight: 850; }
-  .content { width: min(1420px, 100%); margin: 0 auto; padding: 28px; }
-  .view { display: none; animation: enter .2s ease; }
+  .top-avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: #fff; background: var(--blue); font-weight: 700; font-size: .82rem; }
+  /* Context strip under the topbar: where you are, and the active period. */
+  .crumb-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 9px 20px; background: var(--surface); border-bottom: 1px solid var(--line);
+    font-size: .8rem; color: var(--muted);
+  }
+  .crumb-bar .crumb-here { color: var(--text); font-weight: 600; }
+  .crumb-bar .crumb-sep { margin: 0 7px; color: #b9c3cd; }
+  .crumb-bar .crumb-meta { color: var(--text); }
+  .crumb-bar .crumb-meta b { font-weight: 600; }
+  .content { width: 100%; margin: 0; padding: 18px 20px 40px; }
+  .view { display: none; }
   .view.active { display: block; }
-  @keyframes enter { from { opacity: 0; transform: translateY(5px); } }
-  .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 22px; }
-  .eyebrow { margin: 0 0 5px; color: var(--blue); font-size: .66rem; font-weight: 850; letter-spacing: .13em; text-transform: uppercase; }
+  .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
+  .eyebrow { margin: 0 0 4px; color: var(--muted); font-size: .78rem; font-weight: 400; }
   h1, h2, h3, p { margin-top: 0; }
-  h1 { margin-bottom: 0; font-size: clamp(1.55rem, 3vw, 2.25rem); letter-spacing: -.04em; }
-  .page-copy { margin: 6px 0 0; color: var(--muted); font-size: .83rem; }
-  .hero {
-    position: relative; overflow: hidden; display: grid; grid-template-columns: 1.5fr .5fr;
-    min-height: 185px; padding: 28px; margin-bottom: 18px; border: 1px solid #24384f;
-    border-radius: 18px; background:
-      radial-gradient(circle at 90% 10%, rgba(85,167,255,.25), transparent 18rem),
-      linear-gradient(125deg, #111c2b, #10243a);
-    box-shadow: var(--shadow);
+  h1 { margin-bottom: 0; font-size: 1.32rem; font-weight: 600; }
+  .page-copy { margin: 5px 0 0; color: var(--muted); font-size: .82rem; }
+  /* One plain status strip instead of a hero banner + a row of stat cards —
+     matches the reference's slim info-bar pattern (e.g. its "Password expiry
+     / Active Academic Year" strip) rather than heavy dashboard widgets. */
+  .quick-facts {
+    display: flex; flex-wrap: wrap; margin-bottom: 16px;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--surface); overflow: hidden;
   }
-  .hero::after {
-    content: ""; position: absolute; right: 7%; bottom: -72px; width: 200px; height: 200px;
-    border: 32px solid rgba(85,167,255,.08); border-radius: 50%;
-  }
-  .hero h2 { margin-bottom: 9px; font-size: clamp(1.45rem, 3vw, 2.1rem); letter-spacing: -.04em; }
-  .hero p { max-width: 680px; margin-bottom: 0; color: #9fb2c7; line-height: 1.65; font-size: .85rem; }
-  .hero-side { position: relative; z-index: 1; display: flex; align-items: center; justify-content: flex-end; }
-  .year-card { min-width: 190px; padding: 18px; border: 1px solid rgba(255,255,255,.09); border-radius: 14px; background: rgba(255,255,255,.045); }
-  .year-card span { display: block; color: #7890a9; font-size: .62rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-  .year-card strong { display: block; margin-top: 6px; font-size: 1rem; }
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .qf-item { flex: 1 1 150px; padding: 11px 16px; border-right: 1px solid var(--line); }
+  .qf-item:last-child { border-right: 0; }
+  .qf-item span { display: block; margin-bottom: 3px; color: var(--muted); font-size: .75rem; font-weight: 400; }
+  .qf-item strong { font-size: 1.32rem; font-weight: 600; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
   .stat-card {
-    padding: 18px; border: 1px solid var(--line); border-radius: 15px;
-    background: var(--surface); box-shadow: var(--shadow);
+    padding: 16px; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--surface);
   }
-  .stat-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-  .stat-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; color: var(--blue); background: var(--blue-soft); }
-  .stat-card strong { font-size: 1.55rem; letter-spacing: -.04em; }
-  .stat-card p { margin: 4px 0 0; color: var(--muted); font-size: .7rem; font-weight: 700; }
-  .grid-main { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(270px, .65fr); gap: 18px; }
+  .stat-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .stat-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius); color: var(--blue); background: var(--blue-soft); }
+  .stat-card strong { font-size: 1.45rem; font-weight: 600; }
+  .stat-card p { margin: 3px 0 0; color: var(--muted); font-size: .76rem; font-weight: 400; }
+  .ann-feed { display: grid; gap: 0; padding: 0; max-height: 700px; overflow-y: auto; }
+  .ann-item { padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .ann-item:last-child { border-bottom: 0; }
+  .ann-item-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+  .ann-item-head h3 { margin: 0; font-size: .9rem; font-weight: 600; }
+  .ann-item-head .meta { flex-shrink: 0; }
+  .ann-note { margin: 4px 0 10px; color: var(--muted); font-size: .8rem; }
+  .ann-frame { display: block; width: 100%; height: 520px; margin-top: 10px; border: 1px solid var(--line); border-radius: 0; background: #fff; }
+  .ann-open { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--blue); font-size: .78rem; font-weight: 500; }
+  .ann-open:hover { text-decoration: underline; }
   .panel {
-    border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow);
+    border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
   }
-  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--line); }
-  .panel-head h2 { margin: 0; font-size: .92rem; letter-spacing: -.015em; }
-  .panel-head span { color: var(--muted); font-size: .7rem; }
-  .course-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 16px; }
-  .course-card {
-    position: relative; overflow: hidden; min-height: 150px; padding: 17px;
-    border: 1px solid var(--line); border-radius: 13px; background: var(--surface-2);
-  }
-  .course-card:nth-child(4n+1) { --course: #b79cff; }
-  .course-card:nth-child(4n+2) { --course: #ffbf69; }
-  .course-card:nth-child(4n+3) { --course: #62c7dd; }
-  .course-card:nth-child(4n+4) { --course: #76d39c; }
-  .course-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--course); }
-  .course-code { color: var(--course); font-size: .66rem; font-weight: 850; letter-spacing: .08em; }
-  .course-card h3 { margin: 7px 0 13px; font-size: .88rem; }
-  .course-meta { display: grid; gap: 7px; color: var(--muted); font-size: .69rem; }
-  .course-meta span { display: flex; gap: 7px; }
-  .side-stack { display: grid; gap: 14px; }
-  .quick-link {
-    display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px;
-    border: 1px solid var(--line); border-radius: 12px; color: var(--text);
-    background: var(--surface-2); cursor: pointer; text-align: left;
-  }
-  .quick-link:hover { border-color: #355779; transform: translateY(-1px); }
-  .quick-link-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; color: var(--blue); background: var(--blue-soft); }
-  .quick-link strong { display: block; font-size: .75rem; }
-  .quick-link span { display: block; margin-top: 3px; color: var(--muted); font-size: .64rem; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--line); }
+  .panel-head h2 { margin: 0; font-size: .92rem; font-weight: 600; }
+  .panel-head span { color: var(--muted); font-size: .76rem; }
   .section-title { margin-bottom: 16px; }
-  .section-title h2 { margin-bottom: 5px; font-size: 1.2rem; letter-spacing: -.025em; }
-  .section-title p { margin-bottom: 0; color: var(--muted); font-size: .78rem; }
+  .section-title h2 { margin-bottom: 4px; font-size: 1.32rem; font-weight: 600; }
+  .section-title p { margin-bottom: 0; color: var(--muted); font-size: .82rem; }
   .module-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-  .module-card { padding: 19px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); box-shadow: var(--shadow); }
+  .module-card { padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
   .module-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-  .module-code { color: var(--blue); font-size: .66rem; font-weight: 850; letter-spacing: .08em; }
-  .module-card h3 { margin: 5px 0; font-size: .95rem; }
-  .meta { color: var(--muted); font-size: .69rem; }
-  .status { flex: 0 0 auto; padding: 5px 8px; border-radius: 999px; font-size: .59rem; font-weight: 850; text-transform: uppercase; }
-  .status.good, .status.pass { color: var(--green); background: var(--green-soft); }
-  .status.warning, .status.pending { color: var(--amber); background: var(--amber-soft); }
-  .status.critical, .status.fail { color: var(--red); background: var(--red-soft); }
-  .progress-row { display: flex; justify-content: space-between; margin-top: 19px; color: var(--muted); font-size: .67rem; font-weight: 750; }
+  .module-code { color: var(--blue); font-size: .76rem; font-weight: 600; }
+  .module-card h3 { margin: 4px 0; font-size: .95rem; font-weight: 600; }
+  .meta { color: var(--muted); font-size: .76rem; }
+  /* Small square status tags, like the reference's "Important" label. */
+  .status { flex: 0 0 auto; padding: 2px 7px; border-radius: 2px; font-size: .7rem; font-weight: 600; color: #fff; }
+  .status.good, .status.pass { background: var(--green); }
+  .status.warning, .status.pending { background: var(--amber); }
+  .status.critical, .status.fail { background: var(--red); }
+  .progress-row { display: flex; justify-content: space-between; margin-top: 14px; color: var(--muted); font-size: .76rem; }
   .progress-row strong { color: var(--text); }
-  .progress { height: 7px; margin-top: 8px; overflow: hidden; border-radius: 99px; background: #253143; }
-  .progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #55a7ff, #52d6a0); }
-  .counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 14px; }
-  .count { padding: 9px; border-radius: 10px; background: var(--surface-2); text-align: center; }
-  .count strong { display: block; font-size: .83rem; }
-  .count span { color: var(--muted); font-size: .59rem; }
-  .result-total { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 10px; padding: 12px; border-radius: 11px; background: var(--surface-2); }
-  .result-total span { color: var(--muted); font-size: .66rem; }
-  .result-total strong { font-size: 1.08rem; }
+  .progress { height: 6px; margin-top: 6px; overflow: hidden; border-radius: 0; background: var(--surface-3); }
+  .progress span { display: block; height: 100%; background: var(--blue); }
+  .counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 14px; border: 1px solid var(--line); }
+  .count { padding: 8px; background: #fff; text-align: center; border-right: 1px solid var(--line); }
+  .count:last-child { border-right: 0; }
+  .count strong { display: block; font-size: .95rem; font-weight: 600; }
+  .count span { color: var(--muted); font-size: .7rem; }
+  .result-total { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 10px; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--line); }
+  .result-total span { color: var(--muted); font-size: .76rem; }
+  .result-total strong { font-size: 1rem; font-weight: 600; }
   .marks { display: grid; grid-template-columns: repeat(2, 1fr); column-gap: 16px; }
-  .mark { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: .68rem; }
+  .mark { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .78rem; }
   .mark span { color: var(--muted); }
+  /* Full grid lines, plain sentence-case headers — same as the staff panel. */
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; min-width: 720px; }
-  th, td { padding: 13px 16px; border-bottom: 1px solid var(--line); text-align: left; font-size: .7rem; }
-  th { color: #7f8fa3; background: var(--surface-2); font-size: .61rem; letter-spacing: .07em; text-transform: uppercase; }
-  tbody tr:hover td { background: rgba(85,167,255,.025); }
+  th, td { padding: 7px 11px; border: 1px solid var(--line); text-align: left; font-size: .82rem; }
+  th { color: var(--text); background: var(--surface-2); font-size: .8rem; font-weight: 600; white-space: nowrap; }
+  tbody tr:hover td { background: #f5f9fd; }
   .empty {
-    grid-column: 1 / -1; padding: 42px 22px; border: 1px dashed #314157; border-radius: 15px;
-    color: var(--muted); background: rgba(255,255,255,.015); text-align: center; font-size: .78rem;
+    grid-column: 1 / -1; padding: 34px 20px; border: 1px dashed var(--line); border-radius: var(--radius);
+    color: var(--muted); background: var(--surface-2); text-align: center; font-size: .84rem;
   }
-  .profile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .profile-item { padding: 19px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
-  .profile-item span { display: block; margin-bottom: 7px; color: var(--muted); font-size: .61rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
-  .profile-item strong { font-size: .82rem; }
-  .account-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; gap: 12px; align-items: end; margin-top: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
-  .account-field { display: grid; gap: 6px; }
-  .account-field label { color: var(--muted); font-size: .61rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
-  .account-field input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; outline: none; color: var(--text); background: var(--bg); font-size: .78rem; }
-  .account-field input:focus { border-color: #31587d; }
+  /* Profile facts as a bordered definition table, like the reference's
+     "Student Basic Information" panel — not a grid of separate cards. */
+  .profile-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; border: 1px solid var(--line); border-bottom: 0; background: var(--surface); }
+  .profile-item { display: flex; align-items: baseline; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line); }
+  .profile-item span { flex: 0 0 45%; color: var(--muted); font-size: .8rem; }
+  .profile-item strong { font-size: .84rem; font-weight: 600; }
+  .account-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; gap: 12px; align-items: end; margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+  .account-field { display: grid; gap: 5px; }
+  .account-field label { color: var(--text); font-size: .78rem; font-weight: 500; }
+  .account-field input { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); outline: none; color: var(--text); background: #fff; font-size: .82rem; }
+  .account-field input:focus { border-color: var(--blue); }
   .password-wrap { position: relative; width: 100%; }
-  .password-wrap input { padding-right: 44px; }
-  .password-toggle { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 7px; color: var(--blue); background: transparent; cursor: pointer; }
+  .password-wrap input { padding-right: 40px; }
+  .password-toggle { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius); color: var(--blue); background: transparent; cursor: pointer; }
   .password-toggle:hover, .password-toggle:focus-visible { background: var(--blue-soft); outline: none; }
-  .account-button { height: 39px; padding: 0 14px; border: 0; border-radius: 10px; color: #07111c; background: var(--blue); cursor: pointer; font-size: .75rem; font-weight: 850; }
-  .notice { margin-top: 14px; padding: 15px; border: 1px solid #294866; border-radius: 12px; color: #a8c3db; background: #0e2236; font-size: .72rem; line-height: 1.6; }
-  .toast { position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: calc(100vw - 36px); padding: 11px 14px; border: 1px solid var(--line); border-radius: 11px; color: var(--text); background: var(--surface-3); opacity: 0; transform: translateY(18px); transition: .2s ease; font-size: .78rem; }
+  .account-button { height: 34px; padding: 0 14px; border: 0; border-radius: var(--radius); color: #fff; background: var(--blue); cursor: pointer; font-size: .82rem; font-weight: 500; }
+  .account-button:hover { background: var(--blue-dark); }
+  .notice { margin-top: 16px; padding: 12px 15px; border: 1px solid #cfe0f5; border-left: 3px solid var(--violet); border-radius: var(--radius); color: var(--text); background: #f2f7fd; font-size: .8rem; line-height: 1.6; }
+  .toast { position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: calc(100vw - 36px); padding: 11px 14px; border: 0; border-radius: var(--radius); color: #fff; background: var(--text); opacity: 0; transform: translateY(18px); transition: .2s ease; font-size: .82rem; }
   .toast.show { opacity: 1; transform: translateY(0); }
-  .overlay { position: fixed; inset: 0; z-index: 25; display: none; background: rgba(0,0,0,.58); }
+  .overlay { position: fixed; inset: 0; z-index: 25; display: none; background: rgba(20,28,38,.5); }
   @media (max-width: 1050px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
-    .grid-main { grid-template-columns: 1fr; }
-    .side-stack { grid-template-columns: repeat(3, 1fr); }
   }
   @media (max-width: 820px) {
     .sidebar { transform: translateX(-100%); }
     .sidebar.open { transform: translateX(0); }
     .overlay.show { display: block; }
     .workspace { margin-left: 0; }
-    .menu-button { display: grid; place-items: center; }
     .content { padding: 20px; }
-    .hero { grid-template-columns: 1fr; }
-    .hero-side { justify-content: flex-start; }
     .module-list { grid-template-columns: 1fr; }
+    /* Below this width the sidebar is an off-canvas drawer, so a remembered
+       "collapsed" rail from a desktop session must not shrink it. */
+    body.nav-collapsed .sidebar { width: var(--sidebar-width); }
+    body.nav-collapsed .workspace { margin-left: 0; }
+    body.nav-collapsed .sidebar .brand > div:not(.brand-mark),
+    body.nav-collapsed .sidebar .brand small,
+    body.nav-collapsed .sidebar .student-mini > div:not(.avatar),
+    body.nav-collapsed .sidebar .nav-label,
+    body.nav-collapsed .sidebar .nav-caret,
+    body.nav-collapsed .sidebar .nav-item .nav-text { display: block; }
+    body.nav-collapsed .sidebar .nav-badge { display: inline-block; }
+    body.nav-collapsed .sidebar .nav-submenu { display: none !important; }
+    body.nav-collapsed .sidebar .nav-submenu.open { display: grid !important; }
+    body.nav-collapsed .sidebar .brand { justify-content: flex-start; padding: 0 16px; }
+    body.nav-collapsed .sidebar .student-mini { justify-content: flex-start; padding: 13px 16px; }
+    body.nav-collapsed .sidebar .nav-item { justify-content: flex-start; gap: 11px; padding: 11px 16px; border-left-width: 3px; }
+    body.nav-collapsed .sidebar .nav-submenu .nav-item { padding: 9px 16px 9px 42px; }
+    body.nav-collapsed .sidebar .nav-icon { width: 19px; font-size: .95rem; }
   }
   @media (max-width: 580px) {
-    .topbar { min-height: 64px; padding: 0 12px; }
+    .topbar { min-height: 52px; padding: 0 12px; gap: 10px; }
     .search { flex: 1; width: auto; }
     .semester-pill { display: none; }
-    .content { padding: 16px 12px 30px; }
-    .page-head { align-items: flex-start; flex-direction: column; }
-    .hero { display: none; }
-    .year-card { min-width: 100%; }
-    .stats { gap: 9px; }
+    .logout-text { display: none; }
+    .logout { padding: 5px 8px; }
+    .crumb-bar { padding: 8px 12px; }
+    .content { padding: 14px 12px 30px; }
+    .page-head { align-items: flex-start; flex-direction: column; margin-bottom: 14px; }
+    .stats { gap: 9px; grid-template-columns: repeat(2, minmax(0,1fr)); }
     .stat-card { padding: 14px; }
-    .course-grid, .side-stack, .profile-grid, .account-form { grid-template-columns: 1fr; }
-    .marks { grid-template-columns: 1fr; }
-    .top-avatar { display: none; }
-    .page-head { margin-bottom: 14px; }
-    .stats { grid-template-columns: repeat(2, minmax(0,1fr)); }
     .stat-top { margin-bottom: 8px; }
     .stat-card strong { font-size: 1.25rem; }
-    .module-card, .profile-item { padding: 14px; box-shadow: none; }
-    .panel { border: 0; background: transparent; box-shadow: none; }
-    .panel-head { padding: 12px 0; }
-    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-    table { min-width: 620px; font-size: .72rem; }
-    table th, table td { padding: 9px 10px; white-space: nowrap; }
+    /* Two facts per row rather than four squeezed across a phone. */
+    .qf-item { flex: 1 1 50%; border-bottom: 1px solid var(--line); }
+    .qf-item:nth-child(even) { border-right: 0; }
+    .account-form { grid-template-columns: 1fr; }
+    .profile-grid { grid-template-columns: 1fr; }
+    .marks { grid-template-columns: 1fr; }
+    .top-avatar { display: none; }
+    .module-card { padding: 14px; }
+    .panel-head { padding: 10px 12px; }
+    .ann-item { padding: 12px; }
+    .ann-frame { height: 400px; }
+    .table-wrap { overflow-x: auto; }
+    table { min-width: 620px; font-size: .78rem; }
+    table th, table td { padding: 7px 9px; white-space: nowrap; }
   }
 </style>
 </head>
@@ -295,37 +331,36 @@
     </div>
     <nav class="nav" aria-label="Student portal navigation">
       <div class="nav-label">Overview</div>
-      <button class="nav-item active" data-view="dashboard"><span class="nav-icon"><i class="bi bi-grid-1x2"></i></span>Dashboard</button>
+      <button class="nav-item active" data-view="dashboard" title="Dashboard"><span class="nav-icon"><i class="bi bi-grid-1x2"></i></span><span class="nav-text">Dashboard</span></button>
       <div class="nav-label">Academic</div>
       <div class="nav-group">
-        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="attendance-menu"><span class="nav-icon"><i class="bi bi-calendar-check"></i></span>Attendance<span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="attendance-menu" title="Attendance"><span class="nav-icon"><i class="bi bi-calendar-check"></i></span><span class="nav-text">Attendance</span><span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
         <div class="nav-submenu" id="attendance-menu">
-          <button class="nav-item" data-view="attendance-sem1"><span class="nav-icon">1</span>Semester 1<span class="nav-badge">{{ semester1_modules|length }}</span></button>
-          <button class="nav-item" data-view="attendance-sem2"><span class="nav-icon">2</span>Semester 2<span class="nav-badge">{{ semester2_modules|length }}</span></button>
+          <button class="nav-item" data-view="attendance-sem1" title="Attendance · Semester 1"><span class="nav-icon">1</span><span class="nav-text">Semester 1</span><span class="nav-badge">{{ semester1_modules|length }}</span></button>
+          <button class="nav-item" data-view="attendance-sem2" title="Attendance · Semester 2"><span class="nav-icon">2</span><span class="nav-text">Semester 2</span><span class="nav-badge">{{ semester2_modules|length }}</span></button>
         </div>
       </div>
       <div class="nav-group">
-        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="results-menu"><span class="nav-icon"><i class="bi bi-file-earmark-text"></i></span>Results<span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="results-menu" title="Results"><span class="nav-icon"><i class="bi bi-file-earmark-text"></i></span><span class="nav-text">Results</span><span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
         <div class="nav-submenu" id="results-menu">
-          <button class="nav-item" data-view="ca-sem1"><span class="nav-icon">1</span>CA · Semester 1<span class="nav-badge">{{ semester1_modules|length }}</span></button>
-          <button class="nav-item" data-view="ca-sem2"><span class="nav-icon">2</span>CA · Semester 2<span class="nav-badge">{{ semester2_modules|length }}</span></button>
-          <button class="nav-item" data-view="final-results"><span class="nav-icon"><i class="bi bi-award"></i></span>Semester Results</button>
-          <button class="nav-item" data-view="obligations"><span class="nav-icon"><i class="bi bi-exclamation-triangle"></i></span>Obligations</button>
+          <button class="nav-item" data-view="ca-sem1" title="CA · Semester 1"><span class="nav-icon">1</span><span class="nav-text">CA · Semester 1</span><span class="nav-badge">{{ semester1_modules|length }}</span></button>
+          <button class="nav-item" data-view="ca-sem2" title="CA · Semester 2"><span class="nav-icon">2</span><span class="nav-text">CA · Semester 2</span><span class="nav-badge">{{ semester2_modules|length }}</span></button>
+          <button class="nav-item" data-view="final-results" title="Semester Results"><span class="nav-icon"><i class="bi bi-award"></i></span><span class="nav-text">Semester Results</span></button>
+          <button class="nav-item" data-view="obligations" title="Obligations"><span class="nav-icon"><i class="bi bi-exclamation-triangle"></i></span><span class="nav-text">Obligations</span></button>
         </div>
       </div>
-      <button class="nav-item" data-view="modules"><span class="nav-icon"><i class="bi bi-journal-bookmark"></i></span>Enrolled Modules<span class="nav-badge">{{ module_count }}</span></button>
-      <button class="nav-item" data-view="eligibility"><span class="nav-icon"><i class="bi bi-person-check"></i></span>Exam Eligibility</button>
+      <button class="nav-item" data-view="modules" title="Enrolled Modules"><span class="nav-icon"><i class="bi bi-journal-bookmark"></i></span><span class="nav-text">Enrolled Modules</span><span class="nav-badge">{{ module_count }}</span></button>
+      <button class="nav-item" data-view="eligibility" title="Exam Eligibility"><span class="nav-icon"><i class="bi bi-person-check"></i></span><span class="nav-text">Exam Eligibility</span></button>
       <div class="nav-group">
-        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="payments-menu"><span class="nav-icon"><i class="bi bi-credit-card"></i></span>Payments<span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="payments-menu" title="Payments"><span class="nav-icon"><i class="bi bi-credit-card"></i></span><span class="nav-text">Payments</span><span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
         <div class="nav-submenu" id="payments-menu">
-          <button class="nav-item" data-view="payments"><span class="nav-icon"><i class="bi bi-receipt"></i></span>Payment History</button>
-          <button class="nav-item" data-view="payment-summary"><span class="nav-icon"><i class="bi bi-calculator"></i></span>Payment Summary</button>
+          <button class="nav-item" data-view="payments" title="Payment History"><span class="nav-icon"><i class="bi bi-receipt"></i></span><span class="nav-text">Payment History</span></button>
+          <button class="nav-item" data-view="payment-summary" title="Payment Summary"><span class="nav-icon"><i class="bi bi-calculator"></i></span><span class="nav-text">Payment Summary</span></button>
         </div>
       </div>
       <div class="nav-label">Account</div>
-      <button class="nav-item" data-view="profile"><span class="nav-icon"><i class="bi bi-person-circle"></i></span>My Profile</button>
+      <button class="nav-item" data-view="profile" title="My Profile"><span class="nav-icon"><i class="bi bi-person-circle"></i></span><span class="nav-text">My Profile</span></button>
     </nav>
-    <a href="{% url 'student-logout' %}" class="logout"><span>↪</span> Sign out</a>
   </aside>
   <div class="overlay" id="overlay"></div>
 
@@ -335,41 +370,37 @@
       <label class="search"><span>⌕</span><input id="portal-search" type="search" placeholder="Search modules..." aria-label="Search modules"></label>
       <div class="top-meta">
         <span class="semester-pill">{{ active_semester }}</span>
-        <div class="top-avatar">{{ student_name|slice:":1"|upper }}</div>
+        <div class="top-avatar" title="{{ student_name }} — {{ registration_number }}">{{ student_name|slice:":1"|upper }}</div>
+        <a href="{% url 'student-logout' %}" class="logout"><i class="bi bi-box-arrow-right"></i><span class="logout-text">Sign out</span></a>
       </div>
     </header>
+    <div class="crumb-bar">
+      <div><span>Home</span><span class="crumb-sep">/</span><span class="crumb-here" id="crumb-page">Dashboard</span></div>
+      <div class="crumb-meta">Academic Year: <b>{{ academic_year }}</b> — <b>{{ active_semester }}</b></div>
+    </div>
 
     <main class="content">
       <section class="view active" id="view-dashboard">
-        <div class="page-head"><div><p class="eyebrow">{{ academic_year }}</p><h1>Welcome, {{ student_name }}</h1><p class="page-copy">Here is your academic progress at a glance.</p></div></div>
-        <div class="hero">
-          <div><p class="eyebrow">Student workspace</p><h2>Keep your progress visible.</h2><p>Review attendance, compare continuous assessment results across both semesters, and see final marks from one focused dashboard.</p></div>
-          <div class="hero-side"><div class="year-card"><span>Current period</span><strong>{{ active_semester }}</strong></div></div>
+        <div class="page-head"><div><p class="eyebrow">{{ academic_year }} · {{ active_semester }}</p><h1>Welcome, {{ student_name }}</h1><p class="page-copy">Here is your academic progress at a glance.</p></div></div>
+        <div class="quick-facts">
+          <div class="qf-item"><span>Overall attendance</span><strong title="Counts Present and all Sick days. Exam eligibility only counts Sick days backed by a submitted certificate — see the eligibility table for that figure.">{% if overall_attendance is not None %}{{ overall_attendance }}%{% else %}—{% endif %}</strong></div>
+          <div class="qf-item"><span>Active modules</span><strong>{{ active_module_count }}</strong></div>
+          <div class="qf-item"><span>Sessions present</span><strong>{{ total_present }}</strong></div>
+          <div class="qf-item"><span>Sessions absent</span><strong>{{ total_absent }}</strong></div>
         </div>
-        <div class="stats">
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-percent"></i></div></div><strong>{% if overall_attendance is not None %}{{ overall_attendance }}%{% else %}—{% endif %}</strong><p>Overall attendance</p><p style="font-size:.72rem;opacity:.7;margin-top:2px;" title="Counts Present and all Sick days. Exam eligibility only counts Sick days backed by a submitted certificate — see the eligibility table below for that figure.">Includes uncertified sick days; not the exam-eligibility figure</p></article>
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-journals"></i></div></div><strong>{{ active_module_count }}</strong><p>Active semester modules</p></article>
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-check-circle"></i></div></div><strong>{{ total_present }}</strong><p>Sessions present</p></article>
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-x-circle"></i></div></div><strong>{{ total_absent }}</strong><p>Sessions absent</p></article>
-        </div>
-        <div class="grid-main">
-          <section class="panel">
-            <div class="panel-head"><h2>Enrolled modules</h2><span>{{ module_count }} across this academic year</span></div>
-            <div class="course-grid searchable-area">
-              {% for module in modules|slice:":4" %}
-              <article class="course-card searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.teacher }}">
-                <div class="course-code">{{ module.module_code }}</div><h3>{{ module.module_name }}</h3>
-                <div class="course-meta"><span>● {{ module.teacher }}</span><span>◷ {{ module.semester }}</span><span>◆ {{ module.credits }} credits</span><span>▣ {{ module.sessions_total }} sessions held</span></div>
-              </article>
-              {% empty %}<div class="empty">No modules are registered for this academic year.</div>{% endfor %}
-            </div>
-          </section>
-          <div class="side-stack">
-            <button class="quick-link" data-go="attendance-sem1"><span class="quick-link-icon"><i class="bi bi-calendar-check"></i></span><span><strong>Check attendance</strong><span>See module percentages</span></span></button>
-            <button class="quick-link" data-go="ca-sem1"><span class="quick-link-icon">1</span><span><strong>Semester 1 CA</strong><span>Assignments and CATs</span></span></button>
-            <button class="quick-link" data-go="final-results"><span class="quick-link-icon"><i class="bi bi-award"></i></span><span><strong>Final results</strong><span>Weighted totals</span></span></button>
+        <section class="panel">
+          <div class="panel-head"><h2><i class="bi bi-megaphone" style="margin-right:6px;"></i>Announcements</h2><span>Notices posted by the administration</span></div>
+          <div class="ann-feed">
+            {% for a in announcements %}
+            <article class="ann-item">
+              <div class="ann-item-head"><h3>{{ a.title }}</h3><span class="meta">{{ a.created_at|date:"d M Y" }}</span></div>
+              {% if a.note %}<p class="ann-note">{{ a.note }}</p>{% endif %}
+              <iframe class="ann-frame" src="{% url 'announcement-download' a.id %}" title="{{ a.title }}"></iframe>
+              <a class="ann-open" href="{% url 'announcement-download' a.id %}" target="_blank" rel="noopener">Open full PDF <i class="bi bi-box-arrow-up-right"></i></a>
+            </article>
+            {% empty %}<div class="empty">No announcements have been posted yet.</div>{% endfor %}
           </div>
-        </div>
+        </section>
       </section>
 
       <section class="view" id="view-attendance-sem1">
@@ -597,6 +628,11 @@
       }
     });
     target.classList.add('active');
+    const crumb = document.getElementById('crumb-page');
+    // Section views carry their own heading; the dashboard's h1 is a greeting,
+    // so it falls back to the fixed label rather than "Welcome, <name>".
+    const heading = target.querySelector('.section-title h2');
+    if (crumb) crumb.textContent = heading ? heading.textContent.trim() : 'Dashboard';
     search.value = '';
     document.querySelectorAll('.searchable').forEach(item => item.hidden = false);
     if (updateHash) history.replaceState(null, '', `#${name}`);
@@ -604,19 +640,48 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  // The menu button does two jobs: on a phone the sidebar is an off-canvas
+  // drawer, on a wider screen it collapses to an icon-only rail. The rail
+  // choice is remembered; the drawer state deliberately is not.
+  const MOBILE_BP = 820;
+  const isMobile = () => window.innerWidth <= MOBILE_BP;
+  function applyCollapsed(collapsed) {
+    document.body.classList.toggle('nav-collapsed', collapsed);
+    try { localStorage.setItem('studentNavCollapsed', collapsed ? '1' : '0'); } catch (e) { /* private mode */ }
+  }
+
   viewNavItems.forEach(item => item.addEventListener('click', () => showView(item.dataset.view)));
   navToggles.forEach(toggle => toggle.addEventListener('click', () => {
+    // Submenus are hidden in the collapsed rail, so a group header would be a
+    // dead button there — expand the rail first, then open the group.
+    if (document.body.classList.contains('nav-collapsed') && !isMobile()) {
+      applyCollapsed(false);
+      const menu = document.getElementById(toggle.dataset.menu);
+      toggle.setAttribute('aria-expanded', 'true');
+      menu?.classList.add('open');
+      return;
+    }
     const menu = document.getElementById(toggle.dataset.menu);
     const expanded = toggle.getAttribute('aria-expanded') === 'true';
     toggle.setAttribute('aria-expanded', String(!expanded));
     menu?.classList.toggle('open', !expanded);
   }));
   document.querySelectorAll('[data-go]').forEach(item => item.addEventListener('click', () => showView(item.dataset.go)));
+
   document.getElementById('menu-button').addEventListener('click', () => {
-    sidebar.classList.toggle('open');
-    overlay.classList.toggle('show');
+    if (isMobile()) {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('show');
+    } else {
+      applyCollapsed(!document.body.classList.contains('nav-collapsed'));
+    }
   });
   overlay.addEventListener('click', closeSidebar);
+  try {
+    if (localStorage.getItem('studentNavCollapsed') === '1') document.body.classList.add('nav-collapsed');
+  } catch (e) { /* storage unavailable — start expanded */ }
+  // Leaving mobile width must not strand the drawer/overlay in an open state.
+  window.addEventListener('resize', () => { if (!isMobile()) closeSidebar(); });
 
   search.addEventListener('input', () => {
     const query = search.value.trim().toLowerCase();

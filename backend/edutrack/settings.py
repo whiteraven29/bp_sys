@@ -66,6 +66,13 @@ DATABASES = {
         'PASSWORD': config('DB_PASSWORD', default=''),
         'HOST': config('DB_HOST', default='localhost'),
         'PORT': config('DB_PORT', default='5432'),
+        # Reuse a Postgres connection across requests within a worker instead of
+        # opening/closing a new one every request — cuts per-request latency and
+        # connection churn under concurrent load. CONN_HEALTH_CHECKS pings a
+        # reused connection before use so a connection Postgres dropped while
+        # idle doesn't surface as a request error.
+        'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=60, cast=int),
+        'CONN_HEALTH_CHECKS': True,
     }
 }
 
@@ -84,6 +91,12 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Uploaded announcement PDFs. Not served through a public /media/ nginx
+# location — every download goes through the gated announcement_download
+# view, which checks the requester is a logged-in student or staff member.
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

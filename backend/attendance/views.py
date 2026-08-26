@@ -7,8 +7,8 @@ from django.contrib.auth import login, logout, authenticate, update_session_auth
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Count, Q, Sum
-from django.http import HttpResponse, HttpResponseForbidden
-from django.shortcuts import render, redirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden
+from django.shortcuts import get_object_or_404, render, redirect
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework import viewsets, status
@@ -25,7 +25,7 @@ from .models import (
     AcademicYear, Semester, ClassLevel, Module,
     Student, Session, AttendanceRecord, TeacherProfile, AccountantProfile,
     StudentResult, PaymentCategory, StudentFinanceObligation, StudentPayment,
-    StudentFinanceClearance,
+    StudentFinanceClearance, Announcement,
     EstateOfficerProfile, InventoryLocation, AssetCategory, InventoryItemType, Asset, AssetImport,
     AssetTransfer, AssetMaintenance, InventoryInspection, InventoryInspectionItem, AssetDisposal,
 )
@@ -36,7 +36,7 @@ from .serializers import (
     StudentResultSerializer, AttendanceRecordSerializer,
     FinanceStudentSerializer, PaymentCategorySerializer,
     StudentFinanceObligationSerializer, StudentPaymentSerializer,
-    StudentFinanceClearanceSerializer,
+    StudentFinanceClearanceSerializer, AnnouncementSerializer,
     InventoryLocationSerializer, AssetCategorySerializer, InventoryItemTypeSerializer, AssetSerializer,
     AssetTransferSerializer, AssetMaintenanceSerializer, InventoryInspectionSerializer,
     InventoryInspectionItemSerializer, AssetDisposalSerializer,
@@ -245,6 +245,22 @@ def change_password(request):
     return Response({'detail': 'Portal password updated.', 'updated': updated})
 
 
+def announcement_download(request, pk):
+    """Stream an announcement PDF to any logged-in user — staff (Django auth)
+    or student (session-only auth, same check as get_logged_student). Not a
+    DRF view: it has to work for the session-only student portal, which never
+    authenticates against request.user.
+    """
+    if not (request.user.is_authenticated or request.session.get('student_id')):
+        return redirect('login')
+    announcement = get_object_or_404(Announcement, pk=pk)
+    try:
+        handle = announcement.file.open('rb')
+    except FileNotFoundError:
+        raise Http404('That file is no longer available.')
+    return FileResponse(handle, content_type='application/pdf', filename=announcement.file.name.rsplit('/', 1)[-1])
+
+
 @student_login_required
 def student_dashboard(request):
     student = get_logged_student(request)
@@ -264,7 +280,9 @@ def student_dashboard(request):
         )
     enrollments = enrollments.select_related(
         'module__class_level', 'module__semester__academic_year'
-    ).prefetch_related('attendance_records__session', 'result').order_by(
+    ).prefetch_related(
+        'attendance_records__session', 'result', 'finance_clearances', 'module__sessions'
+    ).order_by(
         'module__semester__number', 'module__name'
     )
 
@@ -402,12 +420,17 @@ def student_dashboard(request):
     ]
     eligibility_rows = []
     for enrollment in enrollments:
+        # .all() (not .filter(...).count() x3) reuses the module__sessions and
+        # attendance_records__session prefetches done above instead of issuing
+        # 4 fresh queries per enrollment — was an N+1 that scaled with how many
+        # modules a student takes.
+        module_sessions = list(enrollment.module.sessions.all())
         counts = {
-            Session.CAT1: Session.objects.filter(module=enrollment.module, exam_period=Session.CAT1).count(),
-            Session.CAT2: Session.objects.filter(module=enrollment.module, exam_period=Session.CAT2).count(),
-            'all': Session.objects.filter(module=enrollment.module).count(),
+            Session.CAT1: sum(1 for s in module_sessions if s.exam_period == Session.CAT1),
+            Session.CAT2: sum(1 for s in module_sessions if s.exam_period == Session.CAT2),
+            'all': len(module_sessions),
         }
-        records = list(enrollment.attendance_records.select_related('session'))
+        records = list(enrollment.attendance_records.all())
         cat1_eff = sum(1 for r in records if r.session.exam_period == Session.CAT1 and attendance_is_effective(r))
         cat2_eff = sum(1 for r in records if r.session.exam_period == Session.CAT2 and attendance_is_effective(r))
         all_eff = sum(1 for r in records if attendance_is_effective(r))
@@ -418,7 +441,12 @@ def student_dashboard(request):
         cat2_att = (cat2_pct >= ELIGIBILITY_THRESHOLD) if counts[Session.CAT2] else None
         end_att = (end_pct >= ELIGIBILITY_THRESHOLD) if counts['all'] else None
         total_ca, ca_ok, ca_note = ca_eligibility_for_student(enrollment)
-        clearances = {c.period: c for c in enrollment.finance_clearances.filter(semester=enrollment.module.semester)}
+        # .all() reuses the finance_clearances prefetch; filtered in Python
+        # instead of issuing a fresh query per enrollment.
+        clearances = {
+            c.period: c for c in enrollment.finance_clearances.all()
+            if c.semester_id == enrollment.module.semester_id
+        }
         cat1_fin = bool(clearances.get(StudentFinanceClearance.CAT1) and clearances[StudentFinanceClearance.CAT1].is_cleared)
         cat2_fin = bool(clearances.get(StudentFinanceClearance.CAT2) and clearances[StudentFinanceClearance.CAT2].is_cleared)
         end_fin = bool(clearances.get(StudentFinanceClearance.END) and clearances[StudentFinanceClearance.END].is_cleared)
@@ -468,9 +496,11 @@ def student_dashboard(request):
     )
     finance_paid = sum(p.amount_paid for p in finance_payments)
     finance_balance = finance_required - finance_paid
+    announcements = Announcement.objects.select_related('uploaded_by')[:20]
     return render(request, 'student_dashboard.html', {
         'student_name': student.name,
         'registration_number': student.nactvet_reg_no,
+        'announcements': announcements,
         'modules': modules,
         'module_count': len(modules),
         'active_module_count': len(active_modules),
@@ -534,11 +564,35 @@ def register_view(request):
     return render(request, 'register.html', {'form': form, 'levels': levels})
 
 
-@api_view(['POST'])
+@api_view(['GET', 'POST'])
 @login_required
 def create_staff_account(request):
     if not request.user.is_staff:
-        return Response({'detail': 'Only the administrator can create staff accounts.'}, status=status.HTTP_403_FORBIDDEN)
+        return Response({'detail': 'Only the administrator can manage staff accounts.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'GET':
+        users = User.objects.filter(
+            Q(profile__isnull=False) | Q(accountant_profile__isnull=False) | Q(estate_officer_profile__isnull=False)
+        ).select_related('profile', 'accountant_profile', 'estate_officer_profile').prefetch_related('modules_taught').order_by('username')
+
+        results = []
+        for u in users:
+            if hasattr(u, 'profile'):
+                results.append({
+                    'id': u.id, 'username': u.username, 'full_name': u.profile.full_name,
+                    'role': 'tutor', 'module_ids': [m.id for m in u.modules_taught.all()],
+                })
+            elif hasattr(u, 'accountant_profile'):
+                results.append({
+                    'id': u.id, 'username': u.username, 'full_name': u.accountant_profile.full_name,
+                    'role': 'accountant', 'module_ids': None,
+                })
+            elif hasattr(u, 'estate_officer_profile'):
+                results.append({
+                    'id': u.id, 'username': u.username, 'full_name': u.estate_officer_profile.full_name,
+                    'role': 'estate_officer', 'module_ids': None,
+                })
+        return Response(results)
 
     role = str(request.data.get('role', '')).strip()
     full_name = str(request.data.get('full_name', '')).strip()
@@ -577,6 +631,31 @@ def create_staff_account(request):
         'full_name': full_name,
         'role': role,
     }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@login_required
+def set_staff_modules(request, user_id):
+    """Replace an existing tutor's full module set in one call — a tutor may
+    carry several modules across different class levels/semesters, so this
+    is a sync (add + remove diff), not an append."""
+    if not request.user.is_staff:
+        return Response({'detail': 'Only the administrator can assign modules.'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return Response({'detail': 'Staff account not found.'}, status=status.HTTP_404_NOT_FOUND)
+    if not hasattr(user, 'profile'):
+        return Response({'detail': 'Only tutor accounts can be assigned modules.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    module_ids = request.data.get('module_ids') or []
+    modules = Module.objects.filter(id__in=module_ids)
+    user.modules_taught.set(modules)
+    return Response({
+        'detail': f'Updated modules for {user.profile.full_name}.',
+        'module_ids': [m.id for m in modules],
+    })
 
 
 # ── ACADEMIC YEAR ──────────────────────────────────────────────────────────────
@@ -677,6 +756,17 @@ class ClassLevelViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrAdmin]
 
 
+# ── ANNOUNCEMENTS ──────────────────────────────────────────────────────────────
+
+class AnnouncementViewSet(viewsets.ModelViewSet):
+    queryset = Announcement.objects.select_related('uploaded_by').all()
+    serializer_class = AnnouncementSerializer
+    permission_classes = [IsAuthenticatedReadOnlyOrAdmin]
+
+    def perform_create(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
+
+
 # ── MODULES ────────────────────────────────────────────────────────────────────
 
 class ModuleViewSet(viewsets.ModelViewSet):
@@ -747,7 +837,9 @@ class StudentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Student.objects.filter(
             module__in=user_modules(self.request.user)
-        ).select_related('module__class_level', 'module__semester__academic_year').prefetch_related('attendance_records')
+        ).select_related('module__class_level', 'module__semester__academic_year').prefetch_related(
+            'attendance_records', 'module__sessions'
+        )
 
         for param, field in [
             ('module_id', 'module_id'),

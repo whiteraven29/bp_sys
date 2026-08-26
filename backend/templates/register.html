@@ -3,106 +3,125 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light">
 <title>EduTrack — Create Account</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f1117; --surface: #181c27; --surface2: #1e2335; --border: #2a3050;
-    --accent: #4f8ef7; --accent2: #7c3aed; --green: #22c55e; --red: #ef4444;
-    --text: #e8eaf0; --muted: #7a8299;
-    --font-mono: 'Space Mono', monospace; --font-sans: 'DM Sans', sans-serif;
+    --bg: #eceff3; --surface: #ffffff; --surface2: #f3f5f7; --border: #ccd4dc;
+    --accent: #1565c0; --accent-dark: #10529e; --accent-soft: #e8f1fb;
+    --green: #16a34a; --red: #dc2626; --text: #2b3440; --muted: #71808f;
+    --radius: 3px;
+    --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: var(--font-sans); background: var(--bg); color: var(--text);
     min-height: 100vh; display: flex; align-items: flex-start; justify-content: center;
-    padding: 40px 20px;
-  }
-  body::before {
-    content: ''; position: fixed; inset: 0;
-    background-image: linear-gradient(rgba(79,142,247,.04) 1px, transparent 1px),
-                      linear-gradient(90deg, rgba(79,142,247,.04) 1px, transparent 1px);
-    background-size: 40px 40px; pointer-events: none;
+    padding: 32px 20px;
   }
   .card {
-    position: relative; z-index: 1;
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: 16px; padding: 40px 36px;
-    width: 100%; max-width: 560px;
+    border-radius: var(--radius); width: 100%; max-width: 620px; overflow: hidden;
   }
-  .logo { font-family: var(--font-mono); font-size: 1.4rem; color: var(--accent); margin-bottom: 4px; }
-  .logo span { color: var(--text); }
-  .subtitle { font-size: .88rem; color: var(--muted); margin-bottom: 32px; }
+  .head { display: flex; align-items: center; gap: 11px; padding: 16px 20px; background: var(--accent); color: #fff; }
+  .mark {
+    display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 auto;
+    border-radius: var(--radius); background: #fff; color: var(--accent); font-weight: 700;
+  }
+  .head strong { display: block; font-size: .98rem; font-weight: 600; }
+  .head small { display: block; margin-top: 2px; color: rgba(255,255,255,.85); font-size: .74rem; }
+  .body { padding: 20px; }
+  /* Section rules divide the form into named blocks, like the portal's
+     "University Information" / "Person Basic Information" headings. */
   .section-label {
-    font-size: .65rem; font-family: var(--font-mono); color: var(--muted);
-    letter-spacing: .12em; text-transform: uppercase; margin: 24px 0 12px;
-    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    font-size: .85rem; font-weight: 600; color: var(--text);
+    margin: 22px 0 13px; padding-bottom: 7px; border-bottom: 1px solid var(--border);
   }
-  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-  .field label { font-size: .78rem; color: var(--muted); font-weight: 500; }
+  .section-label:first-child { margin-top: 0; }
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 13px; }
+  .field label { font-size: .8rem; color: var(--text); font-weight: 500; }
   .field input {
-    background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    border-radius: 8px; padding: 11px 14px; font-family: var(--font-sans); font-size: .9rem;
-    outline: none; transition: border .15s; width: 100%;
+    background: #fff; border: 1px solid var(--border); color: var(--text);
+    border-radius: var(--radius); padding: 9px 12px; font-family: var(--font-sans); font-size: .88rem;
+    outline: none; transition: border-color .13s; width: 100%;
   }
   .field input:focus { border-color: var(--accent); }
   .password-wrap { position: relative; width: 100%; }
-  .password-wrap input { padding-right: 44px; }
-  .password-toggle { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border: 0; border-radius: 7px; color: var(--accent); background: transparent; cursor: pointer; }
-  .password-toggle:hover, .password-toggle:focus-visible { background: rgba(79,142,247,.14); outline: none; }
-  .field .help { font-size: .72rem; color: var(--muted); margin-top: 2px; }
-  .field-error { font-size: .75rem; color: var(--red); margin-top: 2px; }
+  .password-wrap input { padding-right: 40px; }
+  .password-toggle {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    display: grid; place-items: center; width: 30px; height: 30px;
+    border: 0; border-radius: var(--radius); color: var(--accent); background: transparent; cursor: pointer;
+  }
+  .password-toggle:hover, .password-toggle:focus-visible { background: var(--accent-soft); outline: none; }
+  .field .help { font-size: .76rem; color: var(--muted); }
+  .field-error { font-size: .78rem; color: var(--red); }
 
-  /* Subject checklist */
-  .level-group { margin-bottom: 20px; }
+  /* Module checklist */
+  .level-group { margin-bottom: 16px; }
   .level-name {
-    font-size: .75rem; font-family: var(--font-mono); color: var(--accent2);
-    text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px;
-    display: flex; align-items: center; gap: 8px;
+    font-size: .8rem; font-weight: 600; color: var(--text); margin-bottom: 9px;
+    display: flex; align-items: center; gap: 9px;
   }
   .level-name::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-  .subject-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+  .subject-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 7px; }
   .subject-check {
     display: flex; align-items: center; gap: 10px;
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 8px; padding: 10px 12px; cursor: pointer;
-    transition: all .15s; user-select: none;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 9px 11px; cursor: pointer;
+    transition: border-color .13s, background .13s; user-select: none;
   }
   .subject-check:hover { border-color: var(--accent); }
   .subject-check input[type=checkbox] { display: none; }
   .subject-check .check-box {
-    width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--border);
+    width: 16px; height: 16px; border-radius: 2px; border: 1px solid #a9b4c0;
     flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-    transition: all .12s;
+    background: #fff; transition: background .12s, border-color .12s;
   }
   .subject-check input:checked ~ .check-box { background: var(--accent); border-color: var(--accent); }
-  .subject-check input:checked ~ .check-box::after { content: '✓'; font-size: .65rem; color: #fff; }
-  .subject-check .sub-info { flex: 1; }
+  .subject-check input:checked ~ .check-box::after { content: '✓'; font-size: .68rem; color: #fff; line-height: 1; }
+  .subject-check .sub-info { flex: 1; min-width: 0; }
   .subject-check .sub-name { font-size: .83rem; font-weight: 500; }
-  .subject-check .sub-code { font-size: .7rem; color: var(--muted); font-family: var(--font-mono); }
-  .subject-check:has(input:checked) { border-color: var(--accent); background: rgba(79,142,247,.08); }
+  .subject-check .sub-code { font-size: .74rem; color: var(--muted); font-family: var(--font-mono); }
+  .subject-check:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
 
-  .no-subjects { font-size: .82rem; color: var(--muted); font-style: italic; padding: 8px 0; }
+  .no-subjects { font-size: .82rem; color: var(--muted); padding: 9px 12px; border: 1px dashed var(--border); border-radius: var(--radius); background: var(--surface2); }
 
-  .errors { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.25); border-radius: 8px; padding: 10px 14px; font-size: .82rem; color: var(--red); margin-bottom: 16px; }
-  .errors ul { padding-left: 16px; }
-  .btn {
-    width: 100%; padding: 13px; border-radius: 8px; border: none;
-    background: var(--accent); color: #fff; font-family: var(--font-sans);
-    font-size: .95rem; font-weight: 600; cursor: pointer; transition: all .18s; margin-top: 20px;
+  .errors {
+    background: #fdeded; border: 1px solid #eab8b8; border-left: 3px solid var(--red);
+    border-radius: var(--radius); padding: 10px 13px; font-size: .82rem; color: var(--text); margin-bottom: 16px;
   }
-  .btn:hover { background: #3a7de8; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(79,142,247,.35); }
-  .footer { margin-top: 24px; text-align: center; font-size: .83rem; color: var(--muted); }
-  .footer a { color: var(--accent); text-decoration: none; }
+  .errors ul { padding-left: 17px; line-height: 1.6; }
+  .btn {
+    width: 100%; padding: 10px; border-radius: var(--radius); border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; font-family: var(--font-sans);
+    font-size: .9rem; font-weight: 500; cursor: pointer; transition: background .13s, border-color .13s; margin-top: 18px;
+  }
+  .btn:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+  .footer {
+    margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--border);
+    text-align: center; font-size: .82rem; color: var(--muted);
+  }
+  .footer a { color: var(--accent); text-decoration: none; font-weight: 500; }
   .footer a:hover { text-decoration: underline; }
-  .hint { font-size: .8rem; color: var(--muted); margin-bottom: 8px; }
-  @media (max-width: 480px) { .card { padding: 28px 16px; } .subject-grid { grid-template-columns: 1fr; } }
+  .hint { font-size: .82rem; color: var(--muted); margin-bottom: 12px; line-height: 1.55; }
+  @media (max-width: 480px) {
+    body { padding: 0; }
+    .card { border: 0; border-radius: 0; }
+    .body { padding: 18px 16px 26px; }
+    .subject-grid { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
 <div class="card">
-  <div class="logo">Edu<span>Track</span></div>
-  <div class="subtitle">Create your tutor account</div>
+  <div class="head">
+    <div class="mark">ET</div>
+    <div><strong>EduTrack</strong><small>Create your tutor account</small></div>
+  </div>
+  <div class="body">
 
   {% if form.errors %}
     <div class="errors">
@@ -175,9 +194,10 @@
   <div class="footer">
     Already have an account? <a href="{% url 'login' %}">Sign in</a>
   </div>
+  </div>
 </div>
 <script>
-document.querySelectorAll('input[type="password"]').forEach(input=>{const wrap=document.createElement('div');wrap.className='password-wrap';input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);const button=document.createElement('button');button.type='button';button.className='password-toggle';button.setAttribute('aria-label','Show password');button.textContent='👁';button.onclick=()=>{const hidden=input.type==='password';input.type=hidden?'text':'password';button.textContent=hidden?'◉':'👁';button.setAttribute('aria-label',hidden?'Hide password':'Show password');input.focus()};wrap.appendChild(button)});
+document.querySelectorAll('input[type="password"]').forEach(input=>{const wrap=document.createElement('div');wrap.className='password-wrap';input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);const button=document.createElement('button');button.type='button';button.className='password-toggle';button.setAttribute('aria-label','Show password');button.innerHTML='<i class="bi bi-eye"></i>';button.onclick=()=>{const hidden=input.type==='password';input.type=hidden?'text':'password';button.innerHTML=hidden?'<i class="bi bi-eye-slash"></i>':'<i class="bi bi-eye"></i>';button.setAttribute('aria-label',hidden?'Hide password':'Show password');input.focus()};wrap.appendChild(button)});
 </script>
 </body>
 </html>

@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
 from django.db import models
 
 
@@ -598,3 +598,29 @@ class StudentResult(models.Model):
 
     def __str__(self):
         return f'Result: {self.student}'
+
+
+class Announcement(models.Model):
+    """A PDF notice the admin broadcasts to every student and staff member.
+
+    Downloads are gated (see attendance.views.announcement_download) rather
+    than served from a public /media/ URL, so `file` is never exposed as a
+    raw path/URL through the API — see AnnouncementSerializer.
+    """
+    title = models.CharField(max_length=200)
+    note = models.CharField(max_length=300, blank=True)
+    file = models.FileField(
+        upload_to='announcements/%Y/%m/',
+        validators=[FileExtensionValidator(['pdf'])],
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='announcements',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.title

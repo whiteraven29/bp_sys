@@ -5,6 +5,7 @@ from io import StringIO
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.contrib.sessions.models import Session as DjangoSession
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -16,6 +17,7 @@ from rest_framework.test import APIClient
 from .models import (
     AcademicYear,
     AccountantProfile,
+    Announcement,
     AttendanceRecord,
     ClassLevel,
     Module,
@@ -1544,3 +1546,140 @@ class AuditFixRegressionTests(TestCase):
         self.assertTrue(self.student.check_portal_pin('777777'))
         self.assertFalse(other_student.check_portal_pin('777777'))
         self.assertTrue(other_student.check_portal_pin('111111'))
+
+
+class AnnouncementTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser('ann-admin', 'admin@example.com', 'safe-password')
+        self.teacher = User.objects.create_user('ann-teacher', password='safe-password')
+        TeacherProfile.objects.create(user=self.teacher, full_name='Ann Teacher')
+        self.year = AcademicYear.objects.create(name='2025/2026', is_active=True)
+        self.semester = Semester.objects.create(academic_year=self.year, number=1, is_active=True)
+        self.level = ClassLevel.objects.create(name='NTA Level 4', order=4)
+        self.module = Module.objects.create(
+            name='Business Mathematics', code='BM401', teacher='Ann Teacher',
+            class_level=self.level, semester=self.semester,
+        )
+        self.student = Student.objects.create(nactvet_reg_no='REG-900', name='Test Student', module=self.module)
+        self.student.set_portal_pin('482913')
+        self.student.must_change_portal_password = False
+        self.student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
+        self.client = APIClient()
+
+    def _pdf(self, name='notice.pdf'):
+        return SimpleUploadedFile(name, b'%PDF-1.4 fake content', content_type='application/pdf')
+
+    def test_admin_can_upload_pdf_announcement_and_it_appears_in_list(self):
+        self.client.force_authenticate(self.admin)
+        response = self.client.post('/api/announcements/', {
+            'title': 'Semester 1 Timetable', 'note': 'Check your slot', 'file': self._pdf(),
+        }, format='multipart')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertTrue(response.data['download_url'].startswith('/announcements/'))
+
+        listing = self.client.get('/api/announcements/')
+        self.assertEqual(listing.status_code, 200)
+        titles = [a['title'] for a in listing.data]
+        self.assertIn('Semester 1 Timetable', titles)
+
+    def test_non_admin_staff_cannot_upload_announcement(self):
+        self.client.force_authenticate(self.teacher)
+        response = self.client.post('/api/announcements/', {
+            'title': 'Sneaky notice', 'file': self._pdf(),
+        }, format='multipart')
+        self.assertEqual(response.status_code, 403)
+
+    def test_non_pdf_upload_is_rejected(self):
+        self.client.force_authenticate(self.admin)
+        bad_file = SimpleUploadedFile('notice.txt', b'not a pdf', content_type='text/plain')
+        response = self.client.post('/api/announcements/', {'title': 'Bad file', 'file': bad_file}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+
+    def test_logged_in_student_can_download_announcement(self):
+        announcement = Announcement.objects.create(title='Notice', file=self._pdf(), uploaded_by=self.admin)
+        session = self.client.session
+        session['student_id'] = self.student.id
+        session['student_reg_no'] = self.student.nactvet_reg_no
+        session.save()
+        response = self.client.get(f'/announcements/{announcement.id}/download/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+
+    def test_anonymous_request_is_redirected_from_download(self):
+        announcement = Announcement.objects.create(title='Notice', file=self._pdf(), uploaded_by=self.admin)
+        response = self.client.get(f'/announcements/{announcement.id}/download/')
+        self.assertRedirects(response, reverse('login'))
+
+
+class TeacherModuleAssignmentTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser('tma-admin', 'admin2@example.com', 'safe-password')
+        self.teacher = User.objects.create_user('tma-teacher', password='safe-password')
+        TeacherProfile.objects.create(user=self.teacher, full_name='Multi Module Teacher')
+        self.accountant = User.objects.create_user('tma-accountant', password='safe-password')
+        AccountantProfile.objects.create(user=self.accountant, full_name='Finance Person')
+        self.year = AcademicYear.objects.create(name='2025/2026', is_active=True)
+        self.semester = Semester.objects.create(academic_year=self.year, number=1, is_active=True)
+        self.level = ClassLevel.objects.create(name='NTA Level 5', order=5)
+        self.module_a = Module.objects.create(
+            name='Module A', code='MA501', teacher='Multi Module Teacher',
+            class_level=self.level, semester=self.semester,
+        )
+        self.module_b = Module.objects.create(
+            name='Module B', code='MB501', teacher='Multi Module Teacher',
+            class_level=self.level, semester=self.semester,
+        )
+        self.module_a.teachers.add(self.teacher)
+        self.client = APIClient()
+
+    def test_admin_can_list_staff_accounts_with_module_ids(self):
+        self.client.force_authenticate(self.admin)
+        response = self.client.get('/api/staff-accounts/')
+        self.assertEqual(response.status_code, 200)
+        tutor_row = next(u for u in response.data if u['username'] == 'tma-teacher')
+        self.assertEqual(tutor_row['role'], 'tutor')
+        self.assertEqual(tutor_row['module_ids'], [self.module_a.id])
+        accountant_row = next(u for u in response.data if u['username'] == 'tma-accountant')
+        self.assertIsNone(accountant_row['module_ids'])
+
+    def test_admin_can_give_a_teacher_a_second_module_across_classes(self):
+        # A tutor may carry more than one module/class — set-modules should add
+        # module_b while leaving module_a in place (both, not a replacement).
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            f'/api/staff-accounts/{self.teacher.id}/set-modules/',
+            {'module_ids': [self.module_a.id, self.module_b.id]}, format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertCountEqual(
+            self.teacher.modules_taught.values_list('id', flat=True),
+            [self.module_a.id, self.module_b.id],
+        )
+
+    def test_set_modules_removes_unchecked_modules(self):
+        self.module_b.teachers.add(self.teacher)
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            f'/api/staff-accounts/{self.teacher.id}/set-modules/',
+            {'module_ids': [self.module_b.id]}, format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertCountEqual(
+            self.teacher.modules_taught.values_list('id', flat=True), [self.module_b.id],
+        )
+
+    def test_non_admin_cannot_set_modules(self):
+        self.client.force_authenticate(self.teacher)
+        response = self.client.post(
+            f'/api/staff-accounts/{self.teacher.id}/set-modules/',
+            {'module_ids': [self.module_b.id]}, format='json',
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_set_modules_rejects_a_non_tutor_account(self):
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            f'/api/staff-accounts/{self.accountant.id}/set-modules/',
+            {'module_ids': [self.module_a.id]}, format='json',
+        )
+        self.assertEqual(response.status_code, 400)

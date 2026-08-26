@@ -1,14 +1,17 @@
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from django.db import transaction
+from django.urls import reverse
 from .grading import result_outcome
 from .models import (
     AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord,
     StudentResult, PaymentCategory, StudentFinanceObligation, StudentPayment,
-    StudentFinanceClearance,
+    StudentFinanceClearance, Announcement,
     EstateOfficerProfile, InventoryLocation, AssetCategory, InventoryItemType, Asset,
     AssetTransfer, AssetMaintenance, InventoryInspection, InventoryInspectionItem, AssetDisposal,
 )
+
+MAX_ANNOUNCEMENT_FILE_BYTES = 10 * 1024 * 1024  # matches nginx client_max_body_size 10M
 
 
 # ── Weighted-mark helper ───────────────────────────────────────────────────────
@@ -286,29 +289,45 @@ class StudentSerializer(serializers.ModelSerializer):
             student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
         return student
 
+    # Each of the fields below used to run its own `.filter(...).count()` query
+    # (8 queries per student row total). `.all()` reuses attendance_records /
+    # module.sessions prefetches when the caller set them up, and the counting
+    # is cached per-instance so repeated field access within one row still
+    # costs at most one query for records and one for sessions, instead of
+    # eight — this used to make listing a class of N students cost 8N queries.
+    def _attendance_records(self, obj):
+        if not hasattr(obj, '_cached_attendance_records'):
+            obj._cached_attendance_records = list(obj.attendance_records.all())
+        return obj._cached_attendance_records
+
+    def _module_sessions(self, obj):
+        if not hasattr(obj, '_cached_module_sessions'):
+            obj._cached_module_sessions = list(obj.module.sessions.all())
+        return obj._cached_module_sessions
+
     def get_sessions_attended(self, obj):
-        return obj.attendance_records.filter(status='P').count()
+        return sum(1 for r in self._attendance_records(obj) if r.status == 'P')
 
     def get_sessions_sick(self, obj):
-        return obj.attendance_records.filter(status='S').count()
+        return sum(1 for r in self._attendance_records(obj) if r.status == 'S')
 
     def get_sessions_absent(self, obj):
-        return obj.attendance_records.filter(status='A').count()
+        return sum(1 for r in self._attendance_records(obj) if r.status == 'A')
 
     def get_sessions_total(self, obj):
-        return Session.objects.filter(module=obj.module).count()
+        return len(self._module_sessions(obj))
 
     def get_theory_total(self, obj):
-        return Session.objects.filter(module=obj.module, session_type=Session.THEORY).count()
+        return sum(1 for s in self._module_sessions(obj) if s.session_type == Session.THEORY)
 
     def get_practical_total(self, obj):
-        return Session.objects.filter(module=obj.module, session_type=Session.PRACTICAL).count()
+        return sum(1 for s in self._module_sessions(obj) if s.session_type == Session.PRACTICAL)
 
     def get_attendance_pct(self, obj):
-        total = Session.objects.filter(module=obj.module).count()
+        total = len(self._module_sessions(obj))
         if not total:
             return 0
-        effective = obj.attendance_records.filter(status__in=['P', 'S']).count()
+        effective = sum(1 for r in self._attendance_records(obj) if r.status in ('P', 'S'))
         return round((effective / total) * 100)
 
 
@@ -829,3 +848,31 @@ class BulkStudentSerializer(serializers.Serializer):
                 # PIN — use the dedicated "Set Password/PIN" action for that.
                 skipped += 1
         return {'added': added, 'skipped': skipped, 'pin_skipped': pin_skipped}
+
+
+class AnnouncementSerializer(serializers.ModelSerializer):
+    # Written on upload, never read back — downloads only ever go through the
+    # gated announcement_download view (see download_url), never a raw path.
+    file = serializers.FileField(write_only=True)
+    uploaded_by_name = serializers.SerializerMethodField()
+    download_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Announcement
+        fields = ['id', 'title', 'note', 'file', 'uploaded_by_name', 'download_url', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def validate_file(self, value):
+        if not value.name.lower().endswith('.pdf'):
+            raise serializers.ValidationError('Only PDF files are accepted.')
+        if value.size > MAX_ANNOUNCEMENT_FILE_BYTES:
+            raise serializers.ValidationError('File must be 10MB or smaller.')
+        return value
+
+    def get_uploaded_by_name(self, obj):
+        if not obj.uploaded_by:
+            return 'Unknown'
+        return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+
+    def get_download_url(self, obj):
+        return reverse('announcement-download', args=[obj.id])

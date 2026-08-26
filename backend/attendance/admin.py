@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord,
     TeacherProfile, AccountantProfile, StudentResult, PaymentCategory, StudentPayment,
-    StudentFinanceObligation, StudentFinanceClearance,
+    StudentFinanceObligation, StudentFinanceClearance, Announcement,
     EstateOfficerProfile,
 )
 
@@ -25,6 +25,13 @@ class SemesterAdmin(admin.ModelAdmin):
 class ClassLevelAdmin(admin.ModelAdmin):
     list_display = ['name', 'order']
     ordering = ['order']
+
+
+@admin.register(Announcement)
+class AnnouncementAdmin(admin.ModelAdmin):
+    list_display = ['title', 'uploaded_by', 'created_at']
+    search_fields = ['title', 'note']
+    ordering = ['-created_at']
 
 
 @admin.register(TeacherProfile)

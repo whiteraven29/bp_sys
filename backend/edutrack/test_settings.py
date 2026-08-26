@@ -1,5 +1,9 @@
+import tempfile
+
 from .settings import *  # noqa: F403
 
+# Keep test-uploaded files out of the real media/ directory.
+MEDIA_ROOT = tempfile.mkdtemp(prefix='edutrack-test-media-')
 
 DATABASES = {
     'default': {
