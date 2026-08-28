@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Q
 
 
 class AcademicYear(models.Model):
@@ -293,8 +294,18 @@ class Module(models.Model):
 
 
 class Student(models.Model):
+    """One enrollment: this person, in this module. Attendance and results hang
+    off it, and always have.
+
+    Money does not. Fees, invoices and clearance attach to `profile` — the
+    person — because a student taking eight modules is eight rows here and
+    owes one balance, not eight. See StudentProfile.
+    """
     nactvet_reg_no = models.CharField(max_length=50, verbose_name='NACTVET Reg. No.')
     name = models.CharField(max_length=200)
+    profile = models.ForeignKey(
+        'StudentProfile', on_delete=models.CASCADE, null=True, blank=True, related_name='enrollments',
+    )
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='students')
     portal_pin_hash = models.CharField(max_length=128, blank=True, editable=False)
     must_change_portal_password = models.BooleanField(default=True, editable=False)
@@ -598,6 +609,473 @@ class StudentResult(models.Model):
 
     def __str__(self):
         return f'Result: {self.student}'
+
+
+# ── FEES LEDGER ───────────────────────────────────────────────────────────────
+#
+# The models above (PaymentCategory, StudentPayment, StudentFinanceObligation,
+# StudentFinanceClearance) hang finance off `Student`, which is an *enrollment*
+# — one row per module — so a student taking eight modules carried eight
+# separate balances that never added up. Everything below replaces them.
+#
+# The shape is a receivables ledger:
+#
+#     ChargeType    what the college can charge for       (catalogue)
+#     FeeStructure  how much, and in how many installments, per NTA level
+#     StudentCharge a debt owed by one person             (debit)
+#     Payment       money received, verified at the counter (credit)
+#     balance       = charges − waivers − payments        (never stored)
+#
+# Money attaches to StudentProfile — the person — not to an enrollment.
+
+
+class StudentProfile(models.Model):
+    """One row per human being, keyed on the registration number.
+
+    `Student` remains the per-module enrollment it has always been, and keeps
+    carrying attendance and results. It gains a pointer here so that fees,
+    invoices and clearance can attach to the person instead of being
+    duplicated across every module they take.
+    """
+    nactvet_reg_no = models.CharField(max_length=50, unique=True, verbose_name='NACTVET Reg. No.')
+    name = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return f'{self.nactvet_reg_no} – {self.name}'
+
+
+class ChargeType(models.Model):
+    """WHAT the college can charge for. One row per item, college-wide.
+
+    Amounts and installment counts live on FeeStructure instead, because both
+    differ by NTA level — Level 4 pays fees over 5 installments where Levels 5
+    and 6 pay over 4.
+    """
+    FEE = 'fee'
+    DIRECT_COST = 'direct_cost'
+    OTHER = 'other'
+    FAMILY_CHOICES = [
+        (FEE, 'School Fees'),
+        (DIRECT_COST, 'Direct Costs'),
+        (OTHER, 'Other Payments'),
+    ]
+
+    AUTOMATIC = 'automatic'
+    OPTIONAL = 'optional'
+    ON_REQUEST = 'on_request'
+    APPLIES_CHOICES = [
+        (AUTOMATIC, 'Every student in the level'),
+        (OPTIONAL, 'Only students assigned it (hostel, field trips)'),
+        (ON_REQUEST, 'Only when the college declares it (supplementary, repeat)'),
+    ]
+
+    name = models.CharField(max_length=160, unique=True)
+    family = models.CharField(max_length=20, choices=FAMILY_CHOICES, default=FEE)
+    applies = models.CharField(max_length=20, choices=APPLIES_CHOICES, default=AUTOMATIC)
+
+    # What non-payment prevents. Set by the accountant — this is the college's
+    # exam-eligibility policy, and it is deliberately not hardcoded: tuition
+    # should block an exam, a graduation gown should not.
+    blocks_registration = models.BooleanField(default=False, verbose_name='Blocks registration')
+    blocks_cat1 = models.BooleanField(default=False, verbose_name='Blocks CAT 1')
+    blocks_cat2 = models.BooleanField(default=False, verbose_name='Blocks CAT 2')
+    blocks_final = models.BooleanField(default=False, verbose_name='Blocks end-of-semester exam')
+    blocks_results = models.BooleanField(default=False, verbose_name='Blocks results release')
+
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # Period keys used by the clearance service, mapped to the flags above.
+    REGISTRATION = 'registration'
+    CAT1 = 'cat1'
+    CAT2 = 'cat2'
+    FINAL = 'final'
+    RESULTS = 'results'
+    PERIOD_FIELDS = {
+        REGISTRATION: 'blocks_registration',
+        CAT1: 'blocks_cat1',
+        CAT2: 'blocks_cat2',
+        FINAL: 'blocks_final',
+        RESULTS: 'blocks_results',
+    }
+
+    class Meta:
+        ordering = ['family', 'name']
+
+    def __str__(self):
+        return self.name
+
+    def blocks_period(self, period):
+        field = self.PERIOD_FIELDS.get(period)
+        return bool(field and getattr(self, field))
+
+
+class FeeStructure(models.Model):
+    """HOW MUCH, and in how many installments, for one charge type at one NTA
+    level in one academic year. This is the grid the accountant fills in."""
+    ACADEMIC_YEAR = 'academic_year'
+    SEMESTER = 'semester'
+    PERIOD_CHOICES = [
+        (ACADEMIC_YEAR, 'Once per academic year'),
+        (SEMESTER, 'Once per semester'),
+    ]
+
+    charge_type = models.ForeignKey(ChargeType, on_delete=models.PROTECT, related_name='fee_structures')
+    class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, related_name='fee_structures')
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='fee_structures')
+    amount = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+    )
+    billing_period = models.CharField(max_length=20, choices=PERIOD_CHOICES, default=ACADEMIC_YEAR)
+    installments = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text='Level 4 fees are paid over 5; Levels 5 and 6 over 4.',
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['academic_year__name', 'class_level__order', 'charge_type__family', 'charge_type__name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['charge_type', 'class_level', 'academic_year'],
+                name='unique_fee_structure_cell',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.charge_type} · {self.class_level} · {self.academic_year} = {self.amount}'
+
+
+class FeeInstallment(models.Model):
+    """One installment of a FeeStructure, with the date it falls due.
+
+    Due dates are what exam clearance is measured against — a student is
+    cleared when everything *due by the exam* is settled, not when the whole
+    year's bill is settled.
+    """
+    fee_structure = models.ForeignKey(FeeStructure, on_delete=models.CASCADE, related_name='installment_schedule')
+    number = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
+    amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))])
+    due_date = models.DateField()
+
+    class Meta:
+        ordering = ['fee_structure', 'number']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['fee_structure', 'number'],
+                name='unique_fee_installment_number',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.fee_structure.charge_type} inst. {self.number} due {self.due_date}'
+
+
+class StudentCharge(models.Model):
+    """A debt owed by one student. The entity the old model was missing.
+
+    `amount_required` used to be stamped onto every payment row and summed,
+    which reported a fully-paid student as owing three times the fee. A charge
+    is recorded once; payments allocate against it.
+    """
+    STRUCTURE = 'structure'
+    ON_REQUEST = 'on_request'
+    CARRY_FORWARD = 'carry_forward'
+    SOURCE_CHOICES = [
+        (STRUCTURE, 'Generated from the fee structure'),
+        (ON_REQUEST, 'Raised on request'),
+        (CARRY_FORWARD, 'Brought forward from a previous year'),
+    ]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='charges')
+    charge_type = models.ForeignKey(ChargeType, on_delete=models.PROTECT, related_name='charges')
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='charges')
+    # Null for charges billed once per academic year rather than per semester.
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, null=True, blank=True, related_name='charges')
+    fee_structure = models.ForeignKey(
+        FeeStructure, on_delete=models.SET_NULL, null=True, blank=True, related_name='charges',
+    )
+    installment_number = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1)])
+    amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))])
+    due_date = models.DateField()
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default=STRUCTURE)
+
+    # A waiver reduces what is owed without pretending money arrived, so a
+    # bursary never looks like a payment in the collections report.
+    waived_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+    )
+    waived_reason = models.CharField(max_length=300, blank=True)
+    waived_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='charges_waived',
+    )
+
+    note = models.CharField(max_length=300, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='charges_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['due_date', 'charge_type__family', 'charge_type__name', 'installment_number']
+        indexes = [
+            models.Index(fields=['profile', 'academic_year']),
+            models.Index(fields=['due_date']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['profile', 'charge_type', 'academic_year', 'semester', 'installment_number'],
+                name='unique_student_charge_installment',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} – {self.charge_type} inst. {self.installment_number}'
+
+    @property
+    def payable(self):
+        """What is actually owed once any waiver is taken off."""
+        return self.amount - self.waived_amount
+
+
+class Invoice(models.Model):
+    """A payment instruction the student takes to the bank.
+
+    The reference is the whole trick: the student writes it on the CRDB slip,
+    so when they return to the counter the paper itself says who paid and what
+    for. No bank integration is involved — it is a college-side convention read
+    by the accountant, not by CRDB.
+    """
+    STUDENT = 'student'
+    OFFICE = 'office'
+    SOURCE_CHOICES = [(STUDENT, 'Generated by the student'), (OFFICE, 'Raised at the office')]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='invoices')
+    reference = models.CharField(max_length=32, unique=True, editable=False)
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='invoices')
+    issued_on = models.DateField(auto_now_add=True)
+    due_date = models.DateField(null=True, blank=True)
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default=STUDENT)
+    cancelled = models.BooleanField(default=False)
+    cancelled_reason = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['profile', '-created_at'])]
+
+    def __str__(self):
+        return self.reference
+
+    @property
+    def total(self):
+        return sum((line.amount for line in self.lines.all()), Decimal('0.00'))
+
+
+class InvoiceLine(models.Model):
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='lines')
+    charge = models.ForeignKey(StudentCharge, on_delete=models.PROTECT, related_name='invoice_lines')
+    amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+
+    class Meta:
+        ordering = ['charge__due_date']
+        constraints = [
+            models.UniqueConstraint(fields=['invoice', 'charge'], name='unique_invoice_line_charge'),
+        ]
+
+
+class Payment(models.Model):
+    """Money received, recorded at the counter against physical proof.
+
+    Append-only. Nothing here is ever edited or deleted — a mistake is
+    corrected by a reversal row that points back at the original, so the trail
+    survives the correction instead of being erased by it. `amount` is signed:
+    a payment is positive, a reversal negative, so sums work everywhere.
+    """
+    CRDB = 'crdb'
+    MOBILE = 'mobile'
+    CASH = 'cash'
+    CHANNEL_CHOICES = [
+        (CRDB, 'CRDB bank deposit'),
+        (MOBILE, 'Mobile money'),
+        (CASH, 'Cash at the office'),
+    ]
+
+    SELF = 'self'
+    PARENT = 'parent'
+    GUARDIAN = 'guardian'
+    SPONSOR = 'sponsor'
+    EMPLOYER = 'employer'
+    PAYER_CHOICES = [
+        (SELF, 'The student'), (PARENT, 'Parent'), (GUARDIAN, 'Guardian'),
+        (SPONSOR, 'Sponsor'), (EMPLOYER, 'Employer'),
+    ]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.PROTECT, related_name='ledger_payments')
+    invoice = models.ForeignKey(
+        Invoice, on_delete=models.PROTECT, null=True, blank=True, related_name='payments',
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    # The date on the bank slip, NOT the day it was keyed in — a student who
+    # paid before a deadline stays cleared even if the office recorded it late.
+    payment_date = models.DateField(verbose_name='Date on the slip')
+    channel = models.CharField(max_length=20, choices=CHANNEL_CHOICES, default=CRDB)
+
+    bank_reference = models.CharField(
+        max_length=100, blank=True,
+        help_text="The bank's own transaction number from the slip.",
+    )
+    efd_receipt_no = models.CharField(
+        max_length=100, blank=True, verbose_name='EFD receipt no.',
+        help_text='From the EFD machine. Links this record to the fiscal receipt.',
+    )
+    # Often not the student. Recorded so "who paid this" has an answer later.
+    payer_name = models.CharField(max_length=200, blank=True)
+    payer_relation = models.CharField(max_length=20, choices=PAYER_CHOICES, default=SELF)
+    proof = models.FileField(
+        upload_to='payment-proof/%Y/%m/', null=True, blank=True,
+        validators=[FileExtensionValidator(['pdf', 'jpg', 'jpeg', 'png'])],
+    )
+
+    note = models.CharField(max_length=300, blank=True)
+    reverses = models.OneToOneField(
+        'self', on_delete=models.PROTECT, null=True, blank=True, related_name='reversal',
+    )
+    reversal_reason = models.CharField(max_length=300, blank=True)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='ledger_payments_recorded',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-payment_date', '-created_at']
+        indexes = [models.Index(fields=['profile', '-payment_date'])]
+        constraints = [
+            # A payment credits, a reversal debits. Nothing may be zero, and a
+            # negative row must say which payment it undoes.
+            models.CheckConstraint(
+                check=Q(reverses__isnull=True, amount__gt=0) | Q(reverses__isnull=False, amount__lt=0),
+                name='payment_sign_matches_reversal',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} – {self.amount} on {self.payment_date}'
+
+    @property
+    def is_reversal(self):
+        return self.reverses_id is not None
+
+
+class PaymentAllocation(models.Model):
+    """Which charge a payment settled, and by how much.
+
+    Separate from Payment because one deposit routinely covers several charges
+    — a parent paying tuition and the exam fee in a single CRDB transaction.
+    """
+    payment = models.ForeignKey(Payment, on_delete=models.CASCADE, related_name='allocations')
+    charge = models.ForeignKey(StudentCharge, on_delete=models.PROTECT, related_name='allocations')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        ordering = ['charge__due_date']
+        constraints = [
+            models.UniqueConstraint(fields=['payment', 'charge'], name='unique_payment_allocation'),
+        ]
+
+    def __str__(self):
+        return f'{self.amount} → {self.charge}'
+
+
+class FinanceOverride(models.Model):
+    """A human decision that beats the arithmetic — bursary, sponsor delay,
+    hardship, or a hold placed for a reason outside the ledger.
+
+    This is what the old StudentFinanceClearance becomes. The difference is
+    that an override now carries a reason, an approver and an expiry, so an
+    exception looks like an exception instead of being indistinguishable from
+    a student who simply paid.
+    """
+    CLEARED = 'cleared'
+    BLOCKED = 'blocked'
+    STATUS_CHOICES = [(CLEARED, 'Cleared'), (BLOCKED, 'Blocked')]
+
+    PERIOD_CHOICES = [
+        (ChargeType.REGISTRATION, 'Registration'),
+        (ChargeType.CAT1, 'CAT 1'),
+        (ChargeType.CAT2, 'CAT 2'),
+        (ChargeType.FINAL, 'End-of-semester exam'),
+        (ChargeType.RESULTS, 'Results release'),
+    ]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='finance_overrides')
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='finance_overrides')
+    semester = models.ForeignKey(
+        Semester, on_delete=models.PROTECT, null=True, blank=True, related_name='finance_overrides',
+    )
+    period = models.CharField(max_length=20, choices=PERIOD_CHOICES)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=CLEARED)
+    reason = models.CharField(max_length=300)
+    expires_on = models.DateField(
+        null=True, blank=True,
+        help_text='After this date the override lapses and the ledger decides again.',
+    )
+    is_active = models.BooleanField(default=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='finance_overrides_approved',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['profile', 'academic_year', 'period'])]
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} – {self.get_period_display()} – {self.status}'
+
+
+class FinanceAuditLog(models.Model):
+    """Every money-touching action, kept forever.
+
+    Students can read their own statements and will occasionally dispute them.
+    When one says "I paid", the answer needs to be a record rather than
+    somebody's memory of last term.
+    """
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='finance_audit_entries',
+    )
+    action = models.CharField(max_length=60)          # payment.record, payment.reverse, charge.waive …
+    entity = models.CharField(max_length=60)          # Payment, StudentCharge, FeeStructure …
+    entity_id = models.PositiveIntegerField(null=True, blank=True)
+    profile = models.ForeignKey(
+        StudentProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_entries',
+    )
+    summary = models.CharField(max_length=300)
+    before = models.JSONField(null=True, blank=True)
+    after = models.JSONField(null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-at']
+        indexes = [
+            models.Index(fields=['-at']),
+            models.Index(fields=['entity', 'entity_id']),
+        ]
+
+    def __str__(self):
+        return f'{self.at:%Y-%m-%d %H:%M} {self.action} – {self.summary}'
 
 
 class Announcement(models.Model):
