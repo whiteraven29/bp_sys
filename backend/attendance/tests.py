@@ -860,7 +860,9 @@ class AttendanceSecurityTests(TestCase):
         self.assertIsNone(module['result']['assign1'])
         self.assertNotContains(response, 'Recent attendance activity')
         self.assertContains(response, 'Payment History')
-        self.assertContains(response, 'Academic Obligations')
+        # The old "Academic Obligations" panel listed declared obligations; it
+        # now shows the student's actual charges off the fees ledger.
+        self.assertContains(response, 'What I Owe')
         self.assertContains(response, 'Theory Modules')
         theory_table = response.context['semester1_theory_modules']
         self.assertEqual(len(theory_table), 1)

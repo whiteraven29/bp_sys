@@ -1,3 +1,4 @@
+from datetime import date as _date_type
 from decimal import Decimal
 
 from django.conf import settings
@@ -10,6 +11,12 @@ from django.db.models import Q
 class AcademicYear(models.Model):
     name = models.CharField(max_length=9, unique=True)   # e.g. "2025/2026"
     is_active = models.BooleanField(default=False)
+    end_date = models.DateField(
+        null=True, blank=True,
+        help_text='The day the year closes. Every invoice raised for this year expires on '
+                  'it, so a student paying by instalments keeps one invoice all year. Left '
+                  'blank, it is taken to be 30 June of the closing year.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -22,6 +29,29 @@ class AcademicYear(models.Model):
     def next_name(self):
         y1, y2 = self.name.split('/')
         return f"{int(y1)+1}/{int(y2)+1}"
+
+    @property
+    def closes_on(self):
+        """The last day of the year — the expiry date printed on every invoice.
+
+        One invoice covers every instalment of a payment, so it cannot expire
+        when the first instalment falls due; it stands until the year itself
+        ends. The office sets `end_date` when it wants an exact day. Failing
+        that we take the latest semester cutoff, and failing that the 30th of
+        June in the closing calendar year, which is when this college's year
+        runs out.
+        """
+        if self.end_date:
+            return self.end_date
+        try:
+            return _date_type(int(self.name.split('/')[1]), 6, 30)
+        except (IndexError, ValueError):
+            pass
+        # Last resort only. A semester's end_cutoff is when attendance stops
+        # being recorded, which is well before the year is over — an invoice
+        # dated from it would expire while instalments were still to come.
+        cutoffs = [s.end_cutoff for s in self.semesters.all() if s.end_cutoff]
+        return max(cutoffs) if cutoffs else None
 
 
 class Semester(models.Model):
@@ -648,6 +678,65 @@ class StudentProfile(models.Model):
         return f'{self.nactvet_reg_no} – {self.name}'
 
 
+class CollegeProfile(models.Model):
+    """The college's own details, as they appear on an invoice.
+
+    A single row, edited by the accountant. Kept in the database rather than
+    settings so the office can correct a phone number without a deploy.
+    """
+    name = models.CharField(max_length=200, default='Blue Pharma College of Health')
+    short_name = models.CharField(max_length=60, default='BPHACOH')
+    po_box = models.CharField(max_length=60, blank=True)
+    town = models.CharField(max_length=80, blank=True)
+    country = models.CharField(max_length=80, default='Tanzania')
+    phone = models.CharField(max_length=120, blank=True)
+    email = models.EmailField(blank=True)
+    website = models.CharField(max_length=160, blank=True)
+    logo = models.FileField(
+        upload_to='college/', null=True, blank=True,
+        validators=[FileExtensionValidator(['png', 'jpg', 'jpeg', 'svg'])],
+    )
+    invoice_terms = models.TextField(
+        blank=True,
+        help_text='Shown under Terms & Conditions on every invoice, one rule per line.',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'college profile'
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def get(cls):
+        return cls.objects.first() or cls()
+
+
+class BankAccount(models.Model):
+    """A college bank account a student can deposit into.
+
+    The college runs more than one — tuition and other charges go to different
+    CRDB accounts — so an invoice may only ever name a single account. Mixing
+    them would produce a bill the student cannot pay in one deposit.
+    """
+    bank_name = models.CharField(max_length=120, default='CRDB')
+    account_name = models.CharField(max_length=200)
+    account_number = models.CharField(max_length=64, unique=True)
+    purpose = models.CharField(
+        max_length=160,
+        help_text='What this account collects, e.g. "Tuition fee" or "Other charges & accommodation".',
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['purpose', 'account_number']
+
+    def __str__(self):
+        return f'{self.bank_name} {self.account_number} – {self.purpose}'
+
+
 class ChargeType(models.Model):
     """WHAT the college can charge for. One row per item, college-wide.
 
@@ -673,9 +762,47 @@ class ChargeType(models.Model):
         (ON_REQUEST, 'Only when the college declares it (supplementary, repeat)'),
     ]
 
+    ONCE = 'once'
+    EACH_YEAR = 'each_year'
+    EACH_SEMESTER = 'each_semester'
+    FREQUENCY_CHOICES = [
+        (ONCE, 'Once — never repeated'),
+        (EACH_YEAR, 'Each year'),
+        (EACH_SEMESTER, 'Each semester'),
+    ]
+
     name = models.CharField(max_length=160, unique=True)
+    # The item code the accountant quotes for this charge on an invoice. Set by
+    # the office to match whatever the college's books already use, so a bill
+    # can be reconciled against them line by line.
+    code = models.CharField(max_length=40, blank=True, verbose_name='Item code')
+    # Where this item sits in the college's published table. An invoice lists
+    # its components in this order, so a student can check the bill against the
+    # Other Charges table in the admission form row by row.
+    sort_order = models.PositiveSmallIntegerField(
+        default=0, verbose_name='Row order',
+        help_text='Position in the published fee table. Items with the same order fall back '
+                  'to alphabetical.',
+    )
     family = models.CharField(max_length=20, choices=FAMILY_CHOICES, default=FEE)
     applies = models.CharField(max_length=20, choices=APPLIES_CHOICES, default=AUTOMATIC)
+
+    # How often it is billed. `once` is what separates a first-year's bill from
+    # a continuing student's: caution money, admission, ID card, uniforms and
+    # the like are charged one time for the whole programme and never again.
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default=EACH_YEAR)
+
+    # Which account the money goes into, and which invoice it belongs on. Both
+    # matter because the college banks tuition and other charges separately —
+    # a student paying both makes two deposits and needs two invoices.
+    bank_account = models.ForeignKey(
+        BankAccount, on_delete=models.PROTECT, null=True, blank=True, related_name='charge_types',
+    )
+    invoice_group = models.CharField(
+        max_length=80, blank=True,
+        help_text='Charges sharing a group are invoiced together, e.g. "Tuition Fee", '
+                  '"Direct Costs", "Accommodation". Defaults to the group name.',
+    )
 
     # What non-payment prevents. Set by the accountant — this is the college's
     # exam-eligibility policy, and it is deliberately not hardcoded: tuition
@@ -704,14 +831,25 @@ class ChargeType(models.Model):
     }
 
     class Meta:
-        ordering = ['family', 'name']
+        ordering = ['family', 'sort_order', 'name']
 
     def __str__(self):
         return self.name
 
+    @property
+    def frequency_label(self):
+        """How often it is charged, as the published table words it: "Each
+        year" or "Once"."""
+        return {self.ONCE: 'Once', self.EACH_YEAR: 'Each year',
+                self.EACH_SEMESTER: 'Each semester'}.get(self.frequency, '')
+
     def blocks_period(self, period):
         field = self.PERIOD_FIELDS.get(period)
         return bool(field and getattr(self, field))
+
+    @property
+    def group_label(self):
+        return self.invoice_group.strip() or self.get_family_display()
 
 
 class FeeStructure(models.Model):
@@ -719,9 +857,11 @@ class FeeStructure(models.Model):
     level in one academic year. This is the grid the accountant fills in."""
     ACADEMIC_YEAR = 'academic_year'
     SEMESTER = 'semester'
+    ONCE = 'once'
     PERIOD_CHOICES = [
         (ACADEMIC_YEAR, 'Once per academic year'),
         (SEMESTER, 'Once per semester'),
+        (ONCE, 'Once for the whole programme'),
     ]
 
     charge_type = models.ForeignKey(ChargeType, on_delete=models.PROTECT, related_name='fee_structures')
@@ -847,6 +987,41 @@ class StudentCharge(models.Model):
         """What is actually owed once any waiver is taken off."""
         return self.amount - self.waived_amount
 
+    @property
+    def balance(self):
+        """What is still outstanding.
+
+        Uses the `allocated` annotation from finance.with_balances() when the
+        queryset supplied one, so rendering a list of charges costs one query
+        rather than one per row.
+        """
+        paid = getattr(self, 'allocated', None)
+        if paid is None:
+            paid = self.allocations.aggregate(total=models.Sum('amount'))['total'] or Decimal('0.00')
+        return self.payable - paid
+
+    @property
+    def is_overdue(self):
+        from datetime import date as _date
+        return self.due_date < _date.today() and self.balance > Decimal('0.00')
+
+    @property
+    def is_due_soon(self):
+        """Due already, or within the month.
+
+        Used to pre-tick the instalments a student is actually about to pay —
+        invoicing the whole year at once is not what anyone walks into the bank
+        with.
+        """
+        from datetime import date as _date, timedelta as _td
+        return self.due_date <= _date.today() + _td(days=30) and self.balance > Decimal('0.00')
+
+    @property
+    def installments_total(self):
+        """How many instalments this charge is one of, so an invoice can say
+        "instalment 2 of 5" rather than a bare number."""
+        return self.fee_structure.installments if self.fee_structure_id else 1
+
 
 class Invoice(models.Model):
     """A payment instruction the student takes to the bank.
@@ -863,6 +1038,12 @@ class Invoice(models.Model):
     profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='invoices')
     reference = models.CharField(max_length=32, unique=True, editable=False)
     academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='invoices')
+    # What this invoice covers and where it is paid. One invoice never spans
+    # two accounts — the student would have to split the deposit.
+    invoice_group = models.CharField(max_length=80, blank=True)
+    bank_account = models.ForeignKey(
+        BankAccount, on_delete=models.PROTECT, null=True, blank=True, related_name='invoices',
+    )
     issued_on = models.DateField(auto_now_add=True)
     due_date = models.DateField(null=True, blank=True)
     source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default=STUDENT)
@@ -873,6 +1054,17 @@ class Invoice(models.Model):
     class Meta:
         ordering = ['-created_at']
         indexes = [models.Index(fields=['profile', '-created_at'])]
+        constraints = [
+            # One reference per payment per year. A student paying tuition in
+            # five instalments quotes the same number on all five slips, so the
+            # constraint is what makes the reference stable rather than a new
+            # one appearing every time they open the page.
+            models.UniqueConstraint(
+                fields=['profile', 'academic_year', 'invoice_group'],
+                condition=Q(cancelled=False),
+                name='one_live_invoice_per_payment_per_year',
+            ),
+        ]
 
     def __str__(self):
         return self.reference
@@ -880,6 +1072,12 @@ class Invoice(models.Model):
     @property
     def total(self):
         return sum((line.amount for line in self.lines.all()), Decimal('0.00'))
+
+    @property
+    def expires_on(self):
+        """The last day this invoice can be paid against — the end of its
+        academic year, because it covers that whole year's instalments."""
+        return self.due_date or self.academic_year.closes_on
 
 
 class InvoiceLine(models.Model):

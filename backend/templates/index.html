@@ -621,7 +621,6 @@
         <button class="nav-sub-btn" data-results-section="final" onclick="showResultsSection('final', this)">End of Semester</button>
         <button class="nav-sub-btn" data-results-section="field" onclick="showResultsSection('field', this)">Field Results</button>
         <button class="nav-sub-btn" data-results-section="analysis" onclick="showResultsSection('analysis', this)">CAT Analysis</button>
-        <button class="nav-sub-btn admin-only" data-finance-section="obligations" onclick="showFinanceSection('obligations', this)">Obligations</button>
       </div>
     </div>
     <div class="nav-group admin-only" id="declarations-nav-group">
@@ -642,27 +641,32 @@
         <button class="nav-sub-btn" onclick="showFinalEligibilityExport(this)">Final Eligibility</button>
       </div>
     </div>
-    <button class="nav-btn finance-only" data-page="finance" data-finance-section="dashboard" onclick="showFinanceSection('dashboard', this)"><span class="icon"><i class="bi bi-graph-up-arrow"></i></span> Finance Overview</button>
+    <button class="nav-btn finance-only" data-page="finance" data-finance-section="overview" onclick="showFinanceSection('overview', this)"><span class="icon"><i class="bi bi-graph-up-arrow"></i></span> Finance Overview</button>
+    <div class="nav-group finance-only" id="finance-setup-nav-group">
+      <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'setup')"><span class="icon"><i class="bi bi-sliders"></i></span> Fee Setup <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-finance-section="accounts" onclick="showFinanceSection('accounts', this)">Bank Accounts</button>
+        <button class="nav-sub-btn" data-finance-section="charge-types" onclick="showFinanceSection('charge-types', this)">Charge Types</button>
+        <button class="nav-sub-btn" data-finance-section="fee-structure" onclick="showFinanceSection('fee-structure', this)">Fee Structure</button>
+      </div>
+    </div>
     <div class="nav-group finance-only" id="finance-payments-nav-group">
       <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'payments')"><span class="icon"><i class="bi bi-credit-card"></i></span> Payments <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
-        <button class="nav-sub-btn" data-finance-section="payments" onclick="showFinanceSection('payments', this)">Record &amp; Track</button>
-        <button class="nav-sub-btn" data-finance-section="categories" onclick="showFinanceSection('categories', this)">Payment Categories</button>
+        <button class="nav-sub-btn" data-finance-section="record" onclick="showFinanceSection('record', this)">Record a Payment</button>
+        <button class="nav-sub-btn" data-finance-section="history" onclick="showFinanceSection('history', this)">Payment History</button>
+        <button class="nav-sub-btn" data-finance-section="collections" onclick="showFinanceSection('collections', this)">Collections &amp; EFD</button>
       </div>
     </div>
     <div class="nav-group finance-only" id="finance-students-nav-group">
       <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'students')"><span class="icon"><i class="bi bi-mortarboard"></i></span> Students <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
-        <button class="nav-sub-btn" data-finance-section="students" onclick="showFinanceSection('students', this)">Paid / Balance Status</button>
-        <button class="nav-sub-btn" data-finance-section="obligations" onclick="showFinanceSection('obligations', this)">Special Obligations</button>
+        <button class="nav-sub-btn" data-finance-section="students" onclick="showFinanceSection('students', this)">Balances &amp; Clearance</button>
+        <button class="nav-sub-btn" data-finance-section="extra-charge" onclick="showFinanceSection('extra-charge', this)">Extra Charges</button>
+        <button class="nav-sub-btn" data-finance-section="overrides" onclick="showFinanceSection('overrides', this)">Waivers &amp; Overrides</button>
       </div>
     </div>
-    <div class="nav-group finance-only" id="finance-clearance-nav-group">
-      <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'clearance')"><span class="icon"><i class="bi bi-patch-check"></i></span> Clearance <span class="nav-caret">›</span></button>
-      <div class="nav-submenu">
-        <button class="nav-sub-btn" data-finance-section="clearance" onclick="showFinanceSection('clearance', this)">Exam &amp; Registration</button>
-      </div>
-    </div>
+    <button class="nav-btn finance-only" data-page="finance" data-finance-section="audit" onclick="showFinanceSection('audit', this)"><span class="icon"><i class="bi bi-shield-check"></i></span> Audit Trail</button>
     <button class="nav-btn admin-only" data-page="sick" onclick="showPage('sick',this)"><span class="icon"><i class="bi bi-bandaid"></i></span> Sick Records</button>
     <div class="aside-label academic-only" style="margin-top:10px;">My Modules</div>
     <div class="academic-only" id="sidebar-levels"></div>
@@ -1234,178 +1238,385 @@
 
     <!-- FINANCE -->
     <div class="page" id="page-finance">
-      <div class="page-title">Finance</div>
-      <div class="page-sub">Move between payment work, student finance status, and clearance decisions without mixing the workflows.</div>
+      <div class="page-title" id="finance-page-title">Finance</div>
+      <div class="page-sub" id="finance-page-sub">Fees, payments and clearance for the whole college.</div>
 
-      <div class="finance-section active" id="finance-section-dashboard">
+      <!-- OVERVIEW -->
+      <div class="finance-section active" id="finance-section-overview">
         <div class="stats-grid">
+          <div class="stat-card" style="--c:var(--accent)"><div class="label">Billed this year</div><div class="value" id="fin-stat-billed">—</div></div>
           <div class="stat-card" style="--c:var(--green)"><div class="label">Collected</div><div class="value" id="fin-stat-paid">—</div></div>
           <div class="stat-card" style="--c:var(--red)"><div class="label">Outstanding</div><div class="value" id="fin-stat-balance">—</div></div>
-          <div class="stat-card" style="--c:var(--accent)"><div class="label">Payment Records</div><div class="value" id="fin-stat-count">—</div></div>
-          <div class="stat-card" style="--c:var(--muted)"><div class="label">Declared Categories</div><div class="value" id="fin-stat-categories">—</div></div>
-        </div>
-        <div class="stats-grid">
-          <div class="stat-card" style="--c:var(--green)"><div class="label">Exam Cleared</div><div class="value" id="fin-stat-exam-clear">—</div></div>
-          <div class="stat-card" style="--c:var(--yellow)"><div class="label">Exam Pending</div><div class="value" id="fin-stat-exam-pending">—</div></div>
-          <div class="stat-card" style="--c:var(--green)"><div class="label">Registration Cleared</div><div class="value" id="fin-stat-reg-clear">—</div></div>
-          <div class="stat-card" style="--c:var(--yellow)"><div class="label">Registration Pending</div><div class="value" id="fin-stat-reg-pending">—</div></div>
+          <div class="stat-card" style="--c:var(--yellow)"><div class="label">Students owing</div><div class="value" id="fin-stat-owing">—</div></div>
         </div>
         <div class="card finance-only">
-          <div class="card-title">Finance Summary by Student</div>
+          <div class="card-title">Who owes the most</div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Reg. No.</th><th>Name</th><th>Class</th><th>Required</th><th>Paid</th><th>Outstanding</th><th>Exam Clearance</th><th>Registration</th></tr></thead>
-              <tbody id="finance-summary-tbody"></tbody>
+              <thead><tr><th>Reg. No.</th><th>Name</th><th>Level</th><th>Billed</th><th>Paid</th><th>Outstanding</th><th>Blocked from</th><th></th></tr></thead>
+              <tbody id="fin-overview-tbody"></tbody>
             </table>
           </div>
         </div>
       </div>
 
-      <div class="finance-section" id="finance-section-categories">
-      <div class="card finance-only">
-        <div class="card-title">Payment Category Setup</div>
-        <div class="form-grid-3">
-          <div class="field"><label>Name</label><input id="fin-cat-name" placeholder="e.g. Semester 1 School Fees" /></div>
-          <div class="field">
-            <label>Type</label>
-            <select id="fin-cat-type">
-              <option value="school_fees">School Fees</option>
-              <option value="special_exam">Special Exam</option>
-              <option value="supp_exam">Supplementary Exam</option>
-              <option value="repeat_module">Repeat Module</option>
-              <option value="discontinuation">Discontinuation</option>
-              <option value="other">Other Payment</option>
-            </select>
+      <!-- CHARGE TYPES -->
+      <div class="finance-section" id="finance-section-charge-types">
+        <div class="card finance-only">
+          <div class="card-title">Add a charge type</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Name</label><input id="fin-ct-name" placeholder="e.g. Tuition Fee, Hostel, Examination Fee" /></div>
+            <div class="field">
+              <label>Group</label>
+              <select id="fin-ct-family">
+                <option value="fee">School Fees</option>
+                <option value="direct_cost">Direct Costs</option>
+                <option value="other">Other Payments</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Who is billed</label>
+              <select id="fin-ct-applies">
+                <option value="automatic">Everyone in the level</option>
+                <option value="optional">Only students assigned it (hostel)</option>
+                <option value="on_request">Only when declared (supplementary)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>How often</label>
+              <select id="fin-ct-frequency">
+                <option value="each_year">Each year</option>
+                <option value="once">Once — never repeated</option>
+                <option value="each_semester">Each semester</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Invoice group</label>
+              <input id="fin-ct-group" placeholder="e.g. Direct Costs" />
+            </div>
+            <div class="field">
+              <label>Paid into</label>
+              <select id="fin-ct-account"><option value="">— select account —</option></select>
+            </div>
           </div>
-          <div class="field"><label>Default Amount</label><input id="fin-cat-amount" type="number" min="0" step="0.01" placeholder="0.00" /></div>
-          <div class="field"><label>Installments</label><input id="fin-cat-installments" type="number" min="1" max="5" step="1" value="1" /></div>
-          <div class="field"><label>Semester</label><select id="fin-cat-semester"><option value="">Active / All Semesters</option></select></div>
-          <div class="field"><label>Class Level</label><select id="fin-cat-level"><option value="">All Levels</option></select></div>
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="savePaymentCategory()">💾 Save Category</button>
-      </div>
-
-      <div class="card finance-only">
-        <div class="card-title">Declared Categories</div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Name</th><th>Type</th><th>Installments</th><th>Default Amount</th><th>Status</th></tr></thead>
-            <tbody id="finance-categories-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-      </div>
-
-      <div class="finance-section" id="finance-section-payments">
-      <div class="card finance-only">
-        <div class="card-title">Record Payment</div>
-        <div class="form-grid-3">
-          <div class="field"><label>Student</label><select id="fin-pay-student"><option value="">— select student —</option></select></div>
-          <div class="field"><label>Category</label><select id="fin-pay-category" onchange="applySelectedCategoryAmount()"><option value="">— select category —</option></select></div>
-          <div class="field"><label>Obligation</label><select id="fin-pay-obligation" onchange="applySelectedObligationAmount()"><option value="">No specific obligation</option></select></div>
-          <div class="field"><label>Required Amount</label><input id="fin-pay-required" type="number" min="0" step="0.01" placeholder="0.00" /></div>
-          <div class="field"><label>Amount Paid</label><input id="fin-pay-paid" type="number" min="0" step="0.01" placeholder="0.00" /></div>
-          <div class="field"><label>Installment #</label><input id="fin-pay-installment" type="number" min="1" max="5" step="1" value="1" /></div>
-          <div class="field"><label>Payment Date</label><input id="fin-pay-date" type="date" /></div>
-          <div class="field"><label>Reference</label><input id="fin-pay-reference" placeholder="Receipt / control number" /></div>
-        </div>
-        <div class="field" style="margin-bottom:12px;"><label>Note</label><input id="fin-pay-note" placeholder="Optional accountant note" /></div>
-        <button class="btn btn-green btn-sm" onclick="saveStudentPayment()">💰 Record Payment</button>
-      </div>
-
-      <div class="card finance-only">
-        <div class="card-title">Payment Records</div>
-        <div class="form-grid-3" style="margin-bottom:14px;">
-          <div class="field"><label>Semester</label><select id="fin-flt-sem" onchange="loadFinance()"><option value="">All Semesters</option></select></div>
-          <div class="field"><label>Class Level</label><select id="fin-flt-level" onchange="loadFinance()"><option value="">All Levels</option></select></div>
-          <div class="field"><label>Category</label><select id="fin-flt-category" onchange="loadFinance()"><option value="">All Categories</option></select></div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Date</th><th>Reg. No.</th><th>Name</th><th>Class</th><th>Category</th><th>Installment</th><th>Required</th><th>Paid</th><th>Balance</th><th>Reference</th><th>Note</th></tr></thead>
-            <tbody id="finance-payments-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-      </div>
-
-      <div class="finance-section" id="finance-section-obligations">
-      <div class="card admin-only">
-        <div class="card-title">Declare Special Student Obligation</div>
-        <div class="form-grid-3">
-          <div class="field"><label>Student</label><select id="fin-obl-student"><option value="">— select student —</option></select></div>
-          <div class="field">
-            <label>Type</label>
-            <select id="fin-obl-type" onchange="syncObligationCategory()">
-              <option value="special_exam">Special Exam</option>
-              <option value="supp_exam">Supplementary Exam</option>
-              <option value="repeat_module">Repeat Module</option>
-            </select>
+          <div style="font-size:.75rem;color:var(--muted);margin:-4px 0 10px">
+            Charges sharing an invoice group and account are billed on one invoice.
+            Tuition and other charges go to different CRDB accounts, so they can never share one.
+            Mark caution money, admission, ID card, coat, uniforms and graduation as
+            <strong>Once</strong> — that is what makes a continuing student's bill smaller.
           </div>
-          <div class="field"><label>Category</label><select id="fin-obl-category"><option value="">— select category —</option></select></div>
-          <div class="field"><label>Amount Required</label><input id="fin-obl-amount" type="number" min="0" step="0.01" placeholder="0.00" /></div>
-          <div class="field"><label>Note</label><input id="fin-obl-note" placeholder="Optional note" /></div>
+          <div class="field" style="margin-top:6px">
+            <label>Not paying this blocks</label>
+            <div style="display:flex;flex-wrap:wrap;gap:14px;padding:8px 0">
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400"><input type="checkbox" id="fin-ct-blocks_registration" /> Registration</label>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400"><input type="checkbox" id="fin-ct-blocks_cat1" /> CAT 1</label>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400"><input type="checkbox" id="fin-ct-blocks_cat2" /> CAT 2</label>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400"><input type="checkbox" id="fin-ct-blocks_final" /> Final exam</label>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400"><input type="checkbox" id="fin-ct-blocks_results" /> Results release</label>
+            </div>
+            <div style="font-size:.75rem;color:var(--muted)">Tuition normally blocks everything; a graduation gown should block nothing but results.</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveChargeType()">💾 Save charge type</button>
         </div>
-        <button class="btn btn-warning btn-sm" onclick="declareFinanceObligation()">Declare Obligation</button>
-      </div>
-      <div class="card finance-only">
-        <div class="card-title">Special, Supplementary, and Repeat Obligations</div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Reg. No.</th><th>Name</th><th>Class</th><th>Type</th><th>Category</th><th>Required</th><th>Paid</th><th>Balance</th><th>Finance Setup</th><th>Note</th></tr></thead>
-            <tbody id="finance-obligations-tbody"></tbody>
-          </table>
+
+        <div class="card finance-only">
+          <div class="card-title">The catalogue</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Family</th><th>Invoice group</th><th>How often</th><th>Account</th><th>Billed to</th><th>Registration</th><th>CAT 1</th><th>CAT 2</th><th>Final</th><th>Results</th><th>Active</th><th></th></tr></thead>
+              <tbody id="fin-charge-types-tbody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">Tick a box to change what a charge blocks. It takes effect immediately for every student.</div>
         </div>
-      </div>
       </div>
 
+      <!-- BANK ACCOUNTS -->
+      <div class="finance-section" id="finance-section-accounts">
+        <div class="card finance-only">
+          <div class="card-title">College bank accounts</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Bank</label><input id="fin-ba-bank" value="CRDB" /></div>
+            <div class="field"><label>Account name</label><input id="fin-ba-name" placeholder="BLUE PHARMA COLLEGE OF HEALTH" /></div>
+            <div class="field"><label>Account number</label><input id="fin-ba-number" placeholder="0150417961300" /></div>
+            <div class="field"><label>What it collects</label><input id="fin-ba-purpose" placeholder="Tuition fee" /></div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveBankAccount()">💾 Save account</button>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
+            These print on the invoice. A student paying into the wrong account is the single
+            most common reason a payment cannot be traced.
+          </div>
+        </div>
+
+        <div class="card finance-only">
+          <div class="card-title">Accounts on file</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Bank</th><th>Account name</th><th>Number</th><th>Collects</th><th>Charges</th><th>Active</th><th></th></tr></thead>
+              <tbody id="fin-accounts-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card finance-only">
+          <div class="card-title">College details on invoices</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Name</label><input id="fin-cp-name" /></div>
+            <div class="field"><label>Short name</label><input id="fin-cp-short" /></div>
+            <div class="field"><label>P.O. Box</label><input id="fin-cp-box" /></div>
+            <div class="field"><label>Town</label><input id="fin-cp-town" /></div>
+            <div class="field"><label>Phone</label><input id="fin-cp-phone" /></div>
+            <div class="field"><label>Email</label><input id="fin-cp-email" /></div>
+            <div class="field"><label>Website</label><input id="fin-cp-web" /></div>
+          </div>
+          <div class="field">
+            <label>Terms &amp; conditions (one per line)</label>
+            <textarea id="fin-cp-terms" rows="5" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:8px;font:inherit"></textarea>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveCollegeProfile()">💾 Save details</button>
+        </div>
+      </div>
+
+      <!-- FEE STRUCTURE GRID -->
+      <div class="finance-section" id="finance-section-fee-structure">
+        <div class="card finance-only">
+          <div class="card-title">Fee structure</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Academic year</label><select id="fin-fs-year" onchange="loadFeeGrid()"></select></div>
+          </div>
+          <div class="table-wrap">
+            <table id="fin-fee-grid">
+              <thead><tr id="fin-fee-grid-head"></tr></thead>
+              <tbody id="fin-fee-grid-tbody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
+            Click any cell to set the amount, how many installments that level pays it over, and when each falls due.
+          </div>
+        </div>
+
+        <div class="card finance-only">
+          <div class="card-title">Bill the students</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Academic year</label><select id="fin-gen-year"></select></div>
+            <div class="field"><label>Class level</label><select id="fin-gen-level"><option value="">All levels</option></select></div>
+          </div>
+          <button class="btn btn-green btn-sm" onclick="generateCharges()">Generate charges</button>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
+            Raises every automatic charge for the students at that level. Safe to run again after
+            adding students — nobody is billed twice.
+          </div>
+          <div id="fin-gen-result" style="margin-top:10px"></div>
+        </div>
+      </div>
+
+      <!-- RECORD A PAYMENT -->
+      <div class="finance-section" id="finance-section-record">
+        <div class="card finance-only">
+          <div class="card-title">Find the invoice</div>
+          <div class="form-grid-3">
+            <div class="field">
+              <label>Reference on the slip</label>
+              <input id="fin-lookup-ref" placeholder="BPH-4471" onkeydown="if(event.key==='Enter')lookupInvoice()" />
+            </div>
+            <div class="field" style="align-self:end">
+              <button class="btn btn-primary btn-sm" onclick="lookupInvoice()">🔍 Look up</button>
+            </div>
+          </div>
+          <div id="fin-lookup-result"></div>
+        </div>
+
+        <div class="card finance-only">
+          <div class="card-title">Record the payment</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Student</label><select id="fin-pay-profile" onchange="onPayProfileChange()"><option value="">— select student —</option></select></div>
+            <div class="field"><label>Amount received</label><input id="fin-pay-amount" type="number" min="0.01" step="0.01" placeholder="0.00" /></div>
+            <div class="field"><label>Date on the slip</label><input id="fin-pay-date" type="date" /></div>
+            <div class="field">
+              <label>Paid through</label>
+              <select id="fin-pay-channel">
+                <option value="crdb">CRDB bank deposit</option>
+                <option value="mobile">Mobile money</option>
+                <option value="cash">Cash at the office</option>
+              </select>
+            </div>
+            <div class="field"><label>Bank / transaction ref.</label><input id="fin-pay-bankref" placeholder="from the slip" /></div>
+            <div class="field"><label>EFD receipt no.</label><input id="fin-pay-efd" placeholder="from the machine" /></div>
+            <div class="field"><label>Paid by</label><input id="fin-pay-payer" placeholder="name on the slip" /></div>
+            <div class="field">
+              <label>Who they are</label>
+              <select id="fin-pay-relation">
+                <option value="self">The student</option>
+                <option value="parent">Parent</option>
+                <option value="guardian">Guardian</option>
+                <option value="sponsor">Sponsor</option>
+                <option value="employer">Employer</option>
+              </select>
+            </div>
+            <div class="field"><label>Note</label><input id="fin-pay-note" placeholder="optional" /></div>
+          </div>
+          <input type="hidden" id="fin-pay-invoice" />
+          <button class="btn btn-green btn-sm" onclick="recordPayment()">💰 Record payment</button>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
+            Record only what you are holding proof of. The balance and every exam clearance update
+            the moment you save — there is nothing else to approve.
+          </div>
+          <div id="fin-pay-outstanding" style="margin-top:14px"></div>
+        </div>
+      </div>
+
+      <!-- PAYMENT HISTORY -->
+      <div class="finance-section" id="finance-section-history">
+        <div class="card finance-only">
+          <div class="card-title">Payments recorded</div>
+          <div class="form-grid-3">
+            <div class="field"><label>From</label><input id="fin-hist-from" type="date" onchange="loadPaymentHistory()" /></div>
+            <div class="field"><label>To</label><input id="fin-hist-to" type="date" onchange="loadPaymentHistory()" /></div>
+            <div class="field"><label>Search</label><input id="fin-hist-search" oninput="renderPaymentHistory()" placeholder="name, reg no, reference" /></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Reg. No.</th><th>Name</th><th>Amount</th><th>Channel</th><th>Paid by</th><th>Bank ref.</th><th>EFD</th><th>Covers</th><th>Recorded by</th><th></th></tr></thead>
+              <tbody id="fin-history-tbody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
+            Payments are never edited or deleted. A mistake is corrected with a reversal, which
+            leaves both entries on the record.
+          </div>
+        </div>
+      </div>
+
+      <!-- COLLECTIONS -->
+      <div class="finance-section" id="finance-section-collections">
+        <div class="card finance-only">
+          <div class="card-title">Collections</div>
+          <div class="form-grid-3">
+            <div class="field"><label>From</label><input id="fin-coll-from" type="date" onchange="loadCollections()" /></div>
+            <div class="field"><label>To</label><input id="fin-coll-to" type="date" onchange="loadCollections()" /></div>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card" style="--c:var(--green)"><div class="label">Total received</div><div class="value" id="fin-coll-total">—</div></div>
+            <div class="stat-card" style="--c:var(--accent)"><div class="label">Payments</div><div class="value" id="fin-coll-count">—</div></div>
+            <div class="stat-card" style="--c:var(--red)"><div class="label">Missing EFD number</div><div class="value" id="fin-coll-missing">—</div></div>
+          </div>
+          <div class="form-grid-3">
+            <div class="card" style="box-shadow:none;margin:0">
+              <div class="card-title">By channel</div>
+              <div id="fin-coll-channel"></div>
+            </div>
+            <div class="card" style="box-shadow:none;margin:0">
+              <div class="card-title">By group</div>
+              <div id="fin-coll-family"></div>
+            </div>
+          </div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
+            Compare "Total received" against the EFD machine for the same dates. Anything in
+            "Missing EFD number" has no fiscal receipt recorded against it yet.
+          </div>
+        </div>
+      </div>
+
+      <!-- STUDENTS -->
       <div class="finance-section" id="finance-section-students">
-      <div class="card finance-only">
-        <div class="card-title">Student Payment Status</div>
-        <div class="form-grid-3" style="margin-bottom:14px;">
-          <div class="field"><label>Semester</label><select id="fin-stu-flt-sem" onchange="loadFinanceStudentsSection()"><option value="">All Semesters</option></select></div>
-          <div class="field"><label>Class Level</label><select id="fin-stu-flt-level" onchange="loadFinanceStudentsSection()"><option value="">All Levels</option></select></div>
-          <div class="field"><label>Search</label><input id="fin-stu-search" oninput="renderFinanceStudentsTable()" placeholder="name, reg no, module" /></div>
+        <div class="card finance-only">
+          <div class="card-title">Balances and clearance</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Academic year</label><select id="fin-stu-year" onchange="loadFinanceStudents()"></select></div>
+            <div class="field"><label>Class level</label><select id="fin-stu-level" onchange="loadFinanceStudents()"><option value="">All levels</option></select></div>
+            <div class="field"><label>Show</label><select id="fin-stu-filter" onchange="renderFinanceStudents()"><option value="all">Everyone</option><option value="owing">Only those owing</option><option value="blocked">Only those blocked</option></select></div>
+            <div class="field"><label>Search</label><input id="fin-stu-search" oninput="renderFinanceStudents()" placeholder="name or reg no" /></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Reg. No.</th><th>Name</th><th>Level</th><th>Billed</th><th>Paid</th><th>Outstanding</th><th>Reg.</th><th>CAT 1</th><th>CAT 2</th><th>Final</th><th>Results</th><th></th></tr></thead>
+              <tbody id="fin-students-tbody"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Reg. No.</th><th>Name</th><th>Class</th><th>Required</th><th>Paid</th><th>Outstanding</th><th>Status</th></tr></thead>
-            <tbody id="finance-students-tbody"></tbody>
-          </table>
-        </div>
-      </div>
       </div>
 
-      <div class="finance-section" id="finance-section-clearance">
-      <div class="card finance-only">
-        <div class="card-title">Exam &amp; Registration Clearance</div>
-        <div class="form-grid-3" style="margin-bottom:14px;">
-          <div class="field">
-            <label>Clearance Type</label>
-            <select id="fin-clearance-type" onchange="renderFinanceClearanceTable()">
-              <option value="cat1">CAT 1 Exam</option>
-              <option value="cat2">CAT 2 Exam</option>
-              <option value="end">End of Semester Exam</option>
-              <option value="registration">Registration / Results</option>
-              <option value="all">All Finance Obligations</option>
-            </select>
+      <!-- ONE-OFF CHARGE -->
+      <div class="finance-section" id="finance-section-extra-charge">
+        <div class="card finance-only">
+          <div class="card-title">Bill one student for something extra</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Student</label><select id="fin-rc-profile"><option value="">— select student —</option></select></div>
+            <div class="field"><label>What for</label><select id="fin-rc-type" onchange="applyRaiseChargeDefault()"><option value="">— select charge —</option></select></div>
+            <div class="field"><label>Amount</label><input id="fin-rc-amount" type="number" min="0.01" step="0.01" placeholder="0.00" /></div>
+            <div class="field"><label>Due date</label><input id="fin-rc-due" type="date" /></div>
+            <div class="field"><label>Note</label><input id="fin-rc-note" placeholder="e.g. Supplementary — ANA101" /></div>
           </div>
-          <div class="field">
-            <label>Helper Filter</label>
-            <select id="fin-clearance-filter" onchange="renderFinanceClearanceTable()">
-              <option value="pending">Pending Only</option>
-              <option value="cleared">Cleared Only</option>
-              <option value="all">All Students</option>
-            </select>
+          <button class="btn btn-primary btn-sm" onclick="raiseExtraCharge()">Raise the charge</button>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
+            For supplementary exams, repeat modules, hostel places and anything else outside the
+            fee structure. It appears on the student's statement immediately and they can invoice it.
           </div>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Reg. No.</th><th>Name</th><th>Class</th><th>Exam Balance</th><th>School Fees Balance</th><th>Total Outstanding</th><th>Clearance</th><th>Finance Approval</th><th>Note</th></tr></thead>
-            <tbody id="finance-clearance-tbody"></tbody>
-          </table>
+
+        <div class="card finance-only">
+          <div class="card-title">Recently raised</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Reg. No.</th><th>Name</th><th>Charge</th><th>Amount</th><th>Outstanding</th><th>Due</th><th>Note</th></tr></thead>
+              <tbody id="fin-extra-charges-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
+
+      <!-- OVERRIDES -->
+      <div class="finance-section" id="finance-section-overrides">
+        <div class="card finance-only">
+          <div class="card-title">Clear or hold a student by hand</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Student</label><select id="fin-ov-profile"><option value="">— select student —</option></select></div>
+            <div class="field">
+              <label>Applies to</label>
+              <select id="fin-ov-period">
+                <option value="registration">Registration</option>
+                <option value="cat1">CAT 1</option>
+                <option value="cat2">CAT 2</option>
+                <option value="final">Final exam</option>
+                <option value="results">Results release</option>
+              </select>
+            </div>
+            <div class="field"><label>Decision</label><select id="fin-ov-status"><option value="cleared">Clear them</option><option value="blocked">Hold them</option></select></div>
+            <div class="field"><label>Reason</label><input id="fin-ov-reason" placeholder="e.g. HESLB disbursement delayed" /></div>
+            <div class="field"><label>Expires on</label><input id="fin-ov-expires" type="date" /></div>
+          </div>
+          <button class="btn btn-warning btn-sm" onclick="saveOverride()">Save override</button>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
+            This overrules the ledger, so it needs a reason worth reading later. Leave the expiry
+            blank only if it should never lapse.
+          </div>
+        </div>
+
+        <div class="card finance-only">
+          <div class="card-title">Active overrides</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Reg. No.</th><th>Name</th><th>Applies to</th><th>Decision</th><th>Reason</th><th>Expires</th><th>Approved by</th><th></th></tr></thead>
+              <tbody id="fin-overrides-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- AUDIT -->
+      <div class="finance-section" id="finance-section-audit">
+        <div class="card finance-only">
+          <div class="card-title">Audit trail</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Student</th><th>What happened</th></tr></thead>
+              <tbody id="fin-audit-tbody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
+            Every action that touches money, kept permanently. Showing the 500 most recent.
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1712,6 +1923,37 @@
 </div>
 
 <!-- PROFILE MODAL -->
+<div class="modal-overlay" id="fee-cell-modal">
+  <div class="modal">
+    <div class="modal-title"><span id="fee-cell-title">Fee</span><button class="modal-close" onclick="closeFeeCellModal()">✕</button></div>
+    <div class="form-grid-3">
+      <div class="field"><label>Amount for the year</label><input id="fee-cell-amount" type="number" min="0" step="0.01" oninput="renderFeeCellDates()" /></div>
+      <div class="field"><label>Installments</label><input id="fee-cell-installments" type="number" min="1" max="12" step="1" value="1" oninput="renderFeeCellDates()" /></div>
+      <div class="field">
+        <label>Billed</label>
+        <select id="fee-cell-period">
+          <option value="academic_year">Once per academic year</option>
+          <option value="semester">Once per semester</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-title" style="margin-top:10px">When each installment falls due</div>
+    <div style="font-size:.75rem;color:var(--muted);margin-bottom:8px">
+      Exam clearance is measured against these dates — a student is cleared when everything
+      due by the exam is settled, not when the whole year is paid.
+    </div>
+    <div class="form-grid-3" id="fee-cell-dates"></div>
+    <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="saveFeeCell()">💾 Save</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="statement-modal">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-title"><span id="statement-title">Statement</span><button class="modal-close" onclick="closeStatementModal()">✕</button></div>
+    <div id="statement-body"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="profile-modal">
   <div class="modal">
     <div class="modal-title">
@@ -1784,12 +2026,17 @@ const state = {
   activeSem: null,
   eligibilityBasis: 'all',
   declarationType: 'special_exam',
-  financeSection: 'dashboard',
-  financeStudents: [],
-  paymentCategories: [],
-  studentPayments: [],
-  financeObligations: [],
-  financeClearances: [],
+  financeSection: 'overview',
+  academicYears: null,
+  financeProfiles: null,
+  financeYear: null,
+  chargeTypes: [],
+  bankAccounts: [],
+  college: null,
+  feeGrid: null,
+  feeCell: null,
+  ledgerPayments: [],
+  financeOverrides: [],
   inventoryAssets: [],
   inventoryLocations: [],
   inventoryCategories: [],
@@ -1865,16 +2112,6 @@ function closeSidebar() {
   document.getElementById('hamburger').classList.remove('open');
   document.getElementById('sidebar-overlay').classList.remove('show');
 }
-function financeNavGroupFor(section = state.financeSection || 'dashboard') {
-  if (['payments', 'categories'].includes(section)) return document.getElementById('finance-payments-nav-group');
-  if (['students', 'obligations'].includes(section)) return document.getElementById('finance-students-nav-group');
-  if (section === 'clearance') return document.getElementById('finance-clearance-nav-group');
-  return null;
-}
-function financeNavButtonFor(section = state.financeSection || 'dashboard') {
-  return financeNavGroupFor(section)?.querySelector('.nav-btn')
-    || document.querySelector('.nav-btn[data-finance-section="dashboard"]');
-}
 function showPage(name, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -1937,7 +2174,7 @@ function showPage(name, btn) {
     const group = financeNavGroupFor();
     group?.classList.add('open');
     financeNavButtonFor()?.classList.add('active');
-    document.querySelector(`[data-finance-section="${state.financeSection || 'dashboard'}"]`)?.classList.add('active');
+    document.querySelector(`[data-finance-section="${state.financeSection || 'overview'}"]`)?.classList.add('active');
   }
   closeSidebar();
   if (name === 'modules') loadModules();
@@ -1994,18 +2231,6 @@ function toggleDeclarationsMenu(event) {
   group.classList.toggle('open');
   if (!document.getElementById('page-declarations').classList.contains('active')) {
     showDeclarationType(state.declarationType || 'special_exam', group.querySelector(`[data-declaration-type="${state.declarationType || 'special_exam'}"]`));
-  }
-  event.stopPropagation();
-}
-
-function toggleFinanceMenu(event, area = 'payments') {
-  const sectionByArea = { payments: 'payments', students: 'students', clearance: 'clearance' };
-  const group = document.getElementById(`finance-${area}-nav-group`);
-  if (!group) return;
-  group.classList.toggle('open');
-  if (!document.getElementById('page-finance').classList.contains('active')) {
-    const section = sectionByArea[area] || 'dashboard';
-    showFinanceSection(section, group.querySelector(`[data-finance-section="${section}"]`));
   }
   event.stopPropagation();
 }
@@ -2089,15 +2314,6 @@ function showEligibilityBasis(basis, btn) {
   document.querySelectorAll('[data-eligibility-basis]').forEach(el => el.classList.toggle('active', el.dataset.eligibilityBasis === state.eligibilityBasis));
   if (btn) btn.classList.add('active');
   onEligibilityModeChange();
-}
-
-function showFinanceSection(section, btn) {
-  state.financeSection = section || 'dashboard';
-  showPage('finance', financeNavButtonFor(state.financeSection));
-  document.querySelectorAll('[data-finance-section]').forEach(el => el.classList.toggle('active', el.dataset.financeSection === state.financeSection));
-  document.querySelectorAll('.finance-section').forEach(el => el.classList.toggle('active', el.id === `finance-section-${state.financeSection}`));
-  if (btn) btn.classList.add('active');
-  if (state.financeStudents.length || state.paymentCategories.length || state.studentPayments.length) renderFinance();
 }
 
 function showInventorySection(section, btn) {
@@ -2251,6 +2467,7 @@ async function boot() {
 
 // ── SELECTS ────────────────────────────────────────────────────────────────────
 function buildSemOptions(el, includeAll = false) {
+  if (!el) return;
   const cur = el.value;
   el.innerHTML = includeAll ? '<option value="">All Semesters</option>' : '<option value="">— select semester —</option>';
   state.semesters.forEach(s => {
@@ -2262,6 +2479,7 @@ function buildSemOptions(el, includeAll = false) {
   if (cur) el.value = cur;
 }
 function buildLevelOptions(el, includeAll = false) {
+  if (!el) return;
   const cur = el.value;
   el.innerHTML = includeAll ? '<option value="">All Levels</option>' : '<option value="">— select level —</option>';
   state.levels.forEach(l => {
@@ -2304,12 +2522,6 @@ function populateAllSelects() {
   buildLevelOptions(document.getElementById('decl-flt-level'), true);
   buildSemOptions(document.getElementById('elig-flt-sem'), true);
   buildLevelOptions(document.getElementById('elig-flt-level'), true);
-  buildSemOptions(document.getElementById('fin-flt-sem'), true);
-  buildLevelOptions(document.getElementById('fin-flt-level'), true);
-  buildSemOptions(document.getElementById('fin-stu-flt-sem'), true);
-  buildLevelOptions(document.getElementById('fin-stu-flt-level'), true);
-  buildSemOptions(document.getElementById('fin-cat-semester'), true);
-  buildLevelOptions(document.getElementById('fin-cat-level'), true);
   buildSemOptions(document.getElementById('sick-flt-sem'), true);
   buildLevelOptions(document.getElementById('sick-flt-level'), true);
   buildSemOptions(document.getElementById('profile-flt-sem'), true);
@@ -4377,438 +4589,899 @@ function showFinalEligibilityExport(btn) {
 }
 
 // ── FINANCE PAGE ───────────────────────────────────────────────────────────────
+//
+// Everything here reads the fees ledger. Balances and clearance are computed by
+// the server (attendance/finance.py) and never recalculated in the browser —
+// the old page did its own arithmetic and disagreed with what the student saw
+// on their own portal.
+
 function money(v) {
   const n = Number(v || 0);
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function financeCategoryKind(categoryId) {
-  const cat = state.paymentCategories.find(c => String(c.id) === String(categoryId));
-  return cat?.category_type || '';
+const CLEARANCE_PERIODS = ['registration', 'cat1', 'cat2', 'final', 'results'];
+const PERIOD_LABELS = {
+  registration: 'Registration', cat1: 'CAT 1', cat2: 'CAT 2',
+  final: 'Final exam', results: 'Results',
+};
+
+function clearBadge(ok) {
+  return ok
+    ? '<span class="badge badge-green">Clear</span>'
+    : '<span class="badge badge-red">Blocked</span>';
 }
 
-function buildFinanceSummaries() {
-  const schoolFeeCategories = state.paymentCategories.filter(c => c.is_active && c.category_type === 'school_fees');
-  return state.financeStudents.map(student => {
-    const payments = state.studentPayments.filter(p => String(p.student) === String(student.id));
-    const obligations = state.financeObligations.filter(o => String(o.student) === String(student.id));
-    let schoolRequired = schoolFeeCategories.reduce((sum, c) => sum + Number(c.default_amount || 0), 0);
-    let schoolPaid = 0;
-    let examRequired = 0;
-    let examPaid = 0;
-    let otherRequired = 0;
-    let otherPaid = 0;
-    const perCategoryRequired = {};
+function blockedList(clearance) {
+  const blocked = CLEARANCE_PERIODS.filter(p => clearance && clearance[p] === false);
+  if (!blocked.length) return '<span class="badge badge-green">Nothing</span>';
+  return blocked.map(p => `<span class="badge badge-red">${PERIOD_LABELS[p]}</span>`).join(' ');
+}
 
-    payments.forEach(p => {
-      if (p.obligation) return;
-      const kind = p.category_type || financeCategoryKind(p.category);
-      const required = Number(p.amount_required || 0);
-      const paid = Number(p.amount_paid || 0);
-      perCategoryRequired[p.category] = Math.max(perCategoryRequired[p.category] || 0, required);
-      if (kind === 'school_fees') {
-        schoolPaid += paid;
-      } else if (kind === 'special_exam' || kind === 'supp_exam') {
-        examPaid += paid;
-      } else {
-        otherPaid += paid;
-      }
-    });
+function financeNavGroupFor(section = state.financeSection || 'overview') {
+  if (['accounts', 'charge-types', 'fee-structure'].includes(section)) return document.getElementById('finance-setup-nav-group');
+  if (['record', 'history', 'collections'].includes(section)) return document.getElementById('finance-payments-nav-group');
+  if (['students', 'extra-charge', 'overrides'].includes(section)) return document.getElementById('finance-students-nav-group');
+  return null;
+}
 
-    Object.entries(perCategoryRequired).forEach(([categoryId, required]) => {
-      const kind = financeCategoryKind(categoryId);
-      if (kind === 'school_fees') {
-        const categoryDefault = Number(state.paymentCategories.find(c => String(c.id) === String(categoryId))?.default_amount || 0);
-        schoolRequired += Math.max(0, required - categoryDefault);
-      } else if (kind === 'special_exam' || kind === 'supp_exam') {
-        examRequired += required;
-      } else {
-        otherRequired += required;
-      }
-    });
+function financeNavButtonFor(section = state.financeSection || 'overview') {
+  return financeNavGroupFor(section)?.querySelector('.nav-btn')
+    || document.querySelector(`.nav-btn[data-finance-section="${section}"]`)
+    || document.querySelector('.nav-btn[data-finance-section="overview"]');
+}
 
-    obligations.forEach(o => {
-      const required = Number(o.amount_required || 0);
-      const paid = Number(o.amount_paid || 0);
-      if (o.obligation_type === 'special_exam' || o.obligation_type === 'supp_exam') {
-        examRequired += required;
-        examPaid += paid;
-      } else if (o.obligation_type === 'repeat_module') {
-        otherRequired += required;
-        otherPaid += paid;
-      }
-    });
+const FINANCE_COPY = {
+  overview:        ['Finance Overview', 'Where the college stands this year, and who is furthest behind.'],
+  accounts:        ['Bank Accounts', 'Where each kind of fee is banked, and the college details that print on an invoice.'],
+  'charge-types':  ['Charge Types', 'What the college charges for, how often, and what each one blocks when unpaid.'],
+  'fee-structure': ['Fee Structure', 'How much each level pays, over how many installments, and when each falls due.'],
+  record:          ['Record a Payment', 'Look up the reference on the slip, then record what arrived.'],
+  history:         ['Payment History', 'Every payment recorded, and the reversals that corrected them.'],
+  collections:     ['Collections & EFD', 'What came in over a period, to reconcile against the EFD machine.'],
+  students:        ['Balances & Clearance', 'What every student owes and what they are cleared to sit.'],
+  'extra-charge':  ['Extra Charges', 'Bill one student for a supplementary, a repeat, a hostel place — anything outside the fee structure.'],
+  overrides:       ['Waivers & Overrides', 'Bursaries, sponsor delays and manual holds — the exceptions to the ledger.'],
+  audit:           ['Audit Trail', 'Every action that has touched money.'],
+};
 
-    const schoolBalance = Math.max(0, schoolRequired - schoolPaid);
-    const examBalance = Math.max(0, examRequired - examPaid);
-    const otherBalance = Math.max(0, otherRequired - otherPaid);
-    const requiredTotal = schoolRequired + examRequired + otherRequired;
-    const paidTotal = schoolPaid + examPaid + otherPaid;
-    const balanceTotal = schoolBalance + examBalance + otherBalance;
-    return {
-      ...student,
-      requiredTotal,
-      paidTotal,
-      balanceTotal,
-      schoolBalance,
-      examBalance,
-      otherBalance,
-      examCleared: examBalance <= 0,
-      registrationCleared: schoolBalance <= 0,
-      clearances: state.financeClearances.filter(c => String(c.student) === String(student.id)),
-    };
+function showFinanceSection(section, btn) {
+  state.financeSection = section || 'overview';
+  showPage('finance', financeNavButtonFor(state.financeSection));
+  document.querySelectorAll('[data-finance-section]').forEach(el =>
+    el.classList.toggle('active', el.dataset.financeSection === state.financeSection));
+  document.querySelectorAll('.finance-section').forEach(el =>
+    el.classList.toggle('active', el.id === `finance-section-${state.financeSection}`));
+  if (btn) btn.classList.add('active');
+
+  const [title, sub] = FINANCE_COPY[state.financeSection] || FINANCE_COPY.overview;
+  document.getElementById('finance-page-title').textContent = title;
+  document.getElementById('finance-page-sub').textContent = sub;
+}
+
+function toggleFinanceMenu(event, area = 'payments') {
+  const firstOf = { setup: 'charge-types', payments: 'record', students: 'students' };
+  const group = document.getElementById(`finance-${area}-nav-group`);
+  if (!group) return;
+  group.classList.toggle('open');
+  if (!document.getElementById('page-finance').classList.contains('active')) {
+    const section = firstOf[area];
+    showFinanceSection(section, group.querySelector(`[data-finance-section="${section}"]`));
+  }
+  event.stopPropagation();
+}
+
+// ── shared lookups ────────────────────────────────────────────────────────────
+
+async function ensureFinanceLookups() {
+  if (!state.academicYears) {
+    const years = await api('GET', '/academic-years/');
+    state.academicYears = years.results ?? years;
+  }
+  if (!state.financeProfiles) {
+    const data = await api('GET', '/finance/students/');
+    state.financeProfiles = data.rows;
+    state.financeYear = data.academic_year;
+  }
+  const activeYearId = state.financeYear?.id
+    || state.academicYears.find(y => y.is_active)?.id
+    || state.academicYears[0]?.id;
+
+  ['fin-fs-year', 'fin-gen-year', 'fin-stu-year'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.filled) return;
+    el.innerHTML = state.academicYears.map(y =>
+      `<option value="${y.id}" ${String(y.id) === String(activeYearId) ? 'selected' : ''}>${safeText(y.name)}</option>`
+    ).join('');
+    el.dataset.filled = '1';
+  });
+  ['fin-gen-level', 'fin-stu-level'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.filled) return;
+    el.innerHTML = '<option value="">All levels</option>' + state.levels.map(l =>
+      `<option value="${l.id}">${safeText(l.name)}</option>`).join('');
+    el.dataset.filled = '1';
+  });
+  ['fin-pay-profile', 'fin-ov-profile', 'fin-rc-profile'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const current = el.value;
+    el.innerHTML = '<option value="">— select student —</option>' + state.financeProfiles.map(p =>
+      `<option value="${p.profile_id}">${safeText(p.nactvet_reg_no)} · ${safeText(p.name)}${p.class_level ? ' · ' + safeText(p.class_level) : ''}</option>`
+    ).join('');
+    if (current) el.value = current;
   });
 }
 
 async function loadFinance() {
   if (!state.isStaff && !state.isAccountant) return;
-  const semId = document.getElementById('fin-flt-sem')?.value || '';
-  const lvlId = document.getElementById('fin-flt-level')?.value || '';
+  await loadFinanceSection();
+}
 
-  let studentsUrl = '/finance-students/?';
-  if (semId) studentsUrl += `semester_id=${semId}&`;
-  if (lvlId) studentsUrl += `class_level_id=${lvlId}&`;
-
-  let paymentsUrl = '/student-payments/?';
-  if (semId) paymentsUrl += `semester_id=${semId}&`;
-  if (lvlId) paymentsUrl += `class_level_id=${lvlId}&`;
-
-  let categoriesUrl = '/payment-categories/?';
-  if (semId) categoriesUrl += `semester_id=${semId}&`;
-  if (lvlId) categoriesUrl += `class_level_id=${lvlId}&`;
-
-  let obligationsUrl = '/finance-obligations/?';
-  if (semId) obligationsUrl += `semester_id=${semId}&`;
-  if (lvlId) obligationsUrl += `class_level_id=${lvlId}&`;
-
-  let clearancesUrl = '/finance-clearances/?';
-  if (semId) clearancesUrl += `semester_id=${semId}&`;
-  if (lvlId) clearancesUrl += `class_level_id=${lvlId}&`;
-
+async function loadFinanceSection() {
+  if (!state.isStaff && !state.isAccountant) return;
   try {
-    const [students, categories, payments, obligations, clearances] = await Promise.all([
-      api('GET', studentsUrl),
-      api('GET', categoriesUrl),
-      api('GET', paymentsUrl),
-      api('GET', obligationsUrl),
-      api('GET', clearancesUrl),
-    ]);
-    state.financeStudents = students.results ?? students;
-    state.paymentCategories = categories.results ?? categories;
-    state.studentPayments = payments.results ?? payments;
-    state.financeObligations = obligations.results ?? obligations;
-    state.financeClearances = clearances.results ?? clearances;
-    renderFinance();
-  } catch(e) {
+    await ensureFinanceLookups();
+    switch (state.financeSection) {
+      case 'overview':       await loadFinanceOverview(); break;
+      case 'accounts':       await loadBankAccounts(); break;
+      case 'charge-types':   await loadChargeTypes(); break;
+      case 'fee-structure':  await loadFeeGrid(); break;
+      case 'record':         await loadOutstandingForPayment(); break;
+      case 'history':        await loadPaymentHistory(); break;
+      case 'collections':    await loadCollections(); break;
+      case 'students':       await loadFinanceStudents(); break;
+      case 'extra-charge':   await loadExtraCharges(); break;
+      case 'overrides':      await loadOverrides(); break;
+      case 'audit':          await loadFinanceAudit(); break;
+    }
+  } catch (e) {
     toast(e?.detail || 'Failed to load finance data', 'var(--red)');
   }
 }
 
-function renderFinance() {
-  buildFinanceSelects();
-  const summaries = buildFinanceSummaries();
-  const paid = state.studentPayments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
-  const balance = summaries.reduce((sum, s) => sum + Number(s.balanceTotal || 0), 0);
-  const examCleared = summaries.filter(s => hasFinanceClearance(s, 'end')).length;
-  const regCleared = summaries.filter(s => hasFinanceClearance(s, 'registration')).length;
-  document.getElementById('fin-stat-paid').textContent = money(paid);
-  document.getElementById('fin-stat-balance').textContent = money(balance);
-  document.getElementById('fin-stat-count').textContent = state.studentPayments.length;
-  document.getElementById('fin-stat-categories').textContent = state.paymentCategories.length;
-  document.getElementById('fin-stat-exam-clear').textContent = examCleared;
-  document.getElementById('fin-stat-exam-pending').textContent = summaries.length - examCleared;
-  document.getElementById('fin-stat-reg-clear').textContent = regCleared;
-  document.getElementById('fin-stat-reg-pending').textContent = summaries.length - regCleared;
+// ── overview ──────────────────────────────────────────────────────────────────
 
-  renderFinanceSummaryTable(summaries);
-  renderFinanceStudentsTable(summaries);
-  renderFinanceClearanceTable(summaries);
-  renderFinanceObligationsTable();
+async function loadFinanceOverview() {
+  const data = await api('GET', '/finance/students/');
+  state.financeProfiles = data.rows;
+  state.financeYear = data.academic_year;
+  document.getElementById('fin-stat-billed').textContent = money(data.totals.billed);
+  document.getElementById('fin-stat-paid').textContent = money(data.totals.paid);
+  document.getElementById('fin-stat-balance').textContent = money(data.totals.outstanding);
+  document.getElementById('fin-stat-owing').textContent = data.totals.owing;
 
-  const catId = document.getElementById('fin-flt-category')?.value || '';
-  const paymentRows = catId ? state.studentPayments.filter(p => String(p.category) === String(catId)) : state.studentPayments;
-  document.getElementById('finance-payments-tbody').innerHTML = paymentRows.length ? paymentRows.map(p => `
+  const top = data.rows.filter(r => Number(r.balance) > 0).slice(0, 15);
+  document.getElementById('fin-overview-tbody').innerHTML = top.length ? top.map(r => `
     <tr>
-      <td>${p.payment_date}</td>
-      <td><span style="font-family:var(--font-mono);font-size:.78rem">${p.student_reg_no}</span></td>
-      <td>${p.student_name}</td>
-      <td>${p.class_level}</td>
-      <td>${p.category_name}</td>
-      <td>${p.installment_number || 1}</td>
-      <td>${money(p.amount_required)}</td>
-      <td><span class="badge badge-green">${money(p.amount_paid)}</span></td>
-      <td><span class="badge ${Number(p.balance || 0) > 0 ? 'badge-red' : 'badge-green'}">${money(p.balance)}</span></td>
-      <td>${p.reference || '—'}</td>
-      <td>${p.note || '—'}</td>
-    </tr>
-  `).join('') : '<tr><td colspan="11"><div class="empty"><div class="ei">💳</div>No payments recorded yet</div></td></tr>';
-
-  document.getElementById('finance-categories-tbody').innerHTML = state.paymentCategories.length ? state.paymentCategories.map(c => `
-    <tr>
-      <td>${c.name}</td>
-      <td>${c.category_type_display}</td>
-      <td>${c.installment_count || 1}</td>
-      <td>${money(c.default_amount)}</td>
-      <td>${c.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Inactive</span>'}</td>
-    </tr>
-  `).join('') : '<tr><td colspan="5"><div class="empty"><div class="ei">📋</div>No categories declared yet</div></td></tr>';
+      <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.nactvet_reg_no)}</span></td>
+      <td>${safeText(r.name)}</td>
+      <td>${safeText(r.class_level || '—')}</td>
+      <td>${money(r.billed)}</td>
+      <td>${money(r.paid)}</td>
+      <td><span class="badge badge-red">${money(r.balance)}</span></td>
+      <td>${blockedList(r.clearance)}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openStatement(${r.profile_id})">Statement</button></td>
+    </tr>`).join('')
+    : '<tr><td colspan="8"><div class="empty"><div class="ei">✅</div>Nobody is behind on fees</div></td></tr>';
 }
 
-function clearanceBadge(ok) {
-  return ok ? '<span class="badge badge-green">Cleared</span>' : '<span class="badge badge-red">Pending</span>';
+// ── charge types ──────────────────────────────────────────────────────────────
+
+async function loadChargeTypes() {
+  const [types, accounts] = await Promise.all([
+    api('GET', '/charge-types/'),
+    api('GET', '/bank-accounts/?is_active=true'),
+  ]);
+  state.chargeTypes = types.results ?? types;
+  state.bankAccounts = accounts.results ?? accounts;
+
+  const select = document.getElementById('fin-ct-account');
+  const current = select.value;
+  select.innerHTML = '<option value="">— select account —</option>' + state.bankAccounts.map(a =>
+    `<option value="${a.id}">${safeText(a.purpose)} · ${safeText(a.account_number)}</option>`).join('');
+  if (current) select.value = current;
+
+  renderChargeTypes();
 }
 
-function renderFinanceSummaryTable(summaries = buildFinanceSummaries()) {
-  document.getElementById('finance-summary-tbody').innerHTML = summaries.length ? summaries.map(s => `
-    <tr>
-      <td><span style="font-family:var(--font-mono);font-size:.78rem">${s.nactvet_reg_no}</span></td>
-      <td>${s.name}</td>
-      <td>${s.class_level_name}</td>
-      <td>${money(s.requiredTotal)}</td>
-      <td>${money(s.paidTotal)}</td>
-      <td><span class="badge ${s.balanceTotal > 0 ? 'badge-red' : 'badge-green'}">${money(s.balanceTotal)}</span></td>
-      <td>${clearanceBadge(hasFinanceClearance(s, 'end'))}</td>
-      <td>${clearanceBadge(hasFinanceClearance(s, 'registration'))}</td>
-    </tr>
-  `).join('') : '<tr><td colspan="8"><div class="empty"><div class="ei">💳</div>No students found</div></td></tr>';
-}
+// ── bank accounts and college details ─────────────────────────────────────────
 
-function renderFinanceStudentsTable(summaries = buildFinanceSummaries()) {
-  const q = (document.getElementById('fin-stu-search')?.value || '').toLowerCase().trim();
-  const rows = q ? summaries.filter(s =>
-    `${s.nactvet_reg_no} ${s.name} ${s.class_level_name} ${s.module_name} ${s.module_code}`.toLowerCase().includes(q)
-  ) : summaries;
-  document.getElementById('finance-students-tbody').innerHTML = rows.length ? rows.map(s => `
-    <tr>
-      <td><span style="font-family:var(--font-mono);font-size:.78rem">${s.nactvet_reg_no}</span></td>
-      <td>${s.name}</td>
-      <td>${s.class_level_name}</td>
-      <td>${money(s.requiredTotal)}</td>
-      <td>${money(s.paidTotal)}</td>
-      <td><span class="badge ${s.balanceTotal > 0 ? 'badge-red' : 'badge-green'}">${money(s.balanceTotal)}</span></td>
-      <td>${s.balanceTotal > 0 ? '<span class="badge badge-yellow">Has Balance</span>' : '<span class="badge badge-green">Paid Up</span>'}</td>
-    </tr>
-  `).join('') : '<tr><td colspan="7"><div class="empty"><div class="ei">🎓</div>No students match this filter</div></td></tr>';
-}
-
-function hasFinanceClearance(summary, period) {
-  return summary.clearances.some(c => c.period === period && c.is_cleared);
-}
-
-function renderFinanceClearanceTable(summaries = buildFinanceSummaries()) {
-  const type = document.getElementById('fin-clearance-type')?.value || 'cat1';
-  const filter = document.getElementById('fin-clearance-filter')?.value || 'pending';
-  let rows = summaries.map(s => {
-    const cleared = type === 'all' ? s.balanceTotal <= 0 : hasFinanceClearance(s, type);
-    const balance = ['cat1', 'cat2', 'end'].includes(type) ? s.examBalance : type === 'registration' ? s.schoolBalance : s.balanceTotal;
-    const note = cleared
-      ? 'Finance approved this clearance.'
-      : `${money(balance)} outstanding or pending finance approval for ${['cat1', 'cat2', 'end'].includes(type) ? 'exam clearance' : type === 'registration' ? 'registration/results' : 'finance obligations'}.`;
-    return { ...s, cleared, note };
-  });
-  if (filter === 'pending') rows = rows.filter(r => !r.cleared);
-  if (filter === 'cleared') rows = rows.filter(r => r.cleared);
-  document.getElementById('finance-clearance-tbody').innerHTML = rows.length ? rows.map(s => `
-    <tr>
-      <td><span style="font-family:var(--font-mono);font-size:.78rem">${s.nactvet_reg_no}</span></td>
-      <td>${s.name}</td>
-      <td>${s.class_level_name}</td>
-      <td>${money(s.examBalance)}</td>
-      <td>${money(s.schoolBalance)}</td>
-      <td>${money(s.balanceTotal)}</td>
-      <td>${clearanceBadge(s.cleared)}</td>
-      <td>
-        ${type !== 'all' ? `<button class="btn btn-green btn-sm" onclick="setFinanceClearance(${s.id}, '${type}', true)">Approve</button>
-        <button class="btn btn-danger btn-sm" onclick="setFinanceClearance(${s.id}, '${type}', false)">Hold</button>` : '—'}
-      </td>
-      <td style="font-size:.75rem;color:var(--muted)">${s.note}</td>
-    </tr>
-  `).join('') : '<tr><td colspan="9"><div class="empty"><div class="ei">✅</div>No students match this clearance filter</div></td></tr>';
-}
-
-function renderFinanceObligationsTable() {
-  document.getElementById('finance-obligations-tbody').innerHTML = state.financeObligations.length ? state.financeObligations.map(o => `
-    <tr>
-      <td><span style="font-family:var(--font-mono);font-size:.78rem">${o.student_reg_no}</span></td>
-      <td>${o.student_name}</td>
-      <td>${o.class_level}</td>
-      <td>${o.obligation_type_display}</td>
-      <td>${o.category_name || '<span class="badge badge-yellow">Pricing pending</span>'}</td>
-      <td>${money(o.amount_required)}</td>
-      <td>${money(o.amount_paid)}</td>
-      <td><span class="badge ${Number(o.balance || 0) > 0 ? 'badge-red' : 'badge-green'}">${money(o.balance)}</span></td>
-      <td>
-        <div style="display:grid;gap:6px;min-width:220px;">
-          <select id="obl-cat-${o.id}" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:6px;">
-            <option value="">— category —</option>
-            ${state.paymentCategories.filter(c => c.is_active && (!o.obligation_type || c.category_type === o.obligation_type)).map(c => `<option value="${c.id}" data-amount="${c.default_amount}" ${String(o.category || '') === String(c.id) ? 'selected' : ''}>${c.name}</option>`).join('')}
-          </select>
-          <div style="display:flex;gap:6px;">
-            <input id="obl-amount-${o.id}" type="number" min="0" step="0.01" value="${o.amount_required || 0}" style="width:100px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:6px;" />
-            <button class="btn btn-primary btn-sm" onclick="updateFinanceObligationSetup(${o.id})">Set</button>
-          </div>
-        </div>
-      </td>
-      <td>${o.note || '—'}</td>
-    </tr>
-  `).join('') : '<tr><td colspan="10"><div class="empty"><div class="ei">📋</div>No declared obligations yet</div></td></tr>';
-}
-
-async function updateFinanceObligationSetup(id) {
-  const category = document.getElementById(`obl-cat-${id}`).value || null;
-  const amount_required = document.getElementById(`obl-amount-${id}`).value || '0';
-  if (!category) { toast('Select a finance category first', 'var(--red)'); return; }
-  try {
-    await api('PATCH', `/finance-obligations/${id}/`, { category, amount_required });
-    toast('Finance setup updated', 'var(--green)');
-    loadFinance();
-  } catch(e) { toast(e?.detail || 'Failed to update obligation', 'var(--red)'); }
-}
-
-async function loadFinanceStudentsSection() {
-  const semId = document.getElementById('fin-stu-flt-sem')?.value || '';
-  const lvlId = document.getElementById('fin-stu-flt-level')?.value || '';
-  document.getElementById('fin-flt-sem').value = semId;
-  document.getElementById('fin-flt-level').value = lvlId;
-  await loadFinance();
-}
-
-function buildFinanceSelects() {
-  ['fin-pay-student', 'fin-obl-student'].forEach(id => {
-    const studentSelect = document.getElementById(id);
-    if (!studentSelect) return;
-    const curStudent = studentSelect.value;
-    studentSelect.innerHTML = '<option value="">— select student —</option>' + state.financeStudents.map(s =>
-      `<option value="${s.id}">${safeText(s.nactvet_reg_no)} · ${safeText(s.name)} · ${safeText(s.class_level_name)}</option>`
-    ).join('');
-    if (curStudent) studentSelect.value = curStudent;
-  });
-
-  const categoryOptions = '<option value="">— select category —</option>' + state.paymentCategories.filter(c => c.is_active).map(c =>
-    `<option value="${c.id}" data-type="${safeText(c.category_type)}" data-installments="${c.installment_count || 1}" data-amount="${c.default_amount}">${safeText(c.category_type_display)} · ${safeText(c.name)}</option>`
-  ).join('');
-  ['fin-pay-category', 'fin-flt-category', 'fin-obl-category'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const cur = el.value;
-    el.innerHTML = id === 'fin-flt-category' ? '<option value="">All Categories</option>' + categoryOptions.replace('<option value="">— select category —</option>', '') : categoryOptions;
-    if (cur) el.value = cur;
-  });
-  const obligationSelect = document.getElementById('fin-pay-obligation');
-  const curObligation = obligationSelect.value;
-  obligationSelect.innerHTML = '<option value="">No specific obligation</option>' + state.financeObligations.map(o =>
-    `<option value="${o.id}" data-student="${o.student}" data-category="${o.category || ''}" data-amount="${o.amount_required || 0}">${safeText(o.student_reg_no)} · ${safeText(o.obligation_type_display)} · ${money(o.balance)} balance</option>`
-  ).join('');
-  if (curObligation) obligationSelect.value = curObligation;
-  syncObligationCategory();
-}
-
-function applySelectedCategoryAmount() {
-  const opt = document.getElementById('fin-pay-category').selectedOptions[0];
-  if (opt?.dataset.amount) document.getElementById('fin-pay-required').value = opt.dataset.amount;
-  document.getElementById('fin-pay-installment').max = opt?.dataset.installments || 5;
-}
-
-function applySelectedObligationAmount() {
-  const opt = document.getElementById('fin-pay-obligation').selectedOptions[0];
-  if (!opt?.value) return;
-  document.getElementById('fin-pay-student').value = opt.dataset.student || '';
-  document.getElementById('fin-pay-category').value = opt.dataset.category || '';
-  document.getElementById('fin-pay-required').value = opt.dataset.amount || '0';
-  applySelectedCategoryAmount();
-}
-
-function syncObligationCategory() {
-  const type = document.getElementById('fin-obl-type')?.value;
-  const categorySelect = document.getElementById('fin-obl-category');
-  if (!type || !categorySelect) return;
-  const match = state.paymentCategories.find(c => c.category_type === type && c.is_active);
-  if (match) {
-    categorySelect.value = match.id;
-    document.getElementById('fin-obl-amount').value = match.default_amount || '';
+async function loadBankAccounts() {
+  const [accounts, college] = await Promise.all([
+    api('GET', '/bank-accounts/'),
+    api('GET', '/finance/college/'),
+  ]);
+  state.bankAccounts = accounts.results ?? accounts;
+  if (!state.chargeTypes?.length) {
+    const types = await api('GET', '/charge-types/');
+    state.chargeTypes = types.results ?? types;
   }
+
+  document.getElementById('fin-accounts-tbody').innerHTML = state.bankAccounts.length
+    ? state.bankAccounts.map(a => {
+        const uses = (state.chargeTypes || []).filter(c => String(c.bank_account) === String(a.id)).length;
+        return `
+        <tr>
+          <td>${safeText(a.bank_name)}</td>
+          <td>${safeText(a.account_name)}</td>
+          <td style="font-family:var(--font-mono)">${safeText(a.account_number)}</td>
+          <td>${safeText(a.purpose)}</td>
+          <td>${uses}</td>
+          <td>${a.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Closed</span>'}</td>
+          <td><button class="btn btn-ghost btn-sm" onclick="toggleAccountActive(${a.id}, ${!a.is_active})">
+            ${a.is_active ? 'Close' : 'Reopen'}</button></td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="7"><div class="empty"><div class="ei">🏦</div>No accounts yet — add the college\'s CRDB accounts above</div></td></tr>';
+
+  state.college = college;
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value || ''; };
+  set('fin-cp-name', college.name);   set('fin-cp-short', college.short_name);
+  set('fin-cp-box', college.po_box);  set('fin-cp-town', college.town);
+  set('fin-cp-phone', college.phone); set('fin-cp-email', college.email);
+  set('fin-cp-web', college.website); set('fin-cp-terms', college.invoice_terms);
 }
 
-async function savePaymentCategory() {
-  const name = document.getElementById('fin-cat-name').value.trim();
-  const category_type = document.getElementById('fin-cat-type').value;
-  const default_amount = document.getElementById('fin-cat-amount').value || '0';
-  const installment_count = Math.min(5, Math.max(1, Number(document.getElementById('fin-cat-installments').value || 1)));
-  const semester = document.getElementById('fin-cat-semester').value || null;
-  const class_level = document.getElementById('fin-cat-level').value || null;
-  if (!name) { toast('Category name is required', 'var(--red)'); return; }
+async function saveBankAccount() {
+  const account_number = document.getElementById('fin-ba-number').value.trim();
+  const purpose = document.getElementById('fin-ba-purpose').value.trim();
+  if (!account_number || !purpose) { toast('Account number and what it collects are required', 'var(--red)'); return; }
   try {
-    await api('POST', '/payment-categories/', { name, category_type, default_amount, installment_count, semester, class_level, is_active: true });
-    document.getElementById('fin-cat-name').value = '';
-    document.getElementById('fin-cat-amount').value = '';
-    document.getElementById('fin-cat-installments').value = '1';
-    toast('Payment category saved', 'var(--green)');
-    loadFinance();
-  } catch(e) { toast(e?.detail || 'Failed to save category', 'var(--red)'); }
+    await api('POST', '/bank-accounts/', {
+      bank_name: document.getElementById('fin-ba-bank').value.trim() || 'CRDB',
+      account_name: document.getElementById('fin-ba-name').value.trim(),
+      account_number, purpose, is_active: true,
+    });
+    ['fin-ba-name', 'fin-ba-number', 'fin-ba-purpose'].forEach(id => document.getElementById(id).value = '');
+    toast('Account saved', 'var(--green)');
+    loadBankAccounts();
+  } catch (e) { toast(e?.detail || e?.account_number?.[0] || 'Failed to save account', 'var(--red)'); }
 }
 
-async function declareFinanceObligation() {
-  const student = document.getElementById('fin-obl-student').value;
-  const obligation_type = document.getElementById('fin-obl-type').value;
-  const category = document.getElementById('fin-obl-category').value;
-  const amount_required = document.getElementById('fin-obl-amount').value;
-  const note = document.getElementById('fin-obl-note').value.trim();
-  const semester = document.getElementById('fin-flt-sem').value || state.activeSem?.id;
-  if (!student || !category || !amount_required || !semester) {
-    toast('Student, semester, category, and amount are required', 'var(--red)');
-    return;
-  }
+async function toggleAccountActive(id, active) {
   try {
-    await api('POST', '/finance-obligations/', { student, semester, obligation_type, category, amount_required, note });
-    document.getElementById('fin-obl-note').value = '';
-    toast('Obligation declared', 'var(--green)');
-    loadFinance();
-  } catch(e) { toast(e?.detail || 'Failed to declare obligation', 'var(--red)'); }
+    await api('PATCH', `/bank-accounts/${id}/`, { is_active: active });
+    toast(active ? 'Account reopened' : 'Account closed', 'var(--green)');
+    loadBankAccounts();
+  } catch (e) { toast(e?.detail || 'Failed to update', 'var(--red)'); }
 }
 
-async function setFinanceClearance(student, period, is_cleared) {
-  const semester = document.getElementById('fin-flt-sem').value || state.activeSem?.id;
-  if (!semester) { toast('No active semester selected', 'var(--red)'); return; }
-  const existing = state.financeClearances.find(c => String(c.student) === String(student) && c.period === period && String(c.semester) === String(semester));
+async function saveCollegeProfile() {
+  const val = id => document.getElementById(id).value.trim();
+  try {
+    await api('PATCH', '/finance/college/', {
+      name: val('fin-cp-name'), short_name: val('fin-cp-short'),
+      po_box: val('fin-cp-box'), town: val('fin-cp-town'),
+      phone: val('fin-cp-phone'), email: val('fin-cp-email'),
+      website: val('fin-cp-web'), invoice_terms: val('fin-cp-terms'),
+    });
+    toast('College details saved — they appear on the next invoice', 'var(--green)');
+  } catch (e) { toast(e?.detail || 'Failed to save details', 'var(--red)'); }
+}
+
+const BLOCK_FIELDS = ['blocks_registration', 'blocks_cat1', 'blocks_cat2', 'blocks_final', 'blocks_results'];
+
+function renderChargeTypes() {
+  const rows = state.chargeTypes || [];
+  document.getElementById('fin-charge-types-tbody').innerHTML = rows.length ? rows.map(c => `
+    <tr>
+      <td><strong>${safeText(c.name)}</strong></td>
+      <td style="font-size:.78rem">${safeText(c.family_display)}</td>
+      <td>${safeText(c.group_label)}</td>
+      <td style="font-size:.75rem;${c.frequency === 'once' ? 'color:var(--accent);font-weight:600' : 'color:var(--muted)'}">${safeText(c.frequency_display)}</td>
+      <td style="font-family:var(--font-mono);font-size:.72rem">${c.bank_account_label
+        ? safeText(c.bank_account_label) : '<span class="badge badge-yellow">not set</span>'}</td>
+      <td style="font-size:.75rem;color:var(--muted)">${safeText(c.applies_display)}</td>
+      ${BLOCK_FIELDS.map(f => `
+        <td style="text-align:center">
+          <input type="checkbox" ${c[f] ? 'checked' : ''}
+                 onchange="toggleChargeBlock(${c.id}, '${f}', this.checked)" />
+        </td>`).join('')}
+      <td>${c.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Retired</span>'}</td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="toggleChargeActive(${c.id}, ${!c.is_active})">
+          ${c.is_active ? 'Retire' : 'Restore'}
+        </button>
+      </td>
+    </tr>`).join('')
+    : '<tr><td colspan="13"><div class="empty"><div class="ei">📋</div>No charge types yet — add the first one above</div></td></tr>';
+}
+
+async function saveChargeType() {
+  const name = document.getElementById('fin-ct-name').value.trim();
+  if (!name) { toast('Give the charge type a name', 'var(--red)'); return; }
   const payload = {
-    student,
-    semester,
-    period,
-    is_cleared,
-    note: is_cleared ? 'Finance approved after checking payments.' : 'Finance approval held pending payment review.',
+    name,
+    family: document.getElementById('fin-ct-family').value,
+    applies: document.getElementById('fin-ct-applies').value,
+    frequency: document.getElementById('fin-ct-frequency').value,
+    invoice_group: document.getElementById('fin-ct-group').value.trim(),
+    bank_account: document.getElementById('fin-ct-account').value || null,
+    is_active: true,
+  };
+  BLOCK_FIELDS.forEach(f => { payload[f] = document.getElementById(`fin-ct-${f}`).checked; });
+  try {
+    await api('POST', '/charge-types/', payload);
+    ['fin-ct-name', 'fin-ct-group'].forEach(id => document.getElementById(id).value = '');
+    BLOCK_FIELDS.forEach(f => { document.getElementById(`fin-ct-${f}`).checked = false; });
+    toast('Charge type saved', 'var(--green)');
+    loadChargeTypes();
+  } catch (e) { toast(e?.detail || e?.name?.[0] || 'Failed to save', 'var(--red)'); }
+}
+
+async function toggleChargeBlock(id, field, value) {
+  try {
+    await api('PATCH', `/charge-types/${id}/`, { [field]: value });
+    const row = (state.chargeTypes || []).find(c => c.id === id);
+    if (row) row[field] = value;
+    toast('Updated — clearance recalculates immediately', 'var(--green)');
+  } catch (e) {
+    toast(e?.detail || 'Failed to update', 'var(--red)');
+    loadChargeTypes();
+  }
+}
+
+async function toggleChargeActive(id, active) {
+  try {
+    await api('PATCH', `/charge-types/${id}/`, { is_active: active });
+    toast(active ? 'Restored' : 'Retired', 'var(--green)');
+    loadChargeTypes();
+  } catch (e) { toast(e?.detail || 'Failed to update', 'var(--red)'); }
+}
+
+// ── fee structure grid ────────────────────────────────────────────────────────
+
+async function loadFeeGrid() {
+  const yearId = document.getElementById('fin-fs-year')?.value;
+  if (!yearId) return;
+  const grid = await api('GET', `/fee-structures/grid/?academic_year_id=${yearId}`);
+  state.feeGrid = grid;
+  renderFeeGrid();
+}
+
+function renderFeeGrid() {
+  const grid = state.feeGrid;
+  if (!grid) return;
+  document.getElementById('fin-fee-grid-head').innerHTML =
+    '<th>Charge</th><th>Group</th>' +
+    grid.class_levels.map(l => `<th style="text-align:center">${safeText(l.name)}</th>`).join('');
+
+  document.getElementById('fin-fee-grid-tbody').innerHTML = grid.rows.length ? grid.rows.map(row => `
+    <tr>
+      <td><strong>${safeText(row.charge_type_name)}</strong>${row.applies !== 'automatic'
+        ? `<div style="font-size:.7rem;color:var(--muted)">${row.applies === 'optional' ? 'assigned per student' : 'on request'}</div>` : ''}</td>
+      <td style="font-size:.75rem;color:var(--muted)">${safeText(row.family_display)}</td>
+      ${row.cells.map(cell => `
+        <td style="text-align:center;cursor:pointer" onclick="openFeeCell(${row.charge_type_id}, ${cell.class_level_id})">
+          ${cell.amount
+            ? `<div style="font-family:var(--font-mono)">${money(cell.amount)}</div>
+               <div style="font-size:.7rem;color:var(--muted)">${cell.installments} installment${cell.installments === 1 ? '' : 's'}${cell.due_dates.length ? '' : ' · no dates'}</div>`
+            : '<span style="color:var(--muted)">— set —</span>'}
+        </td>`).join('')}
+    </tr>`).join('')
+    : `<tr><td colspan="${grid.class_levels.length + 2}"><div class="empty"><div class="ei">📊</div>Add charge types first</div></td></tr>`;
+}
+
+function openFeeCell(chargeTypeId, classLevelId) {
+  const grid = state.feeGrid;
+  const row = grid.rows.find(r => r.charge_type_id === chargeTypeId);
+  const cell = row.cells.find(c => c.class_level_id === classLevelId);
+  const level = grid.class_levels.find(l => l.id === classLevelId);
+  state.feeCell = { chargeTypeId, classLevelId, structureId: cell.structure_id };
+
+  document.getElementById('fee-cell-title').textContent = `${row.charge_type_name} · ${level.name}`;
+  document.getElementById('fee-cell-amount').value = cell.amount || '';
+  document.getElementById('fee-cell-installments').value = cell.installments || 1;
+  document.getElementById('fee-cell-period').value = cell.billing_period || 'academic_year';
+  renderFeeCellDates(cell.due_dates || []);
+  document.getElementById('fee-cell-modal').classList.add('open');
+}
+
+function renderFeeCellDates(existing = []) {
+  const count = Math.max(1, Number(document.getElementById('fee-cell-installments').value || 1));
+  const amount = Number(document.getElementById('fee-cell-amount').value || 0);
+  const each = count ? amount / count : 0;
+  const wrap = document.getElementById('fee-cell-dates');
+  wrap.innerHTML = Array.from({ length: count }, (_, i) => `
+    <div class="field">
+      <label>Installment ${i + 1} — ${money(i === count - 1 ? amount - each * (count - 1) : each)}</label>
+      <input type="date" id="fee-cell-date-${i}" value="${existing[i] || ''}" />
+    </div>`).join('');
+}
+
+function closeFeeCellModal() {
+  document.getElementById('fee-cell-modal').classList.remove('open');
+}
+
+async function saveFeeCell() {
+  const { chargeTypeId, classLevelId, structureId } = state.feeCell || {};
+  const amount = document.getElementById('fee-cell-amount').value;
+  const installments = Number(document.getElementById('fee-cell-installments').value || 1);
+  if (!amount || Number(amount) <= 0) { toast('Give an amount', 'var(--red)'); return; }
+
+  const due_dates = [];
+  for (let i = 0; i < installments; i++) {
+    const value = document.getElementById(`fee-cell-date-${i}`).value;
+    if (!value) { toast(`Installment ${i + 1} needs a due date`, 'var(--red)'); return; }
+    due_dates.push(value);
+  }
+
+  const payload = {
+    charge_type: chargeTypeId,
+    class_level: classLevelId,
+    academic_year: Number(document.getElementById('fin-fs-year').value),
+    amount,
+    installments,
+    billing_period: document.getElementById('fee-cell-period').value,
+    due_dates,
+    is_active: true,
   };
   try {
-    if (existing) await api('PATCH', `/finance-clearances/${existing.id}/`, payload);
-    else await api('POST', '/finance-clearances/', payload);
-    toast(is_cleared ? 'Finance clearance approved' : 'Finance clearance held', is_cleared ? 'var(--green)' : 'var(--yellow)');
-    loadFinance();
-  } catch(e) { toast(e?.detail || 'Failed to update clearance', 'var(--red)'); }
+    if (structureId) await api('PATCH', `/fee-structures/${structureId}/`, payload);
+    else await api('POST', '/fee-structures/', payload);
+    closeFeeCellModal();
+    toast('Fee structure saved', 'var(--green)');
+    loadFeeGrid();
+  } catch (e) {
+    toast(e?.detail || e?.due_dates?.[0] || e?.non_field_errors?.[0] || 'Failed to save', 'var(--red)');
+  }
 }
 
-async function saveStudentPayment() {
-  const student = document.getElementById('fin-pay-student').value;
-  const category = document.getElementById('fin-pay-category').value;
-  const obligation = document.getElementById('fin-pay-obligation').value || null;
-  const amount_required = document.getElementById('fin-pay-required').value || '0';
-  const amount_paid = document.getElementById('fin-pay-paid').value;
-  const installment_number = Number(document.getElementById('fin-pay-installment').value || 1);
+async function generateCharges() {
+  const academic_year = document.getElementById('fin-gen-year').value;
+  const class_level = document.getElementById('fin-gen-level').value || null;
+  if (!academic_year) { toast('Pick an academic year', 'var(--red)'); return; }
+  if (!confirm('Raise this year’s charges for these students? Running it again will not bill anyone twice.')) return;
+  try {
+    const result = await api('POST', '/finance/generate-charges/', { academic_year, class_level });
+    document.getElementById('fin-gen-result').innerHTML =
+      `<div class="badge badge-green">${safeText(result.detail)}</div>`
+      + (result.failures?.length
+        ? `<div style="margin-top:8px;font-size:.78rem;color:var(--red)">${result.failures.map(f =>
+            `${safeText(f.student)}: ${safeText(f.detail)}`).join('<br>')}</div>`
+        : '');
+    toast(result.detail, 'var(--green)');
+    state.financeProfiles = null;
+  } catch (e) { toast(e?.detail || 'Failed to generate charges', 'var(--red)'); }
+}
+
+// ── recording a payment ───────────────────────────────────────────────────────
+
+async function lookupInvoice() {
+  const raw = document.getElementById('fin-lookup-ref').value.trim();
+  const box = document.getElementById('fin-lookup-result');
+  if (!raw) { toast('Type the reference from the slip', 'var(--red)'); return; }
+  try {
+    const invoice = await api('GET', `/invoices/lookup/?reference=${encodeURIComponent(raw)}`);
+    box.innerHTML = `
+      <div class="card" style="box-shadow:none;margin:12px 0 0;border-color:var(--green)">
+        <div class="card-title">${safeText(invoice.reference)} · ${safeText(invoice.student_name)}</div>
+        <div style="font-size:.82rem;margin-bottom:10px">
+          <strong>${safeText(invoice.student_reg_no)}</strong> ·
+          issued ${invoice.issued_on} ·
+          status <span class="badge ${invoice.status === 'paid' ? 'badge-green' : invoice.status === 'overdue' ? 'badge-red' : 'badge-yellow'}">${invoice.status.replace('_', ' ')}</span>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Covers</th><th>Due</th><th>Amount</th></tr></thead>
+          <tbody>${invoice.lines.map(l => `
+            <tr><td>${safeText(l.charge_type_name)}${l.installment_number > 1 ? ` — inst. ${l.installment_number}` : ''}</td>
+                <td>${l.due_date}</td><td>${money(l.amount)}</td></tr>`).join('')}
+            <tr><td colspan="2"><strong>Total</strong></td><td><strong>${money(invoice.total)}</strong></td></tr>
+            ${Number(invoice.paid) > 0 ? `<tr><td colspan="2">Already received</td><td>${money(invoice.paid)}</td></tr>` : ''}
+          </tbody>
+        </table></div>
+        <button class="btn btn-green btn-sm" style="margin-top:10px"
+                onclick="useInvoiceForPayment(${invoice.id}, ${invoice.profile}, '${invoice.total}')">
+          Record a payment against this invoice
+        </button>
+      </div>`;
+  } catch (e) {
+    box.innerHTML = `<div style="margin-top:12px" class="badge badge-red">${safeText(e?.detail || 'Not found')}</div>`;
+  }
+}
+
+function useInvoiceForPayment(invoiceId, profileId, total) {
+  document.getElementById('fin-pay-invoice').value = invoiceId;
+  document.getElementById('fin-pay-profile').value = profileId;
+  document.getElementById('fin-pay-amount').value = total;
+  if (!document.getElementById('fin-pay-date').value) {
+    document.getElementById('fin-pay-date').value = new Date().toISOString().slice(0, 10);
+  }
+  onPayProfileChange();
+  document.getElementById('fin-pay-amount').focus();
+}
+
+async function onPayProfileChange() {
+  await loadOutstandingForPayment();
+}
+
+async function loadOutstandingForPayment() {
+  const profileId = document.getElementById('fin-pay-profile')?.value;
+  const box = document.getElementById('fin-pay-outstanding');
+  if (!box) return;
+  if (!profileId) { box.innerHTML = ''; return; }
+  try {
+    const statement = await api('GET', `/finance/statement/${profileId}/`);
+    const outstanding = statement.charges.filter(c => Number(c.balance) > 0);
+    box.innerHTML = `
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:6px">
+        Outstanding for ${safeText(statement.profile.name)} — total ${money(statement.totals.balance)}
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Charge</th><th>Inst.</th><th>Due</th><th>Outstanding</th></tr></thead>
+        <tbody>${outstanding.length ? outstanding.map(c => `
+          <tr><td>${safeText(c.charge_type_name)}</td><td>${c.installment_number}</td>
+              <td>${c.due_date}${c.is_overdue ? ' <span class="badge badge-red">overdue</span>' : ''}</td>
+              <td>${money(c.balance)}</td></tr>`).join('')
+          : '<tr><td colspan="4"><div class="empty"><div class="ei">✅</div>Nothing outstanding</div></td></tr>'}
+        </tbody>
+      </table></div>`;
+  } catch (e) { box.innerHTML = ''; }
+}
+
+async function recordPayment() {
+  const profile = document.getElementById('fin-pay-profile').value;
+  const amount = document.getElementById('fin-pay-amount').value;
   const payment_date = document.getElementById('fin-pay-date').value;
-  const reference = document.getElementById('fin-pay-reference').value.trim();
-  const note = document.getElementById('fin-pay-note').value.trim();
-  if (!student || !category || !amount_paid || !payment_date) {
-    toast('Student, category, amount paid, and date are required', 'var(--red)');
+  if (!profile || !amount || !payment_date) {
+    toast('Student, amount and the date on the slip are all required', 'var(--red)');
+    return;
+  }
+  const payload = {
+    profile: Number(profile),
+    amount,
+    payment_date,
+    channel: document.getElementById('fin-pay-channel').value,
+    bank_reference: document.getElementById('fin-pay-bankref').value.trim(),
+    efd_receipt_no: document.getElementById('fin-pay-efd').value.trim(),
+    payer_name: document.getElementById('fin-pay-payer').value.trim(),
+    payer_relation: document.getElementById('fin-pay-relation').value,
+    note: document.getElementById('fin-pay-note').value.trim(),
+  };
+  const invoiceId = document.getElementById('fin-pay-invoice').value;
+  if (invoiceId) payload.invoice = Number(invoiceId);
+
+  try {
+    await api('POST', '/payments/record/', payload);
+    ['fin-pay-amount', 'fin-pay-bankref', 'fin-pay-efd', 'fin-pay-payer', 'fin-pay-note',
+     'fin-pay-invoice', 'fin-lookup-ref'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('fin-lookup-result').innerHTML = '';
+    toast('Payment recorded — balance and clearance updated', 'var(--green)');
+    state.financeProfiles = null;
+    loadOutstandingForPayment();
+  } catch (e) {
+    const detail = e?.detail
+      || e?.bank_reference?.[0] || e?.efd_receipt_no?.[0]
+      || e?.payment_date?.[0] || e?.amount?.[0]
+      || e?.non_field_errors?.[0] || 'Failed to record payment';
+    toast(detail, 'var(--red)');
+  }
+}
+
+// ── payment history ───────────────────────────────────────────────────────────
+
+async function loadPaymentHistory() {
+  let url = '/payments/?';
+  const from = document.getElementById('fin-hist-from')?.value;
+  const to = document.getElementById('fin-hist-to')?.value;
+  if (from) url += `from=${from}&`;
+  if (to) url += `to=${to}&`;
+  const data = await api('GET', url);
+  state.ledgerPayments = data.results ?? data;
+  renderPaymentHistory();
+}
+
+function renderPaymentHistory() {
+  const q = (document.getElementById('fin-hist-search')?.value || '').toLowerCase().trim();
+  let rows = state.ledgerPayments || [];
+  if (q) {
+    rows = rows.filter(p => `${p.student_reg_no} ${p.student_name} ${p.bank_reference} ${p.efd_receipt_no} ${p.invoice_reference || ''}`
+      .toLowerCase().includes(q));
+  }
+  document.getElementById('fin-history-tbody').innerHTML = rows.length ? rows.map(p => `
+    <tr style="${p.is_reversal || p.is_reversed ? 'opacity:.6' : ''}">
+      <td>${p.payment_date}</td>
+      <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(p.student_reg_no)}</span></td>
+      <td>${safeText(p.student_name)}</td>
+      <td><span class="badge ${Number(p.amount) < 0 ? 'badge-red' : 'badge-green'}">${money(p.amount)}</span></td>
+      <td style="font-size:.75rem">${safeText(p.channel_display)}</td>
+      <td>${safeText(p.payer_name || '—')}${p.payer_relation !== 'self' ? `<div style="font-size:.7rem;color:var(--muted)">${safeText(p.payer_relation_display)}</div>` : ''}</td>
+      <td style="font-family:var(--font-mono);font-size:.72rem">${safeText(p.bank_reference || '—')}</td>
+      <td style="font-family:var(--font-mono);font-size:.72rem">${p.efd_receipt_no
+        ? safeText(p.efd_receipt_no) : '<span class="badge badge-yellow">missing</span>'}</td>
+      <td style="font-size:.72rem">${p.allocations.map(a => safeText(a.charge_type_name)).join(', ') || '—'}</td>
+      <td style="font-size:.72rem;color:var(--muted)">${safeText(p.recorded_by_name)}</td>
+      <td>${p.is_reversal
+        ? `<span class="badge badge-red">reversal</span>`
+        : p.is_reversed
+          ? `<span class="badge badge-yellow">reversed</span>`
+          : `<button class="btn btn-danger btn-sm" onclick="reversePayment(${p.id})">Reverse</button>`}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="11"><div class="empty"><div class="ei">💳</div>No payments in this range</div></td></tr>';
+}
+
+async function reversePayment(id) {
+  const reason = prompt('Why is this payment being reversed?\n\nThe original stays on the record — this adds a correcting entry.');
+  if (!reason || !reason.trim()) return;
+  try {
+    await api('POST', `/payments/${id}/reverse/`, { reason: reason.trim() });
+    toast('Payment reversed', 'var(--yellow)');
+    state.financeProfiles = null;
+    loadPaymentHistory();
+  } catch (e) { toast(e?.detail || 'Failed to reverse', 'var(--red)'); }
+}
+
+// ── collections ───────────────────────────────────────────────────────────────
+
+async function loadCollections() {
+  let url = '/finance/collections/?';
+  const from = document.getElementById('fin-coll-from')?.value;
+  const to = document.getElementById('fin-coll-to')?.value;
+  if (from) url += `from=${from}&`;
+  if (to) url += `to=${to}&`;
+  const data = await api('GET', url);
+  document.getElementById('fin-coll-total').textContent = money(data.total);
+  document.getElementById('fin-coll-count').textContent = data.count;
+  document.getElementById('fin-coll-missing').textContent = data.missing_efd;
+  document.getElementById('fin-coll-from').value = data.from;
+  document.getElementById('fin-coll-to').value = data.to;
+
+  const asList = obj => Object.keys(obj).length
+    ? Object.entries(obj).map(([k, v]) =>
+        `<div class="qf-item"><span>${safeText(k)}</span><strong>${money(v)}</strong></div>`).join('')
+    : '<div style="color:var(--muted);font-size:.8rem">Nothing in this range</div>';
+  document.getElementById('fin-coll-channel').innerHTML = asList(data.by_channel);
+  document.getElementById('fin-coll-family').innerHTML = asList(data.by_family);
+}
+
+// ── students ──────────────────────────────────────────────────────────────────
+
+async function loadFinanceStudents() {
+  const yearId = document.getElementById('fin-stu-year')?.value;
+  const levelId = document.getElementById('fin-stu-level')?.value;
+  let url = '/finance/students/?';
+  if (yearId) url += `academic_year_id=${yearId}&`;
+  if (levelId) url += `class_level_id=${levelId}&`;
+  const data = await api('GET', url);
+  state.financeProfiles = data.rows;
+  state.financeYear = data.academic_year;
+  renderFinanceStudents();
+}
+
+function renderFinanceStudents() {
+  const q = (document.getElementById('fin-stu-search')?.value || '').toLowerCase().trim();
+  const filter = document.getElementById('fin-stu-filter')?.value || 'all';
+  let rows = state.financeProfiles || [];
+  if (q) rows = rows.filter(r => `${r.nactvet_reg_no} ${r.name}`.toLowerCase().includes(q));
+  if (filter === 'owing') rows = rows.filter(r => Number(r.balance) > 0);
+  if (filter === 'blocked') rows = rows.filter(r => CLEARANCE_PERIODS.some(p => r.clearance?.[p] === false));
+
+  document.getElementById('fin-students-tbody').innerHTML = rows.length ? rows.map(r => `
+    <tr>
+      <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.nactvet_reg_no)}</span></td>
+      <td>${safeText(r.name)}</td>
+      <td>${safeText(r.class_level || '—')}</td>
+      <td>${money(r.billed)}</td>
+      <td>${money(r.paid)}</td>
+      <td><span class="badge ${Number(r.balance) > 0 ? 'badge-red' : 'badge-green'}">${money(r.balance)}</span></td>
+      ${CLEARANCE_PERIODS.map(p => `<td style="text-align:center">${clearBadge(r.clearance?.[p])}</td>`).join('')}
+      <td><button class="btn btn-ghost btn-sm" onclick="openStatement(${r.profile_id})">Statement</button></td>
+    </tr>`).join('')
+    : '<tr><td colspan="12"><div class="empty"><div class="ei">🎓</div>No students match this filter</div></td></tr>';
+}
+
+async function openStatement(profileId) {
+  try {
+    const s = await api('GET', `/finance/statement/${profileId}/`);
+    document.getElementById('statement-title').textContent = `${s.profile.nactvet_reg_no} · ${s.profile.name}`;
+    document.getElementById('statement-body').innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card" style="--c:var(--accent)"><div class="label">Billed</div><div class="value">${money(s.totals.billed)}</div></div>
+        <div class="stat-card" style="--c:var(--green)"><div class="label">Paid</div><div class="value">${money(s.totals.paid)}</div></div>
+        <div class="stat-card" style="--c:var(--red)"><div class="label">Outstanding</div><div class="value">${money(s.totals.balance)}</div></div>
+      </div>
+
+      <div class="card-title" style="margin-top:16px">Clearance</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+        ${CLEARANCE_PERIODS.map(p => `
+          <span class="badge ${s.clearance[p]?.cleared ? 'badge-green' : 'badge-red'}">
+            ${PERIOD_LABELS[p]}${s.clearance[p]?.overridden ? ' (override)' : ''}
+          </span>`).join('')}
+      </div>
+      <div style="font-size:.74rem;color:var(--muted);margin-bottom:14px">
+        ${CLEARANCE_PERIODS.filter(p => !s.clearance[p]?.cleared)
+          .map(p => `${PERIOD_LABELS[p]}: ${safeText(s.clearance[p].reason)}`).join('<br>') || 'Cleared for everything.'}
+      </div>
+
+      <div class="card-title">Charges</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Charge</th><th>Inst.</th><th>Due</th><th>Amount</th><th>Waived</th><th>Outstanding</th></tr></thead>
+        <tbody>${s.charges.length ? s.charges.map(c => `
+          <tr><td>${safeText(c.charge_type_name)}</td><td>${c.installment_number}</td>
+              <td>${c.due_date}${c.is_overdue ? ' <span class="badge badge-red">overdue</span>' : ''}</td>
+              <td>${money(c.amount)}</td><td>${money(c.waived_amount)}</td>
+              <td><span class="badge ${Number(c.balance) > 0 ? 'badge-red' : 'badge-green'}">${money(c.balance)}</span></td></tr>`).join('')
+          : '<tr><td colspan="6">No charges raised yet.</td></tr>'}</tbody>
+      </table></div>
+
+      <div class="card-title" style="margin-top:16px">Payments</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Amount</th><th>Paid by</th><th>Bank ref.</th><th>EFD</th></tr></thead>
+        <tbody>${s.payments.length ? s.payments.map(p => `
+          <tr style="${p.is_reversal ? 'opacity:.6' : ''}">
+            <td>${p.payment_date}</td><td>${money(p.amount)}</td>
+            <td>${safeText(p.payer_name || '—')}</td>
+            <td style="font-family:var(--font-mono);font-size:.72rem">${safeText(p.bank_reference || '—')}</td>
+            <td style="font-family:var(--font-mono);font-size:.72rem">${safeText(p.efd_receipt_no || '—')}</td></tr>`).join('')
+          : '<tr><td colspan="5">Nothing received yet.</td></tr>'}</tbody>
+      </table></div>
+
+      <div class="card-title" style="margin-top:16px">Invoices</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Reference</th><th>Covers</th><th>Paid into</th><th>Issued</th><th>Total</th><th>Status</th><th></th></tr></thead>
+        <tbody>${s.invoices.length ? s.invoices.map(i => `
+          <tr><td style="font-family:var(--font-mono)">${safeText(i.reference)}</td>
+              <td>${safeText(i.invoice_group || '—')}</td>
+              <td style="font-family:var(--font-mono);font-size:.72rem">${safeText(i.bank_account_number || '—')}</td>
+              <td>${i.issued_on}</td><td>${money(i.total)}</td>
+              <td><span class="badge ${i.status === 'paid' ? 'badge-green' : i.status === 'overdue' ? 'badge-red' : 'badge-yellow'}">${i.status.replace('_', ' ')}</span></td>
+              <td><a class="btn btn-ghost btn-sm" href="/invoice/${encodeURIComponent(i.reference)}/" target="_blank" rel="noopener">Print</a></td></tr>`).join('')
+          : '<tr><td colspan="7">None issued.</td></tr>'}</tbody>
+      </table></div>
+
+      <button class="btn btn-primary btn-sm" style="margin-top:16px" onclick="issueInvoiceFor(${profileId})">
+        Raise invoices for everything outstanding
+      </button>`;
+    document.getElementById('statement-modal').classList.add('open');
+  } catch (e) { toast(e?.detail || 'Failed to load statement', 'var(--red)'); }
+}
+
+function closeStatementModal() {
+  document.getElementById('statement-modal').classList.remove('open');
+}
+
+async function issueInvoiceFor(profileId) {
+  try {
+    // One invoice per group — tuition and other charges are banked separately,
+    // so the student makes a separate deposit for each.
+    const invoices = await api('POST', '/finance/issue-invoice/', { profile: profileId });
+    const list = Array.isArray(invoices) ? invoices : [invoices];
+    toast(list.length === 1
+      ? `Invoice ${list[0].reference} raised`
+      : `${list.length} invoices raised — one per account`, 'var(--green)');
+    list.forEach(i => window.open(`/invoice/${encodeURIComponent(i.reference)}/`, '_blank', 'noopener'));
+    openStatement(profileId);
+  } catch (e) { toast(e?.detail || 'Failed to raise an invoice', 'var(--red)'); }
+}
+
+// ── one-off charges ───────────────────────────────────────────────────────────
+
+async function loadExtraCharges() {
+  if (!state.chargeTypes?.length) {
+    const data = await api('GET', '/charge-types/?is_active=true');
+    state.chargeTypes = data.results ?? data;
+  }
+  const select = document.getElementById('fin-rc-type');
+  const current = select.value;
+  // Anything not billed automatically is raised by hand — supplementaries,
+  // repeats, hostel places.
+  const options = state.chargeTypes.filter(c => c.is_active && c.applies !== 'automatic');
+  select.innerHTML = '<option value="">— select charge —</option>' + options.map(c =>
+    `<option value="${c.id}">${safeText(c.family_display)} · ${safeText(c.name)}</option>`).join('');
+  if (current) select.value = current;
+
+  const charges = await api('GET', '/student-charges/');
+  const rows = (charges.results ?? charges).filter(c => c.source === 'on_request').slice(0, 40);
+  document.getElementById('fin-extra-charges-tbody').innerHTML = rows.length ? rows.map(c => `
+    <tr>
+      <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(c.student_reg_no)}</span></td>
+      <td>${safeText(c.student_name)}</td>
+      <td>${safeText(c.charge_type_name)}</td>
+      <td>${money(c.amount)}</td>
+      <td><span class="badge ${Number(c.balance) > 0 ? 'badge-red' : 'badge-green'}">${money(c.balance)}</span></td>
+      <td>${c.due_date}${c.is_overdue ? ' <span class="badge badge-red">overdue</span>' : ''}</td>
+      <td style="font-size:.78rem">${safeText(c.note || '—')}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="7"><div class="empty"><div class="ei">🧾</div>No extra charges raised yet</div></td></tr>';
+}
+
+function applyRaiseChargeDefault() {
+  document.getElementById('fin-rc-amount').focus();
+}
+
+async function raiseExtraCharge() {
+  const profile = document.getElementById('fin-rc-profile').value;
+  const charge_type = document.getElementById('fin-rc-type').value;
+  const amount = document.getElementById('fin-rc-amount').value;
+  const due_date = document.getElementById('fin-rc-due').value;
+  if (!profile || !charge_type || !amount || !due_date) {
+    toast('Student, charge, amount and due date are all required', 'var(--red)');
     return;
   }
   try {
-    await api('POST', '/student-payments/', { student, category, obligation, amount_required, amount_paid, installment_number, payment_date, reference, note });
-    ['fin-pay-paid', 'fin-pay-reference', 'fin-pay-note'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('fin-pay-obligation').value = '';
-    document.getElementById('fin-pay-installment').value = '1';
-    toast('Payment recorded', 'var(--green)');
-    loadFinance();
-  } catch(e) { toast(e?.detail || 'Failed to record payment', 'var(--red)'); }
+    await api('POST', '/finance/raise-charge/', {
+      profile: Number(profile),
+      charge_type: Number(charge_type),
+      academic_year: Number(document.getElementById('fin-stu-year').value || state.financeYear?.id),
+      amount,
+      due_date,
+      note: document.getElementById('fin-rc-note').value.trim(),
+    });
+    ['fin-rc-amount', 'fin-rc-note'].forEach(id => document.getElementById(id).value = '');
+    toast('Charge raised — it is on the student’s statement now', 'var(--green)');
+    state.financeProfiles = null;
+    loadExtraCharges();
+  } catch (e) { toast(e?.detail || 'Failed to raise the charge', 'var(--red)'); }
 }
 
+// ── overrides ─────────────────────────────────────────────────────────────────
+
+async function loadOverrides() {
+  const data = await api('GET', '/finance-overrides/');
+  state.financeOverrides = data.results ?? data;
+  const rows = state.financeOverrides.filter(o => o.is_active);
+  document.getElementById('fin-overrides-tbody').innerHTML = rows.length ? rows.map(o => `
+    <tr>
+      <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(o.student_reg_no)}</span></td>
+      <td>${safeText(o.student_name)}</td>
+      <td>${safeText(o.period_display)}</td>
+      <td><span class="badge ${o.status === 'cleared' ? 'badge-green' : 'badge-red'}">${safeText(o.status_display)}</span></td>
+      <td style="font-size:.78rem">${safeText(o.reason)}</td>
+      <td>${o.expires_on || '<span style="color:var(--muted)">never</span>'}</td>
+      <td style="font-size:.75rem;color:var(--muted)">${safeText(o.approved_by_name)}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="revokeOverride(${o.id})">Revoke</button></td>
+    </tr>`).join('')
+    : '<tr><td colspan="8"><div class="empty"><div class="ei">⚖️</div>No overrides in force</div></td></tr>';
+}
+
+async function saveOverride() {
+  const profile = document.getElementById('fin-ov-profile').value;
+  const reason = document.getElementById('fin-ov-reason').value.trim();
+  if (!profile || !reason) { toast('Pick a student and give a reason', 'var(--red)'); return; }
+  const payload = {
+    profile: Number(profile),
+    academic_year: Number(document.getElementById('fin-stu-year').value || state.financeYear?.id),
+    period: document.getElementById('fin-ov-period').value,
+    status: document.getElementById('fin-ov-status').value,
+    reason,
+    expires_on: document.getElementById('fin-ov-expires').value || null,
+    is_active: true,
+  };
+  try {
+    await api('POST', '/finance-overrides/', payload);
+    document.getElementById('fin-ov-reason').value = '';
+    toast('Override saved', 'var(--green)');
+    state.financeProfiles = null;
+    loadOverrides();
+  } catch (e) { toast(e?.detail || e?.reason?.[0] || 'Failed to save override', 'var(--red)'); }
+}
+
+async function revokeOverride(id) {
+  if (!confirm('Revoke this override? The ledger decides again from now on.')) return;
+  try {
+    await api('DELETE', `/finance-overrides/${id}/`);
+    toast('Override revoked', 'var(--yellow)');
+    state.financeProfiles = null;
+    loadOverrides();
+  } catch (e) { toast(e?.detail || 'Failed to revoke', 'var(--red)'); }
+}
+
+// ── audit ─────────────────────────────────────────────────────────────────────
+
+async function loadFinanceAudit() {
+  const data = await api('GET', '/finance-audit/');
+  const rows = data.results ?? data;
+  document.getElementById('fin-audit-tbody').innerHTML = rows.length ? rows.map(r => `
+    <tr>
+      <td style="white-space:nowrap;font-size:.75rem">${new Date(r.at).toLocaleString()}</td>
+      <td>${safeText(r.actor_name || 'system')}</td>
+      <td style="font-family:var(--font-mono);font-size:.72rem">${safeText(r.action)}</td>
+      <td style="font-family:var(--font-mono);font-size:.72rem">${safeText(r.student_reg_no || '—')}</td>
+      <td style="font-size:.8rem">${safeText(r.summary)}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="5"><div class="empty"><div class="ei">🛡️</div>Nothing recorded yet</div></td></tr>';
+}
 // ── SICK RECORDS PAGE ──────────────────────────────────────────────────────────
 let sickRecordsData = [];
 
@@ -5469,7 +6142,7 @@ installWebIconReplacements();
   document.getElementById('user-avatar').textContent = initials;
   if (isStaff) {
     document.body.classList.add('is-admin');
-    document.getElementById('role-badge').textContent  = 'Admin';
+    document.getElementById('role-badge').textContent  = 'Exam Officer';
     document.getElementById('role-badge').className    = 'role-badge admin';
   } else {
     document.getElementById('role-badge').textContent  = 'Tutor';

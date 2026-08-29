@@ -1,7 +1,11 @@
+from datetime import date
+from decimal import Decimal
+
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from django.db import transaction
 from django.urls import reverse
+from . import finance
 from .grading import result_outcome
 from .models import (
     AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord,
@@ -9,6 +13,9 @@ from .models import (
     StudentFinanceClearance, Announcement,
     EstateOfficerProfile, InventoryLocation, AssetCategory, InventoryItemType, Asset,
     AssetTransfer, AssetMaintenance, InventoryInspection, InventoryInspectionItem, AssetDisposal,
+    ChargeType, FeeStructure, FeeInstallment, StudentProfile, StudentCharge,
+    Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
+    BankAccount, CollegeProfile,
 )
 
 MAX_ANNOUNCEMENT_FILE_BYTES = 10 * 1024 * 1024  # matches nginx client_max_body_size 10M
@@ -876,3 +883,316 @@ class AnnouncementSerializer(serializers.ModelSerializer):
 
     def get_download_url(self, obj):
         return reverse('announcement-download', args=[obj.id])
+
+
+# ── FEES LEDGER ───────────────────────────────────────────────────────────────
+#
+# Read serializers only expose derived figures; nothing here lets a client set
+# a balance. Money enters the system through the finance service layer, which
+# is the only place that writes Payment rows and the audit trail.
+
+
+class ChargeTypeSerializer(serializers.ModelSerializer):
+    family_display = serializers.CharField(source='get_family_display', read_only=True)
+    applies_display = serializers.CharField(source='get_applies_display', read_only=True)
+    frequency_display = serializers.CharField(source='get_frequency_display', read_only=True)
+    group_label = serializers.CharField(read_only=True)
+    bank_account_label = serializers.CharField(source='bank_account.purpose', read_only=True, default='')
+    in_use = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChargeType
+        fields = [
+            'id', 'name', 'code', 'family', 'family_display', 'applies', 'applies_display',
+            'frequency', 'frequency_display', 'invoice_group', 'group_label',
+            'bank_account', 'bank_account_label',
+            'blocks_registration', 'blocks_cat1', 'blocks_cat2', 'blocks_final',
+            'blocks_results', 'is_active', 'in_use', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def get_in_use(self, obj):
+        """Whether charges already exist — the UI warns before editing one."""
+        return obj.charges.exists()
+
+
+class FeeInstallmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FeeInstallment
+        fields = ['id', 'number', 'amount', 'due_date']
+        read_only_fields = ['id']
+
+
+class FeeStructureSerializer(serializers.ModelSerializer):
+    charge_type_name = serializers.CharField(source='charge_type.name', read_only=True)
+    family = serializers.CharField(source='charge_type.family', read_only=True)
+    applies = serializers.CharField(source='charge_type.applies', read_only=True)
+    class_level_name = serializers.CharField(source='class_level.name', read_only=True)
+    academic_year_name = serializers.CharField(source='academic_year.name', read_only=True)
+    billing_period_display = serializers.CharField(source='get_billing_period_display', read_only=True)
+    schedule = FeeInstallmentSerializer(source='installment_schedule', many=True, read_only=True)
+    # Write-only: the due date for each installment, in order. The service
+    # layer splits the amount across them and puts any rounding remainder on
+    # the last one, so a schedule always sums back to the full fee.
+    due_dates = serializers.ListField(
+        child=serializers.DateField(), write_only=True, required=False,
+    )
+
+    class Meta:
+        model = FeeStructure
+        fields = [
+            'id', 'charge_type', 'charge_type_name', 'family', 'applies',
+            'class_level', 'class_level_name', 'academic_year', 'academic_year_name',
+            'amount', 'billing_period', 'billing_period_display', 'installments',
+            'schedule', 'due_dates', 'is_active', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def validate(self, data):
+        due_dates = data.get('due_dates')
+        installments = data.get('installments', getattr(self.instance, 'installments', 1))
+        if due_dates is not None and len(due_dates) != installments:
+            raise serializers.ValidationError({
+                'due_dates': f'Give one due date per installment — {installments} expected, '
+                             f'{len(due_dates)} given.'
+            })
+        return data
+
+
+class StudentChargeSerializer(serializers.ModelSerializer):
+    charge_type_name = serializers.CharField(source='charge_type.name', read_only=True)
+    family = serializers.CharField(source='charge_type.family', read_only=True)
+    family_display = serializers.CharField(source='charge_type.get_family_display', read_only=True)
+    student_name = serializers.CharField(source='profile.name', read_only=True)
+    student_reg_no = serializers.CharField(source='profile.nactvet_reg_no', read_only=True)
+    semester_label = serializers.CharField(source='semester.label', read_only=True, default=None)
+    balance = serializers.SerializerMethodField()
+    is_overdue = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentCharge
+        fields = [
+            'id', 'profile', 'student_name', 'student_reg_no',
+            'charge_type', 'charge_type_name', 'family', 'family_display',
+            'academic_year', 'semester', 'semester_label',
+            'installment_number', 'amount', 'waived_amount', 'waived_reason',
+            'balance', 'due_date', 'is_overdue', 'source', 'note', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'waived_amount', 'waived_reason']
+
+    def get_balance(self, obj):
+        return str(finance.charge_balance(obj))
+
+    def get_is_overdue(self, obj):
+        return obj.is_overdue
+
+
+class InvoiceLineSerializer(serializers.ModelSerializer):
+    charge_type_name = serializers.CharField(source='charge.charge_type.name', read_only=True)
+    installment_number = serializers.IntegerField(source='charge.installment_number', read_only=True)
+    due_date = serializers.DateField(source='charge.due_date', read_only=True)
+
+    class Meta:
+        model = InvoiceLine
+        fields = ['id', 'charge', 'charge_type_name', 'installment_number', 'due_date', 'amount']
+
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='profile.name', read_only=True)
+    student_reg_no = serializers.CharField(source='profile.nactvet_reg_no', read_only=True)
+    academic_year_name = serializers.CharField(source='academic_year.name', read_only=True)
+    lines = InvoiceLineSerializer(many=True, read_only=True)
+    total = serializers.SerializerMethodField()
+    paid = serializers.SerializerMethodField()
+    outstanding = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+    expires_on = serializers.DateField(read_only=True)
+    installment_count = serializers.SerializerMethodField()
+    bank_name = serializers.CharField(source='bank_account.bank_name', read_only=True, default='')
+    bank_account_number = serializers.CharField(
+        source='bank_account.account_number', read_only=True, default='')
+    bank_account_purpose = serializers.CharField(
+        source='bank_account.purpose', read_only=True, default='')
+
+    class Meta:
+        model = Invoice
+        fields = [
+            'id', 'reference', 'profile', 'student_name', 'student_reg_no',
+            'academic_year', 'academic_year_name', 'issued_on', 'due_date',
+            'invoice_group', 'bank_account', 'bank_name', 'bank_account_number',
+            'bank_account_purpose', 'source', 'lines', 'total', 'paid', 'outstanding',
+            'status', 'expires_on', 'installment_count',
+            'cancelled', 'cancelled_reason', 'created_at',
+        ]
+        read_only_fields = ['id', 'reference', 'issued_on', 'created_at']
+
+    def get_total(self, obj):
+        return str(finance.money(obj.total))
+
+    def _paid(self, obj):
+        # Three fields need this and it costs a query, so work it out once per
+        # invoice rather than once per field.
+        if not hasattr(obj, '_paid_cache'):
+            obj._paid_cache = finance.invoice_paid(obj)
+        return obj._paid_cache
+
+    def get_paid(self, obj):
+        return str(self._paid(obj))
+
+    def get_outstanding(self, obj):
+        return str(max(finance.money(obj.total) - self._paid(obj), finance.money(0)))
+
+    def get_status(self, obj):
+        return finance.invoice_status(obj)
+
+    def get_installment_count(self, obj):
+        """How many instalments this one reference covers — the whole point of
+        the invoice, so it belongs on the wire.
+
+        len() rather than .count() so a prefetched queryset is not re-queried
+        once per invoice."""
+        return len(obj.lines.all())
+
+
+class PaymentAllocationSerializer(serializers.ModelSerializer):
+    charge_type_name = serializers.CharField(source='charge.charge_type.name', read_only=True)
+    installment_number = serializers.IntegerField(source='charge.installment_number', read_only=True)
+
+    class Meta:
+        model = PaymentAllocation
+        fields = ['id', 'charge', 'charge_type_name', 'installment_number', 'amount']
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    """Read-only view of the ledger. Payments are created through the
+    record-payment action and never edited — a correction is a reversal."""
+    student_name = serializers.CharField(source='profile.name', read_only=True)
+    student_reg_no = serializers.CharField(source='profile.nactvet_reg_no', read_only=True)
+    invoice_reference = serializers.CharField(source='invoice.reference', read_only=True, default=None)
+    channel_display = serializers.CharField(source='get_channel_display', read_only=True)
+    payer_relation_display = serializers.CharField(source='get_payer_relation_display', read_only=True)
+    recorded_by_name = serializers.CharField(source='recorded_by.username', read_only=True)
+    allocations = PaymentAllocationSerializer(many=True, read_only=True)
+    is_reversal = serializers.BooleanField(read_only=True)
+    is_reversed = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Payment
+        fields = [
+            'id', 'profile', 'student_name', 'student_reg_no',
+            'invoice', 'invoice_reference', 'amount', 'payment_date',
+            'channel', 'channel_display', 'bank_reference', 'efd_receipt_no',
+            'payer_name', 'payer_relation', 'payer_relation_display',
+            'note', 'allocations', 'is_reversal', 'is_reversed',
+            'reverses', 'reversal_reason', 'recorded_by_name', 'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_is_reversed(self, obj):
+        return hasattr(obj, 'reversal')
+
+
+class RecordPaymentSerializer(serializers.Serializer):
+    """What the accountant types in while holding the slip."""
+    profile = serializers.PrimaryKeyRelatedField(queryset=StudentProfile.objects.all())
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0.01'))
+    payment_date = serializers.DateField()
+    invoice = serializers.PrimaryKeyRelatedField(
+        queryset=Invoice.objects.all(), required=False, allow_null=True,
+    )
+    channel = serializers.ChoiceField(choices=Payment.CHANNEL_CHOICES, default=Payment.CRDB)
+    bank_reference = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+    efd_receipt_no = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+    payer_name = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
+    payer_relation = serializers.ChoiceField(choices=Payment.PAYER_CHOICES, default=Payment.SELF)
+    proof = serializers.FileField(required=False, allow_null=True)
+    note = serializers.CharField(max_length=300, required=False, allow_blank=True, default='')
+
+    def validate_payment_date(self, value):
+        # The date on the slip. It may be in the past — often is, when the
+        # office records a week late — but it cannot be in the future.
+        if value > date.today():
+            raise serializers.ValidationError('A payment cannot be dated in the future.')
+        return value
+
+    def validate(self, data):
+        invoice = data.get('invoice')
+        if invoice and invoice.profile_id != data['profile'].id:
+            raise serializers.ValidationError({
+                'invoice': 'That invoice belongs to a different student.'
+            })
+        if invoice and invoice.cancelled:
+            raise serializers.ValidationError({'invoice': 'That invoice was cancelled.'})
+
+        # A receipt may only be banked once. Catches the double-keyed slip and
+        # the same M-Pesa code claimed twice.
+        for field, label in (('bank_reference', 'bank reference'), ('efd_receipt_no', 'EFD receipt number')):
+            value = (data.get(field) or '').strip()
+            if value and Payment.objects.filter(**{field: value}, reverses__isnull=True).exists():
+                raise serializers.ValidationError({
+                    field: f'That {label} has already been recorded.'
+                })
+        return data
+
+
+class ReversePaymentSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=300)
+
+
+class WaiveChargeSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0.00'))
+    reason = serializers.CharField(max_length=300)
+
+
+class FinanceOverrideSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='profile.name', read_only=True)
+    student_reg_no = serializers.CharField(source='profile.nactvet_reg_no', read_only=True)
+    period_display = serializers.CharField(source='get_period_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    approved_by_name = serializers.CharField(source='approved_by.username', read_only=True)
+
+    class Meta:
+        model = FinanceOverride
+        fields = [
+            'id', 'profile', 'student_name', 'student_reg_no',
+            'academic_year', 'semester', 'period', 'period_display',
+            'status', 'status_display', 'reason', 'expires_on', 'is_active',
+            'approved_by_name', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'approved_by_name']
+
+    def validate_reason(self, value):
+        # An override is the one place a human overrules the ledger. It is
+        # worthless in an audit without a reason worth reading.
+        if len(value.strip()) < 5:
+            raise serializers.ValidationError('Give a reason — this overrules the ledger.')
+        return value.strip()
+
+
+class FinanceAuditLogSerializer(serializers.ModelSerializer):
+    actor_name = serializers.CharField(source='actor.username', read_only=True, default='system')
+    student_reg_no = serializers.CharField(source='profile.nactvet_reg_no', read_only=True, default=None)
+
+    class Meta:
+        model = FinanceAuditLog
+        fields = [
+            'id', 'at', 'actor_name', 'action', 'entity', 'entity_id',
+            'student_reg_no', 'summary', 'before', 'after', 'ip_address',
+        ]
+        read_only_fields = fields
+
+
+class BankAccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BankAccount
+        fields = ['id', 'bank_name', 'account_name', 'account_number', 'purpose',
+                  'is_active', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class CollegeProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CollegeProfile
+        fields = ['id', 'name', 'short_name', 'po_box', 'town', 'country',
+                  'phone', 'email', 'website', 'logo', 'invoice_terms', 'updated_at']
+        read_only_fields = ['id', 'updated_at']

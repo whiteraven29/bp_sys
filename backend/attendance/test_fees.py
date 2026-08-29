@@ -19,7 +19,7 @@ from django.test import TestCase
 from . import finance
 from .models import (
     AcademicYear, ChargeType, ClassLevel, FeeStructure, FinanceAuditLog,
-    FinanceOverride, Module, Payment, Semester, Student, StudentCharge,
+    FinanceOverride, Invoice, Module, Payment, Semester, Student, StudentCharge,
 )
 
 User = get_user_model()
@@ -227,17 +227,57 @@ class FeesLedgerTests(TestCase):
 
     # ── invoices ─────────────────────────────────────────────────────────────
 
-    def test_invoice_carries_one_reference_for_several_charges(self):
+    def test_one_reference_covers_every_instalment_of_a_payment(self):
+        """The student writes the same number on all of that payment's slips."""
         finance.generate_charges(self.asha, self.year, actor=self.accountant)
-        finance.raise_charge(self.asha, self.gown, self.year, TZS('50000.00'),
-                             date(2026, 9, 1), actor=self.accountant)
-        charges = finance.outstanding_charges(self.asha, self.year)[:2]
+        charges = finance.outstanding_charges(self.asha, self.year)
+        tuition = [c for c in charges if c.charge_type == self.tuition]
+        self.assertGreater(len(tuition), 1, 'tuition should be billed in instalments')
 
-        invoice = finance.issue_invoice(self.asha, charges, self.year)
+        # Naming one instalment invoices the whole payment.
+        invoice = finance.issue_invoice(self.asha, tuition[:1], self.year)
         self.assertTrue(invoice.reference.startswith('BPH-'))
-        self.assertEqual(invoice.lines.count(), 2)
-        self.assertEqual(invoice.total, sum(c.amount for c in charges))
+        self.assertEqual(invoice.lines.count(), len(tuition))
+        self.assertEqual(invoice.total, sum(c.amount for c in tuition))
         self.assertEqual(finance.invoice_status(invoice, today=date(2026, 8, 1)), 'issued')
+
+    def test_asking_again_returns_the_same_reference(self):
+        """Opening the page twice must not mint a second number for one bill."""
+        finance.generate_charges(self.asha, self.year, actor=self.accountant)
+        charges = finance.outstanding_charges(self.asha, self.year)
+        tuition = [c for c in charges if c.charge_type == self.tuition]
+
+        first = finance.issue_invoice(self.asha, tuition[:1], self.year)
+        again = finance.issue_invoice(self.asha, tuition[1:2], self.year)
+        self.assertEqual(first.reference, again.reference)
+        self.assertEqual(first.pk, again.pk)
+        self.assertEqual(Invoice.objects.filter(profile=self.asha, cancelled=False).count(), 1)
+
+    def test_an_invoice_expires_when_the_academic_year_does(self):
+        """It covers the whole year's instalments, so it cannot expire at the
+        first one."""
+        finance.generate_charges(self.asha, self.year, actor=self.accountant)
+        charges = finance.outstanding_charges(self.asha, self.year)
+        invoice = finance.issue_invoice(
+            self.asha, [c for c in charges if c.charge_type == self.tuition][:1], self.year)
+
+        self.assertEqual(invoice.due_date, self.year.closes_on)
+        self.assertGreater(invoice.due_date, max(c.due_date for c in charges))
+
+    def test_a_charge_raised_later_joins_the_invoice_that_already_exists(self):
+        """A supplementary exam declared mid-year must not start a second
+        reference for a payment the student is already paying off."""
+        first = finance.raise_charge(self.asha, self.gown, self.year, TZS('50000.00'),
+                                     date(2026, 9, 1), actor=self.accountant)
+        invoice = finance.issue_invoice(self.asha, [first], self.year)
+
+        later = finance.raise_charge(self.asha, self.gown, self.year, TZS('30000.00'),
+                                     date(2027, 2, 1), actor=self.accountant)
+        refreshed = finance.issue_invoice(self.asha, [later], self.year)
+
+        self.assertEqual(refreshed.reference, invoice.reference)
+        self.assertEqual(refreshed.lines.count(), 2)
+        self.assertEqual(refreshed.total, TZS('80000.00'))
 
     def test_a_mistyped_reference_fails_instead_of_matching_someone_else(self):
         self.assertTrue(finance.reference_is_valid(finance.build_reference(1)))
@@ -248,8 +288,9 @@ class FeesLedgerTests(TestCase):
 
     def test_paying_an_invoice_settles_its_lines_and_marks_it_paid(self):
         finance.generate_charges(self.asha, self.year, actor=self.accountant)
-        charges = finance.outstanding_charges(self.asha, self.year)[:2]
-        invoice = finance.issue_invoice(self.asha, charges, self.year)
+        charges = finance.outstanding_charges(self.asha, self.year)
+        invoice = finance.issue_invoice(
+            self.asha, [c for c in charges if c.charge_type == self.tuition], self.year)
 
         finance.record_payment(
             self.asha, invoice.total, date(2026, 9, 29), recorded_by=self.accountant,
@@ -259,6 +300,25 @@ class FeesLedgerTests(TestCase):
         )
         self.assertEqual(finance.invoice_status(invoice), 'paid')
         self.assertEqual(finance.balance_for(self.asha)['paid'], invoice.total)
+
+    def test_one_instalment_leaves_the_invoice_part_paid_under_the_same_number(self):
+        """Five deposits work one bill off. The accountant has to be able to see
+        that, which needs the invoice to outlive the first instalment."""
+        finance.generate_charges(self.asha, self.year, actor=self.accountant)
+        charges = finance.outstanding_charges(self.asha, self.year)
+        tuition = sorted([c for c in charges if c.charge_type == self.tuition],
+                         key=lambda c: c.due_date)
+        invoice = finance.issue_invoice(self.asha, tuition, self.year)
+
+        first = tuition[0]
+        finance.record_payment(
+            self.asha, first.amount, date(2026, 9, 29), recorded_by=self.accountant,
+            invoice=invoice, allocations=[(first, first.amount)],
+        )
+        self.assertEqual(finance.invoice_status(invoice), 'partly_paid')
+        self.assertEqual(finance.invoice_paid(invoice), first.amount)
+        self.assertEqual(finance.issue_invoice(self.asha, tuition, self.year).reference,
+                         invoice.reference)
 
     # ── the parent case ──────────────────────────────────────────────────────
 

@@ -26,6 +26,18 @@ router.register('inventory-inspections', views.InventoryInspectionViewSet, basen
 router.register('inventory-inspection-items', views.InventoryInspectionItemViewSet, basename='inventory-inspection-item')
 router.register('asset-disposals', views.AssetDisposalViewSet, basename='asset-disposal')
 
+# Fees ledger. Supersedes the payment-categories / student-payments /
+# finance-clearances routes above, which stay registered until the old finance
+# UI is retired.
+router.register('bank-accounts', views.BankAccountViewSet, basename='bank-account')
+router.register('charge-types', views.ChargeTypeViewSet, basename='charge-type')
+router.register('fee-structures', views.FeeStructureViewSet, basename='fee-structure')
+router.register('student-charges', views.StudentChargeViewSet, basename='student-charge')
+router.register('invoices', views.InvoiceViewSet, basename='invoice')
+router.register('payments', views.PaymentViewSet, basename='payment')
+router.register('finance-overrides', views.FinanceOverrideViewSet, basename='finance-override')
+router.register('finance-audit', views.FinanceAuditLogViewSet, basename='finance-audit')
+
 urlpatterns = [
     path('', include(router.urls)),
     path('dashboard/', views.dashboard, name='dashboard'),
@@ -49,4 +61,16 @@ urlpatterns = [
     path('results/download/field/', views.download_field_results, name='results-download-field'),
     path('eligibility/download/', views.download_eligibility_excel, name='eligibility-download'),
     path('eligibility/final/download/', views.download_final_eligibility_excel, name='final-eligibility-download'),
+
+    # Fees ledger
+    path('finance/students/', views.finance_students, name='finance-students'),
+    path('finance/statement/<int:profile_id>/', views.finance_statement, name='finance-statement'),
+    path('finance/generate-charges/', views.finance_generate_charges, name='finance-generate-charges'),
+    path('finance/raise-charge/', views.finance_raise_charge, name='finance-raise-charge'),
+    path('finance/issue-invoice/', views.finance_issue_invoice, name='finance-issue-invoice'),
+    path('finance/collections/', views.finance_collections, name='finance-collections'),
+    path('finance/college/', views.college_profile, name='finance-college'),
+    path('my-fees/', views.my_fees, name='my-fees'),
+    path('my-fees/invoice/', views.my_invoice, name='my-invoice'),
+    path('my-fees/invoice/options/', views.my_invoice_options, name='my-invoice-options'),
 ]

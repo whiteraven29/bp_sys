@@ -1,7 +1,9 @@
+from decimal import Decimal
 from functools import wraps
 import re
 from io import BytesIO
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -10,6 +12,7 @@ from django.db.models import Count, Q, Sum
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, render, redirect
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view
@@ -20,6 +23,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
+from . import finance
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
 from .models import (
     AcademicYear, Semester, ClassLevel, Module,
@@ -28,6 +32,9 @@ from .models import (
     StudentFinanceClearance, Announcement,
     EstateOfficerProfile, InventoryLocation, AssetCategory, InventoryItemType, Asset, AssetImport,
     AssetTransfer, AssetMaintenance, InventoryInspection, InventoryInspectionItem, AssetDisposal,
+    ChargeType, FeeStructure, FeeInstallment, StudentProfile, StudentCharge,
+    Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
+    BankAccount, CollegeProfile,
 )
 from .serializers import (
     AcademicYearSerializer, SemesterSerializer, ClassLevelSerializer,
@@ -40,6 +47,11 @@ from .serializers import (
     InventoryLocationSerializer, AssetCategorySerializer, InventoryItemTypeSerializer, AssetSerializer,
     AssetTransferSerializer, AssetMaintenanceSerializer, InventoryInspectionSerializer,
     InventoryInspectionItemSerializer, AssetDisposalSerializer,
+    BankAccountSerializer, CollegeProfileSerializer,
+    ChargeTypeSerializer, FeeStructureSerializer, StudentChargeSerializer,
+    InvoiceSerializer, PaymentSerializer, RecordPaymentSerializer,
+    ReversePaymentSerializer, WaiveChargeSerializer, FinanceOverrideSerializer,
+    FinanceAuditLogSerializer,
 )
 from .grading import grade_for_mark, gpa_classification, parse_authority_grade
 
@@ -78,7 +90,15 @@ def is_accountant(user):
 
 
 def can_manage_finance(user):
-    return bool(user and user.is_authenticated and (user.is_staff or is_accountant(user)))
+    """Only the accountant handles money.
+
+    `is_staff` in this system is the examination officer / HOD: they own
+    results, eligibility and the academic register, and deliberately have no
+    access to fees, payments or the ledger. Separating the two is the point —
+    the person who decides who sits an exam is not the person who decides
+    whether their money arrived.
+    """
+    return is_accountant(user)
 
 
 def is_estate_officer(user):
@@ -90,6 +110,13 @@ def is_estate_officer(user):
 
 def active_semester():
     return Semester.objects.filter(is_active=True).select_related('academic_year').first()
+
+
+def active_academic_year():
+    sem = active_semester()
+    if sem:
+        return sem.academic_year
+    return AcademicYear.objects.filter(is_active=True).first()
 
 
 def attendance_is_effective(record):
@@ -111,6 +138,23 @@ class IsAuthenticatedReadOnlyOrAdmin(BasePermission):
 class IsFinanceUser(BasePermission):
     def has_permission(self, request, view):
         return can_manage_finance(request.user)
+
+
+class IsExamOfficerOrFinance(BasePermission):
+    """Exam declarations straddle the two roles.
+
+    Declaring a student for a special, supplementary or repeat exam is an
+    academic decision and belongs to the examination officer. The accountant
+    only reads them, so they know what the student needs to be billed for.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        if request.method in SAFE_METHODS:
+            return bool(user.is_staff or can_manage_finance(user))
+        return bool(user.is_staff)
 
 
 class IsEstateOfficer(BasePermission):
@@ -279,9 +323,9 @@ def student_dashboard(request):
             module__semester__academic_year=active_sem.academic_year
         )
     enrollments = enrollments.select_related(
-        'module__class_level', 'module__semester__academic_year'
+        'module__class_level', 'module__semester__academic_year', 'profile'
     ).prefetch_related(
-        'attendance_records__session', 'result', 'finance_clearances', 'module__sessions'
+        'attendance_records__session', 'result', 'module__sessions'
     ).order_by(
         'module__semester__number', 'module__name'
     )
@@ -419,6 +463,7 @@ def student_dashboard(request):
         if active_sem is None or module['semester_number'] == active_sem.number
     ]
     eligibility_rows = []
+    clearance_cache = {}
     for enrollment in enrollments:
         # .all() (not .filter(...).count() x3) reuses the module__sessions and
         # attendance_records__session prefetches done above instead of issuing
@@ -441,27 +486,24 @@ def student_dashboard(request):
         cat2_att = (cat2_pct >= ELIGIBILITY_THRESHOLD) if counts[Session.CAT2] else None
         end_att = (end_pct >= ELIGIBILITY_THRESHOLD) if counts['all'] else None
         total_ca, ca_ok, ca_note = ca_eligibility_for_student(enrollment)
-        # .all() reuses the finance_clearances prefetch; filtered in Python
-        # instead of issuing a fresh query per enrollment.
-        clearances = {
-            c.period: c for c in enrollment.finance_clearances.all()
-            if c.semester_id == enrollment.module.semester_id
-        }
-        cat1_fin = bool(clearances.get(StudentFinanceClearance.CAT1) and clearances[StudentFinanceClearance.CAT1].is_cleared)
-        cat2_fin = bool(clearances.get(StudentFinanceClearance.CAT2) and clearances[StudentFinanceClearance.CAT2].is_cleared)
-        end_fin = bool(clearances.get(StudentFinanceClearance.END) and clearances[StudentFinanceClearance.END].is_cleared)
+        # Same computation the tutor's eligibility screen uses — one definition,
+        # so the student and the college can never be shown different answers
+        # about the same exam.
+        cat1_fin = _clearance_for(enrollment, ChargeType.CAT1, clearance_cache)
+        cat2_fin = _clearance_for(enrollment, ChargeType.CAT2, clearance_cache)
+        end_fin = _clearance_for(enrollment, ChargeType.FINAL, clearance_cache)
         cat1_parts = [
             (cat1_att, attendance_eligibility_reason(cat1_pct, counts[Session.CAT1], 'CAT 1')),
-            (cat1_fin, finance_clearance_reason(cat1_fin, 'CAT 1')),
+            (cat1_fin['cleared'], cat1_fin['reason']),
         ]
         cat2_parts = [
             (cat2_att, attendance_eligibility_reason(cat2_pct, counts[Session.CAT2], 'CAT 2')),
-            (cat2_fin, finance_clearance_reason(cat2_fin, 'CAT 2')),
+            (cat2_fin['cleared'], cat2_fin['reason']),
         ]
         end_parts = [
             (end_att, attendance_eligibility_reason(end_pct, counts['all'], 'End-of-semester')),
             (ca_ok, ca_note),
-            (end_fin, finance_clearance_reason(end_fin, 'end-of-semester exam')),
+            (end_fin['cleared'], end_fin['reason']),
         ]
         eligibility_rows.append({
             'module_code': enrollment.module.code,
@@ -478,24 +520,52 @@ def student_dashboard(request):
             'ese_ok': combined_eligibility(end_parts),
             'ese_note': combined_reason(end_parts),
         })
-    finance_obligations = list(
-        StudentFinanceObligation.objects
-        .filter(student__in=enrollments)
-        .select_related('category', 'module', 'semester')
-        .prefetch_related('payments')
-        .order_by('-created_at')
-    )
-    finance_payments = list(
-        StudentPayment.objects
-        .filter(student__in=enrollments)
-        .select_related('category')
+    ledger_profile = finance.profile_for_student(student)
+    ledger_year = active_sem.academic_year if active_sem else student.module.semester.academic_year
+    ledger_totals = finance.balance_for(ledger_profile, ledger_year)
+    finance_charges = finance.with_balances(
+        StudentCharge.objects
+        .filter(profile=ledger_profile, academic_year=ledger_year)
+        .select_related('charge_type', 'semester')
+    ).order_by('due_date')
+    finance_payments = (
+        Payment.objects.filter(profile=ledger_profile)
+        .prefetch_related('allocations__charge__charge_type')
         .order_by('-payment_date', '-created_at')
     )
-    finance_required = sum(o.amount_required for o in finance_obligations) + sum(
-        p.amount_required for p in finance_payments if p.obligation_id is None
+    finance_invoices = (
+        Invoice.objects.filter(profile=ledger_profile, academic_year=ledger_year)
+        .select_related('bank_account', 'academic_year')
+        .prefetch_related('lines__charge__charge_type')
     )
-    finance_paid = sum(p.amount_paid for p in finance_payments)
-    finance_balance = finance_required - finance_paid
+    # The template cannot call finance.invoice_paid(invoice), so the numbers a
+    # student reads off the invoice table are worked out here.
+    finance_invoice_rows = []
+    for invoice in finance_invoices:
+        paid = finance.invoice_paid(invoice)
+        total = finance.money(invoice.total)
+        finance_invoice_rows.append({
+            'invoice': invoice,
+            'total': total,
+            'paid': paid,
+            'outstanding': max(total - paid, Decimal('0.00')),
+            'status': finance.invoice_status(invoice),
+            'installments': len(invoice.lines.all()),   # prefetched
+            'expires_on': invoice.expires_on,
+        })
+    # What the student can generate an invoice for: school fees, direct costs,
+    # or one of the other payments they have been billed.
+    invoice_payments = finance.invoiceable_payments(ledger_profile, ledger_year)
+    # Instalment dates are no longer printed down the invoice — the invoice
+    # stands all year. They surface here instead, as reminders the student sees
+    # before each one falls due.
+    fee_reminders = finance.installment_reminders(ledger_profile, ledger_year)
+    fee_reminders_due = [r for r in fee_reminders
+                         if r['urgency'] in (finance.OVERDUE, finance.DUE_SOON)]
+    fee_reminders_later = [r for r in fee_reminders if r['urgency'] == finance.UPCOMING]
+    finance_required = ledger_totals['billed']
+    finance_paid = ledger_totals['paid']
+    finance_balance = ledger_totals['balance']
     announcements = Announcement.objects.select_related('uploaded_by')[:20]
     return render(request, 'student_dashboard.html', {
         'student_name': student.name,
@@ -521,8 +591,16 @@ def student_dashboard(request):
         'total_absent': total_absent,
         'total_sessions': total_sessions,
         'eligibility_rows': eligibility_rows,
-        'finance_obligations': finance_obligations,
+        'finance_charges': finance_charges,
         'finance_payments': finance_payments,
+        'finance_invoices': finance_invoices,
+        'finance_invoice_rows': finance_invoice_rows,
+        'invoice_payments': invoice_payments,
+        'fee_reminders': fee_reminders,
+        'fee_reminders_due': fee_reminders_due,
+        'fee_reminders_later': fee_reminders_later,
+        'academic_year_closes_on': ledger_year.closes_on if ledger_year else None,
+        'finance_waived': ledger_totals['waived'],
         'finance_required': finance_required,
         'finance_paid': finance_paid,
         'finance_balance': finance_balance,
@@ -1586,7 +1664,7 @@ class PaymentCategoryViewSet(viewsets.ModelViewSet):
 
 class StudentFinanceObligationViewSet(viewsets.ModelViewSet):
     serializer_class = StudentFinanceObligationSerializer
-    permission_classes = [IsFinanceUser]
+    permission_classes = [IsExamOfficerOrFinance]
 
     def get_queryset(self):
         qs = StudentFinanceObligation.objects.select_related(
@@ -1616,7 +1694,7 @@ class StudentFinanceObligationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         if not self.request.user.is_staff:
-            raise PermissionDenied('Only the administrator can declare special, supplementary, and repeat-module obligations.')
+            raise PermissionDenied('Only the examination officer can declare special, supplementary, and repeat-module obligations.')
         serializer.save(declared_by=self.request.user)
 
 
@@ -1900,10 +1978,69 @@ def attendance_eligibility_reason(pct, sessions, label):
     return f'{label} attendance {pct}% meets required {ELIGIBILITY_THRESHOLD}%'
 
 
-def finance_clearance_reason(is_cleared, label):
-    if is_cleared:
-        return f'Finance cleared for {label}'
-    return f'Pending finance clearance for {label}'
+def finance_note(result, detailed):
+    """What to say about a student's finance clearance.
+
+    The accountant and the student themselves see the amount. The examination
+    officer and tutors see only whether the student is cleared — they need that
+    to run an exam, but a student's balance is not theirs to read.
+    """
+    if detailed:
+        return result['reason']
+    return 'Finance cleared' if result['cleared'] else 'Pending finance clearance'
+
+
+def _clearance_for(enrollment, period, cache=None):
+    """Finance clearance for the person behind this enrollment.
+
+    Fees belong to the student, not to each module they take, so this resolves
+    the enrollment to its profile first. A student with no charges raised yet
+    is cleared — the ledger blocks nobody until the college has actually billed
+    them.
+
+    Pass a dict as `cache` when looping over enrollments: the answer is the
+    same for every module a student takes, so without it a student in eight
+    modules has their clearance recomputed eight times per period.
+    """
+    profile = enrollment.profile
+    if profile is None:
+        profile = finance.profile_for_student(enrollment)
+    semester = enrollment.module.semester
+
+    if cache is None:
+        return finance.exam_clearance(
+            profile, semester.academic_year, period, semester=semester)
+
+    key = (profile.id, semester.id, period)
+    if key not in cache:
+        cache[key] = finance.exam_clearance(
+            profile, semester.academic_year, period, semester=semester)
+    return cache[key]
+
+
+EXAM_PERIODS = [ChargeType.CAT1, ChargeType.CAT2, ChargeType.FINAL]
+
+
+def _batch_clearance(enrollments):
+    """Pre-compute clearance for every person in a list of enrollments.
+
+    Returns a cache in the shape _clearance_for() expects, so the loop below
+    reads from memory instead of issuing two queries per student per period.
+    """
+    by_semester = {}
+    for enrollment in enrollments:
+        profile = enrollment.profile or finance.profile_for_student(enrollment)
+        by_semester.setdefault(enrollment.module.semester, set()).add(profile.id)
+
+    cache = {}
+    for semester, profile_ids in by_semester.items():
+        results = finance.clearance_map(
+            profile_ids, semester.academic_year, EXAM_PERIODS, semester=semester,
+        )
+        for profile_id, per_period in results.items():
+            for period, result in per_period.items():
+                cache[(profile_id, semester.id, period)] = result
+    return cache
 
 
 def combined_eligibility(parts):
@@ -1930,8 +2067,7 @@ def eligibility(request):
         Student.objects.filter(module__in=my_modules)
         .select_related('module__class_level', 'module__semester__academic_year')
         .prefetch_related('attendance_records__session')
-        .prefetch_related('finance_clearances')
-        .select_related('result')
+        .select_related('result', 'profile')
     )
     if module_id:
         students = students.filter(module_id=module_id)
@@ -1941,6 +2077,12 @@ def eligibility(request):
         students = students.filter(module__semester_id=semester_id)
 
     _mod_cache = {}
+    # Clearance is per person per period, not per enrollment — a student in
+    # eight modules has one answer, not eight. Fetch the whole page's worth in
+    # a fixed number of queries, then look each row's answer up.
+    students = list(students)
+    _clearance_cache = _batch_clearance(students)
+    show_amounts = can_manage_finance(request.user)
 
     def _period_counts(mid):
         if mid not in _mod_cache:
@@ -1966,28 +2108,34 @@ def eligibility(request):
         cat2_eligible = (cat2_pct >= ELIGIBILITY_THRESHOLD) if mc['cat2'] else None
         end_eligible = (end_pct >= ELIGIBILITY_THRESHOLD) if mc['total'] else None
         total_ca, ca_eligible, ca_note = ca_eligibility_for_student(st)
-        finance_by_period = {
-            c.period: c for c in st.finance_clearances.all()
-            if c.semester_id == st.module.semester_id
-        }
-        cat1_finance_eligible = bool(finance_by_period.get(StudentFinanceClearance.CAT1) and finance_by_period[StudentFinanceClearance.CAT1].is_cleared)
-        cat2_finance_eligible = bool(finance_by_period.get(StudentFinanceClearance.CAT2) and finance_by_period[StudentFinanceClearance.CAT2].is_cleared)
-        end_finance_eligible = bool(finance_by_period.get(StudentFinanceClearance.END) and finance_by_period[StudentFinanceClearance.END].is_cleared)
+        # Finance clearance is computed from the ledger, not read off a flag
+        # somebody remembered to tick. A student with nothing outstanding is
+        # cleared the moment their payment is recorded.
+        cat1_fin = _clearance_for(st, ChargeType.CAT1, _clearance_cache)
+        cat2_fin = _clearance_for(st, ChargeType.CAT2, _clearance_cache)
+        end_fin = _clearance_for(st, ChargeType.FINAL, _clearance_cache)
+
+        cat1_finance_eligible = cat1_fin['cleared']
+        cat2_finance_eligible = cat2_fin['cleared']
+        end_finance_eligible = end_fin['cleared']
+        cat1_fin_note = finance_note(cat1_fin, show_amounts)
+        cat2_fin_note = finance_note(cat2_fin, show_amounts)
+        end_fin_note = finance_note(end_fin, show_amounts)
         cat1_att_note = attendance_eligibility_reason(cat1_pct, mc['cat1'], 'CAT 1')
         cat2_att_note = attendance_eligibility_reason(cat2_pct, mc['cat2'], 'CAT 2')
         end_att_note = attendance_eligibility_reason(end_pct, mc['total'], 'End-of-semester')
         cat1_exam_parts = [
             (cat1_eligible, cat1_att_note),
-            (cat1_finance_eligible, finance_clearance_reason(cat1_finance_eligible, 'CAT 1')),
+            (cat1_finance_eligible, cat1_fin_note),
         ]
         cat2_exam_parts = [
             (cat2_eligible, cat2_att_note),
-            (cat2_finance_eligible, finance_clearance_reason(cat2_finance_eligible, 'CAT 2')),
+            (cat2_finance_eligible, cat2_fin_note),
         ]
         end_exam_parts = [
             (end_eligible, end_att_note),
             (ca_eligible, ca_note),
-            (end_finance_eligible, finance_clearance_reason(end_finance_eligible, 'end-of-semester exam')),
+            (end_finance_eligible, end_fin_note),
         ]
 
         rows.append({
@@ -2004,7 +2152,7 @@ def eligibility(request):
             'cat1_eligible': cat1_eligible,
             'cat1_note': cat1_att_note,
             'cat1_finance_eligible': cat1_finance_eligible,
-            'cat1_finance_note': finance_clearance_reason(cat1_finance_eligible, 'CAT 1'),
+            'cat1_finance_note': cat1_fin_note,
             'cat1_exam_eligible': combined_eligibility(cat1_exam_parts),
             'cat1_exam_note': combined_reason(cat1_exam_parts),
             'cat2_sessions': mc['cat2'],
@@ -2013,7 +2161,7 @@ def eligibility(request):
             'cat2_eligible': cat2_eligible,
             'cat2_note': cat2_att_note,
             'cat2_finance_eligible': cat2_finance_eligible,
-            'cat2_finance_note': finance_clearance_reason(cat2_finance_eligible, 'CAT 2'),
+            'cat2_finance_note': cat2_fin_note,
             'cat2_exam_eligible': combined_eligibility(cat2_exam_parts),
             'cat2_exam_note': combined_reason(cat2_exam_parts),
             'end_sessions': mc['total'],
@@ -2022,7 +2170,7 @@ def eligibility(request):
             'end_eligible': end_eligible,
             'end_note': end_att_note,
             'end_finance_eligible': end_finance_eligible,
-            'end_finance_note': finance_clearance_reason(end_finance_eligible, 'end-of-semester exam'),
+            'end_finance_note': end_fin_note,
             'end_exam_eligible': combined_eligibility(end_exam_parts),
             'end_exam_note': combined_reason(end_exam_parts),
             'ca_total': total_ca,
@@ -3695,3 +3843,906 @@ def download_final_eligibility_excel(request):
     response['Content-Disposition'] = f'attachment; filename="final_eligibility_{timezone.localdate()}.xlsx"'
     wb.save(response)
     return response
+
+
+# ── FEES LEDGER ───────────────────────────────────────────────────────────────
+#
+# Replaces the FinanceStudent/PaymentCategory/StudentPayment/Clearance viewsets
+# above. The difference that matters: money is never written directly through a
+# serializer here. Every mutation goes through attendance.finance, which is the
+# only place that allocates payments and writes the audit trail.
+
+
+class ChargeTypeViewSet(viewsets.ModelViewSet):
+    """The catalogue: what the college can charge for, and what each blocks."""
+    serializer_class = ChargeTypeSerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = ChargeType.objects.prefetch_related('charges')
+        family = self.request.query_params.get('family')
+        if family:
+            qs = qs.filter(family=family)
+        if self.request.query_params.get('is_active') == 'true':
+            qs = qs.filter(is_active=True)
+        return qs.order_by('family', 'name')
+
+    def perform_create(self, serializer):
+        charge_type = serializer.save()
+        finance.audit('charge_type.create', 'ChargeType', actor=self.request.user,
+                      entity_id=charge_type.id, summary=f'Created {charge_type.name}',
+                      after=serializer.data, ip=finance.client_ip(self.request))
+
+    def perform_update(self, serializer):
+        before = ChargeTypeSerializer(serializer.instance).data
+        charge_type = serializer.save()
+        finance.audit('charge_type.update', 'ChargeType', actor=self.request.user,
+                      entity_id=charge_type.id, summary=f'Updated {charge_type.name}',
+                      before=before, after=serializer.data, ip=finance.client_ip(self.request))
+
+    def perform_destroy(self, instance):
+        if instance.charges.exists():
+            raise PermissionDenied(
+                'Students have already been charged under this type. Deactivate it instead '
+                'so the existing charges keep their meaning.'
+            )
+        instance.delete()
+
+
+class FeeStructureViewSet(viewsets.ModelViewSet):
+    """The grid: how much, and over how many installments, per NTA level."""
+    serializer_class = FeeStructureSerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = FeeStructure.objects.select_related(
+            'charge_type', 'class_level', 'academic_year'
+        ).prefetch_related('installment_schedule')
+        year_id = self.request.query_params.get('academic_year_id')
+        if year_id:
+            qs = qs.filter(academic_year_id=year_id)
+        level_id = self.request.query_params.get('class_level_id')
+        if level_id:
+            qs = qs.filter(class_level_id=level_id)
+        return qs.order_by('class_level__order', 'charge_type__family', 'charge_type__name')
+
+    def _save_with_schedule(self, serializer):
+        due_dates = serializer.validated_data.pop('due_dates', None)
+        structure = serializer.save()
+        if due_dates:
+            finance.set_installment_schedule(structure, due_dates)
+        return structure
+
+    def perform_create(self, serializer):
+        structure = self._save_with_schedule(serializer)
+        finance.audit('fee_structure.create', 'FeeStructure', actor=self.request.user,
+                      entity_id=structure.id,
+                      summary=f'{structure.charge_type} · {structure.class_level} = {structure.amount}',
+                      ip=finance.client_ip(self.request))
+
+    def perform_update(self, serializer):
+        before = {
+            'amount': str(serializer.instance.amount),
+            'installments': serializer.instance.installments,
+        }
+        structure = self._save_with_schedule(serializer)
+        finance.audit('fee_structure.update', 'FeeStructure', actor=self.request.user,
+                      entity_id=structure.id,
+                      summary=f'{structure.charge_type} · {structure.class_level} = {structure.amount}',
+                      before=before,
+                      after={'amount': str(structure.amount), 'installments': structure.installments},
+                      ip=finance.client_ip(self.request))
+
+    @action(detail=False, methods=['get'])
+    def grid(self, request):
+        """The whole fee structure as one sheet — charge types down, class
+        levels across. Accountants read a grid far faster than a list, and this
+        is the screen that replaces the Excel workbook."""
+        year_id = request.query_params.get('academic_year_id')
+        year = AcademicYear.objects.filter(id=year_id).first() or active_academic_year()
+        if year is None:
+            return Response({'detail': 'No academic year selected.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        levels = list(ClassLevel.objects.order_by('order', 'name'))
+        types = list(ChargeType.objects.filter(is_active=True).order_by('family', 'name'))
+        cells = {
+            (s.charge_type_id, s.class_level_id): s
+            for s in FeeStructure.objects.filter(academic_year=year)
+            .prefetch_related('installment_schedule')
+        }
+
+        rows = []
+        for charge_type in types:
+            row = {
+                'charge_type_id': charge_type.id,
+                'charge_type_name': charge_type.name,
+                'family': charge_type.family,
+                'family_display': charge_type.get_family_display(),
+                'applies': charge_type.applies,
+                'cells': [],
+            }
+            for level in levels:
+                structure = cells.get((charge_type.id, level.id))
+                row['cells'].append({
+                    'class_level_id': level.id,
+                    'structure_id': structure.id if structure else None,
+                    'amount': str(structure.amount) if structure else None,
+                    'installments': structure.installments if structure else None,
+                    'billing_period': structure.billing_period if structure else None,
+                    'due_dates': [str(i.due_date) for i in structure.installment_schedule.all()] if structure else [],
+                })
+            rows.append(row)
+
+        return Response({
+            'academic_year': {'id': year.id, 'name': year.name},
+            'class_levels': [{'id': lv.id, 'name': lv.name} for lv in levels],
+            'rows': rows,
+        })
+
+
+class StudentChargeViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = StudentChargeSerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = StudentCharge.objects.select_related(
+            'profile', 'charge_type', 'academic_year', 'semester'
+        ).prefetch_related('allocations')
+        for param, field in [
+            ('profile_id', 'profile_id'),
+            ('academic_year_id', 'academic_year_id'),
+            ('charge_type_id', 'charge_type_id'),
+        ]:
+            value = self.request.query_params.get(param)
+            if value:
+                qs = qs.filter(**{field: value})
+        if self.request.query_params.get('outstanding') == 'true':
+            qs = [c for c in qs if finance.charge_balance(c) > 0]
+        return qs
+
+    @action(detail=True, methods=['post'])
+    def waive(self, request, pk=None):
+        """Reduce a debt without pretending money arrived, so a bursary never
+        shows up in the collections report as income."""
+        if not can_manage_finance(request.user):
+            raise PermissionDenied('Only the accountant can waive a charge.')
+        charge = get_object_or_404(StudentCharge, pk=pk)
+        serializer = WaiveChargeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if serializer.validated_data['amount'] > charge.amount:
+            return Response({'detail': 'A waiver cannot exceed the charge.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        finance.waive_charge(charge, serializer.validated_data['amount'],
+                             serializer.validated_data['reason'], actor=request.user)
+        return Response(StudentChargeSerializer(charge).data)
+
+
+class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = InvoiceSerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = Invoice.objects.select_related('profile', 'academic_year').prefetch_related(
+            'lines__charge__charge_type', 'payments'
+        )
+        profile_id = self.request.query_params.get('profile_id')
+        if profile_id:
+            qs = qs.filter(profile_id=profile_id)
+        reference = self.request.query_params.get('reference')
+        if reference:
+            qs = qs.filter(reference__iexact=reference.strip())
+        return qs
+
+    @action(detail=False, methods=['get'], url_path='lookup')
+    def lookup(self, request):
+        """Find an invoice by the reference written on the slip. This is the
+        accountant's entry point at the counter — they type what is on the
+        paper and the system says whose it is and what it was for."""
+        reference = str(request.query_params.get('reference', '')).strip().upper()
+        if not reference.startswith('BPH-'):
+            reference = f'BPH-{reference}'
+        if not finance.reference_is_valid(reference):
+            return Response(
+                {'detail': 'That reference is not valid — check the digits on the slip.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        invoice = self.get_queryset().filter(reference=reference).first()
+        if invoice is None:
+            return Response({'detail': f'No invoice found for {reference}.'},
+                            status=status.HTTP_404_NOT_FOUND)
+        return Response(InvoiceSerializer(invoice).data)
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        invoice = get_object_or_404(Invoice, pk=pk)
+        if invoice.payments.exists():
+            return Response({'detail': 'That invoice has payments against it. Reverse them first.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        invoice.cancelled = True
+        invoice.cancelled_reason = str(request.data.get('reason', ''))[:300]
+        invoice.save(update_fields=['cancelled', 'cancelled_reason'])
+        finance.audit('invoice.cancel', 'Invoice', actor=request.user, entity_id=invoice.id,
+                      profile=invoice.profile, summary=f'Cancelled {invoice.reference}',
+                      ip=finance.client_ip(request))
+        return Response(InvoiceSerializer(invoice).data)
+
+
+class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
+    """Append-only. There is no update and no delete — a correction is a
+    reversal, so the record of what happened survives the correction."""
+    serializer_class = PaymentSerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = Payment.objects.select_related(
+            'profile', 'invoice', 'recorded_by'
+        ).prefetch_related('allocations__charge__charge_type', 'reversal')
+        for param, field in [
+            ('profile_id', 'profile_id'),
+            ('invoice_id', 'invoice_id'),
+            ('channel', 'channel'),
+        ]:
+            value = self.request.query_params.get(param)
+            if value:
+                qs = qs.filter(**{field: value})
+        date_from = self.request.query_params.get('from')
+        if date_from:
+            qs = qs.filter(payment_date__gte=date_from)
+        date_to = self.request.query_params.get('to')
+        if date_to:
+            qs = qs.filter(payment_date__lte=date_to)
+        return qs
+
+    @action(detail=False, methods=['post'], url_path='record')
+    def record(self, request):
+        """Record money the accountant is holding proof of."""
+        serializer = RecordPaymentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            payment = finance.record_payment(
+                data['profile'], data['amount'], data['payment_date'],
+                recorded_by=request.user, invoice=data.get('invoice'),
+                channel=data['channel'], bank_reference=data['bank_reference'],
+                efd_receipt_no=data['efd_receipt_no'], payer_name=data['payer_name'],
+                payer_relation=data['payer_relation'], proof=data.get('proof'),
+                note=data['note'], request=request,
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def reverse(self, request, pk=None):
+        payment = get_object_or_404(Payment, pk=pk)
+        serializer = ReversePaymentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            reversal = finance.reverse_payment(
+                payment, serializer.validated_data['reason'], actor=request.user, request=request,
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(PaymentSerializer(reversal).data, status=status.HTTP_201_CREATED)
+
+
+class FinanceOverrideViewSet(viewsets.ModelViewSet):
+    """The human decision that beats the arithmetic — bursary, sponsor delay,
+    hardship, or a hold placed for a reason outside the ledger."""
+    serializer_class = FinanceOverrideSerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = FinanceOverride.objects.select_related('profile', 'academic_year', 'approved_by')
+        for param, field in [
+            ('profile_id', 'profile_id'),
+            ('academic_year_id', 'academic_year_id'),
+            ('period', 'period'),
+        ]:
+            value = self.request.query_params.get(param)
+            if value:
+                qs = qs.filter(**{field: value})
+        return qs
+
+    def perform_create(self, serializer):
+        override = serializer.save(approved_by=self.request.user)
+        finance.audit('override.create', 'FinanceOverride', actor=self.request.user,
+                      entity_id=override.id, profile=override.profile,
+                      summary=f'{override.get_period_display()} {override.status}: {override.reason}',
+                      after=serializer.data, ip=finance.client_ip(self.request))
+
+    def perform_update(self, serializer):
+        before = FinanceOverrideSerializer(serializer.instance).data
+        override = serializer.save(approved_by=self.request.user)
+        finance.audit('override.update', 'FinanceOverride', actor=self.request.user,
+                      entity_id=override.id, profile=override.profile,
+                      summary=f'{override.get_period_display()} {override.status}: {override.reason}',
+                      before=before, after=serializer.data, ip=finance.client_ip(self.request))
+
+    def perform_destroy(self, instance):
+        finance.audit('override.revoke', 'FinanceOverride', actor=self.request.user,
+                      entity_id=instance.id, profile=instance.profile,
+                      summary=f'Revoked {instance.get_period_display()} override',
+                      before=FinanceOverrideSerializer(instance).data,
+                      ip=finance.client_ip(self.request))
+        instance.is_active = False
+        instance.save(update_fields=['is_active'])
+
+
+class FinanceAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only, forever, and never writable through the API."""
+    serializer_class = FinanceAuditLogSerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = FinanceAuditLog.objects.select_related('actor', 'profile')
+        profile_id = self.request.query_params.get('profile_id')
+        if profile_id:
+            qs = qs.filter(profile_id=profile_id)
+        action_name = self.request.query_params.get('action')
+        if action_name:
+            qs = qs.filter(action=action_name)
+        return qs[:500]
+
+
+# ── FEES LEDGER · summary and actions ────────────────────────────────────────
+
+CLEARANCE_PERIODS = [
+    ChargeType.REGISTRATION, ChargeType.CAT1, ChargeType.CAT2,
+    ChargeType.FINAL, ChargeType.RESULTS,
+]
+
+
+def _finance_rows(profiles, year, semester):
+    """One row per person — the row the old model could not produce.
+
+    Balances and clearance are fetched for the whole list at once; doing it per
+    student cost about fourteen queries each, which does not survive a class
+    list.
+    """
+    profiles = list(profiles)
+    totals = finance.balance_map(profiles, year)
+    clearance = finance.clearance_map(profiles, year, CLEARANCE_PERIODS, semester=semester)
+
+    rows = []
+    for profile in profiles:
+        # The enrollments are already prefetched, so this costs no query.
+        enrollment = next(iter(profile.enrollments.all()), None)
+        level = enrollment.module.class_level if enrollment else None
+        mine = totals.get(profile.id, {})
+        rows.append({
+            'profile_id': profile.id,
+            'nactvet_reg_no': profile.nactvet_reg_no,
+            'name': profile.name,
+            'class_level': level.name if level else None,
+            'class_level_id': level.id if level else None,
+            'billed': str(mine.get('billed', Decimal('0.00'))),
+            'waived': str(mine.get('waived', Decimal('0.00'))),
+            'paid': str(mine.get('paid', Decimal('0.00'))),
+            'balance': str(mine.get('balance', Decimal('0.00'))),
+            'clearance': {
+                period: result['cleared']
+                for period, result in clearance.get(profile.id, {}).items()
+            },
+        })
+    return rows
+
+
+@api_view(['GET'])
+def finance_students(request):
+    """Every student's position for the year: billed, paid, outstanding, and
+    what they are cleared for. This is the debtors list."""
+    if not can_manage_finance(request.user):
+        raise PermissionDenied('Finance access required.')
+
+    year = AcademicYear.objects.filter(
+        id=request.query_params.get('academic_year_id')
+    ).first() or active_academic_year()
+    if year is None:
+        return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
+    semester = active_semester()
+
+    profiles = StudentProfile.objects.prefetch_related(
+        'enrollments__module__class_level', 'charges__charge_type', 'charges__allocations',
+    )
+    search = str(request.query_params.get('search', '')).strip()
+    if search:
+        profiles = profiles.filter(
+            Q(name__icontains=search) | Q(nactvet_reg_no__icontains=search)
+        )
+
+    rows = _finance_rows(profiles, year, semester)
+
+    level_id = request.query_params.get('class_level_id')
+    if level_id:
+        rows = [r for r in rows if str(r['class_level_id']) == str(level_id)]
+    if request.query_params.get('owing') == 'true':
+        rows = [r for r in rows if Decimal(r['balance']) > 0]
+
+    rows.sort(key=lambda r: (-Decimal(r['balance']), r['name']))
+    return Response({
+        'academic_year': {'id': year.id, 'name': year.name},
+        'totals': {
+            'students': len(rows),
+            'billed': str(sum(Decimal(r['billed']) for r in rows)),
+            'paid': str(sum(Decimal(r['paid']) for r in rows)),
+            'outstanding': str(sum(Decimal(r['balance']) for r in rows)),
+            'owing': sum(1 for r in rows if Decimal(r['balance']) > 0),
+        },
+        'rows': rows,
+    })
+
+
+@api_view(['GET'])
+def finance_statement(request, profile_id):
+    """One student's complete ledger — every charge, every payment, the running
+    balance, and what each exam period is blocked on.
+
+    A dispute is settled by looking at this rather than by arguing.
+    """
+    profile = get_object_or_404(StudentProfile, pk=profile_id)
+    if not can_manage_finance(request.user):
+        raise PermissionDenied('Finance access required.')
+    year = AcademicYear.objects.filter(
+        id=request.query_params.get('academic_year_id')
+    ).first() or active_academic_year()
+    return Response(_statement_payload(profile, year, active_semester()))
+
+
+def _clearance_payload(result):
+    """exam_clearance returns live StudentCharge objects so callers can inspect
+    them; over the wire they need serialising."""
+    return {
+        'status': result['status'],
+        'cleared': result['cleared'],
+        'balance': str(result['balance']),
+        'reason': result['reason'],
+        'overridden': result['overridden'],
+        'charges': StudentChargeSerializer(result['charges'], many=True).data,
+    }
+
+
+def _statement_payload(profile, year, semester):
+    charges = (
+        StudentCharge.objects.filter(profile=profile, academic_year=year)
+        .select_related('charge_type', 'semester').prefetch_related('allocations')
+        .order_by('due_date')
+    )
+    payments = (
+        Payment.objects.filter(profile=profile)
+        .select_related('invoice', 'recorded_by')
+        .prefetch_related('allocations__charge__charge_type', 'reversal')
+        .order_by('-payment_date', '-created_at')
+    )
+    invoices = (
+        Invoice.objects.filter(profile=profile, academic_year=year)
+        .prefetch_related('lines__charge__charge_type', 'payments')
+    )
+    totals = finance.balance_for(profile, year)
+    return {
+        'profile': {
+            'id': profile.id,
+            'nactvet_reg_no': profile.nactvet_reg_no,
+            'name': profile.name,
+        },
+        'academic_year': {'id': year.id, 'name': year.name} if year else None,
+        'totals': {k: str(v) for k, v in totals.items()},
+        'charges': StudentChargeSerializer(charges, many=True).data,
+        'payments': PaymentSerializer(payments, many=True).data,
+        'invoices': InvoiceSerializer(invoices, many=True).data,
+        'reminders': [
+            {
+                'name': reminder['name'],
+                'group': reminder['group'],
+                'installment_number': reminder['installment_number'],
+                'installments_total': reminder['installments_total'],
+                'amount': str(reminder['amount']),
+                'due_date': reminder['due_date'],
+                'days': reminder['days'],
+                'days_label': reminder['days_label'],
+                'urgency': reminder['urgency'],
+                'reference': reminder['reference'],
+            }
+            for reminder in finance.installment_reminders(profile, year)
+        ] if year else [],
+        'clearance': {
+            period: _clearance_payload(
+                finance.exam_clearance(profile, year, period, semester=semester))
+            for period in CLEARANCE_PERIODS
+        } if year else {},
+    }
+
+
+@api_view(['POST'])
+def finance_generate_charges(request):
+    """Raise the year's automatic charges for a whole class level at once.
+
+    Idempotent — running it again after adding students bills only the new
+    ones, because a charge is unique per student, type, year and installment.
+    """
+    if not can_manage_finance(request.user):
+        raise PermissionDenied('Only the accountant can generate charges.')
+
+    year = get_object_or_404(AcademicYear, pk=request.data.get('academic_year'))
+    level = ClassLevel.objects.filter(id=request.data.get('class_level')).first()
+
+    profiles = StudentProfile.objects.prefetch_related('enrollments__module__class_level')
+    if level:
+        profiles = profiles.filter(enrollments__module__class_level=level).distinct()
+
+    raised, billed, failures = 0, 0, []
+    for profile in profiles:
+        try:
+            created = finance.generate_charges(profile, year, actor=request.user, class_level=level)
+        except ValueError as exc:
+            failures.append({'student': profile.nactvet_reg_no, 'detail': str(exc)})
+            continue
+        if created:
+            billed += 1
+            raised += len(created)
+
+    return Response({
+        'students_billed': billed,
+        'charges_raised': raised,
+        'failures': failures,
+        'detail': f'Raised {raised} charge(s) across {billed} student(s).',
+    }, status=status.HTTP_200_OK if not failures else status.HTTP_207_MULTI_STATUS)
+
+
+@api_view(['POST'])
+def finance_raise_charge(request):
+    """Bill one student for something outside the automatic structure — a
+    hostel place, a supplementary exam, a repeat module."""
+    if not can_manage_finance(request.user):
+        raise PermissionDenied('Finance access required.')
+    profile = get_object_or_404(StudentProfile, pk=request.data.get('profile'))
+    charge_type = get_object_or_404(ChargeType, pk=request.data.get('charge_type'))
+    year = get_object_or_404(AcademicYear, pk=request.data.get('academic_year'))
+    semester = Semester.objects.filter(id=request.data.get('semester')).first()
+
+    try:
+        amount = Decimal(str(request.data.get('amount')))
+    except Exception:
+        return Response({'detail': 'Give a valid amount.'}, status=status.HTTP_400_BAD_REQUEST)
+    if amount <= 0:
+        return Response({'detail': 'A charge must be greater than zero.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    # parse_date rather than handing the raw string to the model: Django would
+    # coerce it on save, but the in-memory instance would still hold a string
+    # and every date comparison on it (is_overdue, clearance) would blow up.
+    due_date = parse_date(str(request.data.get('due_date') or ''))
+    if due_date is None:
+        return Response({'detail': 'Give a due date as YYYY-MM-DD.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    charge = finance.raise_charge(
+        profile, charge_type, year, amount, due_date, semester=semester,
+        actor=request.user, note=str(request.data.get('note', ''))[:300],
+    )
+    return Response(StudentChargeSerializer(charge).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+def finance_issue_invoice(request):
+    """Turn outstanding charges into one payment instruction with one
+    reference. Raised at the office; students use the portal endpoint."""
+    if not can_manage_finance(request.user):
+        raise PermissionDenied('Finance access required.')
+    profile = get_object_or_404(StudentProfile, pk=request.data.get('profile'))
+    year = AcademicYear.objects.filter(
+        id=request.data.get('academic_year')
+    ).first() or active_academic_year()
+
+    charge_ids = request.data.get('charges') or []
+    charges = list(StudentCharge.objects.filter(id__in=charge_ids, profile=profile))
+    if not charges:
+        charges = finance.outstanding_charges(profile, year)
+    try:
+        invoices = finance.issue_invoices(
+            profile, charges, year, source=Invoice.OFFICE, actor=request.user,
+        )
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(InvoiceSerializer(invoices, many=True).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+def finance_collections(request):
+    """What came in over a period, for the cash book — and the EFD numbers to
+    reconcile it against the machine."""
+    if not can_manage_finance(request.user):
+        raise PermissionDenied('Finance access required.')
+
+    today = timezone.localdate()
+    date_from = request.query_params.get('from') or str(today.replace(day=1))
+    date_to = request.query_params.get('to') or str(today)
+
+    payments = (
+        Payment.objects.filter(payment_date__gte=date_from, payment_date__lte=date_to)
+        .select_related('profile', 'recorded_by')
+        .prefetch_related('allocations__charge__charge_type')
+        .order_by('-payment_date', '-created_at')
+    )
+
+    by_channel, by_family = {}, {}
+    for payment in payments:
+        by_channel[payment.channel] = by_channel.get(payment.channel, Decimal('0.00')) + payment.amount
+        for allocation in payment.allocations.all():
+            family = allocation.charge.charge_type.get_family_display()
+            by_family[family] = by_family.get(family, Decimal('0.00')) + allocation.amount
+
+    total = sum((p.amount for p in payments), Decimal('0.00'))
+    return Response({
+        'from': date_from,
+        'to': date_to,
+        'total': str(total),
+        'count': payments.count(),
+        'missing_efd': payments.filter(efd_receipt_no='', reverses__isnull=True).count(),
+        'by_channel': {k: str(v) for k, v in by_channel.items()},
+        'by_family': {k: str(v) for k, v in by_family.items()},
+        'payments': PaymentSerializer(payments, many=True).data,
+    })
+
+
+# ── FEES LEDGER · the student's own view ─────────────────────────────────────
+#
+# The student portal authenticates by session (`student_id`), never against
+# request.user, so these are plain Django views rather than DRF ones — same
+# reason announcement_download is.
+
+
+def _student_profile(request):
+    student = get_logged_student(request)
+    if student is None:
+        return None
+    return finance.profile_for_student(student)
+
+
+@api_view(['GET'])
+def my_fees(request):
+    """What I owe, what I have paid, and what I can sit for."""
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Authentication required.'}, status=status.HTTP_403_FORBIDDEN)
+    year = active_academic_year()
+    if year is None:
+        return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(_statement_payload(profile, year, active_semester()))
+
+
+def _invoiceable_payload(payment):
+    """One payment the student can be invoiced for, as the portal shows it."""
+    invoice = payment['invoice']
+    return {
+        'family': payment['family'],
+        'family_display': payment['family_display'],
+        'group': payment['group'],
+        'installments': payment['installments'],
+        'billed': str(payment['billed']),
+        'paid': str(payment['paid']),
+        'outstanding': str(payment['outstanding']),
+        'bank_account': (
+            {
+                'bank_name': payment['bank_account'].bank_name,
+                'account_number': payment['bank_account'].account_number,
+                'purpose': payment['bank_account'].purpose,
+            } if payment['bank_account'] else None
+        ),
+        'items': [
+            {
+                'name': charge.charge_type.name,
+                'installment_number': charge.installment_number,
+                'installments_total': charge.installments_total,
+                'due_date': charge.due_date,
+                'amount': str(finance.money(charge.payable)),
+                'balance': str(finance.charge_balance(charge)),
+            }
+            for charge in payment['charges']
+        ],
+        'invoice': InvoiceSerializer(invoice).data if invoice else None,
+    }
+
+
+@api_view(['GET'])
+def my_invoice_options(request):
+    """What I can raise an invoice for.
+
+    The student picks a payment — school fees, direct costs, or one of the
+    other payments such as accommodation or a supplementary exam — so the
+    portal needs to know which ones they are billed for, what each is worth,
+    and whether one already has a reference.
+    """
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Authentication required.'}, status=status.HTTP_403_FORBIDDEN)
+    year = active_academic_year()
+    if year is None:
+        return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    payments = finance.invoiceable_payments(profile, year)
+    return Response({
+        'academic_year': {'id': year.id, 'name': year.name, 'closes_on': year.closes_on},
+        'payments': [_invoiceable_payload(payment) for payment in payments],
+    })
+
+
+@api_view(['POST'])
+def my_invoice(request):
+    """Generate the invoice for a payment I intend to make.
+
+    The student names the payment — `family` for school fees, direct costs or
+    other payments, or `group` for one of them specifically. The invoice that
+    comes back covers every instalment of it and expires when the academic year
+    does, so the same reference is quoted on every slip that payment takes to
+    the bank.
+
+    That reference is what whoever actually pays quotes, so a parent's deposit
+    still identifies the student it belongs to.
+    """
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Authentication required.'}, status=status.HTTP_403_FORBIDDEN)
+    year = active_academic_year()
+    if year is None:
+        return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    family = (request.data.get('family') or '').strip()
+    group = (request.data.get('group') or '').strip()
+    charge_ids = request.data.get('charges') or []
+
+    if family and family not in dict(ChargeType.FAMILY_CHOICES):
+        return Response({'detail': f'{family} is not a kind of payment.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    charges = []
+    if not family:
+        # `charges` and `group` both name a payment; the invoice still covers
+        # every instalment of it, because one payment carries one reference.
+        if charge_ids:
+            charges = list(StudentCharge.objects.filter(id__in=charge_ids, profile=profile)
+                           .select_related('charge_type'))
+            if not charges:
+                return Response({'detail': 'Those charges are not yours.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+        else:
+            year_wide = finance.year_charges(profile, year)
+            charges = [c for c in year_wide
+                       if not group or c.charge_type.group_label == group]
+            if group and not charges:
+                return Response({'detail': f'You are not billed for {group}.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            charges = [c for c in charges if finance.charge_balance(c) > Decimal('0.00')]
+
+    if not (family or charges):
+        # "Nothing outstanding" is misleading when the real reason is that the
+        # college has not billed anyone yet — the student reads it as "I am
+        # paid up" and stops asking.
+        billed = StudentCharge.objects.filter(profile=profile, academic_year=year).exists()
+        detail = (
+            'You are fully paid up for this year — there is nothing to invoice.'
+            if billed else
+            'Your fees for this year have not been set up yet. '
+            'The Accounts Office will bill you before you need to pay.'
+        )
+        return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # One invoice per payment: tuition and other charges are banked
+        # separately, so a student settling both makes two deposits and needs
+        # two references.
+        if family:
+            invoices = finance.issue_invoices_for_family(
+                profile, year, family, source=Invoice.STUDENT)
+        else:
+            invoices = finance.issue_invoices(profile, charges, year, source=Invoice.STUDENT)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(InvoiceSerializer(invoices, many=True).data, status=status.HTTP_201_CREATED)
+
+
+def invoice_print(request, reference):
+    """The invoice as a printable page, and as the student's download.
+
+    Deliberately HTML rather than a generated PDF: the project has no PDF
+    library, and the browser's print dialogue produces one anyway — which works
+    from a phone, which is what most students have. `?download=1` opens that
+    dialogue on load, so "Download" on the portal lands the student straight in
+    Save as PDF instead of on a page they then have to work out how to save.
+    """
+    viewer_profile = None
+    if request.session.get('student_id'):
+        viewer_profile = _student_profile(request)
+    elif not (request.user.is_authenticated and can_manage_finance(request.user)):
+        return redirect('login')
+
+    invoice = get_object_or_404(
+        Invoice.objects.select_related('profile', 'academic_year', 'bank_account')
+        .prefetch_related('lines__charge__charge_type', 'lines__charge__fee_structure'),
+        reference__iexact=reference,
+    )
+    # A student may only ever print their own invoice.
+    if viewer_profile is not None and invoice.profile_id != viewer_profile.id:
+        raise Http404('No such invoice.')
+
+    level = finance.class_level_for(invoice.profile, invoice.academic_year)
+    college = CollegeProfile.get()
+    total = finance.money(invoice.total)
+    paid = finance.invoice_paid(invoice)
+
+    # One item paid in instalments needs no item table — the amount and the
+    # instalment count say it all. Several items must be listed, or the student
+    # cannot tell what the total is made of.
+    components = finance.invoice_components(invoice)
+    installments = max((c['installments'] for c in components), default=0)
+
+    return render(request, 'invoice_print.html', {
+        'invoice': invoice,
+        'components': components,
+        'itemised': len(components) > 1,
+        'installments': installments,
+        'transactions': finance.invoice_transactions(invoice),
+        'total': total,
+        'paid': paid,
+        'outstanding': max(total - paid, Decimal('0.00')),
+        'invoice_status': finance.invoice_status(invoice),
+        'expires_on': invoice.expires_on,
+        'class_level': level.name if level else '',
+        'college': college,
+        'terms': [t.strip() for t in (college.invoice_terms or '').splitlines() if t.strip()],
+        'auto_print': request.GET.get('download') in ('1', 'true', 'yes'),
+    })
+
+
+class BankAccountViewSet(viewsets.ModelViewSet):
+    """The college's collection accounts.
+
+    Tuition and other charges are banked separately, so which account a charge
+    belongs to decides which invoice it lands on.
+    """
+    serializer_class = BankAccountSerializer
+    permission_classes = [IsFinanceUser]
+
+    def get_queryset(self):
+        qs = BankAccount.objects.all()
+        if self.request.query_params.get('is_active') == 'true':
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def perform_create(self, serializer):
+        account = serializer.save()
+        finance.audit('bank_account.create', 'BankAccount', actor=self.request.user,
+                      entity_id=account.id, summary=str(account),
+                      ip=finance.client_ip(self.request))
+
+    def perform_update(self, serializer):
+        before = BankAccountSerializer(serializer.instance).data
+        account = serializer.save()
+        finance.audit('bank_account.update', 'BankAccount', actor=self.request.user,
+                      entity_id=account.id, summary=str(account),
+                      before=before, after=serializer.data,
+                      ip=finance.client_ip(self.request))
+
+    def perform_destroy(self, instance):
+        if instance.charge_types.exists() or instance.invoices.exists():
+            raise PermissionDenied(
+                'Charges or invoices already point at this account. Deactivate it instead, '
+                'so existing invoices keep showing where the money went.'
+            )
+        instance.delete()
+
+
+@api_view(['GET', 'PATCH'])
+def college_profile(request):
+    """The college's own details, as they print on an invoice."""
+    if not can_manage_finance(request.user):
+        raise PermissionDenied('Finance access required.')
+    profile = CollegeProfile.objects.first() or CollegeProfile.objects.create()
+    if request.method == 'PATCH':
+        serializer = CollegeProfileSerializer(profile, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        finance.audit('college.update', 'CollegeProfile', actor=request.user,
+                      entity_id=profile.id, summary='Updated college details on invoices',
+                      ip=finance.client_ip(request))
+        return Response(serializer.data)
+    return Response(CollegeProfileSerializer(profile).data)
