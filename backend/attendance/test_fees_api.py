@@ -18,6 +18,7 @@ from rest_framework.test import APIClient
 from . import finance
 from .models import (
     AcademicYear, AccountantProfile, BankAccount, ChargeType, ClassLevel, CollegeProfile,
+    FinanceAuditLog,
     FeeStructure, Invoice, Module, Payment, Semester, Student, StudentCharge,
     StudentProfile, TeacherProfile,
 )
@@ -1512,3 +1513,221 @@ class OtherChargesTableTests(TestCase):
         direct, _items = self._direct_costs(profile, self.year)
         self.assertEqual(direct.bank_account.account_number, '0150417961301')
         self.assertNotEqual(tuition.reference, direct.reference)
+
+
+class BillingFollowsEnrollmentTests(TestCase):
+    """A student is charged the moment they are enrolled.
+
+    Charges used to appear only when somebody ran "generate charges" for a
+    whole level. Anyone admitted after that run — a late admission, a transfer,
+    a student added when a tutor fixed a roster — owed nothing at all: they read
+    as fully paid up on the portal and cleared every exam check, and it went
+    unnoticed until the accountant reconciled at the end of term.
+    """
+
+    def setUp(self):
+        self.year = AcademicYear.objects.create(name='2026/2027', is_active=True)
+        self.sem = Semester.objects.create(academic_year=self.year, number=1, is_active=True)
+        for name, order in [('NTA Level 4', 4)]:
+            ClassLevel.objects.create(name=name, order=order)
+        call_command('seed_fee_structure', year='2026/2027',
+                     first_due='2026-09-30', verbosity=0)
+        self.level = ClassLevel.objects.get(order=4)
+        self.module = Module.objects.create(name='Pharmaceutics', code='PHM101', teacher='T',
+                                            class_level=self.level, semester=self.sem)
+        self.staff = User.objects.create_superuser('admin4', 'a@b.c', 'pw')
+        self.accountant = User.objects.create_user('accountant4', password='pw')
+        AccountantProfile.objects.create(user=self.accountant, full_name='Finance Officer')
+        self.api = APIClient()
+        self.api.force_authenticate(self.staff)
+
+    def _enroll(self, reg_no, module=None):
+        return Student.objects.create(nactvet_reg_no=reg_no, name='Late Arrival',
+                                      module=module or self.module)
+
+    def test_a_newly_enrolled_student_already_owes_the_years_fees(self):
+        student = self._enroll('BPH/2026/050')
+        profile = finance.profile_for_student(student)
+
+        totals = finance.balance_for(profile, self.year)
+        self.assertEqual(totals['billed'], Decimal('2495000.00'))   # 1,600,000 + 895,000
+        self.assertEqual(totals['balance'], Decimal('2495000.00'))
+        self.assertTrue(StudentCharge.objects.filter(profile=profile).exists())
+
+        # And once the first instalment falls due they are correctly blocked,
+        # rather than reading as paid up.
+        clearance = finance.exam_clearance(profile, self.year, ChargeType.CAT1,
+                                           semester=self.sem, today=date(2026, 10, 1))
+        self.assertFalse(clearance['cleared'])
+
+    def test_enrolling_in_a_second_module_does_not_bill_them_twice(self):
+        student = self._enroll('BPH/2026/051')
+        profile = finance.profile_for_student(student)
+        billed = finance.balance_for(profile, self.year)['billed']
+
+        second = Module.objects.create(name='Anatomy', code='ANA101', teacher='T',
+                                       class_level=self.level, semester=self.sem)
+        self._enroll('BPH/2026/051', module=second)
+
+        self.assertEqual(finance.balance_for(profile, self.year)['billed'], billed)
+
+    def test_a_student_added_through_the_roster_import_is_billed_too(self):
+        response = self.api.post('/api/students/bulk_create/', {
+            'module': self.module.id,
+            'students': [{'nactvet_reg_no': 'BPH/2026/052', 'name': 'Imported Student'}],
+        }, format='json')
+        self.assertIn(response.status_code, (200, 201), response.data)
+
+        profile = StudentProfile.objects.get(nactvet_reg_no='BPH/2026/052')
+        self.assertEqual(finance.balance_for(profile, self.year)['billed'],
+                         Decimal('2495000.00'))
+
+    def test_the_accountants_bulk_run_still_works_and_adds_nothing(self):
+        """It stays the way to catch students up after a structure changes, and
+        must remain safe to press twice."""
+        self._enroll('BPH/2026/053')
+        self.api.force_authenticate(self.accountant)
+        response = self.api.post('/api/finance/generate-charges/', {
+            'academic_year': self.year.id, 'class_level': self.level.id,
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['charges_raised'], 0)
+
+    def test_registration_survives_a_fee_structure_with_no_due_dates(self):
+        """Half-configured finance must not stop the college enrolling anyone."""
+        structure = FeeStructure.objects.create(
+            charge_type=ChargeType.objects.create(
+                name='Library deposit', family=ChargeType.DIRECT_COST,
+                applies=ChargeType.AUTOMATIC),
+            class_level=self.level, academic_year=self.year,
+            amount=Decimal('5000.00'), installments=1,
+        )
+        self.assertFalse(structure.installment_schedule.exists())
+
+        student = self._enroll('BPH/2026/054')          # must not raise
+        self.assertTrue(Student.objects.filter(id=student.id).exists())
+        # Nothing was billed, because the schedule is what was missing.
+        profile = finance.profile_for_student(student)
+        self.assertEqual(finance.balance_for(profile, self.year)['billed'], Decimal('0.00'))
+
+    def test_an_optional_charge_is_still_the_offices_to_assign(self):
+        """Automatic billing must not hand every new student a hostel place."""
+        student = self._enroll('BPH/2026/055')
+        profile = finance.profile_for_student(student)
+        self.assertFalse(
+            StudentCharge.objects.filter(
+                profile=profile, charge_type__name='Accommodation').exists())
+
+
+class CorrectingAChargeTypeTests(TestCase):
+    """A charge type must stay correctable after it is in use.
+
+    The catalogue screen could only tick the blocking boxes and retire a row,
+    so a misspelt name, the wrong invoice group or — worst — the wrong CRDB
+    account had to be lived with. The wrong account is not cosmetic: it decides
+    which invoice a charge lands on and which account the student deposits
+    into, so leaving it wrong sends money to the wrong place.
+    """
+
+    def setUp(self):
+        self.year = AcademicYear.objects.create(name='2026/2027', is_active=True)
+        self.sem = Semester.objects.create(academic_year=self.year, number=1, is_active=True)
+        self.level = ClassLevel.objects.create(name='NTA Level 4', order=4)
+        self.module = Module.objects.create(name='Pharmaceutics', code='PHM101', teacher='T',
+                                            class_level=self.level, semester=self.sem)
+        self.accountant = User.objects.create_user('accountant5', password='pw')
+        AccountantProfile.objects.create(user=self.accountant, full_name='Finance Officer')
+        self.api = APIClient()
+        self.api.force_authenticate(self.accountant)
+
+        self.tuition_account = BankAccount.objects.create(
+            bank_name='CRDB', account_name='BPH', account_number='0150417961300',
+            purpose='Tuition fee')
+        self.other_account = BankAccount.objects.create(
+            bank_name='CRDB', account_name='BPH', account_number='0150417961301',
+            purpose='Other charges & accommodation')
+
+    def _create(self, **overrides):
+        payload = {
+            'name': 'Tution Fee',                      # typo, on purpose
+            'family': ChargeType.FEE, 'applies': ChargeType.AUTOMATIC,
+            'frequency': ChargeType.EACH_YEAR, 'invoice_group': 'Tution',
+            'bank_account': self.other_account.id,     # wrong account, on purpose
+            'is_active': True,
+        }
+        payload.update(overrides)
+        response = self.api.post('/api/charge-types/', payload, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        return response.data
+
+    def test_every_field_can_be_corrected(self):
+        created = self._create()
+        response = self.api.patch(f'/api/charge-types/{created["id"]}/', {
+            'name': 'Tuition Fee',
+            'invoice_group': 'Tuition Fee',
+            'bank_account': self.tuition_account.id,
+            'code': '142201410231',
+            'sort_order': 1,
+            'frequency': ChargeType.EACH_YEAR,
+            'blocks_cat1': True,
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+
+        charge_type = ChargeType.objects.get(id=created['id'])
+        self.assertEqual(charge_type.name, 'Tuition Fee')
+        self.assertEqual(charge_type.invoice_group, 'Tuition Fee')
+        self.assertEqual(charge_type.bank_account, self.tuition_account)
+        self.assertEqual(charge_type.code, '142201410231')
+        self.assertEqual(charge_type.sort_order, 1)
+        self.assertTrue(charge_type.blocks_cat1)
+
+    def test_correcting_it_while_students_are_charged_leaves_the_money_alone(self):
+        created = self._create()
+        charge_type = ChargeType.objects.get(id=created['id'])
+        structure = FeeStructure.objects.create(
+            charge_type=charge_type, class_level=self.level, academic_year=self.year,
+            amount=Decimal('1600000.00'), installments=1)
+        finance.set_installment_schedule(structure, [date(2026, 9, 30)])
+
+        student = Student.objects.create(nactvet_reg_no='BPH/2026/060', name='Asha',
+                                         module=self.module)
+        profile = finance.profile_for_student(student)
+        billed = finance.balance_for(profile, self.year)['billed']
+        self.assertEqual(billed, Decimal('1600000.00'))
+
+        # The screen warns that it is in use, and lets the correction through.
+        self.assertTrue(self.api.get(f'/api/charge-types/{created["id"]}/').data['in_use'])
+        response = self.api.patch(f'/api/charge-types/{created["id"]}/', {
+            'name': 'Tuition Fee', 'bank_account': self.tuition_account.id,
+            'invoice_group': 'Tuition Fee',
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+
+        # Nothing about what was billed moved...
+        self.assertEqual(finance.balance_for(profile, self.year)['billed'], billed)
+        # ...but the invoice now names it right and points at the right account.
+        invoice = finance.issue_invoices_for_family(profile, self.year, ChargeType.FEE)[0]
+        self.assertEqual(invoice.invoice_group, 'Tuition Fee')
+        self.assertEqual(invoice.bank_account, self.tuition_account)
+        self.assertEqual(finance.invoice_components(invoice)[0]['name'], 'Tuition Fee')
+
+    def test_the_correction_is_audited_with_what_it_changed(self):
+        created = self._create()
+        self.api.patch(f'/api/charge-types/{created["id"]}/',
+                       {'name': 'Tuition Fee'}, format='json')
+
+        entry = FinanceAuditLog.objects.filter(
+            action='charge_type.update', entity_id=created['id']).first()
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.actor, self.accountant)
+        self.assertEqual(entry.before['name'], 'Tution Fee')
+        self.assertEqual(entry.after['name'], 'Tuition Fee')
+
+    def test_a_tutor_still_cannot_touch_the_catalogue(self):
+        created = self._create()
+        tutor = User.objects.create_user('tutor5', password='pw')
+        TeacherProfile.objects.create(user=tutor, full_name='Tutor')
+        self.api.force_authenticate(tutor)
+        self.assertEqual(
+            self.api.patch(f'/api/charge-types/{created["id"]}/',
+                           {'name': 'Free'}, format='json').status_code, 403)

@@ -16,6 +16,7 @@ from .models import (
     ChargeType, FeeStructure, FeeInstallment, StudentProfile, StudentCharge,
     Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
     BankAccount, CollegeProfile,
+    Form, FormSection, FormQuestion, FormResponse,
 )
 
 MAX_ANNOUNCEMENT_FILE_BYTES = 10 * 1024 * 1024  # matches nginx client_max_body_size 10M
@@ -903,7 +904,8 @@ class ChargeTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChargeType
         fields = [
-            'id', 'name', 'code', 'family', 'family_display', 'applies', 'applies_display',
+            'id', 'name', 'code', 'sort_order', 'family', 'family_display',
+            'applies', 'applies_display',
             'frequency', 'frequency_display', 'invoice_group', 'group_label',
             'bank_account', 'bank_account_label',
             'blocks_registration', 'blocks_cat1', 'blocks_cat2', 'blocks_final',
@@ -1196,3 +1198,143 @@ class CollegeProfileSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'short_name', 'po_box', 'town', 'country',
                   'phone', 'email', 'website', 'logo', 'invoice_terms', 'updated_at']
         read_only_fields = ['id', 'updated_at']
+
+
+# ── EVALUATION FORMS ──────────────────────────────────────────────────────────
+
+class FormQuestionSerializer(serializers.ModelSerializer):
+    type_display = serializers.CharField(source='get_type_display', read_only=True)
+
+    class Meta:
+        model = FormQuestion
+        fields = [
+            'id', 'section', 'text', 'help_text', 'type', 'type_display', 'required',
+            'order', 'options', 'rows', 'columns', 'max_rows',
+        ]
+        read_only_fields = ['id']
+
+    def validate(self, data):
+        """A question that cannot be answered is worse than no question.
+
+        Caught here rather than at submission time, when it would be the
+        student who hit the wall.
+        """
+        kind = data.get('type', getattr(self.instance, 'type', None))
+        options = data.get('options', getattr(self.instance, 'options', []) or [])
+        rows = data.get('rows', getattr(self.instance, 'rows', []) or [])
+        columns = data.get('columns', getattr(self.instance, 'columns', []) or [])
+
+        if kind in (FormQuestion.SINGLE_CHOICE, FormQuestion.MULTI_CHOICE) and not options:
+            raise serializers.ValidationError(
+                {'options': 'Give the student something to choose from.'})
+        if kind == FormQuestion.MATRIX:
+            if not options:
+                raise serializers.ValidationError(
+                    {'options': 'A rating table needs its rating columns, e.g. 1 to 5.'})
+            if not rows:
+                raise serializers.ValidationError(
+                    {'rows': 'A rating table needs the things being rated.'})
+        if kind == FormQuestion.GRID_TEXT and not columns:
+            raise serializers.ValidationError(
+                {'columns': 'A table of text needs its column headings.'})
+        for field, values in (('options', options), ('rows', rows), ('columns', columns)):
+            if values and len(set(map(str, values))) != len(values):
+                raise serializers.ValidationError({field: 'Entries must be different.'})
+        return data
+
+
+class FormSectionSerializer(serializers.ModelSerializer):
+    questions = FormQuestionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = FormSection
+        fields = ['id', 'form', 'title', 'description', 'order', 'questions']
+        read_only_fields = ['id']
+
+
+class FormSerializer(serializers.ModelSerializer):
+    sections = FormSectionSerializer(many=True, read_only=True)
+    status = serializers.SerializerMethodField()
+    response_count = serializers.SerializerMethodField()
+    question_count = serializers.SerializerMethodField()
+    academic_year_name = serializers.CharField(
+        source='academic_year.name', read_only=True, default='')
+    created_by_name = serializers.CharField(
+        source='created_by.get_full_name', read_only=True, default='')
+
+    class Meta:
+        model = Form
+        fields = [
+            'id', 'title', 'slug', 'intro', 'audience', 'academic_year', 'academic_year_name',
+            'is_active', 'opens_on', 'closes_on', 'is_anonymous', 'allow_multiple',
+            'status', 'response_count', 'question_count', 'sections',
+            'created_by_name', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {'slug': {'required': False}}
+
+    def get_status(self, obj):
+        return obj.status()
+
+    def get_response_count(self, obj):
+        return obj.responses.count()
+
+    def get_question_count(self, obj):
+        return FormQuestion.objects.filter(section__form=obj).count()
+
+    def validate(self, data):
+        opens = data.get('opens_on', getattr(self.instance, 'opens_on', None))
+        closes = data.get('closes_on', getattr(self.instance, 'closes_on', None))
+        if opens and closes and closes < opens:
+            raise serializers.ValidationError(
+                {'closes_on': 'The closing date cannot come before the opening date.'})
+        return data
+
+    def create(self, validated_data):
+        validated_data.setdefault('slug', self._slug_for(validated_data['title']))
+        return super().create(validated_data)
+
+    @staticmethod
+    def _slug_for(title):
+        from django.utils.text import slugify
+        base = slugify(title)[:200] or 'form'
+        slug, suffix = base, 2
+        while Form.objects.filter(slug=slug).exists():
+            slug = f'{base}-{suffix}'
+            suffix += 1
+        return slug
+
+
+class StudentFormSerializer(serializers.ModelSerializer):
+    """A form as the student sees it — no response counts, no admin fields."""
+    sections = FormSectionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Form
+        fields = ['id', 'title', 'slug', 'intro', 'is_anonymous', 'closes_on', 'sections']
+
+
+class FormResponseSerializer(serializers.ModelSerializer):
+    student_name = serializers.SerializerMethodField()
+    student_reg_no = serializers.SerializerMethodField()
+    class_level_name = serializers.CharField(source='class_level.name', read_only=True, default='')
+    answers = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FormResponse
+        fields = ['id', 'form', 'student_name', 'student_reg_no', 'class_level_name',
+                  'submitted_at', 'answers']
+
+    def get_student_name(self, obj):
+        # An anonymous form has no profile at all; say so rather than showing a blank.
+        return obj.profile.name if obj.profile else 'Anonymous'
+
+    def get_student_reg_no(self, obj):
+        return obj.profile.nactvet_reg_no if obj.profile else ''
+
+    def get_answers(self, obj):
+        return [
+            {'question': answer.question_id, 'text': answer.question.text,
+             'type': answer.question.type, 'value': answer.value}
+            for answer in obj.answers.select_related('question')
+        ]

@@ -34,6 +34,9 @@ router.register('charge-types', views.ChargeTypeViewSet, basename='charge-type')
 router.register('fee-structures', views.FeeStructureViewSet, basename='fee-structure')
 router.register('student-charges', views.StudentChargeViewSet, basename='student-charge')
 router.register('invoices', views.InvoiceViewSet, basename='invoice')
+router.register('forms', views.FormViewSet, basename='form')
+router.register('form-sections', views.FormSectionViewSet, basename='form-section')
+router.register('form-questions', views.FormQuestionViewSet, basename='form-question')
 router.register('payments', views.PaymentViewSet, basename='payment')
 router.register('finance-overrides', views.FinanceOverrideViewSet, basename='finance-override')
 router.register('finance-audit', views.FinanceAuditLogViewSet, basename='finance-audit')
@@ -73,4 +76,9 @@ urlpatterns = [
     path('my-fees/', views.my_fees, name='my-fees'),
     path('my-fees/invoice/', views.my_invoice, name='my-invoice'),
     path('my-fees/invoice/options/', views.my_invoice_options, name='my-invoice-options'),
+
+    # Evaluation forms, the student's side
+    path('my-forms/', views.my_forms, name='my-forms'),
+    path('my-forms/<slug:slug>/', views.my_form, name='my-form'),
+    path('my-forms/<slug:slug>/submit/', views.submit_my_form, name='my-form-submit'),
 ]

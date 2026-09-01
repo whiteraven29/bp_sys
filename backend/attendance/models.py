@@ -1300,3 +1300,244 @@ class Announcement(models.Model):
 
     def __str__(self):
         return self.title
+
+
+# ── EVALUATION FORMS ──────────────────────────────────────────────────────────
+#
+# The college runs several paper evaluations every year — course evaluation,
+# tutor evaluation, hostel facilities, the tracer study. They are collected on
+# paper, tallied by hand, and the tally is the only thing anybody ever sees.
+#
+# These models hold the same forms as structured questions so the answers can be
+# counted, exported and charted. A form is not an uploaded document: a PDF
+# cannot be filled in the portal, aggregated into a spreadsheet or graphed.
+
+
+class Form(models.Model):
+    """One evaluation form the college publishes to students."""
+
+    DRAFT = 'draft'
+    OPEN = 'open'
+    CLOSED = 'closed'
+
+    # Not every form on the college's shelf is filled in by the student. The
+    # Students' Performance Evaluation is filled in by a mentor *about* a
+    # student, and showing it in the student's own Forms list would invite them
+    # to grade themselves.
+    STUDENT = 'student'
+    STAFF = 'staff'
+    AUDIENCE_CHOICES = [
+        (STUDENT, 'Students — filled in on the student portal'),
+        (STAFF, 'Staff — filled in by a tutor, mentor or officer'),
+    ]
+
+    title = models.CharField(max_length=200)
+    audience = models.CharField(max_length=20, choices=AUDIENCE_CHOICES, default=STUDENT)
+    slug = models.SlugField(max_length=220, unique=True)
+    intro = models.TextField(
+        blank=True,
+        help_text='Shown above the questions — the instructions paragraph from the form.',
+    )
+    academic_year = models.ForeignKey(
+        AcademicYear, on_delete=models.PROTECT, null=True, blank=True, related_name='forms',
+        help_text='Leave blank for a form that is not tied to one year.',
+    )
+
+    # Whether students can see it now. `is_active` is the switch the admin
+    # flips; the two dates let them schedule a window and stop having to
+    # remember to close it.
+    is_active = models.BooleanField(
+        default=False,
+        help_text='Only active forms appear to students.',
+    )
+    opens_on = models.DateField(null=True, blank=True)
+    closes_on = models.DateField(null=True, blank=True)
+
+    # Students will not say a tutor was unprepared with their name on it. An
+    # anonymous form still records *that* a student responded — so nobody is
+    # asked twice — but never which response was theirs.
+    is_anonymous = models.BooleanField(
+        default=False,
+        help_text='Record the answers with no link to who gave them. Use for anything '
+                  'evaluating a member of staff.',
+    )
+    allow_multiple = models.BooleanField(
+        default=False,
+        help_text='Let one student submit more than once. Off means one response each.',
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='forms_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.title
+
+    def status(self, today=None):
+        """Draft, open or closed — what the admin list shows at a glance."""
+        from datetime import date as _date
+        today = today or _date.today()
+        if not self.is_active:
+            return self.DRAFT
+        if self.opens_on and today < self.opens_on:
+            return self.DRAFT
+        if self.closes_on and today > self.closes_on:
+            return self.CLOSED
+        return self.OPEN
+
+    def is_open(self, today=None):
+        return self.status(today) == self.OPEN
+
+
+class FormSection(models.Model):
+    """A titled group of questions — "Section A: Participant information"."""
+    form = models.ForeignKey(Form, on_delete=models.CASCADE, related_name='sections')
+    title = models.CharField(max_length=200, blank=True)
+    description = models.TextField(blank=True)
+    order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f'{self.form} · {self.title or "Section"}'
+
+
+class FormQuestion(models.Model):
+    """One question. The type decides what `options`, `rows` and `columns` mean.
+
+    The five types between them express every question on the college's paper
+    forms: plain fields, the Excellent-to-Very-Poor and Likert lists, the 1–5
+    rating tables, and the two-column "name the module / say what was wrong"
+    tables.
+    """
+    SHORT_TEXT = 'short_text'
+    LONG_TEXT = 'long_text'
+    SINGLE_CHOICE = 'single_choice'
+    MULTI_CHOICE = 'multi_choice'
+    MATRIX = 'matrix'
+    GRID_TEXT = 'grid_text'
+    TYPE_CHOICES = [
+        (SHORT_TEXT, 'Short text'),
+        (LONG_TEXT, 'Paragraph'),
+        (SINGLE_CHOICE, 'Choose one'),
+        (MULTI_CHOICE, 'Choose any'),
+        (MATRIX, 'Rating table'),
+        (GRID_TEXT, 'Table of text'),
+    ]
+
+    section = models.ForeignKey(FormSection, on_delete=models.CASCADE, related_name='questions')
+    text = models.TextField()
+    help_text = models.CharField(max_length=400, blank=True)
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=SINGLE_CHOICE)
+    required = models.BooleanField(default=False)
+    order = models.PositiveSmallIntegerField(default=0)
+
+    # Answer choices, and the column headings of a rating table.
+    options = models.JSONField(default=list, blank=True)
+    # The things being rated, down the left of a rating table.
+    rows = models.JSONField(default=list, blank=True)
+    # The column headings of a table of text.
+    columns = models.JSONField(default=list, blank=True)
+    max_rows = models.PositiveSmallIntegerField(default=4)
+
+    class Meta:
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return self.text[:80]
+
+    @property
+    def numeric_options(self):
+        """The options as numbers, when every one of them is a number.
+
+        A 1–5 rating averages meaningfully; Excellent-to-Very-Poor does not,
+        and must be charted as a distribution instead of a mean.
+        """
+        values = []
+        for option in self.options:
+            try:
+                values.append(float(str(option).strip()))
+            except (TypeError, ValueError):
+                return None
+        return values or None
+
+
+class FormResponse(models.Model):
+    """One filled-in form.
+
+    `profile` is null on an anonymous form — deliberately, not incidentally.
+    Who responded is recorded separately in FormSubmissionReceipt, which has no
+    route back to the answers.
+    """
+    form = models.ForeignKey(Form, on_delete=models.CASCADE, related_name='responses')
+    profile = models.ForeignKey(
+        StudentProfile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='form_responses',
+    )
+    # Kept alongside the answers so a response still reports the respondent's
+    # level and year after they graduate or move up.
+    class_level = models.ForeignKey(
+        ClassLevel, on_delete=models.SET_NULL, null=True, blank=True, related_name='form_responses')
+    academic_year = models.ForeignKey(
+        AcademicYear, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='form_responses')
+    # Set when a member of staff fills the form in — a mentor assessing a
+    # student, say. Students submit through the portal and are recorded on
+    # `profile` instead (or nowhere at all, on an anonymous form).
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='form_responses_submitted',
+    )
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-submitted_at']
+        indexes = [models.Index(fields=['form', '-submitted_at'])]
+
+    def __str__(self):
+        return f'{self.form} · {self.submitted_at:%d %b %Y}'
+
+
+class FormAnswer(models.Model):
+    """One answer, shaped by its question's type.
+
+    `value` holds a string for text and single choice, a list for multi-choice
+    and a table of text, and a {row: choice} mapping for a rating table. One
+    row per question rather than per matrix cell, because the export and the
+    charts both want the question's answer whole.
+    """
+    response = models.ForeignKey(FormResponse, on_delete=models.CASCADE, related_name='answers')
+    question = models.ForeignKey(FormQuestion, on_delete=models.CASCADE, related_name='answers')
+    value = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['question__section__order', 'question__order']
+        constraints = [
+            models.UniqueConstraint(fields=['response', 'question'], name='unique_answer_per_question'),
+        ]
+
+
+class FormSubmissionReceipt(models.Model):
+    """That a student has answered a form — never what they said.
+
+    This is what stops a student being asked twice while keeping an anonymous
+    form genuinely anonymous. It deliberately holds no pointer to FormResponse:
+    if it did, anonymity would only be a convention.
+    """
+    form = models.ForeignKey(Form, on_delete=models.CASCADE, related_name='receipts')
+    profile = models.ForeignKey(
+        StudentProfile, on_delete=models.CASCADE, related_name='form_receipts')
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-submitted_at']
+        constraints = [
+            models.UniqueConstraint(fields=['form', 'profile'], name='one_receipt_per_student_per_form'),
+        ]

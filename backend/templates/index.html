@@ -32,7 +32,7 @@
   }
   .header-left { display: flex; align-items: center; gap: 12px; }
   .hamburger {
-    display: none; flex-direction: column; justify-content: center; gap: 5px;
+    display: flex; flex-direction: column; justify-content: center; gap: 5px;
     width: 36px; height: 36px; border: none; background: transparent; cursor: pointer;
     border-radius: var(--radius); padding: 6px; transition: background .15s;
   }
@@ -93,15 +93,14 @@
     transition: transform .28s cubic-bezier(.4,0,.2,1);
   }
   .sidebar-overlay { display: none; position: fixed; inset: 0; z-index: 99; background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
-  body.is-estate .hamburger { display: flex; }
-  body.is-estate.sidebar-collapsed aside { width:64px; padding-left:8px; padding-right:8px; }
-  body.is-estate.sidebar-collapsed main { margin-left:64px; }
-  body.is-estate.sidebar-collapsed aside .aside-label,
-  body.is-estate.sidebar-collapsed aside .nav-caret,
-  body.is-estate.sidebar-collapsed aside .nav-submenu { display:none !important; }
-  body.is-estate.sidebar-collapsed aside .nav-btn { justify-content:center; gap:0; padding:10px 6px; font-size:0; }
-  body.is-estate.sidebar-collapsed aside .nav-btn.active { padding-left:4px; }
-  body.is-estate.sidebar-collapsed aside .nav-btn .icon { width:24px; font-size:1.05rem; }
+  body.sidebar-collapsed aside { width:64px; padding-left:8px; padding-right:8px; }
+  body.sidebar-collapsed main { margin-left:64px; }
+  body.sidebar-collapsed aside .aside-label,
+  body.sidebar-collapsed aside .nav-caret,
+  body.sidebar-collapsed aside .nav-submenu { display:none !important; }
+  body.sidebar-collapsed aside .nav-btn { justify-content:center; gap:0; padding:10px 6px; font-size:0; }
+  body.sidebar-collapsed aside .nav-btn.active { padding-left:4px; }
+  body.sidebar-collapsed aside .nav-btn .icon { width:24px; font-size:1.05rem; }
   .aside-label { font-size: .7rem; font-weight: 600; color: var(--muted); padding: 12px 12px 5px; }
   /* Full-width rows separated by hairlines, like the reference's menu —
      not floating pills with gaps between them. */
@@ -288,6 +287,14 @@
   .btn-green:hover { background: var(--green); border-color: var(--green); color: #fff; }
   .btn-warning { background: #fff; color: var(--yellow); border-color: #ddc09b; }
   .btn-warning:hover { background: var(--yellow); border-color: var(--yellow); color: #fff; }
+  /* Used 35 times across the panel — charge types, the forms builder, inventory
+     — but never defined, so every one of them rendered as bare text with
+     padding. A quiet tertiary action: no chrome until you point at it. */
+  .btn-ghost { background: transparent; color: var(--muted); border-color: transparent; }
+  .btn-ghost:hover { background: var(--surface2); color: var(--text); border-color: var(--border); }
+  .btn-success { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn-success:hover { background: #15803d; border-color: #15803d; }
+  .btn:disabled, .btn[disabled] { opacity: .5; cursor: not-allowed; }
   .btn-sm { padding: 4px 9px; font-size: .76rem; }
 
   /* Full grid lines and a plain sentence-case header row, like the
@@ -421,12 +428,12 @@
     .logout-btn span { display: none; }
     .user-chip .uname { display: none; }
     .sem-badge { display: none; }
-    body.is-estate.sidebar-collapsed aside { width:var(--sidebar-w); transform:translateX(calc(-1 * var(--sidebar-w))); padding:16px 10px; }
-    body.is-estate.sidebar-collapsed main { margin-left:0; }
-    body.is-estate.sidebar-collapsed aside .aside-label { display:block !important; }
-    body.is-estate.sidebar-collapsed aside .nav-caret { display:inline !important; }
-    body.is-estate.sidebar-collapsed aside .nav-btn { justify-content:flex-start; gap:10px; padding:9px 10px; font-size:.85rem; }
-    body.is-estate.sidebar-collapsed aside .nav-group.open .nav-submenu { display:flex !important; }
+    body.sidebar-collapsed aside { width:var(--sidebar-w); transform:translateX(calc(-1 * var(--sidebar-w))); padding:16px 10px; }
+    body.sidebar-collapsed main { margin-left:0; }
+    body.sidebar-collapsed aside .aside-label { display:block !important; }
+    body.sidebar-collapsed aside .nav-caret { display:inline !important; }
+    body.sidebar-collapsed aside .nav-btn { justify-content:flex-start; gap:10px; padding:9px 10px; font-size:.85rem; }
+    body.sidebar-collapsed aside .nav-group.open .nav-submenu { display:flex !important; }
   }
   @media (max-width: 420px) {
     .stats-grid { grid-template-columns: 1fr; }
@@ -667,6 +674,7 @@
       </div>
     </div>
     <button class="nav-btn finance-only" data-page="finance" data-finance-section="audit" onclick="showFinanceSection('audit', this)"><span class="icon"><i class="bi bi-shield-check"></i></span> Audit Trail</button>
+    <button class="nav-btn admin-only" data-page="forms" onclick="showPage('forms',this)"><span class="icon"><i class="bi bi-ui-checks"></i></span> Forms</button>
     <button class="nav-btn admin-only" data-page="sick" onclick="showPage('sick',this)"><span class="icon"><i class="bi bi-bandaid"></i></span> Sick Records</button>
     <div class="aside-label academic-only" style="margin-top:10px;">My Modules</div>
     <div class="academic-only" id="sidebar-levels"></div>
@@ -1263,7 +1271,7 @@
       <!-- CHARGE TYPES -->
       <div class="finance-section" id="finance-section-charge-types">
         <div class="card finance-only">
-          <div class="card-title">Add a charge type</div>
+          <div class="card-title" id="fin-ct-title">Add a charge type</div>
           <div class="form-grid-3">
             <div class="field"><label>Name</label><input id="fin-ct-name" placeholder="e.g. Tuition Fee, Hostel, Examination Fee" /></div>
             <div class="field">
@@ -1298,6 +1306,15 @@
               <label>Paid into</label>
               <select id="fin-ct-account"><option value="">— select account —</option></select>
             </div>
+            <div class="field">
+              <label>Item code</label>
+              <input id="fin-ct-code" placeholder="your ledger code — printed on the invoice" />
+            </div>
+            <div class="field">
+              <label>Row order</label>
+              <input id="fin-ct-sort_order" type="number" min="0" step="1" placeholder="0"
+                     title="Position in the published fee table. The invoice lists items in this order." />
+            </div>
           </div>
           <div style="font-size:.75rem;color:var(--muted);margin:-4px 0 10px">
             Charges sharing an invoice group and account are billed on one invoice.
@@ -1316,7 +1333,9 @@
             </div>
             <div style="font-size:.75rem;color:var(--muted)">Tuition normally blocks everything; a graduation gown should block nothing but results.</div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="saveChargeType()">💾 Save charge type</button>
+          <button class="btn btn-primary btn-sm" onclick="saveChargeType()" id="fin-ct-save">💾 Save charge type</button>
+          <button class="btn btn-ghost btn-sm" onclick="cancelChargeTypeEdit()" id="fin-ct-cancel"
+                  style="display:none">Cancel</button>
         </div>
 
         <div class="card finance-only">
@@ -1327,7 +1346,12 @@
               <tbody id="fin-charge-types-tbody"></tbody>
             </table>
           </div>
-          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">Tick a box to change what a charge blocks. It takes effect immediately for every student.</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
+            Tick a box to change what a charge blocks — it takes effect immediately for every
+            student. Use <strong>Edit</strong> to correct anything else: a misspelt name, the
+            wrong account, the wrong invoice group. Editing changes how existing charges are
+            described and invoiced; it never alters an amount already billed.
+          </div>
         </div>
       </div>
 
@@ -1621,6 +1645,118 @@
     </div>
 
     <!-- SICK RECORDS -->
+    <div class="page" id="page-forms">
+      <div class="page-title">Forms</div>
+      <div class="page-sub">Evaluation forms students fill in — publish them, read the results, export them for reporting</div>
+
+      <div class="card admin-only">
+        <div class="card-title" id="form-editor-title">Create a form</div>
+        <div class="form-grid-3">
+          <div class="field"><label>Title</label><input id="fm-title" placeholder="e.g. End of Academic Year Course Evaluation" /></div>
+          <div class="field"><label>Academic year</label><select id="fm-year"><option value="">— not tied to a year —</option></select></div>
+          <div class="field">
+            <label>Who fills it in</label>
+            <select id="fm-audience">
+              <option value="student">Students — on the student portal</option>
+              <option value="staff">Staff — a tutor, mentor or officer</option>
+            </select>
+          </div>
+          <div class="field"><label>Opens on</label><input id="fm-opens" type="date" /></div>
+          <div class="field"><label>Closes on</label><input id="fm-closes" type="date" /></div>
+          <div class="field">
+            <label>Anonymous</label>
+            <select id="fm-anon">
+              <option value="false">No — record who answered</option>
+              <option value="true">Yes — never link answers to a student</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Responses per student</label>
+            <select id="fm-multi">
+              <option value="false">One each</option>
+              <option value="true">As many as they like</option>
+            </select>
+          </div>
+        </div>
+        <div class="field"><label>Instructions shown to the student</label><input id="fm-intro" placeholder="The paragraph at the top of the paper form" /></div>
+        <div style="font-size:.75rem;color:var(--muted);margin:-4px 0 10px">
+          Make anything that evaluates a member of staff <strong>anonymous</strong> — students
+          will not say a tutor was unprepared with their name attached. An anonymous form still
+          records <em>that</em> a student answered, so nobody is asked twice.
+        </div>
+        <button class="btn btn-primary btn-sm" id="fm-save" onclick="saveForm()">💾 Save form</button>
+        <button class="btn btn-ghost btn-sm" id="fm-cancel" onclick="cancelFormEdit()" style="display:none">Cancel</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">All forms</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Title</th><th>Year</th><th>Window</th><th>Questions</th><th>Responses</th><th>Anonymous</th><th>Status</th><th>Live</th><th></th></tr></thead>
+            <tbody id="fm-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="fm-builder" style="display:none">
+        <div class="card-title" id="fm-builder-title">Questions</div>
+        <div id="fm-builder-body"></div>
+        <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+          <div class="form-grid-3">
+            <div class="field"><label>Add a section</label><input id="fm-sec-title" placeholder="e.g. Section B: Evaluation questions" /></div>
+            <div class="field" style="align-self:end"><button class="btn btn-secondary btn-sm" onclick="addSection()">+ Add section</button></div>
+          </div>
+        </div>
+        <div id="fm-question-editor" style="display:none;border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+          <div class="card-title" style="font-size:.85rem">Add a question</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Section</label><select id="fm-q-section"></select></div>
+            <div class="field">
+              <label>Type</label>
+              <select id="fm-q-type" onchange="onQuestionTypeChange()">
+                <option value="single_choice">Choose one</option>
+                <option value="multi_choice">Choose any</option>
+                <option value="matrix">Rating table</option>
+                <option value="short_text">Short text</option>
+                <option value="long_text">Paragraph</option>
+                <option value="grid_text">Table of text</option>
+              </select>
+            </div>
+            <div class="field"><label>Required</label><select id="fm-q-required"><option value="false">Optional</option><option value="true">Must be answered</option></select></div>
+          </div>
+          <div class="field"><label>Question</label><input id="fm-q-text" placeholder="The question as it appears on the paper form" /></div>
+          <div class="field"><label>Help text</label><input id="fm-q-help" placeholder="e.g. 1 = Poor, 5 = Excellent" /></div>
+          <div class="form-grid-3">
+            <div class="field" id="fm-q-options-field"><label>Choices — one per line</label><textarea id="fm-q-options" rows="5" placeholder="Excellent&#10;Good&#10;Average&#10;Poor&#10;Very Poor"></textarea></div>
+            <div class="field" id="fm-q-rows-field" style="display:none"><label>Things being rated — one per line</label><textarea id="fm-q-rows" rows="5" placeholder="Water facility&#10;Electricity facility"></textarea></div>
+            <div class="field" id="fm-q-columns-field" style="display:none"><label>Column headings — one per line</label><textarea id="fm-q-columns" rows="5" placeholder="Module name&#10;What was wrong"></textarea></div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="fm-q-save" onclick="saveQuestion()">+ Add question</button>
+          <button class="btn btn-ghost btn-sm" id="fm-q-cancel" onclick="cancelQuestionEdit()" style="display:none">Cancel</button>
+        </div>
+      </div>
+
+      <div class="card" id="fm-fill" style="display:none">
+        <div class="card-title" id="fm-fill-title">Fill in</div>
+        <div id="fm-fill-body"></div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-top:12px">
+          <button class="btn btn-primary btn-sm" id="fm-fill-submit">Submit</button>
+          <button class="btn btn-ghost btn-sm" onclick="closeStaffForm()">Cancel</button>
+          <span id="fm-fill-msg" style="font-size:.8rem"></span>
+        </div>
+      </div>
+
+      <div class="card" id="fm-results" style="display:none">
+        <div class="card-title" id="fm-results-title">Results</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          <button class="btn btn-secondary btn-sm" id="fm-export">⬇ Download Excel</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadWhoResponded()">Who has answered</button>
+        </div>
+        <div id="fm-who" style="font-size:.78rem;color:var(--muted);margin-bottom:14px"></div>
+        <div id="fm-summary"></div>
+      </div>
+    </div>
+
     <div class="page" id="page-sick">
       <div class="page-title">Sick Management</div>
       <div class="page-sub">View all sick records, add notes, and track medical certificate submissions</div>
@@ -2031,6 +2167,13 @@ const state = {
   financeProfiles: null,
   financeYear: null,
   chargeTypes: [],
+  editingChargeType: null,
+  forms: [],
+  editingForm: null,
+  buildingForm: null,
+  resultsForm: null,
+  editingQuestion: null,
+  fillingForm: null,
   bankAccounts: [],
   college: null,
   feeGrid: null,
@@ -2097,16 +2240,45 @@ function appendParam(url, name, value) {
 }
 
 // ── SIDEBAR / MOBILE ───────────────────────────────────────────────────────────
+// The menu button does two jobs, as it does on the student portal: on a phone
+// the sidebar is an off-canvas drawer, on a wider screen it collapses to an
+// icon-only rail. The rail was previously wired up for the estate officer
+// alone, so every other role was stuck with a sidebar they could not fold away.
+const SIDEBAR_KEY = 'staffSidebarCollapsed';
+const sidebarIsMobile = () => window.innerWidth <= 768;
+
+function applySidebarCollapsed(collapsed) {
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  try { localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0'); } catch (e) { /* private mode */ }
+}
+
+function restoreSidebarCollapsed() {
+  try {
+    // Estate officers had their own key before the rail was shared; honour it
+    // so their sidebar does not spring open on the next sign-in.
+    const stored = localStorage.getItem(SIDEBAR_KEY)
+      ?? localStorage.getItem('inventorySidebarCollapsed');
+    document.body.classList.toggle('sidebar-collapsed', stored === '1');
+  } catch (e) { /* storage unavailable — start expanded */ }
+}
+
 function toggleSidebar() {
-  if (window.innerWidth > 768 && document.body.classList.contains('is-estate')) {
-    document.body.classList.toggle('sidebar-collapsed');
-    localStorage.setItem('inventorySidebarCollapsed', document.body.classList.contains('sidebar-collapsed') ? '1' : '0');
+  if (!sidebarIsMobile()) {
+    applySidebarCollapsed(!document.body.classList.contains('sidebar-collapsed'));
     return;
   }
   document.getElementById('sidebar').classList.toggle('open');
   document.getElementById('hamburger').classList.toggle('open');
   document.getElementById('sidebar-overlay').classList.toggle('show');
 }
+
+// Submenus are hidden in the collapsed rail, so a group header would be a dead
+// button there. Expand the rail first and let the group's own handler run.
+document.addEventListener('click', event => {
+  if (sidebarIsMobile() || !document.body.classList.contains('sidebar-collapsed')) return;
+  const button = event.target.closest('aside .nav-group > .nav-btn');
+  if (button) applySidebarCollapsed(false);
+}, true);
 function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('hamburger').classList.remove('open');
@@ -2179,6 +2351,7 @@ function showPage(name, btn) {
   closeSidebar();
   if (name === 'modules') loadModules();
   if (name === 'accounts') loadAccountModules();
+  if (name === 'forms') loadForms();
   if (name === 'students') loadStudents();
   if (name === 'attendance') { loadAttendanceModuleSelect(); loadAttendanceHistory(); updatePeriodLocks(); }
   if (name === 'reports') loadReport();
@@ -2375,7 +2548,6 @@ async function boot() {
     }
     if (state.isEstateOfficer) {
       document.body.classList.add('is-estate');
-      document.body.classList.toggle('sidebar-collapsed', localStorage.getItem('inventorySidebarCollapsed') === '1');
       document.getElementById('role-badge').textContent = 'Estate Officer';
       document.getElementById('role-badge').className = 'role-badge tutor';
       document.getElementById('header-sem-badge').textContent = 'College Inventory';
@@ -4866,7 +5038,12 @@ function renderChargeTypes() {
   const rows = state.chargeTypes || [];
   document.getElementById('fin-charge-types-tbody').innerHTML = rows.length ? rows.map(c => `
     <tr>
-      <td><strong>${safeText(c.name)}</strong></td>
+      <td>
+        <strong>${safeText(c.name)}</strong>
+        <div style="font-size:.7rem;color:var(--muted);font-family:var(--font-mono)">
+          ${c.code ? safeText(c.code) : 'no item code'}${c.sort_order ? ` · row ${c.sort_order}` : ''}
+        </div>
+      </td>
       <td style="font-size:.78rem">${safeText(c.family_display)}</td>
       <td>${safeText(c.group_label)}</td>
       <td style="font-size:.75rem;${c.frequency === 'once' ? 'color:var(--accent);font-weight:600' : 'color:var(--muted)'}">${safeText(c.frequency_display)}</td>
@@ -4879,7 +5056,8 @@ function renderChargeTypes() {
                  onchange="toggleChargeBlock(${c.id}, '${f}', this.checked)" />
         </td>`).join('')}
       <td>${c.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Retired</span>'}</td>
-      <td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="editChargeType(${c.id})">Edit</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleChargeActive(${c.id}, ${!c.is_active})">
           ${c.is_active ? 'Retire' : 'Restore'}
         </button>
@@ -4888,9 +5066,51 @@ function renderChargeTypes() {
     : '<tr><td colspan="13"><div class="empty"><div class="ei">📋</div>No charge types yet — add the first one above</div></td></tr>';
 }
 
+function editChargeType(id) {
+  // Everything about a charge type is correctable. A misspelt name or the
+  // wrong CRDB account had to be lived with, because the only things this
+  // screen could change were the blocking checkboxes.
+  const c = (state.chargeTypes || []).find(row => row.id === id);
+  if (!c) return;
+  state.editingChargeType = id;
+
+  document.getElementById('fin-ct-name').value = c.name || '';
+  document.getElementById('fin-ct-family').value = c.family;
+  document.getElementById('fin-ct-applies').value = c.applies;
+  document.getElementById('fin-ct-frequency').value = c.frequency;
+  document.getElementById('fin-ct-group').value = c.invoice_group || '';
+  document.getElementById('fin-ct-account').value = c.bank_account || '';
+  document.getElementById('fin-ct-code').value = c.code || '';
+  document.getElementById('fin-ct-sort_order').value = c.sort_order || 0;
+  BLOCK_FIELDS.forEach(f => { document.getElementById(`fin-ct-${f}`).checked = !!c[f]; });
+
+  document.getElementById('fin-ct-title').textContent = `Editing: ${c.name}`;
+  document.getElementById('fin-ct-save').textContent = '💾 Save changes';
+  document.getElementById('fin-ct-cancel').style.display = '';
+  if (c.in_use) {
+    toast('Students are already charged under this type — amounts already billed are untouched',
+          'var(--amber)');
+  }
+  document.getElementById('fin-ct-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  document.getElementById('fin-ct-name').focus();
+}
+
+function cancelChargeTypeEdit() {
+  state.editingChargeType = null;
+  ['fin-ct-name', 'fin-ct-group', 'fin-ct-code'].forEach(
+    id => document.getElementById(id).value = '');
+  document.getElementById('fin-ct-sort_order').value = '';
+  document.getElementById('fin-ct-account').value = '';
+  BLOCK_FIELDS.forEach(f => { document.getElementById(`fin-ct-${f}`).checked = false; });
+  document.getElementById('fin-ct-title').textContent = 'Add a charge type';
+  document.getElementById('fin-ct-save').textContent = '💾 Save charge type';
+  document.getElementById('fin-ct-cancel').style.display = 'none';
+}
+
 async function saveChargeType() {
   const name = document.getElementById('fin-ct-name').value.trim();
   if (!name) { toast('Give the charge type a name', 'var(--red)'); return; }
+  const order = document.getElementById('fin-ct-sort_order').value.trim();
   const payload = {
     name,
     family: document.getElementById('fin-ct-family').value,
@@ -4898,16 +5118,24 @@ async function saveChargeType() {
     frequency: document.getElementById('fin-ct-frequency').value,
     invoice_group: document.getElementById('fin-ct-group').value.trim(),
     bank_account: document.getElementById('fin-ct-account').value || null,
-    is_active: true,
+    code: document.getElementById('fin-ct-code').value.trim(),
+    sort_order: order === '' ? 0 : Number(order),
   };
   BLOCK_FIELDS.forEach(f => { payload[f] = document.getElementById(`fin-ct-${f}`).checked; });
+
+  const editing = state.editingChargeType;
   try {
-    await api('POST', '/charge-types/', payload);
-    ['fin-ct-name', 'fin-ct-group'].forEach(id => document.getElementById(id).value = '');
-    BLOCK_FIELDS.forEach(f => { document.getElementById(`fin-ct-${f}`).checked = false; });
-    toast('Charge type saved', 'var(--green)');
+    if (editing) {
+      await api('PATCH', `/charge-types/${editing}/`, payload);
+    } else {
+      await api('POST', '/charge-types/', { ...payload, is_active: true });
+    }
+    cancelChargeTypeEdit();
+    toast(editing ? 'Charge type corrected' : 'Charge type saved', 'var(--green)');
     loadChargeTypes();
-  } catch (e) { toast(e?.detail || e?.name?.[0] || 'Failed to save', 'var(--red)'); }
+  } catch (e) {
+    toast(e?.detail || e?.name?.[0] || 'Failed to save', 'var(--red)');
+  }
 }
 
 async function toggleChargeBlock(id, field, value) {
@@ -4928,6 +5156,509 @@ async function toggleChargeActive(id, active) {
     toast(active ? 'Restored' : 'Retired', 'var(--green)');
     loadChargeTypes();
   } catch (e) { toast(e?.detail || 'Failed to update', 'var(--red)'); }
+}
+
+// ── evaluation forms ─────────────────────────────────────────────────────────
+// The college's evaluations used to be paper, tallied by hand, so the tally was
+// the only thing anyone saw. Holding the questions as data means the counts,
+// the averages, the free text and the spreadsheet all fall out of the answers.
+
+const FM_CHART_COLOURS = ['#1E2D78', '#2563EB', '#0891B2', '#16A34A', '#CA8A04',
+                          '#DC2626', '#7C3AED', '#DB2777'];
+let fmCharts = [];
+
+async function loadForms() {
+  if (!state.academicYears?.length) {
+    const years = await api('GET', '/academic-years/');
+    state.academicYears = years.results ?? years;
+  }
+  const select = document.getElementById('fm-year');
+  if (select && select.options.length <= 1) {
+    select.innerHTML = '<option value="">— not tied to a year —</option>'
+      + (state.academicYears || []).map(y => `<option value="${y.id}">${safeText(y.name)}</option>`).join('');
+  }
+  const data = await api('GET', '/forms/');
+  state.forms = data.results ?? data;
+  renderForms();
+}
+
+function renderForms() {
+  const badge = { draft: 'badge-yellow', open: 'badge-green', closed: 'badge-red' };
+  const label = { draft: 'Draft', open: 'Open', closed: 'Closed' };
+  document.getElementById('fm-tbody').innerHTML = (state.forms || []).length
+    ? state.forms.map(f => `
+      <tr>
+        <td><strong>${safeText(f.title)}</strong><div style="font-size:.7rem;color:var(--muted);font-family:var(--font-mono)">${safeText(f.slug)}</div></td>
+        <td style="font-size:.78rem">${safeText(f.academic_year_name) || '—'}
+          <div style="font-size:.7rem;color:var(--muted)">${f.audience === 'staff' ? 'staff fill in' : 'students fill in'}</div></td>
+        <td style="font-size:.75rem;color:var(--muted)">${f.opens_on || '—'} → ${f.closes_on || '—'}</td>
+        <td style="text-align:center">${f.question_count}</td>
+        <td style="text-align:center"><strong>${f.response_count}</strong></td>
+        <td style="text-align:center">${f.is_anonymous ? '<span class="badge badge-green">Yes</span>' : '<span style="color:var(--muted)">No</span>'}</td>
+        <td><span class="badge ${badge[f.status]}">${label[f.status]}</span></td>
+        <td style="text-align:center"><input type="checkbox" ${f.is_active ? 'checked' : ''}
+              onchange="toggleFormActive(${f.id}, this.checked)" title="Show this form to students" /></td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-ghost btn-sm" onclick="buildForm(${f.id})">Questions</button>
+          <button class="btn btn-ghost btn-sm" onclick="showFormResults(${f.id})">Results</button>
+          <button class="btn btn-ghost btn-sm" onclick="editForm(${f.id})">Edit</button>
+          ${f.audience === 'staff' ? `<button class="btn btn-ghost btn-sm" onclick="fillStaffForm(${f.id})">Fill in</button>` : ''}
+          <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteForm(${f.id})">Delete</button>
+        </td>
+      </tr>`).join('')
+    : '<tr><td colspan="9"><div class="empty"><div class="ei">📋</div>No forms yet — create one above, or run seed_evaluation_forms for the college\'s four</div></td></tr>';
+}
+
+async function toggleFormActive(id, active) {
+  try {
+    await api('PATCH', `/forms/${id}/`, { is_active: active });
+    const row = (state.forms || []).find(f => f.id === id);
+    if (row) { row.is_active = active; row.status = active ? 'open' : 'draft'; }
+    toast(active ? 'Students can now see this form' : 'Hidden from students', 'var(--green)');
+    loadForms();
+  } catch (e) {
+    toast(e?.detail || 'Failed to update', 'var(--red)');
+    loadForms();
+  }
+}
+
+function formPayload() {
+  return {
+    title: document.getElementById('fm-title').value.trim(),
+    intro: document.getElementById('fm-intro').value.trim(),
+    academic_year: document.getElementById('fm-year').value || null,
+    opens_on: document.getElementById('fm-opens').value || null,
+    closes_on: document.getElementById('fm-closes').value || null,
+    audience: document.getElementById('fm-audience').value,
+    is_anonymous: document.getElementById('fm-anon').value === 'true',
+    allow_multiple: document.getElementById('fm-multi').value === 'true',
+  };
+}
+
+function editForm(id) {
+  const f = (state.forms || []).find(row => row.id === id);
+  if (!f) return;
+  state.editingForm = id;
+  document.getElementById('fm-title').value = f.title || '';
+  document.getElementById('fm-intro').value = f.intro || '';
+  document.getElementById('fm-year').value = f.academic_year || '';
+  document.getElementById('fm-opens').value = f.opens_on || '';
+  document.getElementById('fm-closes').value = f.closes_on || '';
+  document.getElementById('fm-audience').value = f.audience || 'student';
+  document.getElementById('fm-anon').value = String(f.is_anonymous);
+  document.getElementById('fm-multi').value = String(f.allow_multiple);
+  document.getElementById('form-editor-title').textContent = `Editing: ${f.title}`;
+  document.getElementById('fm-save').textContent = '💾 Save changes';
+  document.getElementById('fm-cancel').style.display = '';
+  document.getElementById('fm-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function cancelFormEdit() {
+  state.editingForm = null;
+  ['fm-title', 'fm-intro', 'fm-opens', 'fm-closes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fm-year').value = '';
+  document.getElementById('fm-audience').value = 'student';
+  document.getElementById('fm-anon').value = 'false';
+  document.getElementById('fm-multi').value = 'false';
+  document.getElementById('form-editor-title').textContent = 'Create a form';
+  document.getElementById('fm-save').textContent = '💾 Save form';
+  document.getElementById('fm-cancel').style.display = 'none';
+}
+
+async function saveForm() {
+  const payload = formPayload();
+  if (!payload.title) { toast('Give the form a title', 'var(--red)'); return; }
+  try {
+    if (state.editingForm) await api('PATCH', `/forms/${state.editingForm}/`, payload);
+    else await api('POST', '/forms/', payload);
+    const editing = state.editingForm;
+    cancelFormEdit();
+    toast(editing ? 'Form updated' : 'Form created — now add its questions', 'var(--green)');
+    await loadForms();
+    if (!editing) {
+      const created = (state.forms || []).find(f => f.title === payload.title);
+      if (created) buildForm(created.id);
+    }
+  } catch (e) {
+    toast(e?.detail || e?.title?.[0] || e?.closes_on?.[0] || 'Failed to save', 'var(--red)');
+  }
+}
+
+// ── the question builder ──
+
+const FM_TYPE_LABELS = {
+  single_choice: 'Choose one', multi_choice: 'Choose any', matrix: 'Rating table',
+  short_text: 'Short text', long_text: 'Paragraph', grid_text: 'Table of text',
+};
+
+async function buildForm(id) {
+  const form = await api('GET', `/forms/${id}/`);
+  state.buildingForm = form;
+  document.getElementById('fm-results').style.display = 'none';
+  document.getElementById('fm-builder').style.display = '';
+  document.getElementById('fm-builder-title').textContent = `Questions — ${form.title}`;
+
+  document.getElementById('fm-builder-body').innerHTML = form.sections.length
+    ? form.sections.map(section => `
+        <div style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <div style="font-weight:600;font-size:.85rem">${safeText(section.title) || 'Section'}</div>
+            <button class="btn btn-ghost btn-sm" style="color:var(--red)"
+                    onclick="deleteSection(${section.id})">Delete section</button>
+          </div>
+          ${section.questions.length ? `<div class="table-wrap"><table>
+            <thead><tr><th>#</th><th>Question</th><th>Type</th><th>Required</th><th></th></tr></thead>
+            <tbody>${section.questions.map((q, i) => `
+              <tr>
+                <td style="text-align:center;color:var(--muted)">${i + 1}</td>
+                <td style="font-size:.8rem">${safeText(q.text)}
+                  ${q.options?.length ? `<div style="font-size:.7rem;color:var(--muted)">${q.options.map(safeText).join(' · ')}</div>` : ''}
+                  ${q.rows?.length ? `<div style="font-size:.7rem;color:var(--muted)">${q.rows.length} rows rated</div>` : ''}</td>
+                <td style="font-size:.75rem">${FM_TYPE_LABELS[q.type] || q.type}</td>
+                <td style="text-align:center">${q.required ? '✓' : ''}</td>
+                <td style="white-space:nowrap">
+                  <button class="btn btn-ghost btn-sm" onclick="editQuestion(${q.id})">Edit</button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteQuestion(${q.id})">Remove</button>
+                </td>
+              </tr>`).join('')}</tbody></table></div>`
+            : '<div style="font-size:.78rem;color:var(--muted)">No questions in this section yet.</div>'}
+        </div>`).join('')
+    : '<div style="font-size:.8rem;color:var(--muted)">Add a section first, then its questions.</div>';
+
+  const picker = document.getElementById('fm-q-section');
+  picker.innerHTML = form.sections.map(s =>
+    `<option value="${s.id}">${safeText(s.title) || 'Section'}</option>`).join('');
+  document.getElementById('fm-question-editor').style.display = form.sections.length ? '' : 'none';
+  document.getElementById('fm-builder').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function addSection() {
+  const title = document.getElementById('fm-sec-title').value.trim();
+  if (!state.buildingForm) return;
+  try {
+    await api('POST', '/form-sections/', {
+      form: state.buildingForm.id, title,
+      order: state.buildingForm.sections.length,
+    });
+    document.getElementById('fm-sec-title').value = '';
+    buildForm(state.buildingForm.id);
+  } catch (e) { toast(e?.detail || 'Failed to add section', 'var(--red)'); }
+}
+
+function onQuestionTypeChange() {
+  const type = document.getElementById('fm-q-type').value;
+  const show = (id, on) => document.getElementById(id).style.display = on ? '' : 'none';
+  show('fm-q-options-field', ['single_choice', 'multi_choice', 'matrix'].includes(type));
+  show('fm-q-rows-field', type === 'matrix');
+  show('fm-q-columns-field', type === 'grid_text');
+  const label = document.querySelector('#fm-q-options-field label');
+  if (label) label.textContent = type === 'matrix'
+    ? 'Rating columns — one per line' : 'Choices — one per line';
+}
+
+const linesOf = id => document.getElementById(id).value
+  .split('\n').map(line => line.trim()).filter(Boolean);
+
+function editQuestion(id) {
+  // A question with a typo in it had to be deleted and retyped, which is not
+  // possible once anyone has answered it.
+  const q = state.buildingForm.sections
+    .flatMap(s => s.questions).find(row => row.id === id);
+  if (!q) return;
+  state.editingQuestion = id;
+  document.getElementById('fm-q-section').value = q.section;
+  document.getElementById('fm-q-type').value = q.type;
+  document.getElementById('fm-q-text').value = q.text;
+  document.getElementById('fm-q-help').value = q.help_text || '';
+  document.getElementById('fm-q-required').value = String(q.required);
+  document.getElementById('fm-q-options').value = (q.options || []).join('\n');
+  document.getElementById('fm-q-rows').value = (q.rows || []).join('\n');
+  document.getElementById('fm-q-columns').value = (q.columns || []).join('\n');
+  onQuestionTypeChange();
+  document.getElementById('fm-q-save').textContent = '💾 Save changes';
+  document.getElementById('fm-q-cancel').style.display = '';
+  document.getElementById('fm-q-text').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function cancelQuestionEdit() {
+  state.editingQuestion = null;
+  ['fm-q-text', 'fm-q-help', 'fm-q-options', 'fm-q-rows', 'fm-q-columns']
+    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fm-q-save').textContent = '+ Add question';
+  document.getElementById('fm-q-cancel').style.display = 'none';
+}
+
+async function saveQuestion() {
+  const text = document.getElementById('fm-q-text').value.trim();
+  if (!text) { toast('Write the question', 'var(--red)'); return; }
+  const type = document.getElementById('fm-q-type').value;
+  const section = Number(document.getElementById('fm-q-section').value);
+  const existing = state.buildingForm.sections.find(s => s.id === section)?.questions.length || 0;
+  const payload = {
+    section, text, type,
+    help_text: document.getElementById('fm-q-help').value.trim(),
+    required: document.getElementById('fm-q-required').value === 'true',
+    options: linesOf('fm-q-options'),
+    rows: type === 'matrix' ? linesOf('fm-q-rows') : [],
+    columns: type === 'grid_text' ? linesOf('fm-q-columns') : [],
+  };
+  try {
+    if (state.editingQuestion) {
+      await api('PATCH', `/form-questions/${state.editingQuestion}/`, payload);
+    } else {
+      await api('POST', '/form-questions/', { ...payload, order: existing });
+    }
+    const wasEditing = state.editingQuestion;
+    cancelQuestionEdit();
+    toast(wasEditing ? 'Question updated' : 'Question added', 'var(--green)');
+    buildForm(state.buildingForm.id);
+  } catch (e) {
+    toast(e?.detail || e?.options?.[0] || e?.rows?.[0] || e?.columns?.[0]
+          || 'Failed to save question', 'var(--red)');
+  }
+}
+
+async function deleteQuestion(id) {
+  if (!confirm('Remove this question?')) return;
+  try {
+    await api('DELETE', `/form-questions/${id}/`);
+    buildForm(state.buildingForm.id);
+  } catch (e) { toast(e?.detail || 'Could not remove it', 'var(--red)'); }
+}
+
+async function deleteSection(id) {
+  if (!confirm('Delete this section and every question in it?')) return;
+  try {
+    await api('DELETE', `/form-sections/${id}/`);
+    buildForm(state.buildingForm.id);
+  } catch (e) { toast(e?.detail || 'Could not delete it', 'var(--red)'); }
+}
+
+async function deleteForm(id) {
+  const form = (state.forms || []).find(f => f.id === id);
+  if (!confirm(`Delete "${form?.title || 'this form'}"?`)) return;
+  try {
+    await api('DELETE', `/forms/${id}/`);
+    toast('Form deleted', 'var(--green)');
+  } catch (e) {
+    // The server refuses a form that has been answered until we say so twice.
+    if (e?.requires_confirmation) {
+      if (!confirm(`${e.detail}\n\nDelete the form AND its ${e.responses} response(s)?`)) return;
+      try {
+        await api('DELETE', `/forms/${id}/?confirm=yes`);
+        toast('Form and its responses deleted', 'var(--green)');
+      } catch (err) { toast(err?.detail || 'Could not delete it', 'var(--red)'); return; }
+    } else {
+      toast(e?.detail || 'Could not delete it', 'var(--red)');
+      return;
+    }
+  }
+  document.getElementById('fm-builder').style.display = 'none';
+  document.getElementById('fm-results').style.display = 'none';
+  document.getElementById('fm-fill').style.display = 'none';
+  loadForms();
+}
+
+// ── staff filling a staff form in ──
+// The Students' Performance Evaluation is completed by a mentor about a
+// student, so it has nowhere to live on the student portal.
+
+function fmRenderQuestion(q, index) {
+  const name = `sq${q.id}`;
+  const req = q.required ? '<span style="color:var(--red)">*</span>' : '';
+  let body = '';
+  if (q.type === 'short_text') body = `<input type="text" data-sq="${q.id}" maxlength="300">`;
+  else if (q.type === 'long_text') body = `<textarea data-sq="${q.id}" rows="3" maxlength="5000"></textarea>`;
+  else if (q.type === 'single_choice' || q.type === 'multi_choice') {
+    const input = q.type === 'single_choice' ? 'radio' : 'checkbox';
+    body = q.options.map(o => `<label style="display:flex;gap:7px;align-items:center;font-weight:400;font-size:.82rem">
+      <input type="${input}" name="${name}" data-sq="${q.id}" value="${safeText(o)}"> ${safeText(o)}</label>`).join('');
+  } else if (q.type === 'matrix') {
+    body = '<div class="table-wrap"><table><thead><tr><th></th>'
+      + q.options.map(o => `<th style="text-align:center;font-size:.72rem">${safeText(o)}</th>`).join('')
+      + '</tr></thead><tbody>'
+      + q.rows.map((row, r) => `<tr><td style="font-size:.78rem">${safeText(row)}</td>`
+          + q.options.map(o => `<td style="text-align:center"><input type="radio" name="${name}_${r}"
+              data-sq="${q.id}" data-row="${safeText(row)}" value="${safeText(o)}"></td>`).join('')
+          + '</tr>').join('')
+      + '</tbody></table></div>';
+  } else if (q.type === 'grid_text') {
+    body = '<div class="table-wrap"><table><thead><tr>'
+      + q.columns.map(c => `<th style="font-size:.72rem">${safeText(c)}</th>`).join('')
+      + '</tr></thead><tbody>'
+      + Array.from({ length: q.max_rows || 4 }, (_, r) => '<tr>' + q.columns.map((c, ci) =>
+          `<td><input type="text" data-sq="${q.id}" data-grid-row="${r}" data-grid-col="${ci}"></td>`).join('') + '</tr>').join('')
+      + '</tbody></table></div>';
+  }
+  return `<div style="padding:12px 0;border-bottom:1px solid var(--border)">
+    <div style="font-weight:600;font-size:.84rem;margin-bottom:3px">${index}. ${safeText(q.text)}${req}</div>
+    ${q.help_text ? `<div style="font-size:.74rem;color:var(--muted);margin-bottom:7px">${safeText(q.help_text)}</div>` : ''}
+    ${body}</div>`;
+}
+
+async function fillStaffForm(id) {
+  const form = await api('GET', `/forms/${id}/`);
+  state.fillingForm = form;
+  document.getElementById('fm-builder').style.display = 'none';
+  document.getElementById('fm-results').style.display = 'none';
+  document.getElementById('fm-fill').style.display = '';
+  document.getElementById('fm-fill-title').textContent = `Fill in — ${form.title}`;
+  document.getElementById('fm-fill-msg').textContent = '';
+  let n = 0;
+  document.getElementById('fm-fill-body').innerHTML = form.sections.map(section =>
+    `<div style="font-weight:600;font-size:.82rem;margin-top:14px">${safeText(section.title)}</div>`
+    + section.questions.map(q => fmRenderQuestion(q, ++n)).join('')).join('');
+  document.getElementById('fm-fill-submit').onclick = submitStaffForm;
+  document.getElementById('fm-fill').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeStaffForm() {
+  state.fillingForm = null;
+  document.getElementById('fm-fill').style.display = 'none';
+}
+
+async function submitStaffForm() {
+  const form = state.fillingForm;
+  if (!form) return;
+  const answers = {};
+  for (const section of form.sections) {
+    for (const q of section.questions) {
+      const inputs = [...document.querySelectorAll(`[data-sq="${q.id}"]`)];
+      if (q.type === 'short_text' || q.type === 'long_text') {
+        const v = inputs[0]?.value.trim(); if (v) answers[q.id] = v;
+      } else if (q.type === 'single_choice') {
+        const picked = inputs.find(el => el.checked); if (picked) answers[q.id] = picked.value;
+      } else if (q.type === 'multi_choice') {
+        const picked = inputs.filter(el => el.checked).map(el => el.value);
+        if (picked.length) answers[q.id] = picked;
+      } else if (q.type === 'matrix') {
+        const ratings = {};
+        inputs.filter(el => el.checked).forEach(el => { ratings[el.dataset.row] = el.value; });
+        if (Object.keys(ratings).length) answers[q.id] = ratings;
+      } else if (q.type === 'grid_text') {
+        const table = [];
+        inputs.forEach(el => {
+          const r = Number(el.dataset.gridRow), c = Number(el.dataset.gridCol);
+          (table[r] ||= Array(q.columns.length).fill(''))[c] = el.value.trim();
+        });
+        const filled = table.filter(row => row && row.some(cell => cell));
+        if (filled.length) answers[q.id] = filled;
+      }
+    }
+  }
+  const button = document.getElementById('fm-fill-submit');
+  const message = document.getElementById('fm-fill-msg');
+  button.disabled = true; message.textContent = 'Saving…';
+  try {
+    await api('POST', `/forms/${form.id}/submit/`, { answers });
+    toast('Recorded', 'var(--green)');
+    closeStaffForm();
+    loadForms();
+  } catch (e) {
+    message.textContent = e?.detail || 'Could not save.';
+    message.style.color = 'var(--red)';
+  } finally { button.disabled = false; }
+}
+
+// ── results and charts ──
+
+async function showFormResults(id) {
+  const form = (state.forms || []).find(f => f.id === id);
+  state.resultsForm = id;
+  document.getElementById('fm-builder').style.display = 'none';
+  document.getElementById('fm-results').style.display = '';
+  document.getElementById('fm-who').innerHTML = '';
+  document.getElementById('fm-export').onclick = () =>
+    window.open(`/api/forms/${id}/export/`, '_blank');
+
+  const summary = await api('GET', `/forms/${id}/summary/`);
+  document.getElementById('fm-results-title').textContent =
+    `Results — ${form?.title || summary.form.title} · ${summary.responses} response${summary.responses === 1 ? '' : 's'}`;
+
+  fmCharts.forEach(chart => chart.destroy());
+  fmCharts = [];
+
+  if (!summary.responses) {
+    document.getElementById('fm-summary').innerHTML =
+      '<div class="empty"><div class="ei">📊</div>Nobody has answered this form yet</div>';
+    return;
+  }
+
+  document.getElementById('fm-summary').innerHTML = summary.questions.map((q, i) => {
+    if (q.kind === 'text') {
+      return `<div class="card" style="margin-bottom:12px"><div class="card-title" style="font-size:.82rem">${safeText(q.text)}</div>
+        ${q.responses.length
+          ? `<ul style="margin:0;padding-left:18px;font-size:.8rem">${q.responses.map(r => `<li style="margin-bottom:5px">${safeText(r)}</li>`).join('')}</ul>`
+          : '<div style="font-size:.78rem;color:var(--muted)">No answers.</div>'}</div>`;
+    }
+    if (q.kind === 'table') {
+      return `<div class="card" style="margin-bottom:12px"><div class="card-title" style="font-size:.82rem">${safeText(q.text)}</div>
+        ${q.rows.length ? `<div class="table-wrap"><table><thead><tr>${q.columns.map(c => `<th>${safeText(c)}</th>`).join('')}</tr></thead>
+          <tbody>${q.rows.map(row => `<tr>${row.map(cell => `<td style="font-size:.78rem">${safeText(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+          : '<div style="font-size:.78rem;color:var(--muted)">No answers.</div>'}</div>`;
+    }
+    const mean = q.mean !== null && q.mean !== undefined
+      ? `<span class="badge badge-green" style="margin-left:8px">mean ${q.mean}</span>` : '';
+    return `<div class="card" style="margin-bottom:12px">
+      <div class="card-title" style="font-size:.82rem">${safeText(q.text)}${mean}
+        <span style="font-weight:400;color:var(--muted);font-size:.74rem;margin-left:8px">${q.answered} answered</span></div>
+      <div class="inventory-chart-wrap"><canvas id="fm-chart-${i}"></canvas></div></div>`;
+  }).join('');
+
+  // Draw after the canvases are in the document.
+  summary.questions.forEach((q, i) => {
+    const canvas = document.getElementById(`fm-chart-${i}`);
+    if (!canvas) return;
+    if (q.kind === 'choice') {
+      fmCharts.push(new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: q.counts.map(c => c.option),
+          datasets: [{ label: 'Responses', data: q.counts.map(c => c.count),
+                       backgroundColor: FM_CHART_COLOURS[0] }],
+        },
+        options: { responsive: true, maintainAspectRatio: false,
+                   plugins: { legend: { display: false } },
+                   scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+      }));
+    } else if (q.kind === 'matrix') {
+      // Averages per row where the scale is numeric; otherwise the spread.
+      const hasMeans = q.rows.some(r => r.mean !== null);
+      fmCharts.push(new Chart(canvas, hasMeans ? {
+        type: 'bar',
+        data: {
+          labels: q.rows.map(r => r.row),
+          datasets: [{ label: 'Average rating', data: q.rows.map(r => r.mean),
+                       backgroundColor: FM_CHART_COLOURS[1] }],
+        },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                   plugins: { legend: { display: false } },
+                   scales: { x: { beginAtZero: true, suggestedMax: Number(q.options.at(-1)) || 5 } } },
+      } : {
+        type: 'bar',
+        data: {
+          labels: q.rows.map(r => r.row),
+          datasets: q.options.map((option, index) => ({
+            label: option,
+            data: q.rows.map(r => r.counts.find(c => c.option === option)?.count || 0),
+            backgroundColor: FM_CHART_COLOURS[index % FM_CHART_COLOURS.length],
+          })),
+        },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                   scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } } },
+      }));
+    }
+  });
+}
+
+async function loadWhoResponded() {
+  if (!state.resultsForm) return;
+  const data = await api('GET', `/forms/${state.resultsForm}/who-responded/`);
+  document.getElementById('fm-who').innerHTML = data.count
+    ? `<strong>${data.count} answered:</strong> ${data.answered.map(r => safeText(r.name)).join(', ')}
+       <div style="margin-top:4px">This is the receipt list — on an anonymous form it says who
+       answered, never what they said.</div>`
+    : 'Nobody has answered yet.';
 }
 
 // ── fee structure grid ────────────────────────────────────────────────────────
@@ -6153,6 +6884,9 @@ installWebIconReplacements();
 document.getElementById('att-date').value = new Date().toISOString().split('T')[0];
 document.getElementById('fin-pay-date').value = new Date().toISOString().split('T')[0];
 ['tr-date','mt-reported','in-date','ds-proposed'].forEach(id => document.getElementById(id).value = new Date().toISOString().split('T')[0]);
+// Restore the rail before boot's first paint, so a collapsed sidebar does not
+// flash open on every page load.
+restoreSidebarCollapsed();
 boot();
 </script>
 </body>

@@ -12,6 +12,7 @@ from django.db.models import Count, Q, Sum
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, render, redirect
 from django.utils import timezone
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework import viewsets, status
@@ -23,7 +24,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import finance
+from . import evaluations, finance
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
 from .models import (
     AcademicYear, Semester, ClassLevel, Module,
@@ -35,6 +36,7 @@ from .models import (
     ChargeType, FeeStructure, FeeInstallment, StudentProfile, StudentCharge,
     Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
     BankAccount, CollegeProfile,
+    Form, FormSection, FormQuestion, FormAnswer, FormResponse, FormSubmissionReceipt,
 )
 from .serializers import (
     AcademicYearSerializer, SemesterSerializer, ClassLevelSerializer,
@@ -52,6 +54,8 @@ from .serializers import (
     InvoiceSerializer, PaymentSerializer, RecordPaymentSerializer,
     ReversePaymentSerializer, WaiveChargeSerializer, FinanceOverrideSerializer,
     FinanceAuditLogSerializer,
+    FormSerializer, FormSectionSerializer, FormQuestionSerializer,
+    FormResponseSerializer, StudentFormSerializer,
 )
 from .grading import grade_for_mark, gpa_classification, parse_authority_grade
 
@@ -289,11 +293,19 @@ def change_password(request):
     return Response({'detail': 'Portal password updated.', 'updated': updated})
 
 
+@xframe_options_sameorigin
 def announcement_download(request, pk):
     """Stream an announcement PDF to any logged-in user — staff (Django auth)
     or student (session-only auth, same check as get_logged_student). Not a
     DRF view: it has to work for the session-only student portal, which never
     authenticates against request.user.
+
+    The site sends X-Frame-Options: DENY, which is right for every page that
+    can be acted on but stopped the dashboard embedding the notice it had just
+    fetched — the browser reported it as "refused to connect". Relaxed to
+    SAMEORIGIN on this one response: it is a read-only PDF with nothing to
+    click, so framing it carries none of the risk the header exists to prevent,
+    and every other view keeps DENY.
     """
     if not (request.user.is_authenticated or request.session.get('student_id')):
         return redirect('login')
@@ -567,6 +579,10 @@ def student_dashboard(request):
     finance_paid = ledger_totals['paid']
     finance_balance = ledger_totals['balance']
     announcements = Announcement.objects.select_related('uploaded_by')[:20]
+    # Evaluation forms the student may fill in. Rendered server-side so the
+    # sidebar badge is right before any JavaScript runs.
+    student_forms = evaluations.forms_for_student(ledger_profile)
+    forms_outstanding = sum(1 for entry in student_forms if entry['can_answer'])
     return render(request, 'student_dashboard.html', {
         'student_name': student.name,
         'registration_number': student.nactvet_reg_no,
@@ -596,6 +612,8 @@ def student_dashboard(request):
         'finance_invoices': finance_invoices,
         'finance_invoice_rows': finance_invoice_rows,
         'invoice_payments': invoice_payments,
+        'student_forms': student_forms,
+        'forms_outstanding': forms_outstanding,
         'fee_reminders': fee_reminders,
         'fee_reminders_due': fee_reminders_due,
         'fee_reminders_later': fee_reminders_later,
@@ -4746,3 +4764,246 @@ def college_profile(request):
                       ip=finance.client_ip(request))
         return Response(serializer.data)
     return Response(CollegeProfileSerializer(profile).data)
+
+
+# ── EVALUATION FORMS · the admin's side ───────────────────────────────────────
+
+class FormViewSet(viewsets.ModelViewSet):
+    """The forms the college publishes, and what came back.
+
+    Read is open to any signed-in member of staff; only the admin
+    (`is_staff` — the exam officer / HOD) may create, edit or publish one.
+    """
+    serializer_class = FormSerializer
+    permission_classes = [IsAuthenticatedReadOnlyOrAdmin]
+
+    def get_queryset(self):
+        qs = (
+            Form.objects.select_related('academic_year', 'created_by')
+            .prefetch_related('sections__questions')
+        )
+        year_id = self.request.query_params.get('academic_year_id')
+        if year_id:
+            qs = qs.filter(academic_year_id=year_id)
+        if self.request.query_params.get('is_active') == 'true':
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete a form the college no longer runs.
+
+        Deleting one takes its responses with it, so a form that has been
+        answered needs `?confirm=yes` — one deliberate extra step between a
+        mis-click and a year of evaluation data. Export first; the refusal
+        message says so.
+        """
+        form = self.get_object()
+        answered = form.responses.count()
+        confirmed = str(request.query_params.get('confirm', '')).lower() in ('yes', 'true', '1')
+
+        if answered and not confirmed:
+            return Response(
+                {'detail': f'"{form.title}" has {answered} response'
+                           f'{"" if answered == 1 else "s"}. Deleting it deletes them too. '
+                           f'Download the Excel first if you need them, then confirm.',
+                 'responses': answered, 'requires_confirmation': True},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        finance.audit('form.delete', 'Form', actor=request.user, entity_id=form.id,
+                      summary=f'Deleted "{form.title}" and {answered} response(s)',
+                      before={'title': form.title, 'slug': form.slug,
+                              'responses': answered},
+                      ip=finance.client_ip(request))
+        form.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """A member of staff filling in a staff form — a mentor assessing a
+        student, say. Student forms are answered on the portal, not here."""
+        form = self.get_object()
+        if form.audience != Form.STAFF:
+            return Response(
+                {'detail': 'That form is answered by students on their portal.'},
+                status=status.HTTP_400_BAD_REQUEST)
+        if not request.user.is_staff:
+            raise PermissionDenied('Only the admin can fill this form in.')
+
+        answers = request.data.get('answers')
+        if not isinstance(answers, dict):
+            return Response({'detail': 'Send the answers as {question id: answer}.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            evaluations.submit(form, answers, submitted_by=request.user,
+                               academic_year=form.academic_year or active_academic_year())
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'detail': 'Recorded.'}, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'])
+    def responses(self, request, pk=None):
+        form = self.get_object()
+        rows = (
+            form.responses.select_related('profile', 'class_level')
+            .prefetch_related('answers__question')
+        )
+        return Response(FormResponseSerializer(rows, many=True).data)
+
+    @action(detail=True, methods=['get'])
+    def summary(self, request, pk=None):
+        """Counts and averages per question — what the charts draw."""
+        return Response(evaluations.summarise(self.get_object()))
+
+    @action(detail=True, methods=['get'])
+    def export(self, request, pk=None):
+        form = self.get_object()
+        workbook = evaluations.export_workbook(form)
+        buffer = BytesIO()
+        workbook.save(buffer)
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = f'attachment; filename="{form.slug}_responses.xlsx"'
+        return response
+
+    @action(detail=True, methods=['get'], url_path='who-responded')
+    def who_responded(self, request, pk=None):
+        """Who has answered — never what they said.
+
+        The admin still has to chase the students who have not filled a form
+        in, and that must stay possible without breaking anonymity, so this
+        reads the receipts rather than the responses.
+        """
+        form = self.get_object()
+        answered = (
+            FormSubmissionReceipt.objects.filter(form=form)
+            .select_related('profile').order_by('profile__name')
+        )
+        return Response({
+            'answered': [
+                {'name': r.profile.name, 'reg_no': r.profile.nactvet_reg_no,
+                 'submitted_at': r.submitted_at}
+                for r in answered
+            ],
+            'count': answered.count(),
+        })
+
+
+class FormSectionViewSet(viewsets.ModelViewSet):
+    serializer_class = FormSectionSerializer
+    permission_classes = [IsAuthenticatedReadOnlyOrAdmin]
+
+    def get_queryset(self):
+        qs = FormSection.objects.select_related('form').prefetch_related('questions')
+        form_id = self.request.query_params.get('form_id')
+        return qs.filter(form_id=form_id) if form_id else qs
+
+    def perform_destroy(self, instance):
+        # A section takes its questions, and its questions take their answers.
+        answered = FormAnswer.objects.filter(question__section=instance).exists()
+        if answered:
+            raise PermissionDenied(
+                'Students have already answered questions in this section. Deleting it would '
+                'delete their answers — edit the questions instead, or delete the whole form '
+                'if the college has finished with it.'
+            )
+        instance.delete()
+
+
+class FormQuestionViewSet(viewsets.ModelViewSet):
+    serializer_class = FormQuestionSerializer
+    permission_classes = [IsAuthenticatedReadOnlyOrAdmin]
+
+    def get_queryset(self):
+        qs = FormQuestion.objects.select_related('section__form')
+        form_id = self.request.query_params.get('form_id')
+        if form_id:
+            qs = qs.filter(section__form_id=form_id)
+        section_id = self.request.query_params.get('section_id')
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+        return qs
+
+    def perform_destroy(self, instance):
+        if instance.answers.exists():
+            raise PermissionDenied(
+                'Students have already answered this question. Deleting it would delete '
+                'their answers with it — edit the wording instead, or deactivate the form.'
+            )
+        instance.delete()
+
+
+# ── EVALUATION FORMS · the student's side ─────────────────────────────────────
+#
+# Session-authenticated like the fees endpoints, not request.user.
+
+@api_view(['GET'])
+def my_forms(request):
+    """The forms I can fill in, and which I have already done."""
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Authentication required.'}, status=status.HTTP_403_FORBIDDEN)
+    return Response([
+        {
+            'id': entry['form'].id,
+            'slug': entry['form'].slug,
+            'title': entry['form'].title,
+            'intro': entry['form'].intro,
+            'is_anonymous': entry['form'].is_anonymous,
+            'closes_on': entry['form'].closes_on,
+            'answered': entry['answered'],
+            'can_answer': entry['can_answer'],
+        }
+        for entry in evaluations.forms_for_student(profile)
+    ])
+
+
+@api_view(['GET'])
+def my_form(request, slug):
+    """One open form, with its questions, ready to fill in."""
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Authentication required.'}, status=status.HTTP_403_FORBIDDEN)
+    form = get_object_or_404(
+        Form.objects.prefetch_related('sections__questions'),
+        slug=slug, audience=Form.STUDENT)
+    if not form.is_open():
+        return Response({'detail': 'That form is not open for responses.'},
+                        status=status.HTTP_404_NOT_FOUND)
+    return Response({
+        **StudentFormSerializer(form).data,
+        'answered': form.id in evaluations.answered_form_ids(profile),
+    })
+
+
+@api_view(['POST'])
+def submit_my_form(request, slug):
+    """Send in my answers."""
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Authentication required.'}, status=status.HTTP_403_FORBIDDEN)
+    form = get_object_or_404(Form, slug=slug, audience=Form.STUDENT)
+
+    answers = request.data.get('answers')
+    if not isinstance(answers, dict):
+        return Response({'detail': 'Send your answers as {question id: answer}.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    year = active_academic_year()
+    try:
+        evaluations.submit(
+            form, answers, profile=profile,
+            class_level=finance.class_level_for(profile, year),
+            academic_year=year,
+        )
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(
+        {'detail': 'Thank you — your response has been recorded.'},
+        status=status.HTTP_201_CREATED,
+    )

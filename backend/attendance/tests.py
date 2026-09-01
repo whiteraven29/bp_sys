@@ -1612,6 +1612,27 @@ class AnnouncementTests(TestCase):
         response = self.client.get(f'/announcements/{announcement.id}/download/')
         self.assertRedirects(response, reverse('login'))
 
+    def test_the_pdf_can_be_framed_by_the_dashboard_that_fetched_it(self):
+        """The site sends X-Frame-Options: DENY, which stopped the student
+        dashboard rendering the notice it had just fetched — the browser
+        reported it as "refused to connect" and the feed showed nothing."""
+        announcement = Announcement.objects.create(title='Notice', file=self._pdf(), uploaded_by=self.admin)
+        session = self.client.session
+        session['student_id'] = self.student.id
+        session['student_reg_no'] = self.student.nactvet_reg_no
+        session.save()
+
+        response = self.client.get(f'/announcements/{announcement.id}/download/')
+        self.assertEqual(response['X-Frame-Options'], 'SAMEORIGIN')
+        # Inline, or the browser downloads it instead of showing it.
+        self.assertIn('inline', response['Content-Disposition'])
+
+    def test_every_other_page_still_refuses_to_be_framed(self):
+        """The relaxation is for the PDF alone — a page that can be acted on
+        must keep DENY, which is what the header is for."""
+        self.client.force_authenticate(self.admin)
+        self.assertEqual(self.client.get('/api/announcements/')['X-Frame-Options'], 'DENY')
+
 
 class TeacherModuleAssignmentTests(TestCase):
     def setUp(self):

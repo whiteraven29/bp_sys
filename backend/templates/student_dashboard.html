@@ -186,6 +186,30 @@
   .stat-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius); color: var(--blue); background: var(--blue-soft); }
   .stat-card strong { font-size: 1.45rem; font-weight: 600; }
   .stat-card p { margin: 3px 0 0; color: var(--muted); font-size: .76rem; font-weight: 400; }
+  .form-card { padding: 15px 16px; border-bottom: 1px solid var(--line); }
+  .form-card:last-child { border-bottom: 0; }
+  .form-card h3 { margin: 0 0 4px; font-size: .92rem; font-weight: 600; }
+  .form-card p { margin: 0 0 10px; color: var(--muted); font-size: .8rem; }
+  .q-block { padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .q-block:last-of-type { border-bottom: 0; }
+  .q-text { font-weight: 600; font-size: .88rem; margin: 0 0 3px; }
+  .q-help { color: var(--muted); font-size: .76rem; margin: 0 0 9px; }
+  .q-req { color: var(--red); margin-left: 3px; }
+  .q-choices { display: grid; gap: 5px; }
+  .q-choices label { display: flex; align-items: center; gap: 8px; font-size: .84rem; font-weight: 400; cursor: pointer; }
+  .q-block input[type=text], .q-block textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius);
+    font: inherit; font-size: .84rem; background: var(--surface); color: var(--text); }
+  .q-block textarea { min-height: 92px; resize: vertical; }
+  .q-matrix { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  .q-matrix th, .q-matrix td { border: 1px solid var(--line); padding: 7px 9px; }
+  .q-matrix thead th { background: var(--surface-2); font-weight: 600; text-align: center; }
+  .q-matrix tbody th { text-align: left; font-weight: 400; }
+  .q-matrix td { text-align: center; }
+  .q-grid { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  .q-grid th, .q-grid td { border: 1px solid var(--line); padding: 5px; }
+  .q-grid thead th { background: var(--surface-2); font-weight: 600; font-size: .76rem; }
+  .q-grid input { width: 100%; border: 0; padding: 5px; font: inherit; font-size: .82rem; background: transparent; color: var(--text); }
   .rem-feed { display: grid; gap: 0; }
   .rem-item { display: flex; align-items: baseline; gap: 12px; padding: 11px 16px;
               border-bottom: 1px solid var(--line); border-left: 3px solid transparent; }
@@ -275,6 +299,20 @@
   .password-toggle:hover, .password-toggle:focus-visible { background: var(--blue-soft); outline: none; }
   .account-button { height: 34px; padding: 0 14px; border: 0; border-radius: var(--radius); color: #fff; background: var(--blue); cursor: pointer; font-size: .82rem; font-weight: 500; }
   .account-button:hover { background: var(--blue-dark); }
+  /* The portal had no .btn at all, so every button added for invoices and
+     forms fell back to the browser's own chrome. Matches .account-button, and
+     works as an <a> too — "Open invoice" is a link, not a form control. */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
+    border: 1px solid var(--blue); border-radius: var(--radius);
+    background: var(--blue); color: #fff; text-decoration: none;
+    font: inherit; font-size: .82rem; font-weight: 500; cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .btn:hover { background: var(--blue-dark); border-color: var(--blue-dark); color: #fff; }
+  .btn:disabled, .btn[disabled] { opacity: .5; cursor: not-allowed; }
+  .btn-quiet { background: var(--surface); color: var(--text); border-color: var(--line); }
+  .btn-quiet:hover { background: var(--surface-2); color: var(--text); border-color: var(--muted); }
   .notice { margin-top: 16px; padding: 12px 15px; border: 1px solid #cfe0f5; border-left: 3px solid var(--violet); border-radius: var(--radius); color: var(--text); background: #f2f7fd; font-size: .8rem; line-height: 1.6; }
   .toast { position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: calc(100vw - 36px); padding: 11px 14px; border: 0; border-radius: var(--radius); color: #fff; background: var(--text); opacity: 0; transform: translateY(18px); transition: .2s ease; font-size: .82rem; }
   .toast.show { opacity: 1; transform: translateY(0); }
@@ -377,6 +415,7 @@
           <button class="nav-item" data-view="payment-summary" title="Payment Summary"><span class="nav-icon"><i class="bi bi-calculator"></i></span><span class="nav-text">Payment Summary</span></button>
         </div>
       </div>
+      <button class="nav-item" data-view="forms" title="Forms"><span class="nav-icon"><i class="bi bi-ui-checks"></i></span><span class="nav-text">Forms</span>{% if forms_outstanding %}<span class="nav-badge">{{ forms_outstanding }}</span>{% endif %}</button>
       <div class="nav-label">Account</div>
       <button class="nav-item" data-view="profile" title="My Profile"><span class="nav-icon"><i class="bi bi-person-circle"></i></span><span class="nav-text">My Profile</span></button>
     </nav>
@@ -799,6 +838,59 @@
         </section>
       </section>
 
+      <section class="view" id="view-forms">
+        <div class="section-title">
+          <p class="eyebrow">Quality assurance</p><h2>Forms</h2>
+          <p>Evaluation forms the college has opened. Your feedback is used to improve
+             teaching, facilities and services.</p>
+        </div>
+
+        <section class="panel" id="forms-list-panel">
+          <div class="panel-head"><h2>Open forms</h2><span>Only forms open right now appear here</span></div>
+          <div>
+            {% for entry in student_forms %}
+            <div class="form-card">
+              <h3>{{ entry.form.title }}</h3>
+              {% if entry.form.intro %}<p>{{ entry.form.intro }}</p>{% endif %}
+              <p style="margin-bottom:10px">
+                {% if entry.form.is_anonymous %}<span class="status pass">Anonymous</span>
+                  <span style="margin-left:6px">Your name is never stored with these answers.</span>
+                {% endif %}
+                {% if entry.form.closes_on %}<span style="margin-left:6px">Closes {{ entry.form.closes_on|date:"d M Y" }}.</span>{% endif %}
+              </p>
+              {% if entry.can_answer %}
+                <button type="button" class="btn" data-open-form="{{ entry.form.slug }}">
+                  {% if entry.answered %}Fill in again{% else %}Fill in this form{% endif %}
+                </button>
+                {% if entry.answered %}<span class="status pass" style="margin-left:8px">Already answered once</span>{% endif %}
+              {% else %}
+                <span class="status pass">Answered — thank you</span>
+              {% endif %}
+            </div>
+            {% empty %}
+            <div class="form-card">
+              <h3>No forms are open</h3>
+              <p style="margin:0">The college opens evaluation forms at the end of each
+                 semester and academic year. You will see them here when they do.</p>
+            </div>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="panel" id="form-fill-panel" style="display:none">
+          <div class="panel-head"><h2 id="form-fill-title">Form</h2><span id="form-fill-note"></span></div>
+          <div style="padding:0 16px">
+            <p id="form-fill-intro" style="color:var(--muted);font-size:.82rem"></p>
+            <div id="form-fill-body"></div>
+            <div style="padding:16px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <button type="button" class="btn" id="form-submit-btn">Submit my answers</button>
+              <button type="button" class="btn btn-quiet" id="form-cancel-btn">Cancel</button>
+              <span id="form-fill-msg" style="font-size:.82rem"></span>
+            </div>
+          </div>
+        </section>
+      </section>
+
       <section class="view" id="view-profile">
         <div class="section-title"><p class="eyebrow">Account</p><h2>My Profile</h2><p>Your student identity and current academic context.</p></div>
         <div class="profile-grid"><div class="profile-item"><span>Full name</span><strong>{{ student_name }}</strong></div><div class="profile-item"><span>Registration number</span><strong>{{ registration_number }}</strong></div><div class="profile-item"><span>Academic year</span><strong>{{ academic_year }}</strong></div><div class="profile-item"><span>Current semester</span><strong>{{ active_semester }}</strong></div><div class="profile-item"><span>Enrolled modules</span><strong>{{ module_count }}</strong></div><div class="profile-item"><span>Recorded sessions</span><strong>{{ total_sessions }}</strong></div></div>
@@ -879,6 +971,143 @@
     }
   }
 
+  // ── evaluation forms ──────────────────────────────────────────────────────
+  // Rendered from the API rather than the template because the question types
+  // (rating tables, tables of text) each need their own markup, and the same
+  // renderer then serves any form the admin builds later.
+  let currentForm = null;
+
+  const esc = value => String(value ?? '').replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function renderQuestion(q, index) {
+    const name = `q${q.id}`;
+    const required = q.required ? '<span class="q-req">*</span>' : '';
+    let body = '';
+
+    if (q.type === 'short_text') {
+      body = `<input type="text" data-q="${q.id}" maxlength="300">`;
+    } else if (q.type === 'long_text') {
+      body = `<textarea data-q="${q.id}" maxlength="5000"></textarea>`;
+    } else if (q.type === 'single_choice' || q.type === 'multi_choice') {
+      const input = q.type === 'single_choice' ? 'radio' : 'checkbox';
+      body = '<div class="q-choices">' + q.options.map(option =>
+        `<label><input type="${input}" name="${name}" data-q="${q.id}"`
+        + ` value="${esc(option)}"> ${esc(option)}</label>`).join('') + '</div>';
+    } else if (q.type === 'matrix') {
+      body = '<div class="table-wrap"><table class="q-matrix"><thead><tr><th></th>'
+        + q.options.map(o => `<th>${esc(o)}</th>`).join('')
+        + '</tr></thead><tbody>'
+        + q.rows.map((row, r) => `<tr><th>${esc(row)}</th>` + q.options.map(option =>
+            `<td><input type="radio" name="${name}_r${r}" data-q="${q.id}"`
+            + ` data-row="${esc(row)}" value="${esc(option)}"></td>`).join('') + '</tr>').join('')
+        + '</tbody></table></div>';
+    } else if (q.type === 'grid_text') {
+      const rows = Array.from({ length: q.max_rows || 4 }, (_, r) =>
+        '<tr>' + q.columns.map((col, c) =>
+          `<td><input type="text" data-q="${q.id}" data-grid-row="${r}" data-grid-col="${c}"`
+          + ` maxlength="300"></td>`).join('') + '</tr>').join('');
+      body = '<div class="table-wrap"><table class="q-grid"><thead><tr>'
+        + q.columns.map(col => `<th>${esc(col)}</th>`).join('')
+        + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+    }
+
+    return `<div class="q-block" data-question="${q.id}">
+      <p class="q-text">${index}. ${esc(q.text)}${required}</p>
+      ${q.help_text ? `<p class="q-help">${esc(q.help_text)}</p>` : ''}
+      ${body}
+    </div>`;
+  }
+
+  async function openForm(slug) {
+    const body = document.getElementById('form-fill-body');
+    const message = document.getElementById('form-fill-msg');
+    message.textContent = '';
+    body.innerHTML = '<p style="color:var(--muted)">Loading…</p>';
+    document.getElementById('form-fill-panel').style.display = '';
+    document.getElementById('forms-list-panel').style.display = 'none';
+    try {
+      currentForm = await api('GET', `/my-forms/${slug}/`);
+      document.getElementById('form-fill-title').textContent = currentForm.title;
+      document.getElementById('form-fill-note').textContent = currentForm.is_anonymous
+        ? 'Anonymous — your name is not stored with these answers'
+        : 'Your name is recorded with this response';
+      document.getElementById('form-fill-intro').textContent = currentForm.intro || '';
+
+      let counter = 0;
+      body.innerHTML = currentForm.sections.map(section => {
+        const questions = section.questions.map(q => renderQuestion(q, ++counter)).join('');
+        const heading = section.title
+          ? `<h3 style="margin:20px 0 2px;font-size:.86rem;font-weight:600">${esc(section.title)}</h3>`
+          : '';
+        const note = section.description
+          ? `<p class="q-help">${esc(section.description)}</p>` : '';
+        return heading + note + questions;
+      }).join('');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (error) {
+      body.innerHTML = '';
+      message.textContent = error?.detail || 'Could not open that form.';
+    }
+  }
+
+  function collectAnswers() {
+    const answers = {};
+    for (const section of currentForm.sections) {
+      for (const q of section.questions) {
+        const inputs = [...document.querySelectorAll(`[data-q="${q.id}"]`)];
+        if (q.type === 'short_text' || q.type === 'long_text') {
+          const value = inputs[0]?.value.trim();
+          if (value) answers[q.id] = value;
+        } else if (q.type === 'single_choice') {
+          const picked = inputs.find(el => el.checked);
+          if (picked) answers[q.id] = picked.value;
+        } else if (q.type === 'multi_choice') {
+          const picked = inputs.filter(el => el.checked).map(el => el.value);
+          if (picked.length) answers[q.id] = picked;
+        } else if (q.type === 'matrix') {
+          const ratings = {};
+          inputs.filter(el => el.checked).forEach(el => { ratings[el.dataset.row] = el.value; });
+          if (Object.keys(ratings).length) answers[q.id] = ratings;
+        } else if (q.type === 'grid_text') {
+          const table = [];
+          inputs.forEach(el => {
+            const r = Number(el.dataset.gridRow), c = Number(el.dataset.gridCol);
+            (table[r] ||= Array(q.columns.length).fill(''))[c] = el.value.trim();
+          });
+          const filled = table.filter(row => row && row.some(cell => cell));
+          if (filled.length) answers[q.id] = filled;
+        }
+      }
+    }
+    return answers;
+  }
+
+  async function submitForm() {
+    if (!currentForm) return;
+    const button = document.getElementById('form-submit-btn');
+    const message = document.getElementById('form-fill-msg');
+    button.disabled = true;
+    message.textContent = 'Sending…';
+    try {
+      const result = await api('POST', `/my-forms/${currentForm.slug}/submit/`,
+                               { answers: collectAnswers() });
+      toast(result.detail || 'Thank you');
+      // Reload so the list shows it as answered and the badge drops.
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (error) {
+      message.textContent = error?.detail || 'Could not send your answers.';
+      message.style.color = 'var(--red)';
+      button.disabled = false;
+    }
+  }
+
+  function closeForm() {
+    currentForm = null;
+    document.getElementById('form-fill-panel').style.display = 'none';
+    document.getElementById('forms-list-panel').style.display = '';
+  }
+
   function closeSidebar() {
     sidebar.classList.remove('open');
     overlay.classList.remove('show');
@@ -943,6 +1172,10 @@
     item.addEventListener('click', () => showView(item.dataset.gotoView)));
   document.querySelectorAll('[data-invoice-group]').forEach(item =>
     item.addEventListener('click', () => generateInvoiceFor(item.dataset.invoiceGroup, item)));
+  document.querySelectorAll('[data-open-form]').forEach(item =>
+    item.addEventListener('click', () => openForm(item.dataset.openForm)));
+  document.getElementById('form-submit-btn')?.addEventListener('click', submitForm);
+  document.getElementById('form-cancel-btn')?.addEventListener('click', closeForm);
 
   document.getElementById('menu-button').addEventListener('click', () => {
     if (isMobile()) {
