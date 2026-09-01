@@ -772,3 +772,99 @@ class EditingAQuestionTests(FormTestBase):
         refused = self.api.patch(f'/api/form-questions/{rating.id}/',
                                  {'options': []}, format='json')
         self.assertEqual(refused.status_code, 400)
+
+
+class StudentResultsNavigationTests(TestCase):
+    """The results area is two screens: CA for the semester in progress, and
+    every published end-of-semester result.
+
+    CA is a running figure, not a result. Once the college advances the
+    semester the marks are superseded by the end-of-semester result, so they
+    stop being shown — but nothing published is ever lost, because the
+    end-of-semester screen keeps it.
+    """
+
+    def setUp(self):
+        from .models import StudentResult
+        self.year = AcademicYear.objects.create(name='2026/2027', is_active=True)
+        self.sem1 = Semester.objects.create(academic_year=self.year, number=1, is_active=True)
+        self.sem2 = Semester.objects.create(academic_year=self.year, number=2, is_active=False)
+        self.level = ClassLevel.objects.create(name='NTA Level 4', order=4)
+        self.mod1 = Module.objects.create(name='Pharmaceutics', code='PHM101', teacher='T',
+                                          class_level=self.level, semester=self.sem1)
+        self.mod2 = Module.objects.create(name='Anatomy', code='ANA101', teacher='T',
+                                          class_level=self.level, semester=self.sem2)
+        for module in (self.mod1, self.mod2):
+            enrollment = Student.objects.create(
+                nactvet_reg_no='BPH/2026/001', name='Asha Juma', module=module)
+            enrollment.set_portal_pin('Portal#2026', require_change=False)
+            enrollment.save()
+            StudentResult.objects.create(
+                student=enrollment, assign1=30, assign2=30, cat1_theory=60, cat2_theory=60,
+                ca_approved=True)
+        self.portal = Client()
+        self.portal.post('/login/', {'identifier': 'BPH/2026/001', 'secret': 'Portal#2026'})
+
+    def _context(self):
+        return self.portal.get('/student-dashboard/').context
+
+    def test_the_results_menu_offers_exactly_two_screens(self):
+        body = self.portal.get('/student-dashboard/').content.decode()
+        self.assertIn('data-view="ca-results"', body)
+        self.assertIn('data-view="final-results"', body)
+        # The per-semester CA screens are gone, and What I Owe has moved to
+        # Payments where the rest of the money lives.
+        self.assertNotIn('data-view="ca-sem1"', body)
+        self.assertNotIn('data-view="ca-sem2"', body)
+        self.assertIn('id="payments-menu"', body)
+
+    def test_ca_shows_only_the_semester_in_progress(self):
+        context = self._context()
+        codes = [m['module_code'] for m in context['ca_theory_modules']]
+        self.assertEqual(codes, ['PHM101'])          # semester 1 is active
+        self.assertTrue(context['has_ca_results'])
+
+    def test_advancing_the_semester_takes_the_old_ca_away(self):
+        """Exactly what the college sees after the admin advances."""
+        self.assertEqual(len(self._context()['ca_theory_modules']), 1)
+
+        self.sem1.is_active = False
+        self.sem1.save(update_fields=['is_active'])
+        self.sem2.is_active = True
+        self.sem2.save(update_fields=['is_active'])
+
+        context = self._context()
+        codes = [m['module_code'] for m in context['ca_theory_modules']]
+        self.assertEqual(codes, ['ANA101'])          # semester 2 now
+        self.assertNotIn('PHM101', codes)
+
+    def test_ca_empties_when_the_new_semester_has_no_marks_yet(self):
+        from .models import StudentResult
+        StudentResult.objects.filter(student__module=self.mod2).update(ca_approved=False)
+        self.sem1.is_active = False
+        self.sem1.save(update_fields=['is_active'])
+        self.sem2.is_active = True
+        self.sem2.save(update_fields=['is_active'])
+
+        context = self._context()
+        self.assertFalse(context['has_ca_results'])
+        self.assertEqual(context['ca_theory_modules'], [])
+        self.assertContains(self.portal.get('/student-dashboard/'),
+                            'No CA results have been published for')
+
+    def test_end_of_semester_keeps_every_published_semester(self):
+        from .models import StudentResult
+        # Publish both semesters, then advance past semester 1.
+        StudentResult.objects.all().update(
+            end_theory=70, final_approved=True, ca_approved=True)
+        self.sem1.is_active = False
+        self.sem1.save(update_fields=['is_active'])
+        self.sem2.is_active = True
+        self.sem2.save(update_fields=['is_active'])
+
+        context = self._context()
+        published = [m['module_code'] for m in context['modules'] if m['has_final_result']]
+        self.assertCountEqual(published, ['PHM101', 'ANA101'])
+        self.assertEqual(context['published_result_count'], 2)
+        # Semester 1's CA is gone, but its result is not.
+        self.assertNotIn('PHM101', [m['module_code'] for m in context['ca_theory_modules']])

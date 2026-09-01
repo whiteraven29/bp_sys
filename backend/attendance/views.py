@@ -454,20 +454,23 @@ def student_dashboard(request):
     total_sessions = sum(module['sessions_total'] for module in modules)
     semester1_modules = [module for module in modules if module['semester_number'] == 1]
     semester2_modules = [module for module in modules if module['semester_number'] == 2]
-    semester1_theory_modules = [
-        module for module in semester1_modules
+    # CA is a running figure for the semester in progress, not a result. Once
+    # the admin advances the semester the marks stop meaning anything to the
+    # student — the end-of-semester result supersedes them — so the CA screen
+    # follows the active semester and empties when the college moves on.
+    # Everything published stays available under End of Semester.
+    ca_modules = [
+        module for module in modules
+        if active_sem is not None
+        and module['semester_number'] == active_sem.number
+        and module['has_ca_result']
+    ]
+    ca_theory_modules = [
+        module for module in ca_modules
         if not module['result'] or not module['result']['has_practical']
     ]
-    semester1_practical_modules = [
-        module for module in semester1_modules
-        if module['result'] and module['result']['has_practical']
-    ]
-    semester2_theory_modules = [
-        module for module in semester2_modules
-        if not module['result'] or not module['result']['has_practical']
-    ]
-    semester2_practical_modules = [
-        module for module in semester2_modules
+    ca_practical_modules = [
+        module for module in ca_modules
         if module['result'] and module['result']['has_practical']
     ]
     active_modules = [
@@ -592,12 +595,11 @@ def student_dashboard(request):
         'active_module_count': len(active_modules),
         'semester1_modules': semester1_modules,
         'semester2_modules': semester2_modules,
-        'semester1_theory_modules': semester1_theory_modules,
-        'semester1_practical_modules': semester1_practical_modules,
-        'semester2_theory_modules': semester2_theory_modules,
-        'semester2_practical_modules': semester2_practical_modules,
-        'has_ca_results_sem1': any(module['has_ca_result'] for module in semester1_modules),
-        'has_ca_results_sem2': any(module['has_ca_result'] for module in semester2_modules),
+        'ca_theory_modules': ca_theory_modules,
+        'ca_practical_modules': ca_practical_modules,
+        'has_ca_results': bool(ca_modules),
+        'ca_count': len(ca_modules),
+        'published_result_count': sum(1 for module in modules if module['has_final_result']),
         'has_final_results': any(module['has_final_result'] for module in modules),
         'gpa': gpa,
         'gpa_classification': gpa_class,

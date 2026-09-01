@@ -335,7 +335,7 @@ class AttendanceSecurityTests(TestCase):
         self.assertEqual(strong_response.status_code, 200)
         self.student.refresh_from_db()
         self.assertFalse(self.student.must_change_portal_password)
-        self.assertContains(self.client.get(reverse('student-dashboard')), 'CA Results · Semester 1')
+        self.assertContains(self.client.get(reverse('student-dashboard')), 'CA Results')
 
     def test_approved_ca_shows_incomplete_for_unfilled_component(self):
         StudentResult.objects.create(
@@ -864,9 +864,10 @@ class AttendanceSecurityTests(TestCase):
         # now shows the student's actual charges off the fees ledger.
         self.assertContains(response, 'What I Owe')
         self.assertContains(response, 'Theory Modules')
-        theory_table = response.context['semester1_theory_modules']
-        self.assertEqual(len(theory_table), 1)
-        self.assertEqual(response.context['semester1_practical_modules'], [])
+        # CA is shown for the semester in progress only, so the table is built
+        # from the active semester rather than a fixed semester 1 / 2 split.
+        self.assertEqual(len(response.context['ca_theory_modules']), 1)
+        self.assertEqual(response.context['ca_practical_modules'], [])
 
     def test_cat_analysis_reports_module_grades_and_total_pass_rate(self):
         StudentResult.objects.create(
@@ -1112,7 +1113,7 @@ class AttendanceSecurityTests(TestCase):
 
         response = self.client.get(reverse('student-dashboard'))
 
-        self.assertContains(response, 'CA results for Semester 1 have not been published yet.')
+        self.assertContains(response, 'No CA results have been published for')
         self.assertNotContains(response, '80.00')
 
     def test_student_dashboard_shows_ca_results_after_admin_approval(self):
@@ -1131,7 +1132,7 @@ class AttendanceSecurityTests(TestCase):
         response = self.client.get(reverse('student-dashboard'))
 
         self.assertContains(response, '80.00')
-        self.assertNotContains(response, 'CA results for Semester 1 have not been published yet.')
+        self.assertNotContains(response, 'No CA results have been published for')
 
     def test_student_dashboard_hides_final_results_until_admin_approval(self):
         StudentResult.objects.create(
@@ -1149,9 +1150,9 @@ class AttendanceSecurityTests(TestCase):
 
         response = self.client.get(reverse('student-dashboard'))
 
-        self.assertContains(response, 'CA results for Semester 1 have not been published yet.')
-        self.assertContains(response, 'CA Results · Semester 1')
-        self.assertContains(response, 'Final examination marks have not been published yet.')
+        self.assertContains(response, 'No CA results have been published for')
+        self.assertContains(response, 'CA Results')
+        self.assertContains(response, 'No end-of-semester results have been published yet.')
         self.assertNotContains(response, '80.00')
         self.assertNotContains(response, '90.00')
         self.assertNotContains(response, '78.0')
