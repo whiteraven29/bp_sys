@@ -14,5 +14,7 @@ urlpatterns = [
     path('student-dashboard/', att_views.student_dashboard, name='student-dashboard'),
     path('announcements/<int:pk>/download/', att_views.announcement_download, name='announcement-download'),
     path('invoice/<str:reference>/', att_views.invoice_print, name='invoice-print'),
+    # An approved service request, as the college's own paper form.
+    path('request/<int:pk>/', att_views.request_print, name='request-print'),
     path('', login_required(TemplateView.as_view(template_name='index.html')), name='frontend'),
 ]

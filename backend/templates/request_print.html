@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ form.title }} — {{ request_row.reference }}</title>
+<style>
+  :root {
+    --navy:#123A6B; --navy-soft:#EBF0F7; --ink:#1B2430; --muted:#6B7785;
+    --rule:#DCE2EA; --paper:#FFFFFF; --ground:#EDEFF2;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    font-size:13px; line-height:1.55;
+  }
+  .sheet { max-width:820px; margin:24px auto; background:var(--paper); padding:44px 48px 36px;
+           box-shadow:0 1px 6px rgba(0,0,0,.13); }
+
+  /* ── letterhead ── */
+  .head { display:flex; justify-content:space-between; gap:28px; align-items:flex-start;
+          padding-bottom:16px; border-bottom:2px solid var(--navy); }
+  .logo { width:62px; height:62px; object-fit:contain; margin-bottom:10px; }
+  .college { font-size:1.15rem; font-weight:700; color:var(--navy); line-height:1.25;
+             max-width:280px; letter-spacing:-.01em; }
+  .contact { color:var(--muted); font-size:.76rem; text-align:right; }
+  .contact div { margin-bottom:3px; }
+
+  h1 { font-size:1.06rem; font-weight:700; text-align:center; margin:22px 0 4px;
+       text-transform:uppercase; letter-spacing:.04em; }
+  .ref-line { text-align:center; color:var(--muted); font-size:.76rem; margin-bottom:22px; }
+  .ref-line b { font-family:"Courier New",monospace; color:var(--navy); letter-spacing:.05em; }
+
+  /* ── approval banner ── */
+  .granted { display:flex; justify-content:space-between; gap:20px; flex-wrap:wrap;
+             background:var(--navy-soft); border:1px solid #D5DEEB; padding:12px 16px;
+             margin-bottom:24px; font-size:.8rem; }
+  .granted div span { display:block; font-size:.64rem; letter-spacing:.11em;
+                      text-transform:uppercase; color:var(--muted); margin-bottom:2px; }
+  .granted div b { font-weight:600; }
+
+  /* ── sections ── */
+  .sec { margin-bottom:22px; page-break-inside:avoid; }
+  .sec h2 { font-size:.74rem; letter-spacing:.13em; text-transform:uppercase; color:var(--navy);
+            font-weight:700; margin:0 0 8px; padding-bottom:6px; border-bottom:1px solid var(--rule); }
+  .sec p.lead { margin:0 0 12px; font-size:.84rem; }
+
+  table.answers { width:100%; border-collapse:collapse; }
+  table.answers th, table.answers td { padding:6px 8px; vertical-align:top;
+                                       border-bottom:1px solid var(--rule); font-size:.84rem; }
+  table.answers th { width:42%; text-align:left; font-weight:400; color:var(--muted); }
+  table.answers td { font-weight:600; }
+  table.answers td ul { margin:0; padding-left:16px; font-weight:400; }
+
+  /* A part somebody else fills in on paper: label, then a ruled line to write on. */
+  .blank { margin-bottom:12px; }
+  .blank .label { font-size:.78rem; color:var(--muted); margin-bottom:2px; }
+  .rule { border-bottom:1px solid #9AA5B1; height:17px; }
+  .rule + .rule { margin-top:9px; }
+  .stampbox { margin-top:12px; width:150px; height:74px; border:1px dashed #9AA5B1;
+              display:flex; align-items:center; justify-content:center; text-align:center;
+              color:var(--muted); font-size:.68rem; letter-spacing:.1em; text-transform:uppercase; }
+
+  .notes { margin-top:26px; padding-top:14px; border-top:1px solid var(--rule); }
+  .notes .sec-label { font-size:.66rem; letter-spacing:.14em; text-transform:uppercase;
+                      color:var(--navy); font-weight:700; margin-bottom:8px; }
+  .notes ol { margin:0; padding-left:18px; color:var(--muted); font-size:.78rem; }
+  .notes li { margin-bottom:5px; }
+
+  .tagfoot { margin-top:26px; padding-top:14px; border-top:1px solid var(--rule);
+             text-align:center; font-size:.66rem; letter-spacing:.18em;
+             text-transform:uppercase; color:var(--muted); }
+
+  .actions { max-width:820px; margin:0 auto 20px; text-align:right; }
+  .actions button { font:inherit; font-weight:600; cursor:pointer; padding:10px 20px;
+    background:var(--navy); color:#fff; border:0; border-radius:4px; }
+
+  @media print {
+    body { background:#fff; }
+    .sheet { box-shadow:none; margin:0; max-width:none; padding:0; }
+    .actions { display:none; }
+    .granted { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
+</style>
+</head>
+<body>
+
+<div class="actions"><button onclick="window.print()">Download / Print (Save as PDF)</button></div>
+
+<div class="sheet">
+  <div class="head">
+    <div>
+      {% if college.logo %}<img class="logo" src="{{ college.logo.url }}" alt="">{% endif %}
+      <div class="college">{{ college.name }}</div>
+    </div>
+    <div class="contact">
+      {% if college.phone %}<div>Phone: {{ college.phone }}</div>{% endif %}
+      {% if college.email %}<div>{{ college.email }}</div>{% endif %}
+      {% if college.po_box %}<div>{{ college.po_box }}, {{ college.town }}, {{ college.country }}</div>{% endif %}
+      {% if college.website %}<div>{{ college.website }}</div>{% endif %}
+    </div>
+  </div>
+
+  <h1>{{ form.title }}</h1>
+  <div class="ref-line">Reference <b>{{ request_row.reference }}</b></div>
+
+  <div class="granted">
+    <div><span>Student</span><b>{{ request_row.profile.name|default:"—" }}</b></div>
+    <div><span>Registration no.</span><b>{{ request_row.profile.nactvet_reg_no|default:"—" }}</b></div>
+    <div><span>Level</span><b>{{ request_row.class_level.name|default:"—" }}</b></div>
+    <div><span>Academic year</span><b>{{ request_row.academic_year.name|default:"—" }}</b></div>
+    <div><span>Approved</span><b>{{ request_row.decided_at|date:"d M Y"|default:"—" }}</b></div>
+  </div>
+
+  {% for block in sections %}
+  <div class="sec">
+    {% if block.section.title %}<h2>{{ block.section.title }}</h2>{% endif %}
+    {% if block.section.description %}<p class="lead">{{ block.section.description }}</p>{% endif %}
+
+    {% if block.for_office %}
+      {# Printed blank: this part belongs to a health facility or a signing officer. #}
+      {% for row in block.rows %}
+      <div class="blank">
+        <div class="label">{{ row.question.text }}</div>
+        <div class="rule"></div>
+        {% if row.question.type == 'long_text' %}<div class="rule"></div><div class="rule"></div>{% endif %}
+      </div>
+      {% endfor %}
+      <div class="stampbox">Official stamp</div>
+    {% else %}
+      <table class="answers">
+        {% for row in block.rows %}
+        <tr>
+          <th>{{ row.question.text }}</th>
+          <td>{{ row.display|linebreaksbr }}</td>
+        </tr>
+        {% empty %}
+        <tr><th colspan="2" style="font-style:italic">Nothing was filled in for this part.</th></tr>
+        {% endfor %}
+      </table>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {% if notes %}
+  <div class="notes">
+    <div class="sec-label">Note</div>
+    <ol>{% for note in notes %}<li>{{ note }}</li>{% endfor %}</ol>
+  </div>
+  {% endif %}
+
+  <div class="tagfoot">{{ college.short_name }} &nbsp;·&nbsp; {{ request_row.reference }} &nbsp;·&nbsp; Approved {{ request_row.decided_at|date:"d M Y" }}</div>
+</div>
+
+{% if auto_print %}
+<script>
+  // Reached from "Download" on the portal: go straight to Save-as-PDF rather
+  // than leaving the student on a page they have to work out how to save.
+  window.addEventListener('load', () => setTimeout(() => window.print(), 250));
+</script>
+{% endif %}
+</body>
+</html>

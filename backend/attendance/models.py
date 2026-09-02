@@ -80,6 +80,93 @@ class Semester(models.Model):
         return f"Sem {self.number} · {self.academic_year.name}"
 
 
+class ResultEntryWindow(models.Model):
+    """When marks may be entered, declared by the examination officer.
+
+    Marks used to be enterable whenever anyone happened to open the page, so a
+    tutor could quietly revise a CA mark weeks after the results were published
+    and nobody would know. The examination officer now says when the books are
+    open; outside that, only they can write.
+
+    One window per kind per semester — continuous assessment and the end of
+    semester examination close at different times, and neither is the other.
+    """
+
+    #: Continuous assessment is the window that governs tutors — the CATs and
+    #: assignments they set and marked. The end of semester window governs
+    #: nobody's write access, because that paper is entered by the examination
+    #: office alone; it is the deadline the college publishes to itself, and it
+    #: shows on the same banner.
+    CA = 'ca'
+    END = 'end'
+    KIND_CHOICES = [
+        (CA, 'Continuous assessment marks — tutors enter these'),
+        (END, 'End of semester examination — examination office deadline'),
+    ]
+
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name='result_windows')
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    opens_on = models.DateField()
+    closes_on = models.DateField()
+    # The switch the examination officer flips to shut the books early, or to
+    # prepare next semester's window without opening it yet.
+    is_active = models.BooleanField(
+        default=True,
+        help_text='Turn off to close entry immediately, whatever the dates say.',
+    )
+    note = models.CharField(
+        max_length=200, blank=True,
+        help_text='Shown to tutors alongside the dates — "submit by Friday", say.',
+    )
+    declared_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='result_windows_declared',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-semester__academic_year__name', '-semester__number', 'kind']
+        constraints = [
+            models.UniqueConstraint(fields=['semester', 'kind'],
+                                    name='one_result_window_per_kind_per_semester'),
+        ]
+
+    def __str__(self):
+        return f'{self.semester} · {self.get_kind_display()}'
+
+    def status(self, today=None):
+        """Closed, open, or not yet — what the tutor's banner says."""
+        from datetime import date as _date
+        today = today or _date.today()
+        if not self.is_active:
+            return 'closed'
+        if today < self.opens_on:
+            return 'upcoming'
+        if today > self.closes_on:
+            return 'closed'
+        return 'open'
+
+    def is_open(self, today=None):
+        return self.status(today) == 'open'
+
+    @classmethod
+    def for_semester(cls, semester, kind):
+        if semester is None:
+            return None
+        return cls.objects.filter(semester=semester, kind=kind).first()
+
+    @classmethod
+    def entry_is_open(cls, semester, kind, today=None):
+        """No window declared means closed, not open.
+
+        The examination officer saying nothing is not the same as them saying
+        yes — the point of the window is that somebody decided.
+        """
+        window = cls.for_semester(semester, kind)
+        return bool(window and window.is_open(today))
+
+
 class ClassLevel(models.Model):
     name = models.CharField(max_length=100, unique=True)
     order = models.PositiveSmallIntegerField(default=0)
@@ -101,6 +188,55 @@ class TeacherProfile(models.Model):
 
 class AccountantProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='accountant_profile')
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
+class PrincipalProfile(models.Model):
+    """The Principal.
+
+    Carries admin rights over everything academic, and deliberately none over
+    money or college property: those belong to the accountant and the estate
+    officer, and an account that can do everything is an account nobody can
+    audit.
+    """
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='principal_profile')
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
+class HeadOfDepartmentProfile(models.Model):
+    """The Head of Department.
+
+    Runs the department — modules, students, attendance, staff and the forms —
+    but not examinations: results, eligibility and exam declarations stay with
+    the examination officer. Nor money, nor property. The person who runs the
+    department is not the person who decides who sits an exam.
+    """
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='hod_profile')
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
+class SecretaryProfile(models.Model):
+    """The college secretary.
+
+    Distinct from the accountant and the examination officer because the work
+    is: the secretary is the office a student's request for a sick sheet or
+    leave of absence goes to, and the person who releases the printed document
+    for signature and stamping. They have no business in the ledger or the
+    academic register.
+    """
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='secretary_profile')
     full_name = models.CharField(max_length=200)
     is_active = models.BooleanField(default=True)
 
@@ -1331,7 +1467,19 @@ class Form(models.Model):
         (STAFF, 'Staff — filled in by a tutor, mentor or officer'),
     ]
 
+    # Two different things wear the same clothes. An evaluation is feedback the
+    # college tallies and reports on; a service request is one student asking
+    # for one thing and waiting on an answer. Same questions, same builder —
+    # but a request is owed a decision, and an evaluation is not.
+    EVALUATION = 'evaluation'
+    REQUEST = 'request'
+    KIND_CHOICES = [
+        (EVALUATION, 'Evaluation — feedback the college tallies and reports on'),
+        (REQUEST, 'Service request — one student asking for something, owed an answer'),
+    ]
+
     title = models.CharField(max_length=200)
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default=EVALUATION)
     audience = models.CharField(max_length=20, choices=AUDIENCE_CHOICES, default=STUDENT)
     slug = models.SlugField(max_length=220, unique=True)
     intro = models.TextField(
@@ -1341,6 +1489,15 @@ class Form(models.Model):
     academic_year = models.ForeignKey(
         AcademicYear, on_delete=models.PROTECT, null=True, blank=True, related_name='forms',
         help_text='Leave blank for a form that is not tied to one year.',
+    )
+    # The college does not ask every level the same things. The introduction
+    # letter request exists in two versions — one for levels 4 and 5, another
+    # for level 6 — and showing a student the wrong one gets the wrong answers
+    # back. Empty means every level, which is what most forms want and what
+    # every form that predates this field already meant.
+    levels = models.ManyToManyField(
+        ClassLevel, blank=True, related_name='forms', verbose_name='NTA levels',
+        help_text='Which levels are asked to fill this in. Leave empty for all of them.',
     )
 
     # Whether students can see it now. `is_active` is the switch the admin
@@ -1364,6 +1521,24 @@ class Form(models.Model):
     allow_multiple = models.BooleanField(
         default=False,
         help_text='Let one student submit more than once. Off means one response each.',
+    )
+    # A census rather than an invitation. Response rates on a form students can
+    # ignore are what make an evaluation useless to report on, so the college
+    # can require one: the portal stops at it until it is filled in.
+    is_mandatory = models.BooleanField(
+        default=False,
+        verbose_name='Every student must fill this in',
+        help_text='Students see this form on sign-in and cannot use the portal until they '
+                  'have answered it. Student forms only.',
+    )
+
+    # The small print at the foot of the college's paper form — the sick sheet's
+    # warning that excused days still count against the 90% attendance rule, for
+    # instance. Printed on the document, never shown in the portal: it is a note
+    # to whoever signs and stamps the paper.
+    print_note = models.TextField(
+        blank=True,
+        help_text='Notes printed at the foot of the approved document, one per line.',
     )
 
     created_by = models.ForeignKey(
@@ -1394,6 +1569,27 @@ class Form(models.Model):
     def is_open(self, today=None):
         return self.status(today) == self.OPEN
 
+    def applies_to(self, class_level):
+        """Whether a student at this NTA level is asked for this form.
+
+        A form with no levels chosen is for everybody. A form that names its
+        levels is for nobody else — including a student whose level we cannot
+        work out, because guessing would put the level 6 letter request in
+        front of a level 4 student.
+        """
+        targeted = self.levels.all()
+        if not targeted:
+            return True
+        if class_level is None:
+            return False
+        return any(level.pk == class_level.pk for level in targeted)
+
+    @property
+    def level_names(self):
+        """"NTA Level 4, NTA Level 5", or "All levels" when it is not restricted."""
+        names = [level.name for level in self.levels.all()]
+        return ', '.join(names) if names else 'All levels'
+
 
 class FormSection(models.Model):
     """A titled group of questions — "Section A: Participant information"."""
@@ -1401,6 +1597,17 @@ class FormSection(models.Model):
     title = models.CharField(max_length=200, blank=True)
     description = models.TextField(blank=True)
     order = models.PositiveSmallIntegerField(default=0)
+    # Half of the college's paper forms are not filled in by the student at all.
+    # The sick sheet's Part B belongs to the medical officer and Part C to the
+    # Head of Department and Dean of Students. Those parts are never shown in
+    # the portal — they are printed blank, on the approved document, for the
+    # people who sign and stamp it.
+    for_office = models.BooleanField(
+        default=False,
+        verbose_name='Filled in on paper by an office, not by the student',
+        help_text='Hidden in the portal. Printed as blank lines on the approved document '
+                  'for a health facility, a Head of Department or the Dean of Students.',
+    )
 
     class Meta:
         ordering = ['order', 'id']
@@ -1454,6 +1661,12 @@ class FormQuestion(models.Model):
         return self.text[:80]
 
     @property
+    def blank_rows(self):
+        """Empty rows for a table of text. A Django template cannot count, so
+        the row count has to arrive as something iterable."""
+        return range(self.max_rows or 4)
+
+    @property
     def numeric_options(self):
         """The options as numbers, when every one of them is a number.
 
@@ -1497,12 +1710,42 @@ class FormResponse(models.Model):
     )
     submitted_at = models.DateTimeField(auto_now_add=True)
 
+    # A service request is owed an answer. An evaluation is not, and stays
+    # PENDING for ever without meaning anything — the student's Services page
+    # only reads these on a request-kind form.
+    PENDING = 'pending'
+    APPROVED = 'approved'
+    DECLINED = 'declined'
+    STATUS_CHOICES = [
+        (PENDING, 'With the college'),
+        (APPROVED, 'Approved'),
+        (DECLINED, 'Declined'),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=PENDING)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='form_decisions',
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    # Shown to the student, so it says where to collect the letter or why the
+    # request was turned down — not an internal note.
+    decision_note = models.TextField(
+        blank=True,
+        help_text='Shown to the student with the decision — where to collect it, '
+                  'or why it was declined.',
+    )
+
     class Meta:
         ordering = ['-submitted_at']
         indexes = [models.Index(fields=['form', '-submitted_at'])]
 
     def __str__(self):
         return f'{self.form} · {self.submitted_at:%d %b %Y}'
+
+    @property
+    def reference(self):
+        """What the printed document is called when somebody has to find it again."""
+        return f'REQ-{self.id:05d}'
 
 
 class FormAnswer(models.Model):

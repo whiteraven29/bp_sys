@@ -1,9 +1,11 @@
-"""Load BPHACOH's four evaluation forms.
+"""Load BPHACOH's evaluation and request forms.
 
 Transcribed from the college's own documents — the End of Academic Year Course
 Evaluation Form, the Tutor's Evaluation Form, the Hostel Facilities and
-Services Evaluation Form, and the Tracer Study Survey Form. Nobody should have
-to retype twenty-seven questions into a form builder to start using this.
+Services Evaluation Form, the Tracer Study Survey Form, the mentorship and
+performance evaluations, and the two introduction letter request forms. Nobody
+should have to retype twenty-seven questions into a form builder to start
+using this.
 
 Safe to re-run: forms are matched on their slug and updated in place, and the
 questions of a form that already has responses are left alone rather than
@@ -14,11 +16,13 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from attendance.models import (
-    AcademicYear, Form, FormQuestion, FormSection,
+    AcademicYear, ClassLevel, Form, FormQuestion, FormSection,
 )
 
 STUDENT = Form.STUDENT
 STAFF = Form.STAFF
+EVALUATION = Form.EVALUATION
+REQUEST = Form.REQUEST
 
 SHORT = FormQuestion.SHORT_TEXT
 LONG = FormQuestion.LONG_TEXT
@@ -433,6 +437,8 @@ FORMS = [
         'slug': 'practicum-letter-request',
         'title': 'Introduction Letter to Practicum Facilities Request Form',
         'audience': STUDENT,
+        'kind': REQUEST,
+        'levels': [4, 5],                # level 6 has its own, longer version below
         'is_anonymous': False,
         'allow_multiple': True,          # a student may request more than once
         'intro': 'Use this form to request an introduction letter from the office of the '
@@ -466,11 +472,274 @@ FORMS = [
             ]),
         ],
     },
+    {
+        'slug': 'practicum-letter-request-level-6',
+        'title': 'Introduction Letter Request Form — NTA Level 6',
+        'audience': STUDENT,
+        'kind': REQUEST,
+        'levels': [6],
+        'is_anonymous': False,
+        'allow_multiple': True,
+        'intro': 'This form gives registered students the chance to request a letter of '
+                 'introduction to a practicum site for further practical training during the '
+                 'long holiday (August–September, after the semester II examinations). It '
+                 'collects your details, the practicum facility’s details and those of the '
+                 'supervisor at that facility. The college verifies what you submit, and '
+                 'issues the introduction letter by email only if your personal information '
+                 'is correct, the facility is legally recognised by the relevant authorities, '
+                 'and a supervisor with the relevant qualification is present. '
+                 'Very important: make sure the facility you intend to attach to is '
+                 'registered by the relevant authority, and that there is a qualified '
+                 'pharmaceutical personnel there — registered and licensed by the Pharmacy '
+                 'Council, and at least one level above your current level of study.',
+        'sections': [
+            ('Student’s Personal Information',
+             'Fill in your personal information correctly. Make sure the email you give here '
+             'is valid and actively working — the introduction letter is sent to it.', [
+                q('Student’s Name', SHORT, required=True),
+                q('Student’s NACTVET Registration Number', SHORT, required=True,
+                  help_text='To be filled correctly.'),
+                q('Phone number', SHORT, required=True, help_text='e.g. 0682…'),
+                q('Email', SHORT, required=True,
+                  help_text='e.g. mwanafunzi@gmail.com — the introduction letter is shared '
+                            'with you at this address once the information is approved.'),
+                q('Academic Program', options=['Pharmaceutical Sciences'], required=True),
+                q('Course whose semester II examination you have recently completed',
+                  options=['Basic Technician Certificate', 'Technician Certificate',
+                           'Ordinary Diploma'], required=True),
+                q('Academic year', SHORT, required=True, help_text='e.g. 2025/2026'),
+                q('Date of filling this form', SHORT, required=True, help_text='dd/mm/yyyy'),
+            ]),
+            ('Information of the practicum site you intend to attach to',
+             'Fill in correctly the details of the facility you intend to be introduced to '
+             'for further practical training during the holiday.', [
+                q('Nature of the practicum facility',
+                  options=['Pharmacy or ADDO Shop', 'Dispensary', 'Health Centre',
+                           'District/Municipal Hospital', 'Regional Referral Hospital',
+                           'Zonal/National/Special Hospital',
+                           'Tanzania Medicines and Medical Devices Authority (TMDA)',
+                           'Medical Store Department', 'Pharmacy Council',
+                           'Pharmaceutical Industry'],
+                  required=True),
+            ]),
+            ('Information about the Pharmacy or ADDO Shop',
+             'Answer this section only if you chose "Pharmacy or ADDO Shop" above.', [
+                q('Where do you intend to be attached?',
+                  options=['Community/wholesale Pharmacy', 'ADDO Shop']),
+                q('Facility Identification Number (FIN) issued by the Pharmacy Council',
+                  SHORT, help_text='For the facility you chose in the question above.'),
+            ]),
+            ('Information about the Dispensary, Health Centre or Hospital',
+             'Answer this section only if you chose a dispensary, health centre or hospital '
+             'above.', [
+                q('Facility ownership',
+                  options=['Public (owned by the Government)',
+                           'FBO (owned by a Faith Based Organization)', 'Private']),
+                q('Name of the facility', SHORT),
+                q('Facility registration number issued by the Ministry of Health', SHORT),
+            ]),
+            ('Details of the pharmaceutical personnel who will supervise you',
+             'Give the pharmaceutical personnel who will physically be at the facility to '
+             'supervise your activities as a trainee.', [
+                q('Type of pharmaceutical personnel present physically at the facility',
+                  options=['Pharmacist', 'Pharmaceutical Technician',
+                           'Pharmaceutical Assistant'], required=True),
+                q('Their Personal Identification Number (PIN) issued by the Pharmacy Council',
+                  SHORT, required=True),
+                q('Their mobile number', SHORT, required=True),
+            ]),
+        ],
+    },
+    {
+        # Transcribed from the college's own Student's Sicksheet Form. Parts A
+        # (requesting officer), B (the health facility) and C (Head of
+        # Department, Dean of Students) are signed on paper, so they are marked
+        # for_office: never shown in the portal, printed blank on the approved
+        # document for the people who sign and stamp it.
+        'slug': 'sick-sheet-request',
+        'title': "Student's Sicksheet Form",
+        'audience': STUDENT,
+        'kind': REQUEST,
+        'allow_multiple': True,          # illness is not a once-a-year event
+        'intro': 'Ask the College for a sick sheet so you can consult a health facility and, '
+                 'if the medical officer excuses you, have your absence recognised. Say which '
+                 'facility you intend to consult. Once the College approves the request you '
+                 'download and print the form, take it to the facility for Part B, and bring '
+                 'it back for the Head of Department and Dean of Students to approve.',
+        'print_note': 'This form must be signed by the consulted Medical Officer and stamped '
+                      'with the official health facility stamp.\n'
+                      'The days a student is excused from training (if so) may affect their '
+                      'attendance percentage (90%) and subsequently lead them to repeat the '
+                      'semester.',
+        'sections': [
+            ('A. REQUEST TO HEALTH FACILITY',
+             'To the Medical Officer in charge of the health facility named below. The Blue '
+             'Pharma College of Health student named on this form requires to consult your '
+             'facility for their health issues.', [
+                q('Name of the health facility you intend to consult', SHORT, required=True),
+                q('Where the facility is', SHORT,
+                  help_text='Town, ward or district — enough for the office to identify it.'),
+                q('Date you intend to consult', SHORT, help_text='dd/mm/yyyy'),
+            ]),
+            ('A. REQUEST TO HEALTH FACILITY — Requested by', '', [
+                q('Name of the requesting officer', SHORT),
+                q('Signature', SHORT),
+                q('Date', SHORT),
+            ], True),
+            ('B. HEALTH FACILITY DECLARATION — 1. To be filled in case a student is to be '
+             'excused from training',
+             'I certify that the student named on this form is under treatment and unable to '
+             'attend training. I recommend this student to be excused from training for the '
+             'days stated below.', [
+                q('Number of days excused', SHORT),
+                q('From date', SHORT),
+                q('To date', SHORT),
+                q('Name of Medical Officer', SHORT),
+                q('Signature', SHORT),
+                q('Date', SHORT),
+            ], True),
+            ('B. HEALTH FACILITY DECLARATION — 2. To be filled in case a student is not to be '
+             'excused from training',
+             'I certify that the student named on this form is under treatment and able to '
+             'attend training.', [
+                q('Name of Medical Officer', SHORT),
+                q('Signature', SHORT),
+                q('Date', SHORT),
+            ], True),
+            ('C. APPROVED BY COLLEGE ADMINISTRATION — 1. Head of Department', '', [
+                q('Name of Head of Department', SHORT),
+                q('Signature', SHORT),
+                q('Date', SHORT),
+            ], True),
+            ('C. APPROVED BY COLLEGE ADMINISTRATION — 2. Dean of Students', '', [
+                q('Name of Dean of Students', SHORT),
+                q('Signature', SHORT),
+                q('Date', SHORT),
+            ], True),
+        ],
+    },
+    {
+        # Fomu ya Ruhusa ya Wanafunzi, kept in Swahili because that is the
+        # language of the college's own form and of the students filling it in.
+        'slug': 'student-permission-request',
+        'title': 'Fomu ya Ruhusa ya Wanafunzi',
+        'audience': STUDENT,
+        'kind': REQUEST,
+        'allow_multiple': True,
+        'intro': 'Omba ruhusa ya kutokuwepo Chuoni kwa muda. Jaza taarifa zako, sababu na '
+                 'tarehe unazoomba, kisha tuma maombi. Ruhusa ikikubaliwa, pakua na chapisha '
+                 'fomu hii kisha ipeleke kwa Mkuu wa Idara na Muadili wa wanafunzi ili '
+                 'isainiwe na kupigwa mhuri.',
+        'sections': [
+            ('A. TAARIFA ZA MWANAFUNZI', '', [
+                q('Kozi unayosoma', SHORT, required=True),
+                q('Ngazi', SHORT, required=True, help_text='Mfano: NTA Level 4'),
+                q('Muhula', options=['Muhula wa Kwanza', 'Muhula wa Pili'], required=True),
+                q('Mwaka wa masomo', SHORT, required=True, help_text='Mfano: 2026/2027'),
+                q('Idadi ya siku unazoomba kutokuwepo Chuoni', SHORT, required=True),
+                q('Kuanzia tarehe', SHORT, required=True, help_text='siku/mwezi/mwaka'),
+                q('Hadi tarehe', SHORT, required=True, help_text='siku/mwezi/mwaka'),
+                q('Sababu ya kutokuwepo Chuoni kwa muda huo', LONG, required=True),
+            ]),
+            ('B. TAMKO',
+             'Natamka kuwa nitawajibika kikamilifu kusoma yale ambayo nitakuwa nimeyakosa '
+             'katika siku ambazo sitokuwepo chuoni, na kwamba nitatakiwa kurudia kusoma '
+             'somo/masomo husika endapo siku hizi ambazo sitohudhuria darasani zitasababisha '
+             'kutofikisha asilimia 90% za mahudhurio ya vipindi vya darasani.', [
+                q('Natamka na ninakubali tamko hili', options=['Ndiyo, nakubali'],
+                  required=True),
+            ]),
+            ('B. TAMKO — Saini ya mwanafunzi', '', [
+                q('Saini', SHORT),
+                q('Tarehe', SHORT),
+            ], True),
+            ('C. IMEPITISHWA NA — i. Mkuu wa Idara', '', [
+                q('Maoni', LONG),
+                q('Jina', SHORT),
+                q('Saini', SHORT),
+                q('Tarehe', SHORT),
+            ], True),
+            ('C. IMEPITISHWA NA — ii. Muadili wa wanafunzi', '', [
+                q('Maoni', LONG),
+                q('Jina', SHORT),
+                q('Saini', SHORT),
+                q('Tarehe', SHORT),
+            ], True),
+        ],
+    },
+    {
+        'slug': 'official-letter-request',
+        'title': 'Official Letter Request',
+        'audience': STUDENT,
+        'kind': REQUEST,
+        'allow_multiple': True,          # a student may need several over a year
+        'intro': 'Ask the College for a letter addressed to someone outside it — a bank, a '
+                 'loans board, an embassy, an employer. Say who the letter is for and what '
+                 'it has to confirm; the office prepares it and tells you here when it is '
+                 'ready to collect.',
+        'sections': [
+            ('Your details', '', [
+                q('Name', SHORT, required=True),
+                q('NACTVET Registration number', SHORT, required=True),
+                q('Phone number', SHORT, required=True),
+                q('Email', SHORT),
+            ]),
+            ('The letter', '', [
+                q('What letter do you need?',
+                  options=['Confirmation that I am a registered student',
+                           'Introduction to a bank', 'Letter to the loans board (HESLB)',
+                           'Testimonial / letter of good conduct',
+                           'Confirmation of results or transcript',
+                           'Letter to an employer or attachment site', 'Something else'],
+                  required=True),
+                q('If something else, what', SHORT),
+                q('Who should the letter be addressed to?', SHORT, required=True,
+                  help_text='The name of the bank, office or person, as it should be printed.'),
+                q('What must the letter confirm?', LONG, required=True),
+                q('When do you need it by?', SHORT, help_text='dd/mm/yyyy'),
+                q('How will you collect it?',
+                  options=['I will collect it from the office', 'Send it to my email']),
+            ]),
+        ],
+    },
+    {
+        'slug': 'hostel-accommodation-request',
+        'title': 'Hostel Accommodation Request',
+        'audience': STUDENT,
+        'kind': REQUEST,
+        'allow_multiple': False,         # one bed, one request, one academic year
+        'intro': 'Apply for a bed in the College hostel for this academic year. Applying is '
+                 'not the same as being allocated: beds are limited, and the accommodation '
+                 'charge is added to your fees only once your place is confirmed.',
+        'sections': [
+            ('Your details', '', [
+                q('Name', SHORT, required=True),
+                q('NACTVET Registration number', SHORT, required=True),
+                q('Phone number', SHORT, required=True),
+                q('Sex', options=['Female', 'Male'], required=True),
+            ]),
+            ('Your request', '', [
+                q('Which part of the year do you need a bed for?',
+                  options=['The whole academic year', 'Semester I only', 'Semester II only'],
+                  required=True),
+                q('Date you would move in', SHORT, help_text='dd/mm/yyyy'),
+                q('Have you stayed in the College hostel before?', options=NO_YES,
+                  required=True),
+                q('Any health or accessibility need we should know about', LONG,
+                  help_text='For example a ground-floor room. Leave blank if none.'),
+            ]),
+            ('Next of kin', 'Who the College should contact in an emergency.', [
+                q('Name', SHORT, required=True),
+                q('Relationship to you', SHORT, required=True),
+                q('Phone number', SHORT, required=True),
+            ]),
+        ],
+    },
 ]
 
 
 class Command(BaseCommand):
-    help = "Load BPHACOH's evaluation forms (course, tutor, hostel, tracer study)."
+    help = "Load BPHACOH's evaluation and letter request forms, aimed at the right NTA levels."
 
     def add_arguments(self, parser):
         parser.add_argument('--year', default=None,
@@ -497,11 +766,14 @@ class Command(BaseCommand):
                     'intro': spec['intro'],
                     'academic_year': year,
                     'audience': spec.get('audience', STUDENT),
+                    'kind': spec.get('kind', EVALUATION),
+                    'print_note': spec.get('print_note', ''),
                     'is_anonymous': spec.get('is_anonymous', False),
                     'allow_multiple': spec.get('allow_multiple', False),
                     'is_active': options['activate'],
                 },
             )
+            self._set_levels(form, spec.get('levels'))
 
             if form.responses.exists():
                 self.stdout.write(self.style.WARNING(
@@ -512,9 +784,13 @@ class Command(BaseCommand):
             # exactly in step with the paper document.
             form.sections.all().delete()
             questions = 0
-            for order, (title, description, items) in enumerate(spec['sections']):
+            for order, block in enumerate(spec['sections']):
+                # A fourth element marks a part of the paper form that an office
+                # fills in — never shown in the portal, printed blank to sign.
+                title, description, items = block[:3]
                 section = FormSection.objects.create(
-                    form=form, title=title, description=description, order=order)
+                    form=form, title=title, description=description, order=order,
+                    for_office=block[3] if len(block) > 3 else False)
                 for position, item in enumerate(items):
                     FormQuestion.objects.create(
                         section=section, order=position,
@@ -532,4 +808,29 @@ class Command(BaseCommand):
                 f'({len(spec["sections"])} sections, {questions} questions)')
 
         state = 'active' if options['activate'] else 'inactive — publish them when ready'
-        self.stdout.write(self.style.SUCCESS(f'{len(FORMS)} evaluation forms loaded, {state}.'))
+        services = sum(1 for spec in FORMS if spec.get('kind') == REQUEST)
+        self.stdout.write(self.style.SUCCESS(
+            f'{len(FORMS)} forms loaded ({len(FORMS) - services} evaluations, '
+            f'{services} services students can request), {state}.'))
+
+    def _set_levels(self, form, numbers):
+        """Aim a form at the NTA levels that fill it in — all of them if unnamed.
+
+        A missing class level is said out loud rather than passed over: an
+        unaimed form goes to every student, which for the level 6 letter request
+        is exactly the mistake this field exists to prevent.
+        """
+        if not numbers:
+            form.levels.clear()
+            return
+        levels = list(ClassLevel.objects.filter(order__in=numbers))
+        if len(levels) != len(numbers):
+            levels = list(ClassLevel.objects.filter(
+                name__in=[f'NTA Level {number}' for number in numbers]))
+        if len(levels) != len(numbers):
+            self.stdout.write(self.style.WARNING(
+                f'  {form.title} — is for NTA level(s) '
+                f'{", ".join(str(n) for n in numbers)}, but only '
+                f'{len(levels)} of them exist. Set the missing class level up, then '
+                f'aim the form on the Forms page.'))
+        form.levels.set(levels)

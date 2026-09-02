@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
+  <title>{{ form.title }} — EduTrack</title>
+  <style>
+    :root {
+      --bg: #eceff3; --surface: #ffffff; --surface2: #f3f5f7; --border: #ccd4dc;
+      --accent: #1565c0; --accent-dark: #10529e; --accent-soft: #e8f1fb;
+      --red: #dc2626; --green: #16a34a; --text: #2b3440; --muted: #71808f; --radius: 3px;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh; padding: 24px 16px; background: var(--bg); color: var(--text);
+      font-family: var(--font-sans);
+    }
+    main {
+      width: min(760px, 100%); margin: 0 auto; border: 1px solid var(--border);
+      border-radius: var(--radius); background: var(--surface); overflow: hidden;
+    }
+    .head { display: flex; align-items: center; gap: 11px; padding: 16px 20px; background: var(--accent); color: #fff; }
+    .mark { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 auto;
+            border-radius: var(--radius); background: #fff; color: var(--accent); font-weight: 700; }
+    .head strong { display: block; font-size: .98rem; font-weight: 600; }
+    .head small { display: block; margin-top: 2px; color: rgba(255,255,255,.85); font-size: .74rem; }
+    .body { padding: 20px; }
+    h1 { font-size: 1.12rem; font-weight: 600; margin-bottom: 5px; }
+    .identity { color: var(--muted); font-size: .8rem; margin-bottom: 12px; }
+    .notice {
+      padding: 11px 14px; margin-bottom: 18px;
+      border: 1px solid #cfe0f5; border-left: 3px solid var(--accent);
+      border-radius: var(--radius); background: var(--accent-soft);
+      font-size: .82rem; line-height: 1.6;
+    }
+    .notice strong { display: block; margin-bottom: 3px; font-size: .8rem; }
+    .intro { color: var(--muted); font-size: .82rem; line-height: 1.6; margin-bottom: 16px; }
+
+    .sec-title { font-size: .84rem; font-weight: 600; margin: 20px 0 2px; }
+    .sec-desc { color: var(--muted); font-size: .76rem; margin-bottom: 6px; }
+    .q { padding: 14px 0; border-bottom: 1px solid var(--border); }
+    .q:last-of-type { border-bottom: 0; }
+    .q-text { font-size: .86rem; font-weight: 600; margin-bottom: 3px; }
+    .q-help { color: var(--muted); font-size: .76rem; margin-bottom: 8px; }
+    .req { color: var(--red); margin-left: 3px; }
+    .choices { display: grid; gap: 5px; }
+    .choices label { display: flex; align-items: center; gap: 8px; font-size: .83rem; font-weight: 400; cursor: pointer; }
+    input[type=text], textarea {
+      width: 100%; padding: 8px 11px; border: 1px solid var(--border); border-radius: var(--radius);
+      background: #fff; color: var(--text); font-family: var(--font-sans); font-size: .85rem; outline: none;
+    }
+    input[type=text]:focus, textarea:focus { border-color: var(--accent); }
+    textarea { min-height: 88px; resize: vertical; }
+    .scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    th, td { border: 1px solid var(--border); padding: 7px 9px; }
+    thead th { background: var(--surface2); font-weight: 600; text-align: center; font-size: .74rem; }
+    tbody th { text-align: left; font-weight: 400; }
+    td { text-align: center; }
+    td.free { text-align: left; padding: 4px; }
+    td.free input { border: 0; padding: 5px; font-size: .82rem; }
+
+    .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+               padding: 16px 20px; border-top: 1px solid var(--border); background: var(--surface2); }
+    button.submit {
+      padding: 9px 18px; border: 0; border-radius: var(--radius); background: var(--accent);
+      color: #fff; font-family: inherit; font-size: .85rem; font-weight: 500; cursor: pointer;
+    }
+    button.submit:hover { background: var(--accent-dark); }
+    button.submit:disabled { opacity: .55; cursor: not-allowed; }
+    .msg { font-size: .8rem; }
+    .msg.bad { color: var(--red); }
+    .msg.good { color: var(--green); }
+    .signout { margin-left: auto; color: var(--muted); font-size: .78rem; text-decoration: none; }
+    .signout:hover { color: var(--accent); text-decoration: underline; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="head">
+    <div class="mark">ET</div>
+    <div>
+      <strong>EduTrack</strong>
+      <small>Blue Pharma College of Health</small>
+    </div>
+  </div>
+
+  <div class="body">
+    <h1>{{ form.title }}</h1>
+    <div class="identity">{{ student_name }} · {{ registration_number }}</div>
+
+    <div class="notice">
+      <strong>The college has asked every student to complete this.</strong>
+      You will be able to use the portal as soon as you have submitted it.
+      {% if form.is_anonymous %}Your answers are anonymous — your name is not stored with them.{% endif %}
+      {% if remaining %}There {% if remaining == 1 %}is 1 more form{% else %}are {{ remaining }} more forms{% endif %} after this one.{% endif %}
+    </div>
+
+    {% if form.intro %}<p class="intro">{{ form.intro }}</p>{% endif %}
+
+    <form id="required-form">
+      {% for section in sections %}
+        {% if section.title %}<div class="sec-title">{{ section.title }}</div>{% endif %}
+        {% if section.description %}<div class="sec-desc">{{ section.description }}</div>{% endif %}
+        {% for q in section.questions.all %}
+        <div class="q">
+          <div class="q-text">{{ forloop.parentloop.counter0|add:forloop.counter }}. {{ q.text }}{% if q.required %}<span class="req">*</span>{% endif %}</div>
+          {% if q.help_text %}<div class="q-help">{{ q.help_text }}</div>{% endif %}
+
+          {% if q.type == 'short_text' %}
+            <input type="text" data-q="{{ q.id }}" maxlength="300">
+          {% elif q.type == 'long_text' %}
+            <textarea data-q="{{ q.id }}" maxlength="5000"></textarea>
+          {% elif q.type == 'single_choice' or q.type == 'multi_choice' %}
+            <div class="choices">
+              {% for option in q.options %}
+              <label><input type="{% if q.type == 'single_choice' %}radio{% else %}checkbox{% endif %}"
+                            name="q{{ q.id }}" data-q="{{ q.id }}" value="{{ option }}"> {{ option }}</label>
+              {% endfor %}
+            </div>
+          {% elif q.type == 'matrix' %}
+            <div class="scroll"><table>
+              <thead><tr><th></th>{% for option in q.options %}<th>{{ option }}</th>{% endfor %}</tr></thead>
+              <tbody>
+                {% for row in q.rows %}
+                <tr><th>{{ row }}</th>
+                  {% for option in q.options %}
+                  <td><input type="radio" name="q{{ q.id }}r{{ forloop.parentloop.counter0 }}"
+                             data-q="{{ q.id }}" data-row="{{ row }}" value="{{ option }}"></td>
+                  {% endfor %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table></div>
+          {% elif q.type == 'grid_text' %}
+            <div class="scroll"><table>
+              <thead><tr>{% for column in q.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+              <tbody>
+                {% for _ in q.blank_rows %}
+                <tr>
+                  {% for column in q.columns %}
+                  <td class="free"><input type="text" data-q="{{ q.id }}"
+                        data-grid-row="{{ forloop.parentloop.counter0 }}"
+                        data-grid-col="{{ forloop.counter0 }}" maxlength="300"></td>
+                  {% endfor %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table></div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% endfor %}
+    </form>
+  </div>
+
+  <div class="actions">
+    <button type="button" class="submit" id="submit-btn">Submit and continue</button>
+    <span class="msg" id="msg"></span>
+    <a class="signout" href="{% url 'student-logout' %}">Sign out</a>
+  </div>
+</main>
+
+<script>
+  const SLUG = "{{ form.slug|escapejs }}";
+  const COLUMNS = {{ grid_widths|safe }};
+
+  function getCookie(name) {
+    return document.cookie.split(';').map(c => c.trim())
+      .find(c => c.startsWith(name + '='))?.split('=')[1] ?? null;
+  }
+
+  function collect() {
+    const answers = {};
+    document.querySelectorAll('[data-q]').forEach(el => {
+      const id = el.dataset.q;
+      if (el.type === 'radio' || el.type === 'checkbox') {
+        if (!el.checked) return;
+        if (el.dataset.row !== undefined) {
+          (answers[id] ||= {})[el.dataset.row] = el.value;
+        } else if (el.type === 'checkbox') {
+          (answers[id] ||= []).push(el.value);
+        } else {
+          answers[id] = el.value;
+        }
+      } else if (el.dataset.gridRow !== undefined) {
+        const width = COLUMNS[id] || 1;
+        const table = answers[id] ||= [];
+        const row = Number(el.dataset.gridRow);
+        (table[row] ||= Array(width).fill(''))[Number(el.dataset.gridCol)] = el.value.trim();
+      } else if (el.value.trim()) {
+        answers[id] = el.value.trim();
+      }
+    });
+    // Drop the table rows nobody filled in, and any table left entirely empty.
+    for (const [id, value] of Object.entries(answers)) {
+      if (Array.isArray(value) && Array.isArray(value[0])) {
+        const filled = value.filter(row => row && row.some(cell => cell));
+        if (filled.length) answers[id] = filled; else delete answers[id];
+      }
+    }
+    return answers;
+  }
+
+  document.getElementById('submit-btn').addEventListener('click', async () => {
+    const button = document.getElementById('submit-btn');
+    const msg = document.getElementById('msg');
+    button.disabled = true;
+    msg.className = 'msg';
+    msg.textContent = 'Sending…';
+    try {
+      const response = await fetch(`/api/my-forms/${SLUG}/submit/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        credentials: 'same-origin',
+        body: JSON.stringify({ answers: collect() }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw data || { detail: 'Could not send your answers.' };
+      msg.className = 'msg good';
+      msg.textContent = 'Thank you — taking you to your dashboard…';
+      // Straight back to the portal; if another compulsory form is waiting,
+      // the dashboard stops at that one next.
+      setTimeout(() => window.location.replace('{% url "student-dashboard" %}'), 900);
+    } catch (error) {
+      msg.className = 'msg bad';
+      msg.textContent = error?.detail || 'Could not send your answers.';
+      button.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

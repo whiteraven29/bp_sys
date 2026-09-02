@@ -4,6 +4,9 @@ from .models import (
     TeacherProfile, AccountantProfile, StudentResult, PaymentCategory, StudentPayment,
     StudentFinanceObligation, StudentFinanceClearance, Announcement,
     EstateOfficerProfile,
+    SecretaryProfile,
+    PrincipalProfile,
+    HeadOfDepartmentProfile,
 )
 
 
@@ -49,6 +52,25 @@ class AccountantProfileAdmin(admin.ModelAdmin):
 
 @admin.register(EstateOfficerProfile)
 class EstateOfficerProfileAdmin(admin.ModelAdmin):
+    list_display = ['full_name', 'user', 'is_active']
+    list_filter = ['is_active']
+
+
+@admin.register(SecretaryProfile)
+class SecretaryProfileAdmin(admin.ModelAdmin):
+    list_display = ['full_name', 'user', 'is_active']
+    list_filter = ['is_active']
+    search_fields = ['full_name', 'user__username']
+
+
+@admin.register(PrincipalProfile)
+class PrincipalProfileAdmin(admin.ModelAdmin):
+    list_display = ['full_name', 'user', 'is_active']
+    list_filter = ['is_active']
+
+
+@admin.register(HeadOfDepartmentProfile)
+class HeadOfDepartmentProfileAdmin(admin.ModelAdmin):
     list_display = ['full_name', 'user', 'is_active']
     list_filter = ['is_active']
 

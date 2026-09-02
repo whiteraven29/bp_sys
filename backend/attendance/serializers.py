@@ -16,7 +16,7 @@ from .models import (
     ChargeType, FeeStructure, FeeInstallment, StudentProfile, StudentCharge,
     Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
     BankAccount, CollegeProfile,
-    Form, FormSection, FormQuestion, FormResponse,
+    Form, FormSection, FormQuestion, FormResponse, ResultEntryWindow,
 )
 
 MAX_ANNOUNCEMENT_FILE_BYTES = 10 * 1024 * 1024  # matches nginx client_max_body_size 10M
@@ -1202,6 +1202,36 @@ class CollegeProfileSerializer(serializers.ModelSerializer):
 
 # ── EVALUATION FORMS ──────────────────────────────────────────────────────────
 
+class ResultEntryWindowSerializer(serializers.ModelSerializer):
+    semester_label = serializers.CharField(source='semester.label', read_only=True)
+    kind_label = serializers.CharField(source='get_kind_display', read_only=True)
+    status = serializers.SerializerMethodField()
+    declared_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ResultEntryWindow
+        fields = ['id', 'semester', 'semester_label', 'kind', 'kind_label',
+                  'opens_on', 'closes_on', 'is_active', 'note', 'status',
+                  'declared_by_name', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_status(self, obj):
+        return obj.status()
+
+    def get_declared_by_name(self, obj):
+        if not obj.declared_by:
+            return ''
+        return obj.declared_by.get_full_name() or obj.declared_by.username
+
+    def validate(self, data):
+        opens = data.get('opens_on', getattr(self.instance, 'opens_on', None))
+        closes = data.get('closes_on', getattr(self.instance, 'closes_on', None))
+        if opens and closes and closes < opens:
+            raise serializers.ValidationError(
+                {'closes_on': 'The closing date cannot come before the opening date.'})
+        return data
+
+
 class FormQuestionSerializer(serializers.ModelSerializer):
     type_display = serializers.CharField(source='get_type_display', read_only=True)
 
@@ -1248,7 +1278,7 @@ class FormSectionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FormSection
-        fields = ['id', 'form', 'title', 'description', 'order', 'questions']
+        fields = ['id', 'form', 'title', 'description', 'order', 'for_office', 'questions']
         read_only_fields = ['id']
 
 
@@ -1261,12 +1291,15 @@ class FormSerializer(serializers.ModelSerializer):
         source='academic_year.name', read_only=True, default='')
     created_by_name = serializers.CharField(
         source='created_by.get_full_name', read_only=True, default='')
+    level_names = serializers.SerializerMethodField()
 
     class Meta:
         model = Form
         fields = [
-            'id', 'title', 'slug', 'intro', 'audience', 'academic_year', 'academic_year_name',
+            'id', 'title', 'slug', 'intro', 'kind', 'audience',
+            'academic_year', 'academic_year_name',
             'is_active', 'opens_on', 'closes_on', 'is_anonymous', 'allow_multiple',
+            'is_mandatory', 'levels', 'level_names', 'print_note',
             'status', 'response_count', 'question_count', 'sections',
             'created_by_name', 'created_at', 'updated_at',
         ]
@@ -1276,6 +1309,9 @@ class FormSerializer(serializers.ModelSerializer):
     def get_status(self, obj):
         return obj.status()
 
+    def get_level_names(self, obj):
+        return obj.level_names
+
     def get_response_count(self, obj):
         return obj.responses.count()
 
@@ -1283,11 +1319,26 @@ class FormSerializer(serializers.ModelSerializer):
         return FormQuestion.objects.filter(section__form=obj).count()
 
     def validate(self, data):
-        opens = data.get('opens_on', getattr(self.instance, 'opens_on', None))
-        closes = data.get('closes_on', getattr(self.instance, 'closes_on', None))
+        def field(name):
+            return data.get(name, getattr(self.instance, name, None))
+
+        opens, closes = field('opens_on'), field('closes_on')
         if opens and closes and closes < opens:
             raise serializers.ValidationError(
                 {'closes_on': 'The closing date cannot come before the opening date.'})
+
+        # A service request is one student asking for one thing and waiting on
+        # an answer. Anonymously, nobody can be told the answer; compulsorily,
+        # every student is made to ask for something they may not want.
+        if field('kind') == Form.REQUEST:
+            if field('is_anonymous'):
+                raise serializers.ValidationError({'is_anonymous':
+                    'A service request cannot be anonymous — the college has to know '
+                    'whose request it is answering.'})
+            if field('is_mandatory'):
+                raise serializers.ValidationError({'is_mandatory':
+                    'A service request cannot be compulsory. Students ask for a sick '
+                    'sheet or a letter when they need one.'})
         return data
 
     def create(self, validated_data):
@@ -1307,11 +1358,19 @@ class FormSerializer(serializers.ModelSerializer):
 
 class StudentFormSerializer(serializers.ModelSerializer):
     """A form as the student sees it — no response counts, no admin fields."""
-    sections = FormSectionSerializer(many=True, read_only=True)
+    sections = serializers.SerializerMethodField()
+    level_names = serializers.CharField(read_only=True)
 
     class Meta:
         model = Form
-        fields = ['id', 'title', 'slug', 'intro', 'is_anonymous', 'closes_on', 'sections']
+        fields = ['id', 'title', 'slug', 'intro', 'kind', 'is_anonymous', 'closes_on',
+                  'sections', 'level_names']
+
+    def get_sections(self, obj):
+        # The parts a health facility or a signing officer fills in on paper are
+        # not part of the form the student is asked to complete.
+        sections = [s for s in obj.sections.all() if not s.for_office]
+        return FormSectionSerializer(sections, many=True).data
 
 
 class FormResponseSerializer(serializers.ModelSerializer):
@@ -1320,10 +1379,16 @@ class FormResponseSerializer(serializers.ModelSerializer):
     class_level_name = serializers.CharField(source='class_level.name', read_only=True, default='')
     answers = serializers.SerializerMethodField()
 
+    form_title = serializers.CharField(source='form.title', read_only=True)
+    form_kind = serializers.CharField(source='form.kind', read_only=True)
+    decided_by_name = serializers.SerializerMethodField()
+
     class Meta:
         model = FormResponse
-        fields = ['id', 'form', 'student_name', 'student_reg_no', 'class_level_name',
-                  'submitted_at', 'answers']
+        fields = ['id', 'form', 'form_title', 'form_kind', 'student_name', 'student_reg_no',
+                  'class_level_name', 'submitted_at', 'answers',
+                  'status', 'decision_note', 'decided_at', 'decided_by_name']
+        read_only_fields = ['status', 'decision_note', 'decided_at']
 
     def get_student_name(self, obj):
         # An anonymous form has no profile at all; say so rather than showing a blank.
@@ -1338,3 +1403,8 @@ class FormResponseSerializer(serializers.ModelSerializer):
              'type': answer.question.type, 'value': answer.value}
             for answer in obj.answers.select_related('question')
         ]
+
+    def get_decided_by_name(self, obj):
+        if not obj.decided_by:
+            return ''
+        return obj.decided_by.get_full_name() or obj.decided_by.username

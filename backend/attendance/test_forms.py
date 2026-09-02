@@ -17,7 +17,8 @@ from . import evaluations
 from .serializers import FormResponseSerializer
 from .models import (
     AcademicYear, ClassLevel, Form, FormAnswer, FormQuestion, FormResponse,
-    FormSection, FormSubmissionReceipt, Module, Semester, Student, TeacherProfile,
+    FormSection, FormSubmissionReceipt, Module, SecretaryProfile, Semester, Student,
+    TeacherProfile,
 )
 
 User = get_user_model()
@@ -464,9 +465,22 @@ class SeededFormsTests(TestCase):
         call_command('seed_evaluation_forms', verbosity=0)
         by_slug = {form.slug: form for form in Form.objects.all()}
         self.assertEqual(sorted(by_slug), [
-            'course-evaluation', 'hostel-evaluation', 'mentorship-evaluation',
-            'practicum-letter-request', 'student-performance-evaluation',
+            'course-evaluation', 'hostel-accommodation-request', 'hostel-evaluation',
+            'mentorship-evaluation', 'official-letter-request', 'practicum-letter-request',
+            'practicum-letter-request-level-6', 'sick-sheet-request',
+            'student-performance-evaluation', 'student-permission-request',
             'tracer-study', 'tutor-evaluation'])
+
+        # The things a student asks for are requests, not evaluations: they are
+        # owed an answer, and they appear under Services on the portal.
+        self.assertEqual(
+            sorted(form.slug for form in by_slug.values() if form.kind == Form.REQUEST),
+            ['hostel-accommodation-request', 'official-letter-request',
+             'practicum-letter-request', 'practicum-letter-request-level-6',
+             'sick-sheet-request', 'student-permission-request'])
+        # None of them anonymous — the college has to know whose request it is.
+        self.assertFalse(any(form.is_anonymous for form in by_slug.values()
+                             if form.kind == Form.REQUEST))
 
         # Anything evaluating a member of staff is anonymous.
         self.assertTrue(by_slug['tutor-evaluation'].is_anonymous)
@@ -868,3 +882,694 @@ class StudentResultsNavigationTests(TestCase):
         self.assertEqual(context['published_result_count'], 2)
         # Semester 1's CA is gone, but its result is not.
         self.assertNotIn('PHM101', [m['module_code'] for m in context['ca_theory_modules']])
+
+
+class CompulsoryFormTests(FormTestBase):
+    """A form the college declares compulsory holds the portal until it is
+    answered — the same block an unchanged password already puts in the way.
+
+    Response rates on a form students can ignore are what make an evaluation
+    useless to report on, so this is the college saying "everyone, not the
+    self-selecting few".
+    """
+
+    def _required_form(self, **kw):
+        form = self._form(slug='census', title='Course Evaluation', is_mandatory=True, **kw)
+        question = self._question(required=True, text='Rate the tutor')
+        return form, question
+
+    def _dashboard(self):
+        return self.portal.get('/student-dashboard/')
+
+    def test_the_portal_stops_at_a_compulsory_form(self):
+        form, question = self._required_form()
+        response = self._dashboard()
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'student_required_form.html')
+        self.assertContains(response, 'Course Evaluation')
+        self.assertContains(response, 'every student to complete this')
+        # None of the portal is reachable behind it.
+        self.assertNotContains(response, 'data-view="obligations"')
+
+    def test_answering_it_releases_the_portal(self):
+        form, question = self._required_form()
+        self.assertTemplateUsed(self._dashboard(), 'student_required_form.html')
+
+        submitted = self.portal.post(
+            f'/api/my-forms/{form.slug}/submit/',
+            {'answers': {str(question.id): 'Good'}}, content_type='application/json')
+        self.assertEqual(submitted.status_code, 201, submitted.content)
+
+        self.assertTemplateUsed(self._dashboard(), 'student_dashboard.html')
+
+    def test_an_optional_form_never_blocks(self):
+        self._form(slug='optional-one', is_mandatory=False)
+        self._question()
+        self.assertTemplateUsed(self._dashboard(), 'student_dashboard.html')
+
+    def test_a_compulsory_form_that_is_not_live_does_not_block(self):
+        """Drafting one must not lock every student out before it is ready."""
+        self._form(slug='draft-census', is_mandatory=True, is_active=False)
+        self._question()
+        self.assertTemplateUsed(self._dashboard(), 'student_dashboard.html')
+
+    def test_it_stops_blocking_once_the_window_closes(self):
+        self._form(slug='closed-census', is_mandatory=True,
+                   closes_on=date(2020, 1, 1))
+        self._question()
+        self.assertTemplateUsed(self._dashboard(), 'student_dashboard.html')
+
+    def test_forms_are_asked_one_at_a_time(self):
+        first, q1 = self._required_form()
+        second = self._form(slug='census-two', title='Hostel Evaluation', is_mandatory=True)
+        q2 = self._question(required=True, text='Rate the hostel')
+
+        page = self._dashboard()
+        self.assertContains(page, 'Course Evaluation')
+        self.assertContains(page, 'more form')          # says one is still to come
+        self.assertNotContains(page, 'Rate the hostel')
+
+        self.portal.post(f'/api/my-forms/{first.slug}/submit/',
+                         {'answers': {str(q1.id): 'Good'}}, content_type='application/json')
+        page = self._dashboard()
+        self.assertTemplateUsed(page, 'student_required_form.html')
+        self.assertContains(page, 'Hostel Evaluation')
+
+        self.portal.post(f'/api/my-forms/{second.slug}/submit/',
+                         {'answers': {str(q2.id): 'Good'}}, content_type='application/json')
+        self.assertTemplateUsed(self._dashboard(), 'student_dashboard.html')
+
+    def test_a_compulsory_form_can_still_be_anonymous(self):
+        """The college learns everyone answered without learning who said what
+        — the receipt clears the block, not the response."""
+        form, question = self._required_form(is_anonymous=True)
+        self.portal.post(f'/api/my-forms/{form.slug}/submit/',
+                         {'answers': {str(question.id): 'Poor'}},
+                         content_type='application/json')
+
+        self.assertTemplateUsed(self._dashboard(), 'student_dashboard.html')
+        self.assertIsNone(FormResponse.objects.get(form=form).profile)
+        self.assertTrue(FormSubmissionReceipt.objects.filter(
+            form=form, profile=self.asha).exists())
+
+    def test_a_staff_form_never_blocks_a_student(self):
+        self._form(slug='mentor-census', is_mandatory=True, audience=Form.STAFF)
+        self._question()
+        self.assertTemplateUsed(self._dashboard(), 'student_dashboard.html')
+
+    def test_the_student_can_still_sign_out(self):
+        """Blocked is not trapped."""
+        self._required_form()
+        self.assertContains(self._dashboard(), 'Sign out')
+
+    def test_a_required_question_is_still_enforced(self):
+        form, question = self._required_form()
+        refused = self.portal.post(f'/api/my-forms/{form.slug}/submit/',
+                                   {'answers': {}}, content_type='application/json')
+        self.assertEqual(refused.status_code, 400)
+        self.assertTemplateUsed(self._dashboard(), 'student_required_form.html')
+
+    def test_the_admin_can_declare_and_withdraw_it(self):
+        form = self._form(slug='census', is_mandatory=False)
+        self._question()
+        self.assertTemplateUsed(self._dashboard(), 'student_dashboard.html')
+
+        self.assertEqual(self.api.patch(f'/api/forms/{form.id}/',
+                                        {'is_mandatory': True}, format='json').status_code, 200)
+        self.assertTemplateUsed(self._dashboard(), 'student_required_form.html')
+
+        self.api.patch(f'/api/forms/{form.id}/', {'is_mandatory': False}, format='json')
+        self.assertTemplateUsed(self._dashboard(), 'student_dashboard.html')
+
+
+class LevelTargetedFormsTests(FormTestBase):
+    """The college does not ask every NTA level the same things.
+
+    The introduction letter request exists in two versions — one for levels 4
+    and 5, another for level 6 — and a student who fills in the wrong one has
+    given the college the wrong answers, not merely their own time.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # setUp's own student, Asha, is at level 4. Add a level 6 student so
+        # both sides of a targeted form can be checked.
+        self.level6 = ClassLevel.objects.create(name='NTA Level 6', order=6)
+        module6 = Module.objects.create(name='Pharmacotherapy', code='PHM301', teacher='T',
+                                        class_level=self.level6, semester=self.sem)
+        enrollment = Student.objects.create(
+            nactvet_reg_no='BPH/2026/006', name='Neema Paul', module=module6)
+        enrollment.set_portal_pin('Portal#2026', require_change=False)
+        enrollment.save()
+        from . import finance
+        self.neema_profile = finance.profile_for_student(enrollment)
+        self.neema = Client()
+        self.neema.post('/login/', {'identifier': 'BPH/2026/006', 'secret': 'Portal#2026'})
+
+    def _slugs(self, portal):
+        return sorted(f['slug'] for f in portal.get('/api/my-forms/').json())
+
+    def test_a_form_with_no_levels_goes_to_everyone(self):
+        self._form(title='Course Evaluation', slug='course-eval')
+        self.assertEqual(self._slugs(self.portal), ['course-eval'])
+        self.assertEqual(self._slugs(self.neema), ['course-eval'])
+
+    def test_a_level_6_form_never_reaches_a_level_4_student(self):
+        form = self._form(title='Letter request (level 6)', slug='letter-6')
+        form.levels.set([self.level6])
+
+        self.assertEqual(self._slugs(self.neema), ['letter-6'])
+        self.assertEqual(self._slugs(self.portal), [])
+
+    def test_a_form_can_be_aimed_at_two_levels(self):
+        level5 = ClassLevel.objects.create(name='NTA Level 5', order=5)
+        form = self._form(title='Letter request (levels 4 and 5)', slug='letter-45')
+        form.levels.set([self.level, level5])
+
+        self.assertEqual(self._slugs(self.portal), ['letter-45'])
+        self.assertEqual(self._slugs(self.neema), [])
+
+    def test_knowing_the_slug_is_not_a_way_in(self):
+        """Hidden from the list is not enough — the endpoints refuse it too, and
+        say the same thing they would about a closed form."""
+        form = self._form(title='Letter request (level 6)', slug='letter-6')
+        form.levels.set([self.level6])
+        self._question(required=True)
+
+        opened = self.portal.get('/api/my-forms/letter-6/')
+        self.assertEqual(opened.status_code, 404)
+        self.assertEqual(opened.json()['detail'], 'That form is not open for responses.')
+
+        sent = self.portal.post(
+            '/api/my-forms/letter-6/submit/',
+            {'answers': {str(FormQuestion.objects.first().id): 'Good'}},
+            content_type='application/json')
+        self.assertEqual(sent.status_code, 400)
+        self.assertEqual(sent.json()['detail'], 'That form is not open for responses.')
+        self.assertEqual(FormResponse.objects.count(), 0)
+
+    def test_the_student_it_is_aimed_at_can_still_answer(self):
+        form = self._form(title='Letter request (level 6)', slug='letter-6')
+        form.levels.set([self.level6])
+        question = self._question(required=True)
+
+        sent = self.neema.post(
+            '/api/my-forms/letter-6/submit/',
+            {'answers': {str(question.id): 'Good'}}, content_type='application/json')
+        self.assertEqual(sent.status_code, 201)
+        self.assertEqual(FormResponse.objects.get().profile, self.neema_profile)
+
+    def test_a_compulsory_form_for_another_level_does_not_block(self):
+        form = self._form(title='Level 6 census', slug='census-6', is_mandatory=True)
+        form.levels.set([self.level6])
+        self._question(required=True)
+
+        held = self.neema.get('/student-dashboard/')
+        self.assertTemplateUsed(held, 'student_required_form.html')
+
+        free = self.portal.get('/student-dashboard/')
+        self.assertTemplateUsed(free, 'student_dashboard.html')
+
+    def test_a_student_with_no_enrollment_is_not_shown_a_targeted_form(self):
+        """We cannot tell what level they are at, and guessing puts the level 6
+        letter request in front of a level 4 student."""
+        form = self._form(title='Letter request (level 6)', slug='letter-6')
+        form.levels.set([self.level6])
+        stray = self.asha.enrollments.all()
+        stray.delete()
+
+        self.assertEqual(evaluations.forms_for_student(self.asha), [])
+        self.assertEqual(evaluations.pending_mandatory_forms(self.asha), [])
+
+    def test_the_admin_can_aim_a_form_and_change_its_mind(self):
+        created = self.api.post('/api/forms/', {
+            'title': 'Introduction letter request (level 6)',
+            'levels': [self.level6.id],
+        }, format='json')
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.data['levels'], [self.level6.id])
+        self.assertEqual(created.data['level_names'], 'NTA Level 6')
+
+        form = Form.objects.get(id=created.data['id'])
+        self.assertEqual([level.name for level in form.levels.all()], ['NTA Level 6'])
+
+        widened = self.api.patch(f'/api/forms/{form.id}/',
+                                 {'levels': [self.level.id, self.level6.id]}, format='json')
+        self.assertEqual(widened.status_code, 200)
+        self.assertEqual(widened.data['level_names'], 'NTA Level 4, NTA Level 6')
+
+        released = self.api.patch(f'/api/forms/{form.id}/', {'levels': []}, format='json')
+        self.assertEqual(released.data['level_names'], 'All levels')
+        self.assertEqual(self._slugs(self.portal), [])   # still a draft, so still hidden
+
+    def test_the_seeded_letter_requests_land_at_the_right_levels(self):
+        ClassLevel.objects.create(name='NTA Level 5', order=5)
+        call_command('seed_evaluation_forms', verbosity=0)
+
+        by_slug = {form.slug: form for form in Form.objects.all()}
+        self.assertEqual(
+            sorted(level.order for level in by_slug['practicum-letter-request'].levels.all()),
+            [4, 5])
+        self.assertEqual(
+            [level.order for level in by_slug['practicum-letter-request-level-6'].levels.all()],
+            [6])
+        # Everything else stays open to every level.
+        self.assertEqual(list(by_slug['course-evaluation'].levels.all()), [])
+
+    def test_a_continuing_student_gets_this_years_level(self):
+        """Asha was a level 4 last year and is a level 5 now. The level 5 form
+        is the one she is asked for, and last year's is not."""
+        level5 = ClassLevel.objects.create(name='NTA Level 5', order=5)
+        last_year = AcademicYear.objects.create(name='2025/2026', is_active=False)
+        old_sem = Semester.objects.create(academic_year=last_year, number=1)
+        self.enrollment.module = Module.objects.create(
+            name='Anatomy', code='ANA101', teacher='T',
+            class_level=self.level, semester=old_sem)
+        self.enrollment.save()
+        this_year = Module.objects.create(name='Dispensing', code='DSP201', teacher='T',
+                                          class_level=level5, semester=self.sem)
+        Student.objects.create(nactvet_reg_no='BPH/2026/001', name='Asha Juma',
+                               module=this_year, profile=self.asha)
+
+        for_five = self._form(title='Level 5 form', slug='level-5-form')
+        for_five.levels.set([level5])
+        for_four = self._form(title='Level 4 form', slug='level-4-form')
+        for_four.levels.set([self.level])
+
+        self.assertEqual(self._slugs(self.portal), ['level-5-form'])
+
+
+class ServiceRequestTests(FormTestBase):
+    """A service request is one student asking the college for one thing —
+    a sick sheet, a letter, a bed — and waiting on an answer.
+
+    It uses the same builder as an evaluation, but the two are not the same
+    animal: an evaluation is feedback nobody owes a reply to, and a request is
+    owed one, by name.
+    """
+
+    def _service(self, **kw):
+        defaults = {'title': 'Sick Sheet Request', 'slug': 'sick-sheet',
+                    'kind': Form.REQUEST, 'allow_multiple': True}
+        defaults.update(kw)
+        form = self._form(**defaults)
+        self.reason = self._question(text='What is wrong', type=FormQuestion.SHORT_TEXT,
+                                     options=[], required=True)
+        return form
+
+    def _ask(self, portal=None, answer='Malaria'):
+        return (portal or self.portal).post(
+            f'/api/my-forms/{self.reason.section.form.slug}/submit/',
+            {'answers': {str(self.reason.id): answer}}, content_type='application/json')
+
+    # ── the two lists are not the same list ──────────────────────────────────
+
+    def test_a_service_is_kept_out_of_the_evaluation_list(self):
+        self._service()
+        self._form(title='Course Evaluation', slug='course-eval')   # an evaluation
+
+        page = self.portal.get('/student-dashboard/')
+        self.assertEqual([e['form'].slug for e in page.context['student_forms']],
+                         ['course-eval'])
+        self.assertEqual([e['form'].slug for e in page.context['service_forms']],
+                         ['sick-sheet'])
+
+    def test_the_portal_offers_services_under_their_own_menu(self):
+        self._service()
+        page = self.portal.get('/student-dashboard/')
+        self.assertContains(page, 'data-view="services"')
+        self.assertContains(page, 'data-view="my-requests"')
+        # Forms moved in beside them rather than staying a menu of its own.
+        self.assertContains(page, 'Request a Service')
+
+    # ── asking, and being answered ───────────────────────────────────────────
+
+    def test_a_request_arrives_with_the_college_and_the_student_can_see_it(self):
+        self._service()
+        self.assertEqual(self._ask().status_code, 201)
+
+        made = FormResponse.objects.get()
+        self.assertEqual(made.profile, self.asha)
+        self.assertEqual(made.status, FormResponse.PENDING)
+        self.assertIsNone(made.decided_at)
+
+        page = self.portal.get('/student-dashboard/')
+        self.assertEqual(list(page.context['my_requests']), [made])
+        self.assertEqual(page.context['requests_pending'], 1)
+        self.assertContains(page, 'With the college')
+
+    def test_the_admin_answers_it_and_the_student_is_told(self):
+        self._service()
+        self._ask()
+        made = FormResponse.objects.get()
+
+        queue = self.api.get('/api/service-requests/?status=pending')
+        self.assertEqual([row['id'] for row in queue.data], [made.id])
+        self.assertEqual(queue.data[0]['student_name'], 'Asha Juma')
+
+        answered = self.api.post(f'/api/service-requests/{made.id}/decide/', {
+            'status': 'approved',
+            'note': 'Collect it from the Dean of Students on Tuesday.',
+        }, format='json')
+        self.assertEqual(answered.status_code, 200, answered.data)
+
+        made.refresh_from_db()
+        self.assertEqual(made.status, FormResponse.APPROVED)
+        self.assertEqual(made.decided_by, self.admin)
+        self.assertIsNotNone(made.decided_at)
+
+        page = self.portal.get('/student-dashboard/')
+        self.assertContains(page, 'Collect it from the Dean of Students on Tuesday.')
+        self.assertEqual(page.context['requests_pending'], 0)
+
+    def test_declining_says_why(self):
+        self._service()
+        self._ask()
+        made = FormResponse.objects.get()
+        self.api.post(f'/api/service-requests/{made.id}/decide/', {
+            'status': 'declined', 'note': 'You have already been issued one this month.',
+        }, format='json')
+
+        page = self.portal.get('/student-dashboard/')
+        self.assertContains(page, 'Declined')
+        self.assertContains(page, 'already been issued one this month')
+
+    def test_a_decision_can_be_undone(self):
+        """An officer who approved the wrong request should not have to live
+        with a decision nobody made."""
+        self._service()
+        self._ask()
+        made = FormResponse.objects.get()
+        self.api.post(f'/api/service-requests/{made.id}/decide/',
+                      {'status': 'approved', 'note': 'Ready'}, format='json')
+        self.api.post(f'/api/service-requests/{made.id}/decide/',
+                      {'status': 'pending'}, format='json')
+
+        made.refresh_from_db()
+        self.assertEqual(made.status, FormResponse.PENDING)
+        self.assertIsNone(made.decided_by)
+        self.assertIsNone(made.decided_at)
+
+    def test_only_the_admin_answers_a_request(self):
+        self._service()
+        self._ask()
+        made = FormResponse.objects.get()
+
+        tutor = User.objects.create_user('tutor', password='pw')
+        TeacherProfile.objects.create(user=tutor, full_name='Tutor')
+        api = APIClient()
+        api.force_authenticate(tutor)
+
+        refused = api.post(f'/api/service-requests/{made.id}/decide/',
+                           {'status': 'approved'}, format='json')
+        self.assertEqual(refused.status_code, 403)
+        made.refresh_from_db()
+        self.assertEqual(made.status, FormResponse.PENDING)
+        # A tutor may still read the queue.
+        self.assertEqual(api.get('/api/service-requests/').status_code, 200)
+
+    def test_an_evaluation_is_not_something_to_approve(self):
+        form = self._form(title='Course Evaluation', slug='course-eval')
+        question = self._question()
+        response = evaluations.submit(form, {question.id: 'Good'}, profile=self.asha)
+
+        refused = self.api.post(f'/api/service-requests/{response.id}/decide/',
+                                {'status': 'approved'}, format='json')
+        self.assertEqual(refused.status_code, 404)   # not in the request queue at all
+        with self.assertRaises(ValueError):
+            evaluations.decide(response, status='approved')
+
+    # ── the rules a request has to obey ──────────────────────────────────────
+
+    def test_a_request_can_be_neither_anonymous_nor_compulsory(self):
+        for field in ('is_anonymous', 'is_mandatory'):
+            refused = self.api.post('/api/forms/', {
+                'title': 'Sick Sheet Request', 'kind': 'request', field: True,
+            }, format='json')
+            self.assertEqual(refused.status_code, 400, field)
+            self.assertIn(field, refused.data)
+
+    def test_an_existing_form_cannot_be_turned_into_an_anonymous_request(self):
+        form = self._form(title='Tutor Evaluation', slug='tutor-eval', is_anonymous=True)
+        refused = self.api.patch(f'/api/forms/{form.id}/', {'kind': 'request'}, format='json')
+        self.assertEqual(refused.status_code, 400)
+        form.refresh_from_db()
+        self.assertEqual(form.kind, Form.EVALUATION)
+
+    def test_a_compulsory_request_still_does_not_block_the_portal(self):
+        """The API refuses the combination, so this can only arrive as bad data
+        — and bad data must not lock every student behind a sick sheet."""
+        form = self._service()
+        Form.objects.filter(id=form.id).update(is_mandatory=True)
+
+        page = self.portal.get('/student-dashboard/')
+        self.assertTemplateUsed(page, 'student_dashboard.html')
+
+    def test_a_service_is_aimed_at_levels_like_any_other_form(self):
+        level6 = ClassLevel.objects.create(name='NTA Level 6', order=6)
+        form = self._service(title='Letter request', slug='letter-6')
+        form.levels.set([level6])
+
+        page = self.portal.get('/student-dashboard/')
+        self.assertEqual(page.context['service_forms'], [])
+        self.assertEqual(self._ask().status_code, 400)
+
+    def test_a_service_that_is_not_open_cannot_be_requested(self):
+        self._service(is_active=False)
+        page = self.portal.get('/student-dashboard/')
+        self.assertEqual(page.context['service_forms'], [])
+        self.assertEqual(self._ask().status_code, 400)
+        self.assertEqual(FormResponse.objects.count(), 0)
+
+    def test_one_bed_one_request(self):
+        """A hostel place is asked for once a year, and the portal says so
+        rather than letting a student queue twice."""
+        self._service(title='Hostel Accommodation Request', slug='hostel-request',
+                      allow_multiple=False)
+        self.assertEqual(self._ask().status_code, 201)
+
+        page = self.portal.get('/student-dashboard/')
+        self.assertFalse(page.context['service_forms'][0]['can_answer'])
+        self.assertEqual(self._ask().status_code, 400)
+        self.assertEqual(FormResponse.objects.count(), 1)
+
+
+class SecretaryTests(FormTestBase):
+    """The secretary is the office a request for a sick sheet or leave of
+    absence goes to, and the person who releases the printed document.
+
+    A separate role because the work is separate: they have no business in the
+    ledger or the academic register, and the accountant has none in theirs.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.secretary = User.objects.create_user('secretary', password='pw')
+        SecretaryProfile.objects.create(user=self.secretary, full_name='Neema Katabazi')
+        self.sec_api = APIClient()
+        self.sec_api.force_authenticate(self.secretary)
+
+        self.service = self._form(title="Student's Sicksheet Form", slug='sick-sheet',
+                                  kind=Form.REQUEST, allow_multiple=True)
+        self.facility = self._question(text='Name of the health facility',
+                                       type=FormQuestion.SHORT_TEXT, options=[], required=True)
+
+    def _ask(self, answer='Singida Regional Referral Hospital'):
+        return self.portal.post('/api/my-forms/sick-sheet/submit/',
+                                {'answers': {str(self.facility.id): answer}},
+                                content_type='application/json')
+
+    def test_the_admin_can_create_a_secretary_account(self):
+        made = self.api.post('/api/staff-accounts/', {
+            'role': 'secretary', 'full_name': 'Asha Mtei',
+            'username': 'amtei', 'password': 'secret123',
+        }, format='json')
+        self.assertEqual(made.status_code, 201, made.data)
+        self.assertEqual(made.data['role'], 'secretary')
+        self.assertTrue(SecretaryProfile.objects.filter(user__username='amtei').exists())
+
+        listed = self.api.get('/api/staff-accounts/').json()
+        self.assertIn(('amtei', 'secretary'),
+                      [(row['username'], row['role']) for row in listed])
+
+    def test_the_secretary_answers_requests(self):
+        self._ask()
+        made = FormResponse.objects.get()
+
+        queue = self.sec_api.get('/api/service-requests/?status=pending')
+        self.assertEqual([row['id'] for row in queue.data], [made.id])
+
+        answered = self.sec_api.post(f'/api/service-requests/{made.id}/decide/', {
+            'status': 'approved', 'note': 'Print it and take it to the facility.',
+        }, format='json')
+        self.assertEqual(answered.status_code, 200, answered.data)
+        made.refresh_from_db()
+        self.assertEqual(made.status, FormResponse.APPROVED)
+        self.assertEqual(made.decided_by, self.secretary)
+
+    def test_the_secretary_is_told_apart_from_the_other_roles(self):
+        self.sec_api.force_authenticate(self.secretary)
+        payload = self.sec_api.get('/api/dashboard/').json()
+        self.assertTrue(payload['is_secretary'])
+        self.assertFalse(payload['is_staff'])
+        self.assertFalse(payload['is_accountant'])
+        self.assertFalse(payload['is_estate_officer'])
+
+    def test_a_tutor_still_cannot_answer_a_request(self):
+        self._ask()
+        made = FormResponse.objects.get()
+        tutor = User.objects.create_user('tutor', password='pw')
+        TeacherProfile.objects.create(user=tutor, full_name='Tutor')
+        api = APIClient()
+        api.force_authenticate(tutor)
+
+        self.assertEqual(
+            api.post(f'/api/service-requests/{made.id}/decide/',
+                     {'status': 'approved'}, format='json').status_code, 403)
+
+
+class PrintedRequestTests(FormTestBase):
+    """An approved request comes back as the college's own paper form, ready to
+    be signed and stamped. Nothing else prints: a pending request is not a
+    document yet, and a declined one is not a document at all."""
+
+    def setUp(self):
+        super().setUp()
+        self.service = self._form(title="Student's Sicksheet Form", slug='sick-sheet',
+                                  kind=Form.REQUEST, allow_multiple=True,
+                                  print_note='Must be stamped by the health facility.')
+        self.facility = self._question(text='Name of the health facility',
+                                       type=FormQuestion.SHORT_TEXT, options=[], required=True)
+        # Part C of the paper form: nobody in the portal fills this in.
+        self.office = FormSection.objects.create(
+            form=self.service, title='C. APPROVED BY COLLEGE ADMINISTRATION',
+            order=1, for_office=True)
+        self.signature = FormQuestion.objects.create(
+            section=self.office, text='Name of Head of Department',
+            type=FormQuestion.SHORT_TEXT, order=0)
+
+    def _approved(self):
+        self.portal.post('/api/my-forms/sick-sheet/submit/',
+                         {'answers': {str(self.facility.id): 'Singida Referral'}},
+                         content_type='application/json')
+        made = FormResponse.objects.get()
+        evaluations.decide(made, status=FormResponse.APPROVED, note='Collect it today.',
+                           by=self.admin)
+        return made
+
+    def test_an_office_part_is_never_shown_to_the_student(self):
+        opened = self.portal.get('/api/my-forms/sick-sheet/').json()
+        titles = [section['title'] for section in opened['sections']]
+        self.assertEqual(titles, ['Section A'])
+        # And an answer to one is not accepted either.
+        refused = self.portal.post('/api/my-forms/sick-sheet/submit/', {
+            'answers': {str(self.facility.id): 'X', str(self.signature.id): 'Me'},
+        }, content_type='application/json')
+        self.assertEqual(refused.status_code, 400)
+
+    def test_an_office_part_is_never_required_of_the_student(self):
+        FormQuestion.objects.filter(id=self.signature.id).update(required=True)
+        sent = self.portal.post('/api/my-forms/sick-sheet/submit/',
+                                {'answers': {str(self.facility.id): 'Singida Referral'}},
+                                content_type='application/json')
+        self.assertEqual(sent.status_code, 201)
+
+    def test_an_approved_request_prints_on_the_college_letterhead(self):
+        made = self._approved()
+        page = self.portal.get(f'/request/{made.id}/')
+
+        self.assertEqual(page.status_code, 200)
+        self.assertTemplateUsed(page, 'request_print.html')
+        self.assertContains(page, made.reference)
+        self.assertContains(page, 'Asha Juma')
+        self.assertContains(page, 'BPH/2026/001')
+        self.assertContains(page, 'Singida Referral')
+        # The office part is printed, blank, for whoever signs it.
+        self.assertContains(page, 'C. APPROVED BY COLLEGE ADMINISTRATION')
+        self.assertContains(page, 'Name of Head of Department')
+        self.assertContains(page, 'Official stamp')
+        self.assertContains(page, 'Must be stamped by the health facility.')
+
+    def test_download_goes_straight_to_save_as_pdf(self):
+        made = self._approved()
+        self.assertContains(self.portal.get(f'/request/{made.id}/?download=1'), 'window.print()')
+
+    def test_nothing_prints_until_it_is_approved(self):
+        self.portal.post('/api/my-forms/sick-sheet/submit/',
+                         {'answers': {str(self.facility.id): 'Singida Referral'}},
+                         content_type='application/json')
+        made = FormResponse.objects.get()
+        self.assertEqual(self.portal.get(f'/request/{made.id}/').status_code, 404)
+
+        evaluations.decide(made, status=FormResponse.DECLINED, note='No.', by=self.admin)
+        self.assertEqual(self.portal.get(f'/request/{made.id}/').status_code, 404)
+
+    def test_a_student_can_only_print_their_own(self):
+        made = self._approved()
+        other_module = Module.objects.create(name='Anatomy', code='ANA101', teacher='T',
+                                             class_level=self.level, semester=self.sem)
+        other = Student.objects.create(nactvet_reg_no='BPH/2026/999', name='Someone Else',
+                                       module=other_module)
+        other.set_portal_pin('Portal#2026', require_change=False)
+        other.save()
+        intruder = Client()
+        intruder.post('/login/', {'identifier': 'BPH/2026/999', 'secret': 'Portal#2026'})
+
+        self.assertEqual(intruder.get(f'/request/{made.id}/').status_code, 404)
+
+    def test_the_secretary_can_see_what_the_student_prints(self):
+        made = self._approved()
+        secretary = User.objects.create_user('secretary', password='pw')
+        SecretaryProfile.objects.create(user=secretary, full_name='Neema')
+        office = Client()
+        office.force_login(secretary)
+        self.assertEqual(office.get(f'/request/{made.id}/').status_code, 200)
+
+    def test_a_stranger_is_sent_to_the_login_screen(self):
+        made = self._approved()
+        self.assertEqual(Client().get(f'/request/{made.id}/').status_code, 302)
+
+
+class SeededCollegeFormsTests(TestCase):
+    """The sick sheet and the permission form, transcribed from the college's
+    own paper documents."""
+
+    def test_the_sick_sheet_matches_the_paper_form(self):
+        call_command('seed_evaluation_forms', verbosity=0)
+        form = Form.objects.get(slug='sick-sheet-request')
+
+        self.assertEqual(form.kind, Form.REQUEST)
+        self.assertFalse(form.is_anonymous)
+        self.assertIn('attendance percentage (90%)', form.print_note)
+
+        sections = list(form.sections.all())
+        # Only Part A's facility details are the student's to fill in; the rest
+        # of the paper form belongs to the requesting officer, the health
+        # facility and the college administration.
+        student_parts = [s.title for s in sections if not s.for_office]
+        self.assertEqual(student_parts, ['A. REQUEST TO HEALTH FACILITY'])
+        office_parts = [s.title for s in sections if s.for_office]
+        self.assertEqual(len(office_parts), 5)
+        self.assertTrue(any('Head of Department' in t for t in office_parts))
+        self.assertTrue(any('Dean of Students' in t for t in office_parts))
+        self.assertTrue(any('HEALTH FACILITY DECLARATION' in t for t in office_parts))
+
+    def test_the_permission_form_keeps_the_colleges_own_words(self):
+        call_command('seed_evaluation_forms', verbosity=0)
+        form = Form.objects.get(slug='student-permission-request')
+
+        self.assertEqual(form.title, 'Fomu ya Ruhusa ya Wanafunzi')
+        self.assertEqual(form.kind, Form.REQUEST)
+
+        sections = {s.title: s for s in form.sections.all()}
+        self.assertIn('A. TAARIFA ZA MWANAFUNZI', sections)
+        self.assertFalse(sections['A. TAARIFA ZA MWANAFUNZI'].for_office)
+        # The declaration is the student's to accept; the signature, the Head of
+        # Department's comments and the Dean's are all signed on paper.
+        self.assertIn('asilimia 90%', sections['B. TAMKO'].description)
+        self.assertTrue(sections['C. IMEPITISHWA NA — i. Mkuu wa Idara'].for_office)
+        self.assertTrue(sections['C. IMEPITISHWA NA — ii. Muadili wa wanafunzi'].for_office)
+
+        asked = [q.text for q in evaluations.answerable_questions(form)]
+        self.assertIn('Sababu ya kutokuwepo Chuoni kwa muda huo', asked)
+        self.assertNotIn('Saini', asked)

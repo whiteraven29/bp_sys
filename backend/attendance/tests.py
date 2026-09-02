@@ -359,6 +359,15 @@ class AttendanceSecurityTests(TestCase):
         self.assertEqual(serialized['assign1_w'], 0.0)
         self.assertIsNotNone(serialized['total_ca'])
 
+        # Marking a CA absence is the tutor's, but only while the examination
+        # officer has the books open; the end-of-semester paper never is.
+        from datetime import date, timedelta
+        from .models import ResultEntryWindow
+        ResultEntryWindow.objects.create(
+            semester=self.module.semester, kind=ResultEntryWindow.CA,
+            opens_on=date.today() - timedelta(days=1),
+            closes_on=date.today() + timedelta(days=7))
+
         self.client.force_authenticate(self.teacher)
         allowed = self.client.patch(
             f'/api/results/{result.id}/', {'cat1_theory_absent': True}, format='json'
@@ -859,10 +868,15 @@ class AttendanceSecurityTests(TestCase):
         self.assertEqual(module['result']['ca_display'], 'ABS')
         self.assertIsNone(module['result']['assign1'])
         self.assertNotContains(response, 'Recent attendance activity')
-        self.assertContains(response, 'Payment History')
+        # Payment History and Payment Summary are gone: every payment, its bank
+        # reference and its receipt already appear on the invoice that payment
+        # was made against, and the overall position moved onto What I Owe.
+        self.assertNotContains(response, 'data-view="payments"')
+        self.assertNotContains(response, 'data-view="payment-summary"')
         # The old "Academic Obligations" panel listed declared obligations; it
         # now shows the student's actual charges off the fees ledger.
         self.assertContains(response, 'What I Owe')
+        self.assertContains(response, 'Total billed')
         self.assertContains(response, 'Theory Modules')
         # CA is shown for the semester in progress only, so the table is built
         # from the active semester rather than a fixed semester 1 / 2 split.

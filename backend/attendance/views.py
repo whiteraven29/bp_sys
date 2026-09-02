@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 from functools import wraps
 import re
@@ -15,7 +16,7 @@ from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
-from rest_framework import viewsets, status
+from rest_framework import mixins, viewsets, status
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission, IsAuthenticated, SAFE_METHODS
@@ -24,14 +25,16 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import evaluations, finance
+from . import analytics, evaluations, finance
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
 from .models import (
     AcademicYear, Semester, ClassLevel, Module,
     Student, Session, AttendanceRecord, TeacherProfile, AccountantProfile,
     StudentResult, PaymentCategory, StudentFinanceObligation, StudentPayment,
     StudentFinanceClearance, Announcement,
-    EstateOfficerProfile, InventoryLocation, AssetCategory, InventoryItemType, Asset, AssetImport,
+    EstateOfficerProfile, SecretaryProfile, PrincipalProfile, HeadOfDepartmentProfile,
+    ResultEntryWindow,
+    InventoryLocation, AssetCategory, InventoryItemType, Asset, AssetImport,
     AssetTransfer, AssetMaintenance, InventoryInspection, InventoryInspectionItem, AssetDisposal,
     ChargeType, FeeStructure, FeeInstallment, StudentProfile, StudentCharge,
     Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
@@ -55,7 +58,7 @@ from .serializers import (
     ReversePaymentSerializer, WaiveChargeSerializer, FinanceOverrideSerializer,
     FinanceAuditLogSerializer,
     FormSerializer, FormSectionSerializer, FormQuestionSerializer,
-    FormResponseSerializer, StudentFormSerializer,
+    FormResponseSerializer, StudentFormSerializer, ResultEntryWindowSerializer,
 )
 from .grading import grade_for_mark, gpa_classification, parse_authority_grade
 
@@ -112,6 +115,121 @@ def is_estate_officer(user):
     )
 
 
+def is_principal(user):
+    return bool(
+        user and user.is_authenticated
+        and PrincipalProfile.objects.filter(user=user, is_active=True).exists()
+    )
+
+
+def is_head_of_department(user):
+    return bool(
+        user and user.is_authenticated
+        and HeadOfDepartmentProfile.objects.filter(user=user, is_active=True).exists()
+    )
+
+
+def can_manage_exams(user):
+    """Entering a mark, approving a result, declaring a student for an exam.
+
+    Every admin role except the Head of Department, who reads examinations but
+    does not decide them: the person who runs the department is not the person
+    who decides who sits an exam. Money and college property are already outside
+    every admin account — they need the accountant's or the estate officer's own
+    profile.
+    """
+    return bool(
+        user and user.is_authenticated
+        and user.is_staff and not is_head_of_department(user)
+    )
+
+
+#: The three families of writable fields on a result. They are governed
+#: separately because they close at different times and by different people.
+CA_MARK_FIELDS = frozenset({
+    'field_ca', 'assign1', 'assign2', 'cat1_theory', 'cat2_theory',
+    'cat1_practical', 'cat2_practical',
+    'assign1_absent', 'assign2_absent', 'cat1_theory_absent', 'cat2_theory_absent',
+    'cat1_practical_absent', 'cat2_practical_absent',
+})
+END_MARK_FIELDS = frozenset({
+    'end_theory', 'end_practical', 'end_theory_absent', 'end_practical_absent',
+})
+EXAM_OFFICE_FIELDS = frozenset({
+    'ca_approved', 'final_approved', 'supplementary_mark',
+    'authority_grade', 'authority_status',
+})
+
+
+def check_result_entry(user, module, data):
+    """May this person write these marks, on this module, today?
+
+    A tutor enters continuous assessment only — the CATs and assignments they
+    set and marked themselves — and only while the examination officer has the
+    books open. The end of semester examination, the supplementary and every
+    approval belong to the examination officer whatever the calendar says: the
+    person who marked the coursework is not the person who publishes the
+    result. The Head of Department reads results and never writes them.
+    """
+    if can_manage_exams(user):
+        return
+    if is_head_of_department(user):
+        raise PermissionDenied(
+            'Entering and approving marks belongs to the examination officer.')
+
+    touched = set(data)
+    if touched & EXAM_OFFICE_FIELDS:
+        raise PermissionDenied(
+            'Only the examination officer can approve or publish results.')
+    if touched & END_MARK_FIELDS:
+        raise PermissionDenied(
+            'End of semester examination marks are entered by the examination officer. '
+            'Tutors enter continuous assessment — the CATs and assignments — only.')
+    if not touched & CA_MARK_FIELDS:
+        return
+
+    semester = module.semester
+    window = ResultEntryWindow.for_semester(semester, ResultEntryWindow.CA)
+    if window is None:
+        raise PermissionDenied(
+            f'The examination officer has not opened continuous assessment marks '
+            f'for {semester}.')
+    if not window.is_open():
+        when = (f'{window.opens_on:%d %b %Y} to {window.closes_on:%d %b %Y}'
+                if window.status() == 'closed'
+                else f'from {window.opens_on:%d %b %Y}')
+        raise PermissionDenied(
+            f'Entry for continuous assessment marks is closed for {semester} — the window '
+            f'was {when}. Ask the examination officer to reopen it.')
+
+
+def can_read_exams(user):
+    """Seeing marks, eligibility, the exports and the performance analysis.
+
+    Open to every admin role including the Head of Department: running a
+    department means watching how its students are doing, by module and over
+    time, and that is not the same power as changing a mark.
+    """
+    return bool(user and user.is_authenticated and user.is_staff)
+
+
+def is_secretary(user):
+    return bool(
+        user and user.is_authenticated
+        and SecretaryProfile.objects.filter(user=user, is_active=True).exists()
+    )
+
+
+def can_answer_requests(user):
+    """Who may approve or decline what a student has asked the college for.
+
+    The secretary's own job, and the admin's because somebody has to be able to
+    do it when the secretary is away. Not the accountant and not a tutor: a
+    request for leave of absence is neither a payment nor a mark.
+    """
+    return bool(user and user.is_authenticated and (user.is_staff or is_secretary(user)))
+
+
 def active_semester():
     return Semester.objects.filter(is_active=True).select_related('academic_year').first()
 
@@ -157,13 +275,56 @@ class IsExamOfficerOrFinance(BasePermission):
         if not (user and user.is_authenticated):
             return False
         if request.method in SAFE_METHODS:
-            return bool(user.is_staff or can_manage_finance(user))
-        return bool(user.is_staff)
+            return bool(can_read_exams(user) or can_manage_finance(user))
+        return bool(can_manage_exams(user))
 
 
 class IsEstateOfficer(BasePermission):
     def has_permission(self, request, view):
         return is_estate_officer(request.user)
+
+
+class ReadExamsWriteExamOfficer(BasePermission):
+    """Everyone who may already reach an examination endpoint keeps reading it;
+    only the roles that decide examinations may change one.
+
+    Tutors are unaffected — their own module scoping is done by the view.
+    """
+    message = 'Entering and approving marks belongs to the examination officer.'
+
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        return not is_head_of_department(request.user)
+
+
+class CanReadExams(BasePermission):
+    def has_permission(self, request, view):
+        return can_read_exams(request.user)
+
+
+class DeclaresExamWindows(BasePermission):
+    """Any signed-in member of staff may read when the books are open — a tutor
+    needs the dates before they type, not after. Only the examination officer
+    says when."""
+    message = 'Only the examination officer decides when marks may be entered.'
+
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return request.method in SAFE_METHODS or can_manage_exams(request.user)
+
+
+class IsRequestOfficer(BasePermission):
+    """Any signed-in member of staff may read the request queue; only the
+    secretary or the admin may answer one."""
+
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return request.method in SAFE_METHODS or can_answer_requests(request.user)
 
 
 def _make_both_semesters(year):
@@ -326,6 +487,30 @@ def student_dashboard(request):
         return render(request, 'student_password_change.html', {
             'student_name': student.name,
             'registration_number': student.nactvet_reg_no,
+        })
+
+    # A form the college has made compulsory stops the portal here, the same
+    # way an unchanged password does. One at a time, oldest first, so a student
+    # facing three of them is not shown a wall of work.
+    profile = finance.profile_for_student(student)
+    pending = evaluations.pending_mandatory_forms(profile)
+    if pending:
+        form = pending[0]
+        sections = form.sections.filter(for_office=False).prefetch_related('questions')
+        # The submit script has to know how wide each table of text is to send
+        # its rows back in the right shape.
+        grid_widths = {
+            question.id: len(question.columns)
+            for section in sections for question in section.questions.all()
+            if question.type == FormQuestion.GRID_TEXT
+        }
+        return render(request, 'student_required_form.html', {
+            'student_name': student.name,
+            'registration_number': student.nactvet_reg_no,
+            'form': form,
+            'sections': sections,
+            'grid_widths': json.dumps({str(k): v for k, v in grid_widths.items()}),
+            'remaining': len(pending) - 1,
         })
 
     active_sem = active_semester()
@@ -535,7 +720,7 @@ def student_dashboard(request):
             'ese_ok': combined_eligibility(end_parts),
             'ese_note': combined_reason(end_parts),
         })
-    ledger_profile = finance.profile_for_student(student)
+    ledger_profile = profile
     ledger_year = active_sem.academic_year if active_sem else student.module.semester.academic_year
     ledger_totals = finance.balance_for(ledger_profile, ledger_year)
     finance_charges = finance.with_balances(
@@ -584,8 +769,13 @@ def student_dashboard(request):
     announcements = Announcement.objects.select_related('uploaded_by')[:20]
     # Evaluation forms the student may fill in. Rendered server-side so the
     # sidebar badge is right before any JavaScript runs.
-    student_forms = evaluations.forms_for_student(ledger_profile)
+    student_forms = evaluations.forms_for_student(ledger_profile, kind=Form.EVALUATION)
     forms_outstanding = sum(1 for entry in student_forms if entry['can_answer'])
+    # Services the student can ask the college for, and what came of the ones
+    # they have already asked for.
+    service_forms = evaluations.services_for_student(ledger_profile)
+    my_requests = evaluations.my_requests(ledger_profile)
+    requests_pending = sum(1 for r in my_requests if r.status == FormResponse.PENDING)
     return render(request, 'student_dashboard.html', {
         'student_name': student.name,
         'registration_number': student.nactvet_reg_no,
@@ -601,6 +791,9 @@ def student_dashboard(request):
         'ca_count': len(ca_modules),
         'published_result_count': sum(1 for module in modules if module['has_final_result']),
         'has_final_results': any(module['has_final_result'] for module in modules),
+        'service_forms': service_forms,
+        'my_requests': my_requests,
+        'requests_pending': requests_pending,
         'gpa': gpa,
         'gpa_classification': gpa_class,
         'overall_attendance': overall_attendance,
@@ -670,8 +863,13 @@ def create_staff_account(request):
 
     if request.method == 'GET':
         users = User.objects.filter(
-            Q(profile__isnull=False) | Q(accountant_profile__isnull=False) | Q(estate_officer_profile__isnull=False)
-        ).select_related('profile', 'accountant_profile', 'estate_officer_profile').prefetch_related('modules_taught').order_by('username')
+            Q(profile__isnull=False) | Q(accountant_profile__isnull=False)
+            | Q(estate_officer_profile__isnull=False) | Q(secretary_profile__isnull=False)
+            | Q(principal_profile__isnull=False) | Q(hod_profile__isnull=False)
+        ).select_related(
+            'profile', 'accountant_profile', 'estate_officer_profile', 'secretary_profile',
+            'principal_profile', 'hod_profile',
+        ).prefetch_related('modules_taught').order_by('username')
 
         results = []
         for u in users:
@@ -690,6 +888,21 @@ def create_staff_account(request):
                     'id': u.id, 'username': u.username, 'full_name': u.estate_officer_profile.full_name,
                     'role': 'estate_officer', 'module_ids': None,
                 })
+            elif hasattr(u, 'secretary_profile'):
+                results.append({
+                    'id': u.id, 'username': u.username, 'full_name': u.secretary_profile.full_name,
+                    'role': 'secretary', 'module_ids': None,
+                })
+            elif hasattr(u, 'principal_profile'):
+                results.append({
+                    'id': u.id, 'username': u.username, 'full_name': u.principal_profile.full_name,
+                    'role': 'principal', 'module_ids': None,
+                })
+            elif hasattr(u, 'hod_profile'):
+                results.append({
+                    'id': u.id, 'username': u.username, 'full_name': u.hod_profile.full_name,
+                    'role': 'hod', 'module_ids': None,
+                })
         return Response(results)
 
     role = str(request.data.get('role', '')).strip()
@@ -698,8 +911,10 @@ def create_staff_account(request):
     password = str(request.data.get('password', '')).strip()
     module_ids = request.data.get('module_ids') or []
 
-    if role not in ('tutor', 'accountant', 'estate_officer'):
-        return Response({'detail': 'Role must be tutor, accountant, or estate officer.'}, status=status.HTTP_400_BAD_REQUEST)
+    if role not in ('tutor', 'accountant', 'estate_officer', 'secretary', 'principal', 'hod'):
+        return Response({'detail': 'Role must be tutor, accountant, estate officer, secretary, '
+                                   'principal, or head of department.'},
+                        status=status.HTTP_400_BAD_REQUEST)
     if not full_name or not username or len(password) < 6:
         return Response({'detail': 'Full name, username, and a 6+ character password are required.'}, status=status.HTTP_400_BAD_REQUEST)
     if User.objects.filter(username__iexact=username).exists():
@@ -712,11 +927,22 @@ def create_staff_account(request):
             password=password,
             first_name=parts[0],
             last_name=parts[1] if len(parts) > 1 else '',
+            # The Principal and the Head of Department carry admin rights. What
+            # each of them is *not* allowed near — money, college property, and
+            # for the HoD examinations — is decided by the checks those areas
+            # make, not by withholding is_staff.
+            is_staff=role in ('principal', 'hod'),
         )
         if role == 'accountant':
             AccountantProfile.objects.create(user=user, full_name=full_name)
         elif role == 'estate_officer':
             EstateOfficerProfile.objects.create(user=user, full_name=full_name)
+        elif role == 'secretary':
+            SecretaryProfile.objects.create(user=user, full_name=full_name)
+        elif role == 'principal':
+            PrincipalProfile.objects.create(user=user, full_name=full_name)
+        elif role == 'hod':
+            HeadOfDepartmentProfile.objects.create(user=user, full_name=full_name)
         else:
             TeacherProfile.objects.create(user=user, full_name=full_name)
             modules = Module.objects.filter(id__in=module_ids)
@@ -1085,6 +1311,8 @@ def dashboard(request):
             'modules': 0, 'students': 0, 'sessions_today': 0, 'avg_attendance': None,
             'active_semester': None, 'recent_sessions': [], 'levels': [],
             'is_staff': False, 'is_accountant': False, 'is_estate_officer': True,
+            'is_secretary': False, 'is_principal': False,
+            'is_head_of_department': False, 'can_manage_exams': False,
         })
     today = timezone.localdate()
     my_modules = user_modules(request.user)
@@ -1189,6 +1417,76 @@ def dashboard(request):
         'is_staff': request.user.is_staff,
         'is_accountant': is_accountant(request.user),
         'is_estate_officer': False,
+        'is_secretary': is_secretary(request.user),
+        'is_principal': is_principal(request.user),
+        'is_head_of_department': is_head_of_department(request.user),
+        'can_manage_exams': can_manage_exams(request.user),
+    })
+
+
+class ResultEntryWindowViewSet(viewsets.ModelViewSet):
+    """When the books are open for marks.
+
+    Any signed-in member of staff may read them — a tutor needs to know when
+    they can enter, and being told after they have typed a screenful is no use.
+    Only the examination officer declares one.
+    """
+    serializer_class = ResultEntryWindowSerializer
+    permission_classes = [DeclaresExamWindows]
+
+    def get_queryset(self):
+        qs = (ResultEntryWindow.objects
+              .select_related('semester__academic_year', 'declared_by'))
+        semester_id = self.request.query_params.get('semester_id')
+        if semester_id:
+            qs = qs.filter(semester_id=semester_id)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(declared_by=self.request.user)
+
+
+# ── PERFORMANCE ───────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@login_required
+def performance(request):
+    """How students are doing, by module and over time.
+
+    The Principal, the Head of Department and the examination officer see the
+    whole college; a tutor sees their own modules and nobody else's. Reading a
+    summary is not the same power as changing a mark, so everyone who teaches
+    gets one.
+    """
+    # None means "no restriction". A tutor with no modules assigned gets an
+    # empty queryset, which is not the same thing and must show nothing.
+    modules = None if can_read_exams(request.user) else user_modules(request.user)
+
+    def pick(model, param):
+        value = request.query_params.get(param)
+        found = model.objects.filter(id=value).first() if value else None
+        # A tutor asking for somebody else's module is answered as though they
+        # had not filtered at all, rather than being shown it.
+        if found is not None and model is Module and modules is not None:
+            if not modules.filter(id=found.id).exists():
+                return None
+        return found
+
+    try:
+        data = analytics.summary(
+            academic_year=pick(AcademicYear, 'academic_year_id'),
+            semester=pick(Semester, 'semester_id'),
+            class_level=pick(ClassLevel, 'class_level_id'),
+            module=pick(Module, 'module_id'),
+            assessment=request.query_params.get('assessment', analytics.FINAL),
+            modules=modules,
+        )
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({
+        **data,
+        'scope': 'college' if modules is None else 'my-modules',
+        'options': analytics.filter_options(modules),
     })
 
 
@@ -2364,7 +2662,7 @@ class ResultViewSet(viewsets.ModelViewSet):
     Admin can read/write all and download Excel.
     """
     serializer_class   = StudentResultSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadExamsWriteExamOfficer]
 
     def get_queryset(self):
         qs = (
@@ -2381,11 +2679,7 @@ class ResultViewSet(viewsets.ModelViewSet):
         return qs
 
     def update(self, request, *args, **kwargs):
-        if not request.user.is_staff:
-            for f in ('end_theory', 'end_practical', 'supplementary_mark', 'end_theory_absent',
-                      'end_practical_absent', 'ca_approved', 'final_approved'):
-                if f in request.data:
-                    raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
+        check_result_entry(request.user, self.get_object().student.module, request.data)
         return super().update(request, *args, **kwargs)
 
     def perform_create(self, serializer):
@@ -2393,14 +2687,11 @@ class ResultViewSet(viewsets.ModelViewSet):
         allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
         if student.module_id not in allowed_module_ids:
             raise PermissionDenied('You may only create results for modules you tutor.')
-        if not self.request.user.is_staff:
-            for field in ('ca_approved', 'final_approved'):
-                if field in serializer.validated_data:
-                    raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
-            for field in ('end_theory', 'end_practical', 'supplementary_mark',
-                          'end_theory_absent', 'end_practical_absent'):
-                if serializer.validated_data.get(field) is not None:
-                    raise PermissionDenied('Only the administrator can approve or enter restricted result fields.')
+        # Only the fields actually carrying a value count as being written; a
+        # serializer fills the rest in with None whether the tutor sent them or not.
+        supplied = {field for field, value in serializer.validated_data.items()
+                    if value not in (None, False)}
+        check_result_entry(self.request.user, student.module, supplied)
         serializer.save()
 
     @action(detail=False, methods=['post'], url_path='authority-grades')
@@ -2907,7 +3198,7 @@ def download_ca_signoff(request):
 
 @login_required
 def download_results(request):
-    if not request.user.is_staff:
+    if not can_read_exams(request.user):
         return HttpResponseForbidden('Administrator access required.')
 
     module_id       = request.GET.get('module_id')
@@ -3039,7 +3330,7 @@ def download_results(request):
 @login_required
 def download_field_results(request):
     """Export one field module in a compact CA 40% + report 60% workbook."""
-    if not request.user.is_staff:
+    if not can_read_exams(request.user):
         return HttpResponseForbidden('Administrator access required.')
 
     module_id = request.GET.get('module_id')
@@ -3140,7 +3431,7 @@ def download_field_results(request):
 
 @login_required
 def download_final_results(request):
-    if not request.user.is_staff:
+    if not can_read_exams(request.user):
         return HttpResponseForbidden('Administrator access required.')
 
     module_id      = request.GET.get('module_id')
@@ -3292,7 +3583,7 @@ def download_final_results(request):
 
 @login_required
 def download_eligibility_excel(request):
-    if not request.user.is_staff:
+    if not can_read_exams(request.user):
         return HttpResponseForbidden('Administrator access required.')
 
     module_id      = request.GET.get('module_id')
@@ -3494,7 +3785,7 @@ def download_eligibility_excel(request):
 @login_required
 def download_final_eligibility_excel(request):
     """Export attendance, CA marks and combined eligibility for NTA 4–6."""
-    if not request.user.is_staff:
+    if not can_read_exams(request.user):
         return HttpResponseForbidden('Administrator access required.')
 
     from collections import defaultdict
@@ -4782,7 +5073,7 @@ class FormViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = (
             Form.objects.select_related('academic_year', 'created_by')
-            .prefetch_related('sections__questions')
+            .prefetch_related('sections__questions', 'levels')
         )
         year_id = self.request.query_params.get('academic_year_id')
         if year_id:
@@ -4944,6 +5235,98 @@ class FormQuestionViewSet(viewsets.ModelViewSet):
 #
 # Session-authenticated like the fees endpoints, not request.user.
 
+class ServiceRequestViewSet(mixins.RetrieveModelMixin,
+                            mixins.ListModelMixin,
+                            viewsets.GenericViewSet):
+    """The queue of things students have asked the college for.
+
+    Read is open to any signed-in member of staff; only the admin decides one.
+    A request is the only thing on the portal the college owes an answer to, so
+    it is a queue and not a report — filter it by status and work it down.
+    """
+    serializer_class = FormResponseSerializer
+    permission_classes = [IsRequestOfficer]
+
+    def get_queryset(self):
+        return evaluations.request_queue(self.request.query_params.get('status'))
+
+    @action(detail=True, methods=['post'])
+    def decide(self, request, pk=None):
+        if not can_answer_requests(request.user):
+            raise PermissionDenied('Only the secretary or the admin can answer a service request.')
+        service_request = self.get_object()
+        try:
+            evaluations.decide(
+                service_request,
+                status=request.data.get('status'),
+                note=request.data.get('note', ''),
+                by=request.user,
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        finance.audit('service_request.decide', 'FormResponse', actor=request.user,
+                      entity_id=service_request.id,
+                      summary=f'{service_request.form.title} — '
+                              f'{service_request.get_status_display().lower()}',
+                      ip=finance.client_ip(request))
+        return Response(FormResponseSerializer(service_request).data)
+
+
+def request_print(request, pk):
+    """An approved request as the college's own paper form, ready to print.
+
+    HTML rather than a generated PDF, for the same reason the invoice is: the
+    browser's print dialogue makes a PDF anyway, and it works from the phone
+    most students actually have. `?download=1` opens that dialogue on load.
+
+    Only an approved request prints. A pending one is not a document yet, and a
+    declined one is not a document at all — printing either would put the
+    college's letterhead on something nobody has agreed to.
+    """
+    viewer_profile = None
+    if request.session.get('student_id'):
+        viewer_profile = _student_profile(request)
+    elif not can_answer_requests(request.user):
+        return redirect('login')
+
+    service_request = get_object_or_404(
+        FormResponse.objects.select_related('form', 'profile', 'class_level',
+                                            'academic_year', 'decided_by')
+        .prefetch_related('answers__question', 'form__sections__questions'),
+        pk=pk, form__kind=Form.REQUEST,
+    )
+    # A student may only ever print their own.
+    if viewer_profile is not None and service_request.profile_id != viewer_profile.id:
+        raise Http404('No such request.')
+    if service_request.status != FormResponse.APPROVED:
+        raise Http404('That request has not been approved.')
+
+    answers = {answer.question_id: answer.value for answer in service_request.answers.all()}
+    sections = []
+    for section in service_request.form.sections.all():
+        questions = list(section.questions.all())
+        sections.append({
+            'section': section,
+            'for_office': section.for_office,
+            # An office part is printed blank; a student part is printed with
+            # what they wrote, and a question they left out is simply omitted.
+            'rows': [{'question': question,
+                      'display': evaluations.answer_text(question, answers.get(question.id))}
+                     for question in questions
+                     if section.for_office or answers.get(question.id) is not None],
+        })
+
+    return render(request, 'request_print.html', {
+        'request_row': service_request,
+        'form': service_request.form,
+        'sections': sections,
+        'college': CollegeProfile.get(),
+        'notes': [line for line in service_request.form.print_note.splitlines() if line.strip()],
+        'auto_print': request.GET.get('download') == '1',
+    })
+
+
 @api_view(['GET'])
 def my_forms(request):
     """The forms I can fill in, and which I have already done."""
@@ -4972,9 +5355,11 @@ def my_form(request, slug):
     if profile is None:
         return Response({'detail': 'Authentication required.'}, status=status.HTTP_403_FORBIDDEN)
     form = get_object_or_404(
-        Form.objects.prefetch_related('sections__questions'),
+        Form.objects.prefetch_related('sections__questions', 'levels'),
         slug=slug, audience=Form.STUDENT)
-    if not form.is_open():
+    # Same answer for closed and for aimed-at-another-level: a student has no
+    # business learning which of the two it is.
+    if not form.is_open() or not form.applies_to(evaluations.level_of(profile)):
         return Response({'detail': 'That form is not open for responses.'},
                         status=status.HTTP_404_NOT_FOUND)
     return Response({
@@ -5005,7 +5390,7 @@ def submit_my_form(request, slug):
         )
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-    return Response(
-        {'detail': 'Thank you — your response has been recorded.'},
-        status=status.HTTP_201_CREATED,
-    )
+    detail = ('Your request has been sent. Follow it under Services → My Requests.'
+              if form.kind == Form.REQUEST
+              else 'Thank you — your response has been recorded.')
+    return Response({'detail': detail}, status=status.HTTP_201_CREATED)

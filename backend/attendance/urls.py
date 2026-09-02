@@ -11,6 +11,7 @@ router.register('modules', views.ModuleViewSet, basename='module')
 router.register('students', views.StudentViewSet, basename='student')
 router.register('sessions', views.SessionViewSet, basename='session')
 router.register('results', views.ResultViewSet, basename='result')
+router.register('result-windows', views.ResultEntryWindowViewSet, basename='result-window')
 router.register('finance-students', views.FinanceStudentViewSet, basename='finance-student')
 router.register('payment-categories', views.PaymentCategoryViewSet, basename='payment-category')
 router.register('finance-obligations', views.StudentFinanceObligationViewSet, basename='finance-obligation')
@@ -37,16 +38,17 @@ router.register('invoices', views.InvoiceViewSet, basename='invoice')
 router.register('forms', views.FormViewSet, basename='form')
 router.register('form-sections', views.FormSectionViewSet, basename='form-section')
 router.register('form-questions', views.FormQuestionViewSet, basename='form-question')
+router.register('service-requests', views.ServiceRequestViewSet, basename='service-request')
 router.register('payments', views.PaymentViewSet, basename='payment')
 router.register('finance-overrides', views.FinanceOverrideViewSet, basename='finance-override')
 router.register('finance-audit', views.FinanceAuditLogViewSet, basename='finance-audit')
 
 urlpatterns = [
-    path('', include(router.urls)),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('report/', views.report, name='report'),
     path('all-modules/', views.all_modules, name='all-modules'),
     path('eligibility/', views.eligibility, name='eligibility'),
+    path('performance/', views.performance, name='performance'),
     path('sick-records/', views.sick_records, name='sick-records'),
     path('sick-records/<int:pk>/', views.update_sick_record, name='update-sick-record'),
     path('records/<int:pk>/status/', views.update_attendance_status, name='update-attendance-status'),
@@ -81,4 +83,9 @@ urlpatterns = [
     path('my-forms/', views.my_forms, name='my-forms'),
     path('my-forms/<slug:slug>/', views.my_form, name='my-form'),
     path('my-forms/<slug:slug>/submit/', views.submit_my_form, name='my-form-submit'),
+
+    # Last, not first. The router's detail route matches any single segment, so
+    # `results/<pk>/` was swallowing `results/download/` and the CA results
+    # export resolved to a lookup for a result with the id "download".
+    path('', include(router.urls)),
 ]

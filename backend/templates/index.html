@@ -138,7 +138,7 @@
 
   /* ── MAIN ── */
   main { flex: 1; overflow-y: auto; padding: 0; margin-left: var(--sidebar-w); position: relative; z-index: 1; }
-  .main-inner { padding: 18px 24px 40px; }
+  .main-inner { padding: 18px 24px 40px; max-width: 1600px; }
 
   /* ── PAGES ── */
   .page { display: none; }
@@ -188,10 +188,67 @@
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   }
 
-  .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 14px; }
-  .form-grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  /* auto-fill at 160px gave six columns on a wide screen and clipped the label
+     off every select — "Evaluation — feedback y". A form field needs room for
+     its longest option, so the columns are wider and there are fewer of them. */
+  /* Explanatory copy under a field or a card title. It used to be written inline
+     with a negative top margin, which pulled it flush against the input above. */
+  /* Symmetric margins on purpose: consecutive notes collapse to one gap, so
+     tightening them with a negative top margin is unnecessary — and that rule
+     fired off a *hidden* sibling, which is what pulled the compulsory note
+     flush against the instructions box above it. */
+  .help-note { font-size: .76rem; line-height: 1.55; color: var(--muted); margin: 10px 0; }
+  .help-note strong { color: var(--text); font-weight: 600; }
+
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px 14px; margin-bottom: 14px; }
+  .form-grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px 14px; margin-bottom: 14px; }
+  @media (min-width: 1500px) {
+    .form-grid, .form-grid-3 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  /* A select must never be narrower than its own text. */
+  .field select, .field input, .field textarea { min-width: 0; text-overflow: ellipsis; }
   .field { display: flex; flex-direction: column; gap: 5px; }
+  /* A field inside .form-grid gets its spacing from the grid. One standing on
+     its own in a card had none at all, so whatever followed sat on top of it. */
+  .card > .field { margin-bottom: 14px; }
   .field label { font-size: .78rem; color: var(--text); font-weight: 500; }
+  /* Every control gets the house style, not only the ones a .field wraps.
+     Outside one they used to render as raw browser widgets — the "looks like
+     plain HTML" of half these screens. Element selectors on purpose: .field and
+     the filter classes below still outrank this and keep their own sizing. */
+  input:not([class]), select:not([class]), textarea:not([class]) {
+    width: 100%; padding: 8px 11px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--text);
+    font-family: inherit; font-size: .85rem; outline: none;
+  }
+  input:not([class]):focus, select:not([class]):focus, textarea:not([class]):focus {
+    border-color: var(--accent);
+  }
+  select option { background: var(--surface2); }
+  textarea { resize: vertical; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+  input:disabled, select:disabled, textarea:disabled { opacity: .55; cursor: not-allowed; }
+  /* Tick boxes, radios, file and range pickers are not text fields and must not
+     be stretched into one. */
+  input[type="checkbox"], input[type="radio"] {
+    width: 16px; height: 16px; padding: 0; border-radius: 3px;
+    accent-color: var(--accent); cursor: pointer; vertical-align: middle;
+  }
+  input[type="radio"] { border-radius: 50%; }
+  input[type="file"], input[type="range"], input[type="color"] {
+    width: auto; padding: 6px; background: transparent; border: 0;
+  }
+  input[type="hidden"] { display: none; }
+  /* The one control browsers refuse to inherit anything from. Left alone it is
+     the rawest thing on any of these screens. */
+  input[type="file"] { font-size: .82rem; color: var(--text); }
+  input[type="file"]::file-selector-button {
+    margin-right: 10px; padding: 6px 13px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--surface2); color: var(--text);
+    font: inherit; font-size: .8rem; font-weight: 500; cursor: pointer;
+  }
+  input[type="file"]::file-selector-button:hover { border-color: var(--accent); color: var(--accent); }
+
   .field input, .field select, .field textarea {
     background: #fff; border: 1px solid var(--border); color: var(--text);
     border-radius: var(--radius); padding: 7px 10px; font-family: var(--font-sans); font-size: .85rem;
@@ -384,6 +441,38 @@
   body.is-finance .finance-only.card { display: block !important; }
   body.is-finance:not(.is-admin) .academic-only { display: none !important; }
   .estate-only { display: none !important; }
+  /* The Services page shows one section at a time. Cards that serve two — the
+     form editor and the question builder — list both, so switching between
+     evaluations and services keeps the tools and swaps the list. */
+  /* Only ever hides. Forcing a card *on* here would outrank the role rules and
+     show the secretary a form editor they have no business in, so the section
+     switch takes cards away and leaves showing them to whoever owns them. */
+  #page-forms [data-forms-section]:not(.sec-on) { display: none !important; }
+
+  /* The secretary answers what students have asked the college for and prints
+     the approved document. Nothing else on this screen is their work. */
+  /* The Head of Department reads examinations — running a department means
+     watching how its students are doing — but does not decide them. Marks,
+     approvals and exam declarations stay with the examination officer, the way
+     money and college property already stay outside every admin account. */
+  body.is-hod .exam-only,
+  body.is-hod .exam-write { display: none !important; }
+  body:not(.is-hod) .hod-notice { display: none !important; }
+  .hod-notice { display: flex; align-items: flex-start; gap: 10px; padding: 11px 16px; margin-bottom: 14px;
+    border: 1px solid #cfe0f5; border-left: 3px solid var(--accent); border-radius: 4px;
+    background: #e8f1fb; font-size: .8rem; line-height: 1.55; }
+
+  .secretary-only { display: none !important; }
+  body.is-secretary .secretary-only { display: flex !important; }
+  /* Answering a request is the secretary's job and the admin's cover for it. */
+  .decider-only { display: none !important; }
+  body.is-admin .decider-only,
+  body.is-secretary .decider-only { display: flex !important; }
+  body.is-secretary .academic-only,
+  body.is-secretary .finance-only,
+  body.is-secretary .estate-only,
+  body.is-secretary .non-secretary-only { display: none !important; }
+
   body.is-estate .estate-only { display: flex !important; }
   body.is-estate .estate-only.card { display: block !important; }
   body.is-estate .academic-only, body.is-estate .finance-only { display: none !important; }
@@ -630,7 +719,7 @@
         <button class="nav-sub-btn" data-results-section="analysis" onclick="showResultsSection('analysis', this)">CAT Analysis</button>
       </div>
     </div>
-    <div class="nav-group admin-only" id="declarations-nav-group">
+    <div class="nav-group admin-only exam-only" id="declarations-nav-group">
       <button class="nav-btn" data-page="declarations" onclick="toggleDeclarationsMenu(event)"><span class="icon"><i class="bi bi-pin-angle"></i></span> Exam Declarations <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn active" data-declaration-type="special_exam" onclick="showDeclarationType('special_exam', this)">Special</button>
@@ -674,7 +763,15 @@
       </div>
     </div>
     <button class="nav-btn finance-only" data-page="finance" data-finance-section="audit" onclick="showFinanceSection('audit', this)"><span class="icon"><i class="bi bi-shield-check"></i></span> Audit Trail</button>
-    <button class="nav-btn admin-only" data-page="forms" onclick="showPage('forms',this)"><span class="icon"><i class="bi bi-ui-checks"></i></span> Forms</button>
+    <button class="nav-btn academic-only" data-page="performance" onclick="showPage('performance',this)"><span class="icon"><i class="bi bi-graph-up"></i></span> Performance</button>
+    <div class="nav-group admin-only secretary-only" id="services-nav-group">
+      <button class="nav-btn" data-page="forms" onclick="toggleServicesMenu(event)"><span class="icon"><i class="bi bi-life-preserver"></i></span> Services <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-forms-nav="requests" onclick="showFormsSection('requests', this)">Service Requests</button>
+        <button class="nav-sub-btn non-secretary-only" data-forms-nav="services" onclick="showFormsSection('services', this)">Services Offered</button>
+        <button class="nav-sub-btn non-secretary-only" data-forms-nav="evaluations" onclick="showFormsSection('evaluations', this)">Evaluation Forms</button>
+      </div>
+    </div>
     <button class="nav-btn admin-only" data-page="sick" onclick="showPage('sick',this)"><span class="icon"><i class="bi bi-bandaid"></i></span> Sick Records</button>
     <div class="aside-label academic-only" style="margin-top:10px;">My Modules</div>
     <div class="academic-only" id="sidebar-levels"></div>
@@ -781,6 +878,9 @@
               <option value="tutor">Tutor</option>
               <option value="accountant">Accountant</option>
               <option value="estate_officer">Estate Officer</option>
+              <option value="secretary">Secretary</option>
+              <option value="principal">Principal</option>
+              <option value="hod">Head of Department</option>
             </select>
           </div>
           <div class="field"><label>Full Name</label><input id="acct-full-name" placeholder="e.g. Jane Mwangi" /></div>
@@ -1000,8 +1100,56 @@
 
     <!-- RESULTS / CA MARKS -->
     <div class="page" id="page-results">
+      <div class="hod-notice">
+        <span style="font-size:1.1rem;flex-shrink:0">ℹ️</span>
+        <div><strong>Head of Department access</strong> — you can read marks, print them and
+          export them, and the Performance page summarises them by module and over time.
+          Entering and approving marks belongs to the examination officer.</div>
+      </div>
       <div class="page-title">Results — Continuous Assessment</div>
       <div class="page-sub">Enter raw marks out of 100 per student — weighted totals &amp; eligibility calculated automatically</div>
+
+      <div id="rw-banner"></div>
+
+      <div class="card admin-only exam-write" id="result-window-card">
+        <div class="card-title">Mark entry windows
+          <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px">— when tutors may enter marks</span>
+        </div>
+        <p class="help-note">
+          Marks used to be enterable whenever anyone happened to open the page, so a mark could
+          be revised weeks after results were published and nobody would know. Say when the books
+          are open; outside that only you can write, and a tutor is told the dates rather than
+          left guessing.<br><br>
+          The <strong>continuous assessment</strong> window is the one that governs tutors — the
+          CATs and assignments they set and marked. <strong>End of semester</strong> marks are
+          entered by you whatever the calendar says, so that window is the deadline the college
+          publishes to itself; everyone sees it on the banner above.
+        </p>
+        <div class="form-grid-3">
+          <div class="field">
+            <label>Semester</label>
+            <select id="rw-semester"></select>
+          </div>
+          <div class="field">
+            <label>Which marks</label>
+            <select id="rw-kind">
+              <option value="ca">Continuous assessment — tutors enter these</option>
+              <option value="end">End of semester — your own deadline</option>
+            </select>
+          </div>
+          <div class="field"><label>Opens on</label><input id="rw-opens" type="date" /></div>
+          <div class="field"><label>Closes on</label><input id="rw-closes" type="date" /></div>
+          <div class="field" style="grid-column:span 2"><label>Note shown to tutors</label>
+            <input id="rw-note" maxlength="200" placeholder="e.g. Submit CAT 2 by Friday" /></div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="saveResultWindow()">💾 Declare window</button>
+        <div class="table-wrap" style="margin-top:14px">
+          <table>
+            <thead><tr><th>Semester</th><th>Which marks</th><th>Opens</th><th>Closes</th><th>Note</th><th>Status</th><th>Open</th><th></th></tr></thead>
+            <tbody id="rw-tbody"></tbody>
+          </table>
+        </div>
+      </div>
 
       <!-- Module selector -->
       <div class="card">
@@ -1028,7 +1176,7 @@
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" onclick="downloadAuthorityGradeTemplate()">⬇ Download Level Template</button>
-          <button class="btn btn-primary btn-sm" onclick="uploadAuthorityGrades()">⬆ Upload Authority Grades</button>
+          <button class="btn btn-primary btn-sm exam-write" onclick="uploadAuthorityGrades()">⬆ Upload Authority Grades</button>
         </div>
       </div>
 
@@ -1084,10 +1232,10 @@
           <div class="card-title">
             📝 CA Marks <span style="font-size:.75rem;font-weight:400;color:var(--muted);">(Assignments + CATs — 40%)</span>
             <div style="display:flex;gap:6px;margin-left:auto;">
-              <button class="btn btn-green btn-sm admin-only" onclick="setCAApproval(true)">Approve CA</button>
-              <button class="btn btn-danger btn-sm admin-only" onclick="setCAApproval(false)">Hide CA</button>
+              <button class="btn btn-green btn-sm admin-only exam-write" onclick="setCAApproval(true)">Approve CA</button>
+              <button class="btn btn-danger btn-sm admin-only exam-write" onclick="setCAApproval(false)">Hide CA</button>
               <button class="btn btn-secondary btn-sm" onclick="printCAResults()">🖨 Print</button>
-              <button class="btn btn-primary btn-sm" onclick="saveAllResults()">💾 Save</button>
+              <button class="btn btn-primary btn-sm exam-write" onclick="saveAllResults()">💾 Save</button>
             </div>
           </div>
           <div class="table-wrap">
@@ -1105,10 +1253,10 @@
           <div class="card-title">
             🌾 Field Results <span style="font-size:.75rem;font-weight:400;color:var(--muted);">(CA 40% + Final 60%)</span>
             <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;">
-              <button class="btn btn-green btn-sm admin-only" onclick="setFinalApproval(true)">Approve Results</button>
-              <button class="btn btn-danger btn-sm admin-only" onclick="setFinalApproval(false)">Unapprove</button>
+              <button class="btn btn-green btn-sm admin-only exam-write" onclick="setFinalApproval(true)">Approve Results</button>
+              <button class="btn btn-danger btn-sm admin-only exam-write" onclick="setFinalApproval(false)">Unapprove</button>
               <button class="btn btn-secondary btn-sm admin-only" onclick="downloadFieldResultsExcel()">⬇ Export to Excel</button>
-              <button class="btn btn-primary btn-sm" onclick="saveAllResults()">💾 Save</button>
+              <button class="btn btn-primary btn-sm exam-write" onclick="saveAllResults()">💾 Save</button>
             </div>
           </div>
           <div class="table-wrap">
@@ -1126,8 +1274,8 @@
           <div class="card-title">
             🎓 End of Semester Exam <span id="end-exam-weight-label" style="font-size:.75rem;font-weight:400;color:var(--muted);"></span>
             <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;">
-              <button class="btn btn-green btn-sm" onclick="setFinalApproval(true)">Approve Final Results</button>
-              <button class="btn btn-danger btn-sm" onclick="setFinalApproval(false)">Unapprove</button>
+              <button class="btn btn-green btn-sm exam-write" onclick="setFinalApproval(true)">Approve Final Results</button>
+              <button class="btn btn-danger btn-sm exam-write" onclick="setFinalApproval(false)">Unapprove</button>
               <button class="btn btn-secondary btn-sm" onclick="printFinalResults()">🖨 Print</button>
             </div>
           </div>
@@ -1143,7 +1291,7 @@
     </div>
 
     <!-- EXAM DECLARATIONS -->
-    <div class="page" id="page-declarations">
+    <div class="page exam-only" id="page-declarations">
       <div class="page-title">Exam Declarations</div>
       <div class="page-sub">Declare students for special, supplementary, repeat-module, or discontinuation review; finance will price and clear payments separately.</div>
       <div class="card admin-only">
@@ -1316,7 +1464,7 @@
                      title="Position in the published fee table. The invoice lists items in this order." />
             </div>
           </div>
-          <div style="font-size:.75rem;color:var(--muted);margin:-4px 0 10px">
+          <div class="help-note">
             Charges sharing an invoice group and account are billed on one invoice.
             Tuition and other charges go to different CRDB accounts, so they can never share one.
             Mark caution money, admission, ID card, coat, uniforms and graduation as
@@ -1645,15 +1793,85 @@
     </div>
 
     <!-- SICK RECORDS -->
-    <div class="page" id="page-forms">
-      <div class="page-title">Forms</div>
-      <div class="page-sub">Evaluation forms students fill in — publish them, read the results, export them for reporting</div>
+    <div class="page" id="page-performance">
+      <div class="page-title">Performance &amp; Trends</div>
+      <div class="page-sub" id="pf-scope">How students are doing — by year, semester, level, module and assessment, and how that has moved</div>
 
-      <div class="card admin-only">
+      <div class="card">
+        <div class="card-title">What to look at</div>
+        <div class="form-grid-3">
+          <div class="field">
+            <label>Assessment</label>
+            <select id="pf-assessment" onchange="loadPerformance()"></select>
+          </div>
+          <div class="field">
+            <label>Academic year</label>
+            <select id="pf-year" onchange="onPerformanceYearChange()"><option value="">All years</option></select>
+          </div>
+          <div class="field">
+            <label>Semester</label>
+            <select id="pf-semester" onchange="loadPerformance()"><option value="">All semesters</option></select>
+          </div>
+          <div class="field">
+            <label>Class level</label>
+            <select id="pf-level" onchange="onPerformanceLevelChange()"><option value="">All levels</option></select>
+          </div>
+          <div class="field">
+            <label>Module</label>
+            <select id="pf-module" onchange="loadPerformance()"><option value="">All modules</option></select>
+          </div>
+          <div class="field" style="align-self:end">
+            <button class="btn btn-ghost btn-sm" onclick="resetPerformanceFilters()">Clear filters</button>
+          </div>
+        </div>
+        <div style="font-size:.75rem;color:var(--muted)">
+          Every assessment is shown as a percentage so a CAT out of 100, a CA out of 40 and a
+          final total out of 100 sit on the same axis and can be compared across semesters. A
+          student marked absent counts as zero — they sat nothing and scored nothing, and
+          leaving them out would flatter the module.
+        </div>
+      </div>
+
+      <div class="quick-facts" id="pf-headline"></div>
+
+      <div class="card">
+        <div class="card-title">Trend <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px">— the same measurement, semester by semester</span></div>
+        <div class="inventory-chart-wrap"><canvas id="pf-trend-chart"></canvas></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Grade distribution</div>
+        <div class="inventory-chart-wrap"><canvas id="pf-grade-chart"></canvas></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">By module <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px">— weakest first, because those are the ones to look at</span></div>
+        <div class="inventory-chart-wrap"><canvas id="pf-module-chart"></canvas></div>
+        <div class="table-wrap" style="margin-top:14px">
+          <table>
+            <thead><tr><th>Module</th><th>Level</th><th>Semester</th><th>Assessed</th><th>Mean %</th><th>Highest</th><th>Lowest</th><th>Pass rate</th></tr></thead>
+            <tbody id="pf-module-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" id="page-forms">
+      <div class="page-title" id="forms-page-title">Services</div>
+      <div class="page-sub" id="forms-page-sub">What students ask the College for, and what the College asks students</div>
+
+      <div class="card admin-only" data-forms-section="evaluations services">
         <div class="card-title" id="form-editor-title">Create a form</div>
         <div class="form-grid-3">
           <div class="field"><label>Title</label><input id="fm-title" placeholder="e.g. End of Academic Year Course Evaluation" /></div>
           <div class="field"><label>Academic year</label><select id="fm-year"><option value="">— not tied to a year —</option></select></div>
+          <div class="field">
+            <label>What it is</label>
+            <select id="fm-kind" onchange="onFormKindChange()">
+              <option value="evaluation">Evaluation — feedback you tally and report on</option>
+              <option value="request">Service request — a student asking for something</option>
+            </select>
+          </div>
           <div class="field">
             <label>Who fills it in</label>
             <select id="fm-audience">
@@ -1677,9 +1895,40 @@
               <option value="true">As many as they like</option>
             </select>
           </div>
+          <div class="field">
+            <label>Compulsory</label>
+            <select id="fm-mandatory">
+              <option value="false">Optional — students fill it if they choose</option>
+              <option value="true">Required — block the portal until they do</option>
+            </select>
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <label>NTA levels</label>
+            <div id="fm-levels" style="padding:7px 0"></div>
+            <div style="font-size:.72rem;color:var(--muted)">
+              Tick nothing for a form every level fills in. Tick some, and only students at
+              those levels see it — the level 6 introduction letter request never reaches a
+              level 4 student, and never appears in their list.
+            </div>
+          </div>
         </div>
         <div class="field"><label>Instructions shown to the student</label><input id="fm-intro" placeholder="The paragraph at the top of the paper form" /></div>
-        <div style="font-size:.75rem;color:var(--muted);margin:-4px 0 10px">
+        <div class="field" id="fm-print-note-field" style="display:none">
+          <label>Notes printed at the foot of the approved document</label>
+          <input id="fm-print-note" placeholder="One per line — e.g. This form must be stamped by the health facility" />
+        </div>
+        <div id="fm-kind-help" class="help-note" style="display:none">
+          A <strong>service request</strong> appears under <strong>Services → Request a
+          Service</strong> on the student portal instead of under Forms, and every submission
+          lands in the queue below for you to approve or decline. It cannot be anonymous or
+          compulsory: the student has to be told the answer, and nobody should be made to ask
+          for a sick sheet they do not need.
+        </div>
+        <div class="help-note">
+          A <strong>compulsory</strong> form meets students at sign-in and holds the portal
+          until they answer it — use it when you need every student, not a self-selecting few.
+          It works alongside anonymity: the college learns that everyone has answered without
+          learning who said what.<br><br>
           Make anything that evaluates a member of staff <strong>anonymous</strong> — students
           will not say a tutor was unprepared with their name attached. An anonymous form still
           records <em>that</em> a student answered, so nobody is asked twice.
@@ -1688,8 +1937,12 @@
         <button class="btn btn-ghost btn-sm" id="fm-cancel" onclick="cancelFormEdit()" style="display:none">Cancel</button>
       </div>
 
-      <div class="card">
-        <div class="card-title">All forms</div>
+      <div class="card non-secretary-only" data-forms-section="evaluations">
+        <div class="card-title">Evaluation forms</div>
+        <p class="help-note">
+          Feedback you tally and report on. Students fill these in under
+          <strong>Services → Forms</strong>.
+        </p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Title</th><th>Year</th><th>Window</th><th>Questions</th><th>Responses</th><th>Anonymous</th><th>Status</th><th>Live</th><th></th></tr></thead>
@@ -1698,7 +1951,49 @@
         </div>
       </div>
 
-      <div class="card" id="fm-builder" style="display:none">
+      <div class="card non-secretary-only" data-forms-section="services">
+        <div class="card-title">Services students can request</div>
+        <p class="help-note">
+          Things a student asks the College for — a sick sheet, a letter, a hostel bed. These
+          appear under <strong>Services → Request a Service</strong> on the portal, and every
+          submission lands in the queue below to be approved or declined.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Title</th><th>Year</th><th>Window</th><th>Questions</th><th>Requests</th><th>Anonymous</th><th>Status</th><th>Live</th><th></th></tr></thead>
+            <tbody id="fm-service-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" data-forms-section="requests">
+        <div class="card-title">Service requests</div>
+        <p class="help-note">
+          What students have asked the College for. A request is the one thing on the portal
+          the College owes an answer to — the student sees the decision and your note on their
+          My Requests page, so write the note for them: where to collect it, or why not.
+        </p>
+        <div class="form-grid-3">
+          <div class="field">
+            <label>Show</label>
+            <select id="sr-status" onchange="loadServiceRequests()">
+              <option value="pending">Waiting on the College</option>
+              <option value="approved">Approved</option>
+              <option value="declined">Declined</option>
+              <option value="">All requests</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Student</th><th>Asked for</th><th>Level</th><th>Requested</th><th>Status</th><th>Answered by</th><th></th></tr></thead>
+            <tbody id="sr-tbody"></tbody>
+          </table>
+        </div>
+        <div id="sr-detail" style="display:none;border-top:1px solid var(--border);margin-top:14px;padding-top:14px"></div>
+      </div>
+
+      <div class="card non-secretary-only" id="fm-builder" style="display:none" data-forms-section="evaluations services">
         <div class="card-title" id="fm-builder-title">Questions</div>
         <div id="fm-builder-body"></div>
         <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
@@ -1746,7 +2041,7 @@
         </div>
       </div>
 
-      <div class="card" id="fm-results" style="display:none">
+      <div class="card" id="fm-results" style="display:none" data-forms-section="evaluations services requests">
         <div class="card-title" id="fm-results-title">Results</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
           <button class="btn btn-secondary btn-sm" id="fm-export">⬇ Download Excel</button>
@@ -2153,6 +2448,8 @@ const state = {
   isStaff: false,
   isAccountant: false,
   isEstateOfficer: false,
+  isSecretary: false,
+  formsSection: 'requests',
   levels: [],
   semesters: [],
   modules: [],
@@ -2301,6 +2598,7 @@ function showPage(name, btn) {
       (g.id === 'results-nav-group' && name === 'results') ||
       (g.id === 'declarations-nav-group' && name === 'declarations') ||
       (g.id === 'eligibility-nav-group' && name === 'eligibility') ||
+      (g.id === 'services-nav-group' && name === 'forms') ||
       (g.id.startsWith('finance-') && name === 'finance' && g === financeNavGroupFor());
     if (!keep) g.classList.remove('open');
   });
@@ -2351,7 +2649,16 @@ function showPage(name, btn) {
   closeSidebar();
   if (name === 'modules') loadModules();
   if (name === 'accounts') loadAccountModules();
-  if (name === 'forms') loadForms();
+  if (name === 'forms') {
+    loadForms();
+    // Reached from the group header or a deep link: land on a section rather
+    // than a page whose every card is hidden.
+    if (!document.querySelector('#page-forms [data-forms-section].sec-on')) {
+      showFormsSection(state.formsSection || 'requests');
+    }
+  }
+  if (name === 'performance') loadPerformance();
+  if (name === 'results') loadResultWindows();
   if (name === 'students') loadStudents();
   if (name === 'attendance') { loadAttendanceModuleSelect(); loadAttendanceHistory(); updatePeriodLocks(); }
   if (name === 'reports') loadReport();
@@ -2541,10 +2848,16 @@ async function boot() {
     state.isStaff = dash.is_staff;
     state.isAccountant = dash.is_accountant;
     state.isEstateOfficer = dash.is_estate_officer;
+    state.isSecretary = dash.is_secretary;
     if (state.isAccountant) document.body.classList.add('is-finance');
     if (!state.isStaff && state.isAccountant) {
       document.getElementById('role-badge').textContent = 'Accountant';
       document.getElementById('role-badge').className = 'role-badge admin';
+    }
+    if (state.isSecretary && !state.isStaff) {
+      document.body.classList.add('is-secretary');
+      document.getElementById('role-badge').textContent = 'Secretary';
+      document.getElementById('role-badge').className = 'role-badge tutor';
     }
     if (state.isEstateOfficer) {
       document.body.classList.add('is-estate');
@@ -2584,6 +2897,11 @@ async function boot() {
       loadStaffAccounts();
     }
     if (state.isEstateOfficer) showInventorySection('overview', document.querySelector('[data-inventory-section="overview"]'));
+    // The secretary's whole job is on the Forms page, so start them there
+    // rather than on an attendance dashboard that reads all zeros for them.
+    if (state.isSecretary && !state.isStaff) {
+      showPage('forms', document.querySelector('[data-page="forms"]'));
+    }
     updatePeriodLocks();
     loadAnnouncements();
 
@@ -2794,7 +3112,9 @@ function renderStaffAccounts() {
     tbody.innerHTML = '<tr><td colspan="5"><div class="empty">No staff accounts yet</div></td></tr>';
     return;
   }
-  const roleLabel = { tutor: 'Tutor', accountant: 'Accountant', estate_officer: 'Estate Officer' };
+  const roleLabel = { tutor: 'Tutor', accountant: 'Accountant',
+                      estate_officer: 'Estate Officer', secretary: 'Secretary',
+                      principal: 'Principal', hod: 'Head of Department' };
   tbody.innerHTML = rows.map(u => {
     const modules = u.role === 'tutor'
       ? (u.module_ids.length
@@ -5179,23 +5499,478 @@ async function loadForms() {
   }
   const data = await api('GET', '/forms/');
   state.forms = data.results ?? data;
+  if (!state.editingForm) renderFormLevels([]);
   renderForms();
+  loadServiceRequests();
 }
 
+// ── the Services page ───────────────────────────────────────────────────────
+//
+// One page, three views of it: what students have asked for, what they may ask
+// for, and what the college asks them. They share a form editor and a question
+// builder, so those cards belong to two sections rather than being duplicated.
+
+const FORMS_SECTIONS = {
+  requests: ['Service Requests',
+             'What students have asked the College for — approve or decline, and they see your answer'],
+  services: ['Services Offered',
+             'What a student may ask the College for — a sick sheet, a letter, a hostel bed'],
+  evaluations: ['Evaluation Forms',
+                'Feedback the College collects — publish them, read the results, export them for reporting'],
+};
+
+function showFormsSection(section, btn) {
+  if (!FORMS_SECTIONS[section]) section = 'requests';
+  state.formsSection = section;
+  document.querySelectorAll('#page-forms [data-forms-section]').forEach(card => {
+    card.classList.toggle('sec-on', card.dataset.formsSection.split(' ').includes(section));
+  });
+  document.querySelectorAll('[data-forms-nav]').forEach(
+    el => el.classList.toggle('active', el.dataset.formsNav === section));
+  const [title, sub] = FORMS_SECTIONS[section];
+  document.getElementById('forms-page-title').textContent = title;
+  document.getElementById('forms-page-sub').textContent = sub;
+  showPage('forms', document.querySelector('#services-nav-group .nav-btn'));
+  if (btn) btn.classList.add('active');
+}
+
+function toggleServicesMenu(event) {
+  const group = document.getElementById('services-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-forms').classList.contains('active')) {
+    showFormsSection(state.formsSection || 'requests');
+  }
+  event.stopPropagation();
+}
+
+// ── mark entry windows ──────────────────────────────────────────────────────
+//
+// The examination officer says when the books are open. Outside that only they
+// can write, so a tutor has to be told the dates rather than discover them by
+// having a screenful of marks refused.
+
+const RW_KIND_LABELS = { ca: 'Continuous assessment', end: 'End of semester' };
+
+async function loadResultWindows() {
+  try {
+    const data = await api('GET', '/result-windows/');
+    state.resultWindows = data.results ?? data;
+  } catch (e) {
+    state.resultWindows = [];
+  }
+  const picker = document.getElementById('rw-semester');
+  if (picker && !picker.options.length) {
+    picker.innerHTML = (state.semesters || []).map(sem =>
+      `<option value="${sem.id}">${safeText(sem.label)}</option>`).join('');
+    if (state.activeSem) picker.value = state.activeSem.id;
+  }
+  renderResultWindows();
+  renderResultWindowBanner();
+}
+
+function renderResultWindows() {
+  const tbody = document.getElementById('rw-tbody');
+  if (!tbody) return;
+  const badge = { open: 'badge-green', upcoming: 'badge-yellow', closed: 'badge-red' };
+  const label = { open: 'Open', upcoming: 'Not open yet', closed: 'Closed' };
+  const rows = state.resultWindows || [];
+  tbody.innerHTML = rows.length
+    ? rows.map(w => `
+      <tr>
+        <td style="font-size:.8rem">${safeText(w.semester_label)}</td>
+        <td style="font-size:.8rem">${safeText(RW_KIND_LABELS[w.kind] || w.kind)}</td>
+        <td style="font-size:.78rem">${w.opens_on}</td>
+        <td style="font-size:.78rem">${w.closes_on}</td>
+        <td style="font-size:.75rem;color:var(--muted)">${safeText(w.note) || '—'}</td>
+        <td><span class="badge ${badge[w.status]}">${label[w.status]}</span></td>
+        <td style="text-align:center"><input type="checkbox" ${w.is_active ? 'checked' : ''}
+              onchange="toggleResultWindow(${w.id}, this.checked)" title="Close entry immediately" /></td>
+        <td><button class="btn btn-ghost btn-sm" onclick="editResultWindow(${w.id})">Edit</button></td>
+      </tr>`).join('')
+    : '<tr><td colspan="8"><div class="empty"><div class="ei">🔒</div>No windows declared — marks are closed to tutors until you open one</div></td></tr>';
+}
+
+// Every role sees this, because "why will my marks not save" is the question it
+// exists to answer before it is asked.
+function renderResultWindowBanner() {
+  const box = document.getElementById('rw-banner');
+  if (!box) return;
+  const active = state.activeSem;
+  if (!active) { box.innerHTML = ''; return; }
+  const mine = (state.resultWindows || []).filter(w => String(w.semester) === String(active.id));
+  const line = ['ca', 'end'].map(kind => {
+    const window = mine.find(w => w.kind === kind);
+    const name = RW_KIND_LABELS[kind];
+    // No end-of-semester window declared is not a closure — that paper is the
+    // examination office's to enter whenever, so say nothing rather than "closed".
+    if (!window) return kind === 'end' ? '' : `<span class="badge badge-red">${name}: closed</span>`;
+    if (window.status === 'open') {
+      return `<span class="badge badge-green">${name}: open until ${window.closes_on}</span>`;
+    }
+    if (window.status === 'upcoming') {
+      return `<span class="badge badge-yellow">${name}: opens ${window.opens_on}</span>`;
+    }
+    return `<span class="badge badge-red">${name}: closed ${window.closes_on}</span>`;
+  }).filter(Boolean).join(' ');
+  const notes = mine.filter(w => w.note).map(w => safeText(w.note)).join(' · ');
+  box.innerHTML = `<div class="card" style="padding:11px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <strong style="font-size:.8rem">Mark entry for ${safeText(active.label)}</strong>
+    ${line}
+    ${notes ? `<span style="font-size:.76rem;color:var(--muted)">${notes}</span>` : ''}
+  </div>`;
+}
+
+function resultWindowPayload() {
+  return {
+    semester: document.getElementById('rw-semester').value,
+    kind: document.getElementById('rw-kind').value,
+    opens_on: document.getElementById('rw-opens').value || null,
+    closes_on: document.getElementById('rw-closes').value || null,
+    note: document.getElementById('rw-note').value.trim(),
+    is_active: true,
+  };
+}
+
+function editResultWindow(id) {
+  const w = (state.resultWindows || []).find(row => row.id === id);
+  if (!w) return;
+  document.getElementById('rw-semester').value = w.semester;
+  document.getElementById('rw-kind').value = w.kind;
+  document.getElementById('rw-opens').value = w.opens_on || '';
+  document.getElementById('rw-closes').value = w.closes_on || '';
+  document.getElementById('rw-note').value = w.note || '';
+  document.getElementById('result-window-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function saveResultWindow() {
+  const payload = resultWindowPayload();
+  if (!payload.semester || !payload.opens_on || !payload.closes_on) {
+    toast('Pick a semester and both dates', 'var(--red)');
+    return;
+  }
+  // One window per kind per semester: declaring again edits the one that exists
+  // rather than leaving two rules fighting over the same marks.
+  const existing = (state.resultWindows || []).find(
+    w => String(w.semester) === String(payload.semester) && w.kind === payload.kind);
+  try {
+    if (existing) await api('PATCH', `/result-windows/${existing.id}/`, payload);
+    else await api('POST', '/result-windows/', payload);
+    ['rw-opens', 'rw-closes', 'rw-note'].forEach(id => document.getElementById(id).value = '');
+    toast(existing ? 'Window updated' : 'Window declared', 'var(--green)');
+    loadResultWindows();
+  } catch (e) {
+    toast(e?.detail || e?.closes_on?.[0] || 'Could not save the window', 'var(--red)');
+  }
+}
+
+async function toggleResultWindow(id, isActive) {
+  try {
+    await api('PATCH', `/result-windows/${id}/`, { is_active: isActive });
+    toast(isActive ? 'Entry reopened' : 'Entry closed', 'var(--green)');
+  } catch (e) {
+    toast(e?.detail || 'Could not update the window', 'var(--red)');
+  }
+  loadResultWindows();
+}
+
+// ── performance and trends ──────────────────────────────────────────────────
+//
+// One measurement, four ways of cutting it: over time, across grades, across
+// modules, and as a headline. The college could always see one student's marks
+// and one module's marks; none of these questions could be asked before.
+
+let pfCharts = [];
+
+function destroyPerformanceCharts() {
+  pfCharts.forEach(chart => chart.destroy());
+  pfCharts = [];
+}
+
+function performanceQuery() {
+  const params = new URLSearchParams({ assessment: document.getElementById('pf-assessment').value || 'final' });
+  for (const [id, key] of [['pf-year', 'academic_year_id'], ['pf-semester', 'semester_id'],
+                           ['pf-level', 'class_level_id'], ['pf-module', 'module_id']]) {
+    const value = document.getElementById(id).value;
+    if (value) params.set(key, value);
+  }
+  return params.toString();
+}
+
+function fillPerformanceFilters(options) {
+  const assessment = document.getElementById('pf-assessment');
+  if (!assessment.options.length) {
+    assessment.innerHTML = options.assessments
+      .map(a => `<option value="${a.value}">${safeText(a.label)}</option>`).join('');
+    assessment.value = 'final';
+  }
+  const year = document.getElementById('pf-year');
+  if (year.options.length <= 1) {
+    year.innerHTML = '<option value="">All years</option>' + options.academic_years
+      .map(y => `<option value="${y.id}">${safeText(y.name)}</option>`).join('');
+  }
+  const level = document.getElementById('pf-level');
+  if (level.options.length <= 1) {
+    level.innerHTML = '<option value="">All levels</option>' + (state.levels || [])
+      .map(l => `<option value="${l.id}">${safeText(l.name)}</option>`).join('');
+  }
+  state.performanceOptions = options;
+  refreshPerformanceSemesters();
+  refreshPerformanceModules();
+}
+
+// A semester belongs to a year and a module to a level, so narrowing one has to
+// narrow the next — otherwise the screen offers combinations with nothing
+// behind them and answers "no results" to a question nobody asked.
+function refreshPerformanceSemesters() {
+  const options = state.performanceOptions;
+  if (!options) return;
+  const yearId = document.getElementById('pf-year').value;
+  const select = document.getElementById('pf-semester');
+  const chosen = select.value;
+  const rows = options.semesters.filter(s => !yearId || String(s.academic_year_id) === yearId);
+  select.innerHTML = '<option value="">All semesters</option>' + rows
+    .map(s => `<option value="${s.id}">${safeText(s.label)}</option>`).join('');
+  select.value = rows.some(s => String(s.id) === chosen) ? chosen : '';
+}
+
+function refreshPerformanceModules() {
+  const options = state.performanceOptions;
+  if (!options) return;
+  const levelId = document.getElementById('pf-level').value;
+  const select = document.getElementById('pf-module');
+  const chosen = select.value;
+  const rows = options.modules.filter(m => !levelId || String(m.class_level_id) === levelId);
+  select.innerHTML = '<option value="">All modules</option>' + rows
+    .map(m => `<option value="${m.id}">${safeText(m.code)} — ${safeText(m.name)}</option>`).join('');
+  select.value = rows.some(m => String(m.id) === chosen) ? chosen : '';
+}
+
+function onPerformanceYearChange() { refreshPerformanceSemesters(); loadPerformance(); }
+function onPerformanceLevelChange() { refreshPerformanceModules(); loadPerformance(); }
+
+function resetPerformanceFilters() {
+  ['pf-year', 'pf-semester', 'pf-level', 'pf-module'].forEach(id => document.getElementById(id).value = '');
+  refreshPerformanceSemesters();
+  refreshPerformanceModules();
+  loadPerformance();
+}
+
+async function loadPerformance() {
+  let data;
+  try {
+    data = await api('GET', `/performance/?${performanceQuery()}`);
+  } catch (e) {
+    toast(e?.detail || 'Could not load performance', 'var(--red)');
+    return;
+  }
+  fillPerformanceFilters(data.options);
+  const scope = document.getElementById('pf-scope');
+  if (scope) {
+    scope.textContent = data.scope === 'my-modules'
+      ? 'How your students are doing — your modules, by year, semester and assessment, and how that has moved'
+      : 'How students are doing — by year, semester, level, module and assessment, and how that has moved';
+  }
+  renderPerformance(data);
+}
+
+function renderPerformance(data) {
+  const h = data.headline;
+  const show = value => (value === null || value === undefined) ? '—' : value;
+  document.getElementById('pf-headline').innerHTML = `
+    <div class="qf-item"><span>Students assessed</span><strong>${h.assessed}</strong></div>
+    <div class="qf-item"><span>Mean</span><strong>${show(h.mean)}${h.mean === null ? '' : '%'}</strong></div>
+    <div class="qf-item"><span>Pass rate</span><strong title="Passed at ${data.pass_mark}%">${show(h.pass_rate)}${h.pass_rate === null ? '' : '%'}</strong></div>
+    <div class="qf-item"><span>Highest</span><strong>${show(h.highest)}</strong></div>
+    <div class="qf-item"><span>Lowest</span><strong>${show(h.lowest)}</strong></div>`;
+
+  document.getElementById('pf-module-tbody').innerHTML = data.by_module.length
+    ? data.by_module.map(row => `
+      <tr>
+        <td><strong>${safeText(row.code)}</strong>
+          <div style="font-size:.72rem;color:var(--muted)">${safeText(row.module)}</div></td>
+        <td style="font-size:.78rem">${safeText(row.level)}</td>
+        <td style="font-size:.78rem">${safeText(row.semester)}</td>
+        <td style="text-align:center">${row.assessed}</td>
+        <td style="text-align:center"><strong>${show(row.mean)}</strong></td>
+        <td style="text-align:center">${show(row.highest)}</td>
+        <td style="text-align:center">${show(row.lowest)}</td>
+        <td style="text-align:center"><span class="badge ${row.pass_rate >= 75 ? 'badge-green' : row.pass_rate >= 50 ? 'badge-yellow' : 'badge-red'}">${show(row.pass_rate)}%</span></td>
+      </tr>`).join('')
+    : '<tr><td colspan="8"><div class="empty"><div class="ei">📊</div>No marks have been recorded for this selection yet</div></td></tr>';
+
+  destroyPerformanceCharts();
+  const grid = { color: 'rgba(31,41,55,.08)' };
+  const axis = { color: '#6b7280' };
+  const base = { responsive: true, maintainAspectRatio: false,
+                 plugins: { legend: { display: false } } };
+
+  const trend = document.getElementById('pf-trend-chart');
+  if (trend) {
+    pfCharts.push(new Chart(trend, {
+      type: 'line',
+      data: {
+        labels: data.trend.map(p => p.label),
+        datasets: [
+          { label: `Mean ${data.assessment_label}`, data: data.trend.map(p => p.mean),
+            borderColor: '#1565c0', backgroundColor: 'rgba(21,101,192,.12)',
+            fill: true, tension: .3, pointRadius: 4 },
+          { label: 'Pass rate', data: data.trend.map(p => p.pass_rate),
+            borderColor: '#16a34a', borderDash: [5, 4], fill: false, tension: .3, pointRadius: 3 },
+        ],
+      },
+      options: { ...base, plugins: { legend: { display: true, labels: { color: '#1f2937' } } },
+                 scales: { x: { ticks: axis, grid }, y: { beginAtZero: true, max: 100, ticks: axis, grid } } },
+    }));
+  }
+
+  const grades = document.getElementById('pf-grade-chart');
+  if (grades) {
+    pfCharts.push(new Chart(grades, {
+      type: 'bar',
+      data: {
+        labels: data.distribution.map(d => d.grade),
+        datasets: [{ label: 'Students', data: data.distribution.map(d => d.count),
+                     backgroundColor: data.distribution.map(d => d.grade === 'F' ? '#dc2626' : '#1565c0'),
+                     borderRadius: 6 }],
+      },
+      options: { ...base, scales: { x: { ticks: axis, grid }, y: { beginAtZero: true, ticks: { ...axis, precision: 0 }, grid } } },
+    }));
+  }
+
+  const modules = document.getElementById('pf-module-chart');
+  if (modules) {
+    const rows = data.by_module.slice(0, 15);
+    pfCharts.push(new Chart(modules, {
+      type: 'bar',
+      data: {
+        labels: rows.map(r => r.code),
+        datasets: [{ label: 'Mean %', data: rows.map(r => r.mean),
+                     backgroundColor: rows.map(r => r.mean < data.pass_mark ? '#dc2626' : '#1565c0'),
+                     borderRadius: 6 }],
+      },
+      options: { ...base, indexAxis: 'y',
+                 scales: { x: { beginAtZero: true, max: 100, ticks: axis, grid }, y: { ticks: axis, grid } } },
+    }));
+  }
+}
+
+// ── the service request queue ───────────────────────────────────────────────
+
+async function loadServiceRequests() {
+  const wanted = document.getElementById('sr-status')?.value ?? 'pending';
+  try {
+    const data = await api('GET', `/service-requests/${wanted ? `?status=${wanted}` : ''}`);
+    state.serviceRequests = data.results ?? data;
+  } catch (e) {
+    state.serviceRequests = [];
+  }
+  document.getElementById('sr-detail').style.display = 'none';
+  renderServiceRequests();
+}
+
+function renderServiceRequests() {
+  const badge = { pending: 'badge-yellow', approved: 'badge-green', declined: 'badge-red' };
+  const label = { pending: 'Waiting', approved: 'Approved', declined: 'Declined' };
+  const rows = state.serviceRequests || [];
+  document.getElementById('sr-tbody').innerHTML = rows.length
+    ? rows.map(r => `
+      <tr>
+        <td><strong>${safeText(r.student_name)}</strong>
+          <div style="font-size:.7rem;color:var(--muted);font-family:var(--font-mono)">${safeText(r.student_reg_no)}</div></td>
+        <td style="font-size:.8rem">${safeText(r.form_title)}</td>
+        <td style="font-size:.78rem">${safeText(r.class_level_name) || '—'}</td>
+        <td style="font-size:.78rem">${new Date(r.submitted_at).toLocaleDateString()}</td>
+        <td><span class="badge ${badge[r.status]}">${label[r.status]}</span></td>
+        <td style="font-size:.78rem">${safeText(r.decided_by_name) || '—'}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="openServiceRequest(${r.id})">Open</button></td>
+      </tr>`).join('')
+    : '<tr><td colspan="7"><div class="empty"><div class="ei">📨</div>Nothing here — students have not asked for anything under this filter</div></td></tr>';
+}
+
+function openServiceRequest(id) {
+  const request = (state.serviceRequests || []).find(r => r.id === id);
+  if (!request) return;
+  const answers = (request.answers || []).map(a => `
+    <tr><th style="text-align:left;width:44%">${safeText(a.text)}</th>
+        <td>${safeText(formatAnswerValue(a.value))}</td></tr>`).join('');
+  const panel = document.getElementById('sr-detail');
+  panel.style.display = '';
+  panel.innerHTML = `
+    <div class="card-title">${safeText(request.form_title)} — ${safeText(request.student_name)}</div>
+    <div class="table-wrap"><table><tbody>${answers || '<tr><td>No answers recorded.</td></tr>'}</tbody></table></div>
+    <div class="field" style="margin-top:12px">
+      <label>What the student will be told</label>
+      <input id="sr-note" maxlength="500"
+             placeholder="e.g. Ready for collection at the Dean of Students' office from Tuesday"
+             value="${safeText(request.decision_note || '')}" />
+    </div>
+    <div class="decider-only" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-success btn-sm" onclick="decideRequest(${id}, 'approved')">✓ Approve</button>
+      <button class="btn btn-sm" style="color:var(--red)" onclick="decideRequest(${id}, 'declined')">✕ Decline</button>
+      <button class="btn btn-ghost btn-sm" onclick="decideRequest(${id}, 'pending')">Undo — put it back in the queue</button>
+      ${request.status === 'approved'
+        ? `<a class="btn btn-ghost btn-sm" href="/request/${id}/" target="_blank" rel="noopener">📄 See what the student prints</a>`
+        : ''}
+    </div>`;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// An answer is a string, a list of choices, a {row: rating} map or a table of
+// text. The queue reads better as one line each than as raw JSON.
+function formatAnswerValue(value) {
+  if (value === null || value === undefined) return '—';
+  if (Array.isArray(value)) {
+    return value.map(item => Array.isArray(item) ? item.join(' | ') : item).join('; ');
+  }
+  if (typeof value === 'object') {
+    return Object.entries(value).map(([row, choice]) => `${row}: ${choice}`).join('; ');
+  }
+  return String(value);
+}
+
+async function decideRequest(id, decision) {
+  const note = document.getElementById('sr-note')?.value.trim() || '';
+  if (decision === 'declined' && !note) {
+    toast('Say why, so the student is not left guessing', 'var(--red)');
+    return;
+  }
+  try {
+    await api('POST', `/service-requests/${id}/decide/`, { status: decision, note });
+    toast(decision === 'pending' ? 'Put back in the queue' : `Request ${decision}`, 'var(--green)');
+    loadServiceRequests();
+  } catch (e) {
+    toast(e?.detail || 'Could not answer that request', 'var(--red)');
+  }
+}
+
+// Two lists, not one with a badge in it. An evaluation and a service request
+// are answered in different places on the portal and mean different things to
+// the College, so seeing them mixed together is how you lose track of which is
+// which — and of whether a form you meant to make a request actually is one.
 function renderForms() {
+  const all = state.forms || [];
+  renderFormRows('fm-tbody', all.filter(f => f.kind !== 'request'),
+                 'No evaluation forms yet — create one above, or run seed_evaluation_forms');
+  renderFormRows('fm-service-tbody', all.filter(f => f.kind === 'request'),
+                 'No services yet — create one above and set “What it is” to a service request');
+}
+
+function renderFormRows(tbodyId, forms, emptyNote) {
   const badge = { draft: 'badge-yellow', open: 'badge-green', closed: 'badge-red' };
   const label = { draft: 'Draft', open: 'Open', closed: 'Closed' };
-  document.getElementById('fm-tbody').innerHTML = (state.forms || []).length
-    ? state.forms.map(f => `
+  document.getElementById(tbodyId).innerHTML = forms.length
+    ? forms.map(f => `
       <tr>
         <td><strong>${safeText(f.title)}</strong><div style="font-size:.7rem;color:var(--muted);font-family:var(--font-mono)">${safeText(f.slug)}</div></td>
         <td style="font-size:.78rem">${safeText(f.academic_year_name) || '—'}
-          <div style="font-size:.7rem;color:var(--muted)">${f.audience === 'staff' ? 'staff fill in' : 'students fill in'}</div></td>
+          <div style="font-size:.7rem;color:var(--muted)">${f.audience === 'staff' ? 'staff fill in' : 'students fill in'}</div>
+          ${f.levels?.length ? `<div style="font-size:.7rem;color:var(--accent)">${safeText(f.level_names)}</div>` : ''}</td>
         <td style="font-size:.75rem;color:var(--muted)">${f.opens_on || '—'} → ${f.closes_on || '—'}</td>
         <td style="text-align:center">${f.question_count}</td>
         <td style="text-align:center"><strong>${f.response_count}</strong></td>
         <td style="text-align:center">${f.is_anonymous ? '<span class="badge badge-green">Yes</span>' : '<span style="color:var(--muted)">No</span>'}</td>
-        <td><span class="badge ${badge[f.status]}">${label[f.status]}</span></td>
+        <td><span class="badge ${badge[f.status]}">${label[f.status]}</span>
+          ${f.is_mandatory ? '<div style="margin-top:3px"><span class="badge badge-red">Compulsory</span></div>' : ''}</td>
         <td style="text-align:center"><input type="checkbox" ${f.is_active ? 'checked' : ''}
               onchange="toggleFormActive(${f.id}, this.checked)" title="Show this form to students" /></td>
         <td style="white-space:nowrap">
@@ -5206,7 +5981,7 @@ function renderForms() {
           <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteForm(${f.id})">Delete</button>
         </td>
       </tr>`).join('')
-    : '<tr><td colspan="9"><div class="empty"><div class="ei">📋</div>No forms yet — create one above, or run seed_evaluation_forms for the college\'s four</div></td></tr>';
+    : `<tr><td colspan="9"><div class="empty"><div class="ei">📋</div>${safeText(emptyNote)}</div></td></tr>`;
 }
 
 async function toggleFormActive(id, active) {
@@ -5222,14 +5997,53 @@ async function toggleFormActive(id, active) {
   }
 }
 
+// Empty means every level. Ticking a box narrows the form to those levels and
+// hides it from everyone else, so this has to be shown filled in when editing —
+// an admin who cannot see the current targeting will re-save it away by accident.
+function renderFormLevels(selected) {
+  const box = document.getElementById('fm-levels');
+  if (!box) return;
+  const chosen = new Set((selected || []).map(String));
+  box.innerHTML = (state.levels || []).length
+    ? state.levels.map(l => `
+        <label style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;font-size:.82rem;font-weight:400">
+          <input type="checkbox" class="fm-level" value="${l.id}" ${chosen.has(String(l.id)) ? 'checked' : ''} />
+          ${safeText(l.name)}
+        </label>`).join('')
+    : '<span style="font-size:.78rem;color:var(--muted)">No class levels set up yet — this form will go to everyone.</span>';
+}
+
+function selectedFormLevels() {
+  return [...document.querySelectorAll('#fm-levels .fm-level:checked')].map(el => Number(el.value));
+}
+
+// A request is one student asking for one thing and waiting on an answer, so
+// two of the evaluation switches make no sense on it: anonymously nobody can be
+// told the answer, and compulsorily every student is made to ask for something
+// they may not want. The API refuses both; this stops them being offered.
+function onFormKindChange() {
+  const isRequest = document.getElementById('fm-kind').value === 'request';
+  const anon = document.getElementById('fm-anon');
+  const mandatory = document.getElementById('fm-mandatory');
+  if (isRequest) { anon.value = 'false'; mandatory.value = 'false'; }
+  anon.disabled = mandatory.disabled = isRequest;
+  document.getElementById('fm-kind-help').style.display = isRequest ? '' : 'none';
+  // Only a request is ever printed, so only a request has a printed footnote.
+  document.getElementById('fm-print-note-field').style.display = isRequest ? '' : 'none';
+}
+
 function formPayload() {
   return {
+    levels: selectedFormLevels(),
+    kind: document.getElementById('fm-kind').value,
+    print_note: document.getElementById('fm-print-note').value.trim(),
     title: document.getElementById('fm-title').value.trim(),
     intro: document.getElementById('fm-intro').value.trim(),
     academic_year: document.getElementById('fm-year').value || null,
     opens_on: document.getElementById('fm-opens').value || null,
     closes_on: document.getElementById('fm-closes').value || null,
     audience: document.getElementById('fm-audience').value,
+    is_mandatory: document.getElementById('fm-mandatory').value === 'true',
     is_anonymous: document.getElementById('fm-anon').value === 'true',
     allow_multiple: document.getElementById('fm-multi').value === 'true',
   };
@@ -5245,8 +6059,13 @@ function editForm(id) {
   document.getElementById('fm-opens').value = f.opens_on || '';
   document.getElementById('fm-closes').value = f.closes_on || '';
   document.getElementById('fm-audience').value = f.audience || 'student';
+  document.getElementById('fm-kind').value = f.kind || 'evaluation';
+  document.getElementById('fm-print-note').value = f.print_note || '';
+  document.getElementById('fm-mandatory').value = String(f.is_mandatory);
   document.getElementById('fm-anon').value = String(f.is_anonymous);
   document.getElementById('fm-multi').value = String(f.allow_multiple);
+  renderFormLevels(f.levels);
+  onFormKindChange();
   document.getElementById('form-editor-title').textContent = `Editing: ${f.title}`;
   document.getElementById('fm-save').textContent = '💾 Save changes';
   document.getElementById('fm-cancel').style.display = '';
@@ -5255,11 +6074,16 @@ function editForm(id) {
 
 function cancelFormEdit() {
   state.editingForm = null;
-  ['fm-title', 'fm-intro', 'fm-opens', 'fm-closes'].forEach(id => document.getElementById(id).value = '');
+  ['fm-title', 'fm-intro', 'fm-opens', 'fm-closes', 'fm-print-note']
+    .forEach(id => document.getElementById(id).value = '');
   document.getElementById('fm-year').value = '';
   document.getElementById('fm-audience').value = 'student';
+  document.getElementById('fm-kind').value = 'evaluation';
+  document.getElementById('fm-mandatory').value = 'false';
   document.getElementById('fm-anon').value = 'false';
   document.getElementById('fm-multi').value = 'false';
+  renderFormLevels([]);
+  onFormKindChange();
   document.getElementById('form-editor-title').textContent = 'Create a form';
   document.getElementById('fm-save').textContent = '💾 Save form';
   document.getElementById('fm-cancel').style.display = 'none';
@@ -5303,6 +6127,12 @@ async function buildForm(id) {
         <div style="margin-bottom:16px">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
             <div style="font-weight:600;font-size:.85rem">${safeText(section.title) || 'Section'}</div>
+            <label style="display:inline-flex;align-items:center;gap:5px;font-size:.74rem;font-weight:400;color:var(--muted)"
+                   title="Hidden in the portal. Printed as blank lines on the approved document for a health facility or a signing officer.">
+              <input type="checkbox" ${section.for_office ? 'checked' : ''}
+                     onchange="setSectionForOffice(${section.id}, this.checked)" />
+              Filled in on paper by an office
+            </label>
             <button class="btn btn-ghost btn-sm" style="color:var(--red)"
                     onclick="deleteSection(${section.id})">Delete section</button>
           </div>
@@ -5330,6 +6160,21 @@ async function buildForm(id) {
     `<option value="${s.id}">${safeText(s.title) || 'Section'}</option>`).join('');
   document.getElementById('fm-question-editor').style.display = form.sections.length ? '' : 'none';
   document.getElementById('fm-builder').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Half of the college's paper forms are not the student's to fill in — the sick
+// sheet's Part B belongs to the medical officer, Part C to the Head of
+// Department and Dean of Students. Marking a section that way keeps it out of
+// the portal and prints it blank, to be signed and stamped.
+async function setSectionForOffice(id, forOffice) {
+  try {
+    await api('PATCH', `/form-sections/${id}/`, { for_office: forOffice });
+    toast(forOffice ? 'Printed blank for an office to complete' : 'Students fill this in',
+          'var(--green)');
+  } catch (e) {
+    toast(e?.detail || 'Could not update the section', 'var(--red)');
+  }
+  buildForm(state.buildingForm.id);
 }
 
 async function addSection() {
@@ -6868,12 +7713,19 @@ installWebIconReplacements();
 (function initUser() {
   const username = '{{ request.user.username|escapejs }}';
   const isStaff  = {{ request.user.is_staff|yesno:"true,false" }};
+  // Read from the template rather than waiting on /dashboard/, so a Head of
+  // Department never sees the examination menus flash up before they are hidden.
+  const isPrincipal = {% if request.user.principal_profile.is_active %}true{% else %}false{% endif %};
+  const isHod = {% if request.user.hod_profile.is_active %}true{% else %}false{% endif %};
   const initials = username.slice(0, 2).toUpperCase();
   document.getElementById('user-name').textContent   = username;
   document.getElementById('user-avatar').textContent = initials;
   if (isStaff) {
     document.body.classList.add('is-admin');
-    document.getElementById('role-badge').textContent  = 'Exam Officer';
+    if (isHod) document.body.classList.add('is-hod');
+    else if (isPrincipal) document.body.classList.add('is-principal');
+    document.getElementById('role-badge').textContent =
+      isHod ? 'Head of Department' : isPrincipal ? 'Principal' : 'Exam Officer';
     document.getElementById('role-badge').className    = 'role-badge admin';
   } else {
     document.getElementById('role-badge').textContent  = 'Tutor';

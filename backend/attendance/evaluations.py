@@ -15,7 +15,7 @@ from datetime import date
 from django.db import transaction
 
 from .models import (
-    Form, FormAnswer, FormQuestion, FormResponse, FormSubmissionReceipt,
+    AcademicYear, Form, FormAnswer, FormQuestion, FormResponse, FormSubmissionReceipt,
 )
 
 TEXT_TYPES = {FormQuestion.SHORT_TEXT, FormQuestion.LONG_TEXT}
@@ -27,17 +27,47 @@ MAX_LONG_TEXT = 5000
 
 # ── what a student can see ────────────────────────────────────────────────────
 
-def open_forms(today=None, audience=Form.STUDENT):
+#: "do not filter by level at all", which is a different thing from a student
+#: whose level we could not work out — that one gets no level-specific forms.
+ANY_LEVEL = object()
+
+
+def open_forms(today=None, audience=Form.STUDENT, class_level=ANY_LEVEL, kind=None):
     """Every form this audience may answer right now.
 
     Defaults to the student portal, because a staff-completed form appearing in
-    a student's list would invite them to evaluate themselves.
+    a student's list would invite them to evaluate themselves. Pass a
+    `class_level` to drop the forms aimed at some other NTA level, and a `kind`
+    to separate the evaluations from the things a student is asking for.
     """
     today = today or date.today()
-    qs = Form.objects.filter(is_active=True).select_related('academic_year')
+    qs = (Form.objects.filter(is_active=True)
+          .select_related('academic_year').prefetch_related('levels'))
     if audience is not None:
         qs = qs.filter(audience=audience)
-    return [form for form in qs if form.is_open(today)]
+    if kind is not None:
+        qs = qs.filter(kind=kind)
+    forms = [form for form in qs if form.is_open(today)]
+    if class_level is not ANY_LEVEL:
+        forms = [form for form in forms if form.applies_to(class_level)]
+    return forms
+
+
+def level_of(profile):
+    """The NTA level whose forms this student is asked for.
+
+    Derived here rather than asked of the caller: a caller that forgets would
+    quietly widen a form to every level, and nothing would look wrong.
+
+    Scoped to the active year, because a continuing student is enrolled at
+    level 4 last year and level 5 this one, and it is this year's level the
+    college is asking about.
+    """
+    if profile is None:
+        return None
+    from . import finance          # local — finance owns enrollment → level
+    year = AcademicYear.objects.filter(is_active=True).first()
+    return finance.class_level_for(profile, year)
 
 
 def answered_form_ids(profile):
@@ -48,7 +78,29 @@ def answered_form_ids(profile):
     )
 
 
-def forms_for_student(profile, today=None):
+def pending_mandatory_forms(profile, today=None):
+    """The forms this student must answer before the portal will let them past.
+
+    Read off the submission receipts, not the responses, so a mandatory form
+    can still be anonymous — the college learns that everyone has answered
+    without learning who said what.
+    """
+    if profile is None:
+        return []
+    answered = answered_form_ids(profile)
+    # Evaluations only. A service request cannot be made compulsory — asking a
+    # student for a sick sheet they do not need is nonsense — and filtering here
+    # means bad data cannot lock the portal behind one either.
+    pending = [form for form in open_forms(today, class_level=level_of(profile),
+                                           kind=Form.EVALUATION)
+               if form.is_mandatory and form.id not in answered]
+    # Form's own ordering is newest-first, which would ask for the most recent
+    # census before one that has been waiting a fortnight. Oldest first.
+    pending.sort(key=lambda form: (form.created_at, form.id))
+    return pending
+
+
+def forms_for_student(profile, today=None, kind=None):
     """The open forms, each marked with whether this student has answered it.
 
     Answered forms are still listed rather than hidden — a student who has
@@ -58,11 +110,79 @@ def forms_for_student(profile, today=None):
     return [
         {'form': form, 'answered': form.id in answered,
          'can_answer': form.allow_multiple or form.id not in answered}
-        for form in open_forms(today)
+        for form in open_forms(today, class_level=level_of(profile), kind=kind)
     ]
 
 
+# ── services a student asks for ───────────────────────────────────────────────
+
+def services_for_student(profile, today=None):
+    """The services this student may request — a sick sheet, a letter, a bed."""
+    return forms_for_student(profile, today, kind=Form.REQUEST)
+
+
+def my_requests(profile):
+    """This student's own service requests, newest first, with where each got to.
+
+    A request is the one thing on the portal the college owes an answer to, so
+    the student sees the decision and the note that came with it — where to
+    collect the letter, or why it was turned down.
+    """
+    if profile is None:
+        return []
+    return list(
+        FormResponse.objects
+        .filter(form__kind=Form.REQUEST, profile=profile)
+        .select_related('form')
+        .order_by('-submitted_at')
+    )
+
+
+def request_queue(status=None):
+    """Every service request the college has been sent, newest first."""
+    qs = (FormResponse.objects
+          .filter(form__kind=Form.REQUEST)
+          .select_related('form', 'profile', 'class_level', 'decided_by')
+          .prefetch_related('answers__question')
+          .order_by('-submitted_at'))
+    return qs.filter(status=status) if status else qs
+
+
+def decide(response, *, status, note='', by=None):
+    """Answer a service request.
+
+    Sending one back to pending is allowed and clears the decision with it —
+    an officer who approved the wrong request should be able to undo it, not
+    live with a decision nobody made.
+    """
+    from django.utils import timezone
+
+    if response.form.kind != Form.REQUEST:
+        raise ValueError('Only a service request can be approved or declined.')
+    if status not in dict(FormResponse.STATUS_CHOICES):
+        raise ValueError('That is not a decision.')
+
+    response.status = status
+    response.decision_note = (note or '').strip()
+    decided = status != FormResponse.PENDING
+    response.decided_by = by if decided else None
+    response.decided_at = timezone.now() if decided else None
+    response.save(update_fields=['status', 'decision_note', 'decided_by', 'decided_at'])
+    return response
+
+
 # ── validating an answer ──────────────────────────────────────────────────────
+
+def answerable_questions(form):
+    """The questions the student is actually asked.
+
+    A section marked `for_office` belongs to a health facility or a signing
+    officer and is printed blank on the approved document, so it is not part of
+    the form the student fills in — nor of anything counted, summarised or
+    exported, where it would only ever be an empty column.
+    """
+    return FormQuestion.objects.filter(section__form=form, section__for_office=False)
+
 
 def _clean_text(value, limit):
     text = '' if value is None else str(value).strip()
@@ -164,13 +284,16 @@ def submit(form, answers, *, profile=None, class_level=None, academic_year=None,
     if not form.is_open(today):
         raise ValueError('That form is not open for responses.')
 
+    # A form aimed at another NTA level is refused here as well as hidden from
+    # the list, so knowing the slug is not a way in.
+    if profile is not None and not form.applies_to(class_level or level_of(profile)):
+        raise ValueError('That form is not open for responses.')
+
     if profile is not None and not form.allow_multiple:
         if FormSubmissionReceipt.objects.filter(form=form, profile=profile).exists():
             raise ValueError('You have already answered this form.')
 
-    questions = list(
-        FormQuestion.objects.filter(section__form=form).select_related('section')
-    )
+    questions = list(answerable_questions(form).select_related('section'))
     by_id = {question.id: question for question in questions}
 
     # Keys arrive as JSON object keys, so they are strings. A key that is not a
@@ -286,7 +409,7 @@ def summarise_question(question, answers):
 def summarise(form):
     """Every question's results, ready for the charts and the summary sheet."""
     questions = list(
-        FormQuestion.objects.filter(section__form=form)
+        answerable_questions(form)
         .select_related('section')
         .order_by('section__order', 'order', 'id')
     )
@@ -319,6 +442,24 @@ def _flatten(question, value):
     return [str(value)]
 
 
+def answer_text(question, value):
+    """One answer as a line of prose, for a printed document.
+
+    The spreadsheet wants an answer split across cells; a printed form wants it
+    read back as a sentence, so a rating table becomes "Row — rating" and a
+    table of text becomes one row per line.
+    """
+    if value is None or value == '':
+        return ''
+    if isinstance(value, dict):
+        return '; '.join(f'{row} — {value[row]}' for row in question.rows if row in value)
+    if isinstance(value, list):
+        if value and isinstance(value[0], (list, tuple)):
+            return '\n'.join(' | '.join(str(cell) for cell in row) for row in value)
+        return '; '.join(str(item) for item in value)
+    return str(value)
+
+
 def export_columns(question):
     """A rating table needs one column per row rated; everything else needs one."""
     if question.type == FormQuestion.MATRIX:
@@ -342,7 +483,7 @@ def export_workbook(form):
     wrap = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
     questions = list(
-        FormQuestion.objects.filter(section__form=form)
+        answerable_questions(form)
         .select_related('section').order_by('section__order', 'order', 'id')
     )
     responses = list(

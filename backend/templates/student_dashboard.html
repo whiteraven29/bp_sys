@@ -42,6 +42,35 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
   button, input, a { font: inherit; }
+  /* The portal styled its inputs one context at a time — the search box, the
+     password fields, the form filler — so anything added anywhere else came out
+     as a raw browser control. This is the baseline; those contexts still win. */
+  input:not([class]), select:not([class]), textarea:not([class]) {
+    width: 100%; padding: 8px 11px; border: 1px solid var(--line);
+    border-radius: var(--radius); background: var(--surface);
+    color: var(--text); font-family: inherit; font-size: .86rem; outline: none;
+  }
+  input:not([class]):focus, select:not([class]):focus, textarea:not([class]):focus {
+    border-color: var(--blue);
+  }
+  textarea { resize: vertical; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+  input:disabled, select:disabled, textarea:disabled { opacity: .55; cursor: not-allowed; }
+  input[type="checkbox"], input[type="radio"] {
+    width: 16px; height: 16px; padding: 0; accent-color: var(--blue);
+    cursor: pointer; vertical-align: middle;
+  }
+  input[type="radio"] { border-radius: 50%; }
+  input[type="hidden"] { display: none; }
+  /* The one control browsers refuse to inherit anything from. Left alone it is
+     the rawest thing on any of these screens. */
+  input[type="file"] { font-size: .82rem; color: var(--text); }
+  input[type="file"]::file-selector-button {
+    margin-right: 10px; padding: 6px 13px; border: 1px solid var(--line);
+    border-radius: var(--radius); background: var(--surface-2); color: var(--text);
+    font: inherit; font-size: .8rem; font-weight: 500; cursor: pointer;
+  }
+  input[type="file"]::file-selector-button:hover { border-color: var(--blue); color: var(--blue); }
   button { color: inherit; }
   a { color: inherit; text-decoration: none; }
   .app { min-height: 100vh; }
@@ -240,6 +269,23 @@
   .panel {
     border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
   }
+  /* A row action is a thing you click, not a state you read. These used to
+     borrow the green "pass" badge, so View and Download looked like a status
+     and nobody could tell they were links. */
+  .btn-mini {
+    display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--surface); color: var(--blue);
+    font-size: .75rem; font-weight: 600; white-space: nowrap; cursor: pointer;
+    transition: background .13s, border-color .13s, color .13s;
+  }
+  .btn-mini:hover { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .btn-mini + .btn-mini { margin-left: 5px; }
+  /* Explanatory copy under a panel's table, indented to the panel's own gutter
+     rather than running edge to edge. */
+  .panel-note { margin: 0; padding: 11px 16px; border-top: 1px solid var(--line);
+                font-size: .82rem; color: var(--muted); line-height: 1.6; }
+
   .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--line); }
   .panel-head h2 { margin: 0; font-size: .92rem; font-weight: 600; }
   .panel-head span { color: var(--muted); font-size: .76rem; }
@@ -410,11 +456,16 @@
           <button class="nav-item" data-view="invoice-generate" title="Generate Invoice"><span class="nav-icon"><i class="bi bi-file-earmark-plus"></i></span><span class="nav-text">Generate Invoice</span></button>
           <button class="nav-item" data-view="invoice-list" title="My Invoices"><span class="nav-icon"><i class="bi bi-files"></i></span><span class="nav-text">My Invoices</span><span class="nav-badge">{{ finance_invoice_rows|length }}</span></button>
           <button class="nav-item" data-view="obligations" title="What I Owe"><span class="nav-icon"><i class="bi bi-exclamation-triangle"></i></span><span class="nav-text">What I Owe</span></button>
-          <button class="nav-item" data-view="payments" title="Payment History"><span class="nav-icon"><i class="bi bi-receipt"></i></span><span class="nav-text">Payment History</span></button>
-          <button class="nav-item" data-view="payment-summary" title="Payment Summary"><span class="nav-icon"><i class="bi bi-calculator"></i></span><span class="nav-text">Payment Summary</span></button>
         </div>
       </div>
-      <button class="nav-item" data-view="forms" title="Forms"><span class="nav-icon"><i class="bi bi-ui-checks"></i></span><span class="nav-text">Forms</span>{% if forms_outstanding %}<span class="nav-badge">{{ forms_outstanding }}</span>{% endif %}</button>
+      <div class="nav-group">
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="services-menu" title="Services"><span class="nav-icon"><i class="bi bi-life-preserver"></i></span><span class="nav-text">Services</span><span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
+        <div class="nav-submenu" id="services-menu">
+          <button class="nav-item" data-view="services" title="Request a Service"><span class="nav-icon"><i class="bi bi-hand-index-thumb"></i></span><span class="nav-text">Request a Service</span>{% if service_forms %}<span class="nav-badge">{{ service_forms|length }}</span>{% endif %}</button>
+          <button class="nav-item" data-view="my-requests" title="My Requests"><span class="nav-icon"><i class="bi bi-inbox"></i></span><span class="nav-text">My Requests</span>{% if requests_pending %}<span class="nav-badge">{{ requests_pending }}</span>{% endif %}</button>
+          <button class="nav-item" data-view="forms" title="Forms"><span class="nav-icon"><i class="bi bi-ui-checks"></i></span><span class="nav-text">Forms</span>{% if forms_outstanding %}<span class="nav-badge">{{ forms_outstanding }}</span>{% endif %}</button>
+        </div>
+      </div>
       <div class="nav-label">Account</div>
       <button class="nav-item" data-view="profile" title="My Profile"><span class="nav-icon"><i class="bi bi-person-circle"></i></span><span class="nav-text">My Profile</span></button>
     </nav>
@@ -619,6 +670,12 @@
 
       <section class="view" id="view-obligations">
         <div class="section-title"><p class="eyebrow">Finance</p><h2>What I Owe</h2><p>Every charge on your account, and what is still outstanding on each.</p></div>
+        <div class="stats">
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-wallet2"></i></div></div><strong>{{ finance_required|floatformat:2 }}</strong><p>Total billed</p></article>
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-check-circle"></i></div></div><strong>{{ finance_paid|floatformat:2 }}</strong><p>Total paid</p></article>
+          {% if finance_waived %}<article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-hand-thumbs-up"></i></div></div><strong>{{ finance_waived|floatformat:2 }}</strong><p>Waived</p></article>{% endif %}
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-exclamation-circle"></i></div></div><strong>{{ finance_balance|floatformat:2 }}</strong><p>Outstanding</p></article>
+        </div>
         <section class="panel">
           <div class="panel-head"><h2>My charges</h2><span>School fees, direct costs, and other payments</span></div>
           <div class="table-wrap"><table><thead><tr><th>What it is</th><th>Invoice group</th><th>Installment</th><th>Due</th><th>Amount</th><th>Outstanding</th><th>Status</th></tr></thead><tbody>
@@ -638,12 +695,33 @@
             </tr>
             {% empty %}<tr><td colspan="7">No charges have been raised on your account yet.</td></tr>{% endfor %}
           </tbody></table></div>
-          {% if finance_balance > 0 %}
-            <p style="margin:14px 0 0;font-size:.85rem;color:var(--muted)">
-              To pay any of this, go to <strong>Payments → Generate Invoice</strong> and pick the
-              payment you are settling. One invoice number covers all of its instalments.
-            </p>
-          {% endif %}
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>Pay your fees</h2><span>Generate an invoice, take it to the bank, bring the slip back</span></div>
+          <div class="account-form">
+            {% if finance_charges %}
+              <p style="margin:0 0 14px">
+                Each payment has one invoice number, good for all of its instalments and its
+                own CRDB account — write that number on every slip for it. If a parent or
+                sponsor pays for you, give them the number: without it we cannot tell whose
+                money arrived. Every payment received, with its bank reference and receipt,
+                is printed on the invoice it was paid against.
+              </p>
+              {% if finance_balance > 0 %}
+                <button type="button" class="btn" data-goto-view="invoice-generate">Generate invoices for everything outstanding</button>
+                <button type="button" class="btn" data-goto-view="invoice-list">See my invoices</button>
+              {% else %}
+                <p style="margin:0"><span class="status pass">You are paid up for {{ academic_year }}</span></p>
+              {% endif %}
+            {% else %}
+              <p style="margin:0">
+                Your fees for {{ academic_year }} have not been set up yet. The Accounts
+                Office will bill you before you need to pay — nothing is owing in the
+                meantime.
+              </p>
+            {% endif %}
+          </div>
         </section>
       </section>
 
@@ -752,14 +830,14 @@
                 {% else %}<span class="status pending">Awaiting payment</span>{% endif %}
               </td>
               <td style="white-space:nowrap">
-                <a class="status pass" href="{% url 'invoice-print' row.invoice.reference %}" target="_blank" rel="noopener">View</a>
-                <a class="status pass" href="{% url 'invoice-print' row.invoice.reference %}?download=1" target="_blank" rel="noopener">Download</a>
+                <a class="btn-mini" href="{% url 'invoice-print' row.invoice.reference %}" target="_blank" rel="noopener">View</a>
+                <a class="btn-mini" href="{% url 'invoice-print' row.invoice.reference %}?download=1" target="_blank" rel="noopener">Download</a>
               </td>
             </tr>
             {% empty %}<tr><td colspan="11">No invoices yet. Generate one from Payments → Generate Invoice when you are ready to pay.</td></tr>{% endfor %}
             </tbody>
           </table></div>
-          <p style="margin:10px 0 0;font-size:.85rem">
+          <p class="panel-note">
             Tuition and other charges are banked in different CRDB accounts, so each is a
             separate invoice with its own number. Pay each one into the account printed on it,
             write that invoice number on the slip, and bring the slip to the Accounts Office.
@@ -767,65 +845,90 @@
         </section>
       </section>
 
-      <section class="view" id="view-payments">
-        <div class="section-title"><p class="eyebrow">Finance</p><h2>Payment History</h2><p>Every payment recorded against your account, across all modules.</p></div>
-        <section class="panel">
-          <div class="panel-head"><h2>Payments received</h2><span>Recorded at the Accounts Office against your bank slip</span></div>
-          <div class="table-wrap"><table><thead><tr><th>Date</th><th>Amount</th><th>Channel</th><th>Paid by</th><th>Bank ref.</th><th>EFD receipt</th><th>Covers</th></tr></thead><tbody>
-            {% for payment in finance_payments %}
-            <tr {% if payment.is_reversal %}style="opacity:.65"{% endif %}>
-              <td>{{ payment.payment_date|date:"d M Y" }}</td>
-              <td>{{ payment.amount|floatformat:2 }}{% if payment.is_reversal %} <span class="status fail">Reversed</span>{% endif %}</td>
-              <td>{{ payment.get_channel_display }}</td>
-              <td>{{ payment.payer_name|default:"—" }}{% if payment.payer_relation != 'self' %} ({{ payment.get_payer_relation_display }}){% endif %}</td>
-              <td>{{ payment.bank_reference|default:"—" }}</td>
-              <td>{{ payment.efd_receipt_no|default:"—" }}</td>
-              <td>{% for a in payment.allocations.all %}{{ a.charge.charge_type.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
-            </tr>
-            {% empty %}<tr><td colspan="7">No payments have been recorded yet.</td></tr>{% endfor %}
-          </tbody></table></div>
-        </section>
-      </section>
-
-      <section class="view" id="view-payment-summary">
-        <div class="section-title"><p class="eyebrow">Finance</p><h2>Payment Summary</h2><p>Your overall financial position for {{ academic_year }}.</p></div>
-        <div class="stats">
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-wallet2"></i></div></div><strong>{{ finance_required|floatformat:2 }}</strong><p>Total billed</p></article>
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-check-circle"></i></div></div><strong>{{ finance_paid|floatformat:2 }}</strong><p>Total paid</p></article>
-          {% if finance_waived %}<article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-hand-thumbs-up"></i></div></div><strong>{{ finance_waived|floatformat:2 }}</strong><p>Waived</p></article>{% endif %}
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-exclamation-circle"></i></div></div><strong>{{ finance_balance|floatformat:2 }}</strong><p>Outstanding</p></article>
+      <section class="view" id="view-services">
+        <div class="section-title">
+          <p class="eyebrow">Services</p><h2>Request a Service</h2>
+          <p>Ask the college for something you need — a sick sheet, an official letter, a
+             hostel bed. Fill in the request here and follow it under My Requests; you do
+             not need to queue at an office to start one.</p>
         </div>
 
         <section class="panel">
-          <div class="panel-head"><h2>Pay your fees</h2><span>Generate an invoice, take it to the bank, bring the slip back</span></div>
-          <div class="account-form">
-            {% if finance_charges %}
-              <p style="margin:0 0 14px">
-                Each payment has one invoice number, good for all of its instalments and its
-                own CRDB account — write that number on every slip for it. If a parent or
-                sponsor pays for you, give them the number: without it we cannot tell whose
-                money arrived.
-              </p>
-              {% if finance_balance > 0 %}
-                <button type="button" class="btn" data-goto-view="invoice-generate">Generate invoices for everything outstanding</button>
-                <button type="button" class="btn" data-goto-view="invoice-list">See my invoices</button>
+          <div class="panel-head"><h2>What you can ask for</h2><span>Only services open to your level right now</span></div>
+          <div>
+            {% for entry in service_forms %}
+            <div class="form-card searchable" data-search="{{ entry.form.title }} {{ entry.form.intro }}">
+              <h3>{{ entry.form.title }}</h3>
+              {% if entry.form.intro %}<p>{{ entry.form.intro }}</p>{% endif %}
+              {% if entry.form.closes_on %}<p style="margin-bottom:10px"><span style="font-size:.8rem;color:var(--muted)">Requests close {{ entry.form.closes_on|date:"d M Y" }}.</span></p>{% endif %}
+              {% if entry.can_answer %}
+                <button type="button" class="btn" data-open-form="{{ entry.form.slug }}" data-from-view="services">
+                  {% if entry.answered %}Request again{% else %}Make this request{% endif %}
+                </button>
               {% else %}
-                <p style="margin:0"><span class="status pass">You are paid up for {{ academic_year }}</span></p>
+                <span class="status pending">Already requested — see My Requests</span>
               {% endif %}
-            {% else %}
-              <p style="margin:0">
-                Your fees for {{ academic_year }} have not been set up yet. The Accounts
-                Office will bill you before you need to pay — nothing is owing in the
-                meantime.
-              </p>
-            {% endif %}
+            </div>
+            {% empty %}
+            <div class="form-card">
+              <h3>No services are open</h3>
+              <p style="margin:0">Nothing is open to your level just now. When the college
+                 opens a service — a sick sheet, a letter, hostel accommodation — it appears
+                 here. Anything urgent still goes to the office in person.</p>
+            </div>
+            {% endfor %}
           </div>
+        </section>
+      </section>
+
+      <section class="view" id="view-my-requests">
+        <div class="section-title">
+          <p class="eyebrow">Services</p><h2>My Requests</h2>
+          <p>Everything you have asked the college for, and what came of it. A request stays
+             with the college until an officer answers it.</p>
+        </div>
+
+        <section class="panel">
+          <div class="panel-head"><h2>My requests</h2><span>Newest first</span></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>What I asked for</th><th>Ref.</th><th>Requested</th><th>Status</th><th>Answered</th><th>The college says</th><th>Document</th></tr></thead>
+            <tbody>
+            {% for request in my_requests %}
+            <tr>
+              <td>{{ request.form.title }}</td>
+              <td>{{ request.reference }}</td>
+              <td>{{ request.submitted_at|date:"d M Y" }}</td>
+              <td>
+                {% if request.status == 'approved' %}<span class="status pass">Approved</span>
+                {% elif request.status == 'declined' %}<span class="status fail">Declined</span>
+                {% else %}<span class="status pending">With the college</span>{% endif %}
+              </td>
+              <td>{{ request.decided_at|date:"d M Y"|default:"—" }}</td>
+              <td>{{ request.decision_note|default:"—" }}</td>
+              <td style="white-space:nowrap">
+                {% if request.status == 'approved' %}
+                  <a class="btn-mini" href="{% url 'request-print' request.id %}" target="_blank" rel="noopener">View</a>
+                  <a class="btn-mini" href="{% url 'request-print' request.id %}?download=1" target="_blank" rel="noopener">Download</a>
+                {% else %}—{% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7">You have not asked for anything yet. Start under
+                <strong>Services → Request a Service</strong>.</td></tr>
+            {% endfor %}
+            </tbody>
+          </table></div>
+          <p class="panel-note">
+            Once a request is approved, download it and print it. The printed form carries the
+            College letterhead and your details; the parts left blank are for the health
+            facility or the signing officer to complete, sign and stamp.
+          </p>
         </section>
       </section>
 
       <section class="view" id="view-forms">
         <div class="section-title">
-          <p class="eyebrow">Quality assurance</p><h2>Forms</h2>
+          <p class="eyebrow">Services</p><h2>Forms</h2>
           <p>Evaluation forms the college has opened. Your feedback is used to improve
              teaching, facilities and services.</p>
         </div>
@@ -844,7 +947,7 @@
                 {% if entry.form.closes_on %}<span style="margin-left:6px">Closes {{ entry.form.closes_on|date:"d M Y" }}.</span>{% endif %}
               </p>
               {% if entry.can_answer %}
-                <button type="button" class="btn" data-open-form="{{ entry.form.slug }}">
+                <button type="button" class="btn" data-open-form="{{ entry.form.slug }}" data-from-view="forms">
                   {% if entry.answered %}Fill in again{% else %}Fill in this form{% endif %}
                 </button>
                 {% if entry.answered %}<span class="status pass" style="margin-left:8px">Already answered once</span>{% endif %}
@@ -862,10 +965,17 @@
           </div>
         </section>
 
-        <section class="panel" id="form-fill-panel" style="display:none">
-          <div class="panel-head"><h2 id="form-fill-title">Form</h2><span id="form-fill-note"></span></div>
+      </section>
+
+      <section class="view" id="view-form-fill">
+        <div class="section-title">
+          <p class="eyebrow" id="form-fill-eyebrow">Forms</p>
+          <h2 id="form-fill-heading">Form</h2>
+          <p id="form-fill-intro"></p>
+        </div>
+        <section class="panel" id="form-fill-panel">
+          <div class="panel-head"><h2 id="form-fill-title">Your answers</h2><span id="form-fill-note"></span></div>
           <div style="padding:0 16px">
-            <p id="form-fill-intro" style="color:var(--muted);font-size:.82rem"></p>
             <div id="form-fill-body"></div>
             <div style="padding:16px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
               <button type="button" class="btn" id="form-submit-btn">Submit my answers</button>
@@ -1004,16 +1114,34 @@
     </div>`;
   }
 
-  async function openForm(slug) {
+  // Filling one in is its own view rather than a panel swapped into the Forms
+  // page, because the same filler now serves two lists — an evaluation opened
+  // from Forms and a service opened from Request a Service — and each has to
+  // land the student back where they started.
+  let returnView = 'forms';
+
+  async function openForm(slug, from) {
+    returnView = from || 'forms';
+    const asService = returnView === 'services';
     const body = document.getElementById('form-fill-body');
     const message = document.getElementById('form-fill-msg');
     message.textContent = '';
+    message.style.color = '';
     body.innerHTML = '<p style="color:var(--muted)">Loading…</p>';
-    document.getElementById('form-fill-panel').style.display = '';
-    document.getElementById('forms-list-panel').style.display = 'none';
+    document.getElementById('form-fill-eyebrow').textContent = asService ? 'Services' : 'Forms';
+    document.getElementById('form-fill-heading').textContent = 'Loading…';
+    document.getElementById('form-fill-intro').textContent = '';
+    document.getElementById('form-submit-btn').disabled = false;
+    document.getElementById('form-submit-btn').textContent =
+      asService ? 'Send my request' : 'Submit my answers';
+    document.getElementById('form-fill-title').textContent =
+      asService ? 'Your request' : 'Your answers';
+    showView('form-fill', false);
     try {
       currentForm = await api('GET', `/my-forms/${slug}/`);
-      document.getElementById('form-fill-title').textContent = currentForm.title;
+      document.getElementById('form-fill-heading').textContent = currentForm.title;
+      const crumb = document.getElementById('crumb-page');
+      if (crumb) crumb.textContent = currentForm.title;
       document.getElementById('form-fill-note').textContent = currentForm.is_anonymous
         ? 'Anonymous — your name is not stored with these answers'
         : 'Your name is recorded with this response';
@@ -1032,7 +1160,9 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
       body.innerHTML = '';
+      document.getElementById('form-fill-heading').textContent = 'Sorry';
       message.textContent = error?.detail || 'Could not open that form.';
+      message.style.color = 'var(--red)';
     }
   }
 
@@ -1078,8 +1208,10 @@
       const result = await api('POST', `/my-forms/${currentForm.slug}/submit/`,
                                { answers: collectAnswers() });
       toast(result.detail || 'Thank you');
-      // Reload so the list shows it as answered and the badge drops.
-      setTimeout(() => window.location.reload(), 1200);
+      // Reload so the list shows it as answered and the badge drops. A request
+      // lands on My Requests, which is where its answer will appear.
+      const landing = returnView === 'services' ? 'my-requests' : 'forms';
+      setTimeout(() => { window.location.hash = landing; window.location.reload(); }, 1200);
     } catch (error) {
       message.textContent = error?.detail || 'Could not send your answers.';
       message.style.color = 'var(--red)';
@@ -1089,8 +1221,7 @@
 
   function closeForm() {
     currentForm = null;
-    document.getElementById('form-fill-panel').style.display = 'none';
-    document.getElementById('forms-list-panel').style.display = '';
+    showView(returnView);
   }
 
   function closeSidebar() {
@@ -1158,7 +1289,7 @@
   document.querySelectorAll('[data-invoice-group]').forEach(item =>
     item.addEventListener('click', () => generateInvoiceFor(item.dataset.invoiceGroup, item)));
   document.querySelectorAll('[data-open-form]').forEach(item =>
-    item.addEventListener('click', () => openForm(item.dataset.openForm)));
+    item.addEventListener('click', () => openForm(item.dataset.openForm, item.dataset.fromView)));
   document.getElementById('form-submit-btn')?.addEventListener('click', submitForm);
   document.getElementById('form-cancel-btn')?.addEventListener('click', closeForm);
 
