@@ -317,10 +317,13 @@ class ChangingSomebodysRoleTests(RoleTestBase):
         self.user.refresh_from_db()
         self.assertFalse(self.user.is_staff)
 
-    def test_an_administrator_cannot_lock_themselves_out(self):
+    def test_nobody_edits_their_own_roles(self):
+        """Which also means an administrator cannot lock themselves out — the
+        rule that stops self-promotion stops self-demotion with it."""
         refused = self.api.post(f'/api/staff-accounts/{self.admin.id}/roles/',
                                 {'roles': ['tutor']}, format='json')
-        self.assertEqual(refused.status_code, 400)
+        self.assertEqual(refused.status_code, 403)
+        self.assertIn('your own roles', refused.data['detail'])
         self.admin.refresh_from_db()
         self.assertTrue(self.admin.is_staff)
 
@@ -470,3 +473,70 @@ class WearingTwoHatsTests(RoleTestBase):
     def test_asking_for_a_scope_nobody_defined_is_refused(self):
         self.assertEqual(self._scope('everything').status_code, 400)
         self.assertEqual(self._codes(), ['ANA101', 'PHM101'])
+
+
+class RoleAdministrationCannotBeUsedToEscalateTests(RoleTestBase):
+    """Handing out roles is the one power that hands out every other.
+
+    Both of these were possible before: a Head of Department could grant
+    themselves the accountant's role and open the ledger, or drop their own HoD
+    profile to become the examination officer and start writing marks — walking
+    straight through the two boundaries the college drew around them.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.hod, self.hod_api = self._account('hod', 'hod')
+        self.principal, self.principal_api = self._account('principal', 'principal')
+
+    def _set(self, actor, user, *roles):
+        return actor.post(f'/api/staff-accounts/{user.id}/roles/',
+                          {'roles': list(roles)}, format='json')
+
+    def test_a_head_of_department_cannot_grant_itself_the_ledger(self):
+        self.assertEqual(self.hod_api.get('/api/charge-types/').status_code, 403)
+        self.assertEqual(self._set(self.hod_api, self.hod, 'hod', 'accountant').status_code, 403)
+        self.assertEqual(self.hod_api.get('/api/charge-types/').status_code, 403)
+        self.assertFalse(AccountantProfile.objects.filter(user=self.hod).exists())
+
+    def test_a_head_of_department_cannot_shed_the_office_to_escape_its_limits(self):
+        self.assertEqual(self._set(self.hod_api, self.hod, 'exam_officer').status_code, 403)
+        self.hod.refresh_from_db()
+        self.assertTrue(HeadOfDepartmentProfile.objects.filter(user=self.hod).exists())
+        self.assertEqual(
+            self.hod_api.post('/api/results/', {'student': 1, 'cat1_theory': 30},
+                              format='json').status_code, 403)
+
+    def test_a_head_of_department_cannot_promote_a_colleague_either(self):
+        """Otherwise two of them promote each other and the rule is decoration."""
+        self.assertEqual(self._set(self.hod_api, self.principal, 'principal', 'accountant')
+                         .status_code, 403)
+        self.assertFalse(AccountantProfile.objects.filter(user=self.principal).exists())
+
+    def test_a_head_of_department_cannot_mint_an_account_to_log_into(self):
+        """The longer route to the same place: make an accountant, know its
+        password, sign in as it."""
+        refused = self.hod_api.post('/api/staff-accounts/', {
+            'role': 'accountant', 'full_name': 'Back Door',
+            'username': 'backdoor', 'password': 'secret123',
+        }, format='json')
+        self.assertEqual(refused.status_code, 403)
+        self.assertFalse(User.objects.filter(username='backdoor').exists())
+
+    def test_nobody_changes_their_own_roles_not_even_the_principal(self):
+        self.assertEqual(self._set(self.principal_api, self.principal,
+                                   'principal', 'accountant').status_code, 403)
+        self.assertFalse(AccountantProfile.objects.filter(user=self.principal).exists())
+        self.assertEqual(self._set(self.api, self.admin, 'exam_officer', 'accountant')
+                         .status_code, 403)
+
+    def test_the_principal_and_the_exam_officer_still_administer_everyone_else(self):
+        self.assertEqual(self._set(self.principal_api, self.hod, 'hod', 'secretary')
+                         .status_code, 200)
+        self.assertEqual(self._set(self.api, self.principal, 'principal', 'tutor')
+                         .status_code, 200)
+
+    def test_a_head_of_department_still_reads_the_staff_list(self):
+        """They run the department and need to see who is in it — reading is
+        not the power that was being abused."""
+        self.assertEqual(self.hod_api.get('/api/staff-accounts/').status_code, 200)

@@ -219,6 +219,20 @@ def check_result_entry(user, module, data):
             f'was {when}. Ask the examination officer to reopen it.')
 
 
+def can_manage_accounts(user):
+    """Creating accounts and moving people between roles.
+
+    Deliberately narrower than "any admin". Role administration hands out every
+    other boundary the college drew, so an account that can do it can walk
+    through all of them: a Head of Department could grant themselves the
+    accountant's role and open the ledger, or drop their own HoD profile to
+    become the examination officer and start writing marks. Both were possible
+    and both are closed here. The Principal and the examination officer keep it.
+    """
+    return bool(user and user.is_authenticated
+                and user.is_staff and not is_head_of_department(user))
+
+
 def can_read_exams(user):
     """Seeing marks, eligibility, the exports and the performance analysis.
 
@@ -1008,20 +1022,24 @@ def set_staff_roles(request, user_id):
     the modules they teach and gives the college two rows for one member of
     staff.
     """
-    if not request.user.is_staff:
-        return Response({'detail': 'Only the administrator can manage staff accounts.'},
+    if not can_manage_accounts(request.user):
+        return Response({'detail': 'Only the Principal or the examination officer can '
+                                   'change what role somebody holds.'},
                         status=status.HTTP_403_FORBIDDEN)
 
     user = get_object_or_404(User, pk=user_id)
+    # Nobody promotes themselves. Every escalation this endpoint could offer
+    # runs through granting yourself a role you were not given, so the rule is
+    # the blunt one: ask a colleague.
+    if user == request.user:
+        return Response(
+            {'detail': 'You cannot change your own roles. Ask another administrator.'},
+            status=status.HTTP_403_FORBIDDEN)
+
     roles = request.data.get('roles')
     if not isinstance(roles, (list, tuple)):
         return Response({'detail': 'Send the roles as a list, e.g. ["tutor", "hod"].'},
                         status=status.HTTP_400_BAD_REQUEST)
-    if user == request.user and not set(roles) & set(STAFF_ROLES):
-        return Response(
-            {'detail': 'That would take away your own administrator access. '
-                       'Ask another administrator to make this change.'},
-            status=status.HTTP_400_BAD_REQUEST)
 
     try:
         set_roles(user, roles, full_name=str(request.data.get('full_name', '')).strip() or None)
@@ -1033,8 +1051,15 @@ def set_staff_roles(request, user_id):
 @api_view(['GET', 'POST'])
 @login_required
 def create_staff_account(request):
+    # Reading the staff list is open to any admin — a Head of Department runs
+    # the department and needs to see who is in it. Minting an account is not:
+    # it hands out roles, which is the one power that hands out every other.
     if not request.user.is_staff:
         return Response({'detail': 'Only the administrator can manage staff accounts.'}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == 'POST' and not can_manage_accounts(request.user):
+        return Response({'detail': 'Only the Principal or the examination officer can '
+                                   'create staff accounts.'},
+                        status=status.HTTP_403_FORBIDDEN)
 
     if request.method == 'GET':
         # An account with no profile at all used to be invisible here — which
