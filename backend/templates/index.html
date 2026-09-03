@@ -1021,13 +1021,15 @@
           </div>
         </div>
         <div class="card">
-          <div class="card-title">🎓 Enrolled Students</div>
+          <div class="card-title">🎓 Enrolled Students
+            <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px" id="stu-list-note"></span>
+          </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" class="admin-only">
             <button class="btn btn-warning btn-sm" onclick="bulkSetStudentPins()">🔑 Set Password/PIN for Filtered Students</button>
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>NACTVET Reg. No.</th><th>Name</th><th>Level</th><th>Semester</th><th>P</th><th>S</th><th>A</th><th>T-held</th><th>P-held</th><th>Overall %</th><th></th></tr></thead>
+              <thead><tr><th>NACTVET Reg. No.</th><th>Name</th><th>Level</th><th id="stu-col-3">Modules</th><th>P</th><th>S</th><th>A</th><th>T-held</th><th>P-held</th><th>Overall %</th><th></th></tr></thead>
               <tbody id="students-tbody"></tbody>
             </table>
           </div>
@@ -3496,47 +3498,129 @@ async function refreshModuleDropdowns(semId, lvlId, ...dropdownIds) {
     return mods;
   } catch(e) { return []; }
 }
+// A Student row is an *enrollment* — this person, in this module — so listing
+// them raw showed a student taking five modules five times over. With a module
+// chosen that is exactly right: it is that module's register. With no module
+// chosen the question is "who is enrolled", and the answer is one row each.
 async function loadStudents() {
   const semId = document.getElementById('stu-flt-sem').value;
   const lvlId = document.getElementById('stu-flt-level').value;
   const modId = document.getElementById('stu-flt-module').value;
   const search = document.getElementById('stu-search').value.trim();
-  let url = '/students/?';
+  const byModule = !!modId;
+
+  let url = byModule ? '/students/?' : '/students/people/?';
   url = appendParam(url, 'class_level_id', lvlId);
   url = appendParam(url, 'semester_id', semId);
   url = appendParam(url, 'module_id', modId);
   url = appendParam(url, 'search', search);
+
+  document.getElementById('stu-col-3').textContent = byModule ? 'Semester' : 'Modules';
   try {
     const data = await api('GET', url);
-    const students = data.results ?? data;
-    studentRows = students;
+    const rows = data.results ?? data;
+    studentRows = byModule ? rows : rows.flatMap(p => p.enrollments || []);
+    state.studentPeople = byModule ? [] : rows;
+    document.getElementById('stu-list-note').textContent = byModule
+      ? `${rows.length} enrolled in this module`
+      : `${rows.length} student${rows.length === 1 ? '' : 's'} · one row each`;
+
     const tbody = document.getElementById('students-tbody');
-    if (!students.length) {
+    if (!rows.length) {
       tbody.innerHTML = '<tr><td colspan="11"><div class="empty"><div class="ei">🎓</div>No students enrolled</div></td></tr>';
       return;
     }
-    tbody.innerHTML = students.map(s =>
-      `<tr>
-        <td><span style="font-family:var(--font-mono);font-size:.78rem">${s.nactvet_reg_no}</span></td>
-        <td>${s.name}</td>
-        <td>${s.class_level_name}</td>
-        <td style="font-size:.75rem;color:var(--muted)">${s.semester_label}</td>
-        <td><span class="badge badge-green">${s.sessions_attended}</span></td>
-        <td><span class="badge badge-orange">${s.sessions_sick}</span></td>
-        <td><span class="badge badge-red">${s.sessions_absent}</span></td>
-        <td><span class="badge badge-blue">${s.theory_total}</span></td>
-        <td><span class="badge badge-purple">${s.practical_total}</span></td>
-        <td>${pctBadge(s.attendance_pct)}${progressBar(s.attendance_pct)}</td>
-        <td>
-          <div class="row-actions">
-            <button class="btn btn-secondary btn-sm" title="Update student" onclick="openStudentEditModal(${s.id})">✎</button>
-            <button class="btn btn-secondary btn-sm" title="Set portal PIN" onclick="setStudentPin(${s.id},'${s.name.replace(/'/g,"\\'")}')">🔑</button>
-            <button class="btn btn-danger btn-sm" title="Remove student" onclick="deleteStudent(${s.id},'${s.name.replace(/'/g,"\\'")}')">✕</button>
-          </div>
-        </td>
-      </tr>`
-    ).join('');
+    tbody.innerHTML = byModule ? rows.map(studentRowHtml).join('')
+                               : rows.map(personRowHtml).join('');
   } catch(e) { toast('Failed to load students', 'var(--red)'); }
+}
+
+function studentRowHtml(s) {
+  return `<tr>
+    <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(s.nactvet_reg_no)}</span></td>
+    <td>${safeText(s.name)}</td>
+    <td>${safeText(s.class_level_name)}</td>
+    <td style="font-size:.75rem;color:var(--muted)">${safeText(s.semester_label)}</td>
+    <td><span class="badge badge-green">${s.sessions_attended}</span></td>
+    <td><span class="badge badge-orange">${s.sessions_sick}</span></td>
+    <td><span class="badge badge-red">${s.sessions_absent}</span></td>
+    <td><span class="badge badge-blue">${s.theory_total}</span></td>
+    <td><span class="badge badge-purple">${s.practical_total}</span></td>
+    <td>${pctBadge(s.attendance_pct)}${progressBar(s.attendance_pct)}</td>
+    <td>
+      <div class="row-actions">
+        <button class="btn btn-secondary btn-sm" title="Update student" onclick="openStudentEditModal(${s.id})">✎</button>
+        <button class="btn btn-secondary btn-sm" title="Set portal PIN" onclick="setStudentPin(${s.id},${JSON.stringify(s.name)})">🔑</button>
+        <button class="btn btn-danger btn-sm" title="Remove from this module" onclick="deleteStudent(${s.id},${JSON.stringify(s.name)})">✕</button>
+      </div>
+    </td>
+  </tr>`;
+}
+
+function personRowHtml(p) {
+  const key = p.nactvet_reg_no.replace(/[^A-Za-z0-9]/g, '');
+  return `<tr>
+    <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(p.nactvet_reg_no)}</span></td>
+    <td>${safeText(p.name)}
+      ${p.has_portal_pin ? '' : '<div style="font-size:.68rem;color:var(--muted)">no portal password yet</div>'}</td>
+    <td style="font-size:.78rem">${p.levels.map(safeText).join(', ')}</td>
+    <td><button class="btn btn-ghost btn-sm" onclick="toggleEnrollments('${key}')">${p.modules} module${p.modules === 1 ? '' : 's'} ▾</button></td>
+    <td><span class="badge badge-green">${p.sessions_attended}</span></td>
+    <td><span class="badge badge-orange">${p.sessions_sick}</span></td>
+    <td><span class="badge badge-red">${p.sessions_absent}</span></td>
+    <td><span class="badge badge-blue">${p.theory_total}</span></td>
+    <td><span class="badge badge-purple">${p.practical_total}</span></td>
+    <td>${pctBadge(p.attendance_pct)}${progressBar(p.attendance_pct)}</td>
+    <td>
+      <div class="row-actions">
+        <button class="btn btn-secondary btn-sm" title="Set portal password on every enrolment"
+                onclick="setPersonPin(${JSON.stringify(p.nactvet_reg_no)},${JSON.stringify(p.name)})">🔑</button>
+      </div>
+    </td>
+  </tr>
+  <tr id="enr-${key}" style="display:none"><td colspan="11" style="background:var(--surface2);padding:0">
+    <div class="table-wrap"><table style="min-width:0">
+      <thead><tr><th>Module</th><th>Level</th><th>Semester</th><th>Attendance</th><th></th></tr></thead>
+      <tbody>${(p.enrollments || []).map(e => `
+        <tr>
+          <td><strong>${safeText(e.module_code)}</strong> — ${safeText(e.module_name)}</td>
+          <td style="font-size:.78rem">${safeText(e.class_level_name)}</td>
+          <td style="font-size:.78rem">${safeText(e.semester_label)}</td>
+          <td>${pctBadge(e.attendance_pct)}</td>
+          <td>
+            <div class="row-actions">
+              <button class="btn btn-secondary btn-sm" title="Update this enrolment" onclick="openStudentEditModal(${e.id})">✎</button>
+              <button class="btn btn-danger btn-sm" title="Remove from this module" onclick="deleteStudent(${e.id},${JSON.stringify(p.name)})">✕</button>
+            </div>
+          </td>
+        </tr>`).join('')}</tbody>
+    </table></div>
+  </td></tr>`;
+}
+
+function toggleEnrollments(key) {
+  const row = document.getElementById(`enr-${key}`);
+  if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+}
+
+// The portal lets a student in on whichever enrolment carries the password, so
+// setting it on all of them is the only version that behaves predictably.
+async function setPersonPin(regNo, name) {
+  const person = (state.studentPeople || []).find(p => p.nactvet_reg_no === regNo);
+  if (!person) return;
+  const pin = prompt(`Set the portal password for ${name} (6+ characters).\n` +
+                     `It applies to all ${person.modules} of their enrolments.`);
+  if (!pin) return;
+  if (pin.trim().length < 6) { toast('Use at least 6 characters', 'var(--red)'); return; }
+  try {
+    for (const enrollment of person.enrollments) {
+      await api('PATCH', `/students/${enrollment.id}/`, { portal_pin: pin.trim() });
+    }
+    toast(`Portal password set for ${name}`, 'var(--green)');
+    loadStudents();
+  } catch (e) {
+    toast(e?.portal_pin?.[0] || e?.detail || 'Could not set the password', 'var(--red)');
+  }
 }
 
 async function openStudentEditModal(id) {

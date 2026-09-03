@@ -1372,6 +1372,65 @@ class StudentViewSet(viewsets.ModelViewSet):
         result = serializer.save()
         return Response(result, status=status.HTTP_201_CREATED)
 
+    @action(detail=False, methods=['get'], url_path='people')
+    def people(self, request):
+        """One row per student, not one per enrollment.
+
+        `Student` is an enrollment — this person, in this module — so a student
+        taking five modules is five rows, and the roster listed them five times
+        over before anybody had filtered to a module. That is the right shape
+        for a module register and the wrong one for "who is enrolled", which is
+        the question this screen is asked with no module chosen.
+
+        Attendance is summed across their enrollments: a student is present for
+        a session or absent from it, and which module it belonged to is not what
+        the person-level figure is about.
+        """
+        serializer = StudentSerializer()
+        people = {}
+        for enrollment in self.get_queryset().order_by('name', 'nactvet_reg_no'):
+            key = enrollment.nactvet_reg_no.upper()
+            row = people.setdefault(key, {
+                'nactvet_reg_no': enrollment.nactvet_reg_no,
+                'name': enrollment.name,
+                'levels': [], 'semesters': [], 'enrollments': [],
+                'sessions_attended': 0, 'sessions_sick': 0, 'sessions_absent': 0,
+                'sessions_total': 0, 'theory_total': 0, 'practical_total': 0,
+                'has_portal_pin': False,
+            })
+            module = enrollment.module
+            level, semester = module.class_level.name, module.semester.label
+            if level not in row['levels']:
+                row['levels'].append(level)
+            if semester not in row['semesters']:
+                row['semesters'].append(semester)
+            row['enrollments'].append({
+                # Carries the person's own fields too, so an enrolment opened
+                # from the grouped list edits exactly as one opened from a
+                # module register does.
+                'id': enrollment.id,
+                'nactvet_reg_no': enrollment.nactvet_reg_no, 'name': enrollment.name,
+                'module': module.id, 'module_id': module.id,
+                'module_code': module.code, 'module_name': module.name,
+                'class_level_id': module.class_level_id, 'class_level_name': level,
+                'semester_id': module.semester_id, 'semester_label': semester,
+                'attendance_pct': serializer.get_attendance_pct(enrollment),
+                'has_portal_pin': enrollment.has_portal_pin,
+            })
+            for field in ('sessions_attended', 'sessions_sick', 'sessions_absent',
+                          'sessions_total', 'theory_total', 'practical_total'):
+                row[field] += getattr(serializer, f'get_{field}')(enrollment)
+            # The portal accepts whichever enrollment carries a PIN, so the
+            # person has one as soon as any of them does.
+            row['has_portal_pin'] = row['has_portal_pin'] or enrollment.has_portal_pin
+
+        for row in people.values():
+            effective = row['sessions_attended'] + row['sessions_sick']
+            row['modules'] = len(row['enrollments'])
+            row['attendance_pct'] = (round(effective * 100 / row['sessions_total'])
+                                     if row['sessions_total'] else 0)
+        return Response(sorted(people.values(), key=lambda row: row['name'].lower()))
+
     @action(detail=False, methods=['post'], url_path='bulk_set_pin')
     def bulk_set_pin(self, request):
         if not request.user.is_staff:
