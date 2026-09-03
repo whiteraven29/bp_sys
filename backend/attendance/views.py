@@ -855,6 +855,143 @@ def register_view(request):
     return render(request, 'register.html', {'form': form, 'levels': levels})
 
 
+#: What each role is, and the profile row that carries it. A user may hold
+#: several: promoting a tutor to Principal is not a new account, it is the same
+#: person keeping the modules they already teach and gaining an office.
+ROLE_PROFILES = {
+    'tutor': TeacherProfile,
+    'accountant': AccountantProfile,
+    'estate_officer': EstateOfficerProfile,
+    'secretary': SecretaryProfile,
+    'principal': PrincipalProfile,
+    'hod': HeadOfDepartmentProfile,
+}
+#: The roles that carry Django's `is_staff`. "exam_officer" has no profile of
+#: its own — it *is* is_staff with neither of the other two offices — so it is
+#: named here to make it something the role editor can grant and take away
+#: rather than an invisible side effect.
+STAFF_ROLES = ('principal', 'hod', 'exam_officer')
+#: Which title an account is listed under when it holds more than one.
+ROLE_ORDER = ('principal', 'hod', 'exam_officer', 'secretary', 'accountant',
+              'estate_officer', 'tutor')
+ROLE_LABELS = {
+    'tutor': 'Tutor', 'accountant': 'Accountant', 'estate_officer': 'Estate Officer',
+    'secretary': 'Secretary', 'principal': 'Principal', 'hod': 'Head of Department',
+    'exam_officer': 'Exam Officer',
+}
+
+
+def _held(model, user):
+    """Whether this account carries this profile. TeacherProfile has no
+    `is_active` switch; every other role profile does."""
+    qs = model.objects.filter(user=user)
+    if hasattr(model, 'is_active'):
+        qs = qs.filter(is_active=True)
+    return qs.exists()
+
+
+def roles_for(user):
+    """Every role this account holds, most senior first."""
+    held = {name for name, model in ROLE_PROFILES.items() if _held(model, user)}
+    if user.is_staff and not held & {'principal', 'hod'}:
+        held.add('exam_officer')
+    return [role for role in ROLE_ORDER if role in held]
+
+
+def full_name_for(user):
+    for role in ROLE_ORDER:
+        model = ROLE_PROFILES.get(role)
+        if model is None:
+            continue
+        profile = model.objects.filter(user=user).first()
+        if profile:
+            return profile.full_name
+    return user.get_full_name() or user.username
+
+
+@transaction.atomic
+def set_roles(user, roles, *, full_name=None):
+    """Make this account hold exactly these roles.
+
+    Adding one never disturbs what the account already had — a tutor made Head
+    of Department keeps every module they teach — and removing one takes away
+    the office, not the history. Module assignments live on the module, not on
+    the profile, so they survive either way.
+    """
+    wanted = set(roles)
+    unknown = wanted - set(ROLE_PROFILES) - {'exam_officer'}
+    if unknown:
+        raise ValueError(f'Unknown role(s): {", ".join(sorted(unknown))}.')
+    if not wanted:
+        raise ValueError('An account must hold at least one role.')
+
+    name = full_name or full_name_for(user)
+    for role, model in ROLE_PROFILES.items():
+        existing = model.objects.filter(user=user).first()
+        if role in wanted:
+            if existing is None:
+                model.objects.create(user=user, full_name=name)
+            elif hasattr(existing, 'is_active') and not existing.is_active:
+                existing.is_active = True
+                existing.save(update_fields=['is_active'])
+        elif existing is not None:
+            existing.delete()
+
+    # A superuser keeps the keys to the building whatever else changes.
+    staff = user.is_superuser or bool(wanted & set(STAFF_ROLES))
+    if user.is_staff != staff:
+        user.is_staff = staff
+        user.save(update_fields=['is_staff'])
+    return user
+
+
+def staff_account_row(user):
+    held = roles_for(user)
+    return {
+        'id': user.id,
+        'username': user.username,
+        'full_name': full_name_for(user),
+        'role': held[0] if held else '',
+        'roles': held,
+        'role_labels': [ROLE_LABELS[role] for role in held],
+        'is_staff': user.is_staff,
+        'is_superuser': user.is_superuser,
+        'module_ids': [m.id for m in user.modules_taught.all()] if 'tutor' in held else None,
+    }
+
+
+@api_view(['POST'])
+@login_required
+def set_staff_roles(request, user_id):
+    """Move an account between roles, or give it a second one.
+
+    The reason this exists rather than "make another account": a tutor promoted
+    to Head of Department is the same person, and splitting them in two loses
+    the modules they teach and gives the college two rows for one member of
+    staff.
+    """
+    if not request.user.is_staff:
+        return Response({'detail': 'Only the administrator can manage staff accounts.'},
+                        status=status.HTTP_403_FORBIDDEN)
+
+    user = get_object_or_404(User, pk=user_id)
+    roles = request.data.get('roles')
+    if not isinstance(roles, (list, tuple)):
+        return Response({'detail': 'Send the roles as a list, e.g. ["tutor", "hod"].'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if user == request.user and not set(roles) & set(STAFF_ROLES):
+        return Response(
+            {'detail': 'That would take away your own administrator access. '
+                       'Ask another administrator to make this change.'},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        set_roles(user, roles, full_name=str(request.data.get('full_name', '')).strip() or None)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(staff_account_row(user))
+
+
 @api_view(['GET', 'POST'])
 @login_required
 def create_staff_account(request):
@@ -862,48 +999,20 @@ def create_staff_account(request):
         return Response({'detail': 'Only the administrator can manage staff accounts.'}, status=status.HTTP_403_FORBIDDEN)
 
     if request.method == 'GET':
+        # An account with no profile at all used to be invisible here — which
+        # meant the examination officer could not see their own row, let alone
+        # give somebody else the job.
         users = User.objects.filter(
             Q(profile__isnull=False) | Q(accountant_profile__isnull=False)
             | Q(estate_officer_profile__isnull=False) | Q(secretary_profile__isnull=False)
             | Q(principal_profile__isnull=False) | Q(hod_profile__isnull=False)
-        ).select_related(
+            | Q(is_staff=True)
+        ).distinct().select_related(
             'profile', 'accountant_profile', 'estate_officer_profile', 'secretary_profile',
             'principal_profile', 'hod_profile',
         ).prefetch_related('modules_taught').order_by('username')
 
-        results = []
-        for u in users:
-            if hasattr(u, 'profile'):
-                results.append({
-                    'id': u.id, 'username': u.username, 'full_name': u.profile.full_name,
-                    'role': 'tutor', 'module_ids': [m.id for m in u.modules_taught.all()],
-                })
-            elif hasattr(u, 'accountant_profile'):
-                results.append({
-                    'id': u.id, 'username': u.username, 'full_name': u.accountant_profile.full_name,
-                    'role': 'accountant', 'module_ids': None,
-                })
-            elif hasattr(u, 'estate_officer_profile'):
-                results.append({
-                    'id': u.id, 'username': u.username, 'full_name': u.estate_officer_profile.full_name,
-                    'role': 'estate_officer', 'module_ids': None,
-                })
-            elif hasattr(u, 'secretary_profile'):
-                results.append({
-                    'id': u.id, 'username': u.username, 'full_name': u.secretary_profile.full_name,
-                    'role': 'secretary', 'module_ids': None,
-                })
-            elif hasattr(u, 'principal_profile'):
-                results.append({
-                    'id': u.id, 'username': u.username, 'full_name': u.principal_profile.full_name,
-                    'role': 'principal', 'module_ids': None,
-                })
-            elif hasattr(u, 'hod_profile'):
-                results.append({
-                    'id': u.id, 'username': u.username, 'full_name': u.hod_profile.full_name,
-                    'role': 'hod', 'module_ids': None,
-                })
-        return Response(results)
+        return Response([staff_account_row(user) for user in users])
 
     role = str(request.data.get('role', '')).strip()
     full_name = str(request.data.get('full_name', '')).strip()
@@ -927,34 +1036,17 @@ def create_staff_account(request):
             password=password,
             first_name=parts[0],
             last_name=parts[1] if len(parts) > 1 else '',
-            # The Principal and the Head of Department carry admin rights. What
-            # each of them is *not* allowed near — money, college property, and
-            # for the HoD examinations — is decided by the checks those areas
-            # make, not by withholding is_staff.
-            is_staff=role in ('principal', 'hod'),
         )
-        if role == 'accountant':
-            AccountantProfile.objects.create(user=user, full_name=full_name)
-        elif role == 'estate_officer':
-            EstateOfficerProfile.objects.create(user=user, full_name=full_name)
-        elif role == 'secretary':
-            SecretaryProfile.objects.create(user=user, full_name=full_name)
-        elif role == 'principal':
-            PrincipalProfile.objects.create(user=user, full_name=full_name)
-        elif role == 'hod':
-            HeadOfDepartmentProfile.objects.create(user=user, full_name=full_name)
-        else:
-            TeacherProfile.objects.create(user=user, full_name=full_name)
-            modules = Module.objects.filter(id__in=module_ids)
-            for module in modules:
+        # One place decides what a role means — including that the Principal and
+        # the Head of Department carry admin rights. What each of them is *not*
+        # allowed near (money, college property, and for the HoD examinations)
+        # is decided by the checks those areas make, not by withholding is_staff.
+        set_roles(user, [role], full_name=full_name)
+        if role == 'tutor':
+            for module in Module.objects.filter(id__in=module_ids):
                 module.teachers.add(user)
 
-    return Response({
-        'id': user.id,
-        'username': user.username,
-        'full_name': full_name,
-        'role': role,
-    }, status=status.HTTP_201_CREATED)
+    return Response(staff_account_row(user), status=status.HTTP_201_CREATED)
 
 
 @api_view(['POST'])

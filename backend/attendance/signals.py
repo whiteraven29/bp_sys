@@ -1,4 +1,6 @@
-"""Charges follow enrollment.
+"""Two things the system must do for itself.
+
+Charges follow enrollment, and an office carries its own access.
 
 A student used to be registered and then owe nothing at all until somebody
 remembered to run "generate charges" for their whole level. Anyone admitted
@@ -19,7 +21,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from . import finance
-from .models import Student
+from .models import HeadOfDepartmentProfile, PrincipalProfile, Student
 
 logger = logging.getLogger(__name__)
 
@@ -54,3 +56,29 @@ def bill_new_enrollment(sender, instance, created, **kwargs):
     if raised:
         logger.info('Billed %s for %s on enrollment: %d charge(s)',
                     instance.nactvet_reg_no, academic_year, len(raised))
+
+
+@receiver(post_save, sender=PrincipalProfile,
+          dispatch_uid='attendance.principal_carries_admin_rights')
+@receiver(post_save, sender=HeadOfDepartmentProfile,
+          dispatch_uid='attendance.hod_carries_admin_rights')
+def office_carries_admin_rights(sender, instance, **kwargs):
+    """Holding one of these offices *is* having admin rights.
+
+    Django's own admin will happily attach a Principal profile to an account
+    without touching `is_staff`, and the result is somebody who carries the
+    title and none of the access — they sign in and are still shown a tutor's
+    screen. That is not a role change anybody would recognise as one, so the
+    profile grants the rights itself.
+
+    Grants only, never revokes: the examination officer is `is_staff` with no
+    profile at all, so an automatic revoke here could not tell "this office
+    ended" from "this account was always the exam officer". Taking a role away
+    goes through set_roles, which knows the difference.
+    """
+    user = instance.user
+    if instance.is_active and not user.is_staff:
+        user.is_staff = True
+        user.save(update_fields=['is_staff'])
+        logger.info('Granted admin rights to %s on becoming %s',
+                    user.username, sender._meta.verbose_name)

@@ -899,7 +899,7 @@
         <div class="card-title">Existing Staff</div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Username</th><th>Full Name</th><th>Role</th><th>Modules</th><th></th></tr></thead>
+            <thead><tr><th>Username</th><th>Full Name</th><th>Roles</th><th>Modules</th><th></th></tr></thead>
             <tbody id="staff-accounts-tbody"></tbody>
           </table>
         </div>
@@ -2322,6 +2322,23 @@
 </div>
 
 <!-- TEACHER MODULES MODAL -->
+<div class="modal-overlay" id="roles-modal">
+  <div class="modal">
+    <div class="modal-title">
+      Change roles — <span id="roles-user-name"></span>
+      <button class="modal-close" onclick="closeRolesModal()">✕</button>
+    </div>
+    <input type="hidden" id="roles-user-id">
+    <p class="help-note">
+      Tick every office this person holds. Moving a tutor to Head of Department or Principal
+      does not need a second account — tick the new office, and the modules they teach stay
+      with them either way. Changes take effect at their next sign-in.
+    </p>
+    <div id="roles-list" class="check-grid" style="margin-bottom:14px;"></div>
+    <button class="btn btn-primary btn-sm" onclick="saveUserRoles()">Save roles</button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="teacher-modules-modal">
   <div class="modal">
     <div class="modal-title">
@@ -3112,26 +3129,79 @@ function renderStaffAccounts() {
     tbody.innerHTML = '<tr><td colspan="5"><div class="empty">No staff accounts yet</div></td></tr>';
     return;
   }
-  const roleLabel = { tutor: 'Tutor', accountant: 'Accountant',
-                      estate_officer: 'Estate Officer', secretary: 'Secretary',
-                      principal: 'Principal', hod: 'Head of Department' };
   tbody.innerHTML = rows.map(u => {
-    const modules = u.role === 'tutor'
-      ? (u.module_ids.length
+    const isTutor = (u.roles || []).includes('tutor');
+    const modules = isTutor
+      ? ((u.module_ids || []).length
           ? u.module_ids.map(id => state.allModules.find(m => String(m.id) === String(id))?.code || '?').join(', ')
           : '<span style="color:var(--muted)">none assigned</span>')
       : '—';
-    const editBtn = u.role === 'tutor'
-      ? `<button class="btn btn-secondary btn-sm" onclick="openTeacherModulesModal(${u.id})">Edit Modules</button>`
-      : '';
+    // An account can hold more than one office — a tutor promoted to Head of
+    // Department is the same person and keeps their modules — so every role is
+    // shown, not just the most senior one.
+    const badges = (u.roles || []).map((role, i) =>
+      `<span class="badge ${i === 0 ? 'badge-blue' : 'badge-yellow'}">${safeText(ROLE_LABELS[role] || role)}</span>`
+    ).join(' ') || '<span style="color:var(--muted)">none</span>';
     return `<tr>
-      <td><span style="font-family:var(--font-mono)">${u.username}</span></td>
-      <td>${u.full_name}</td>
-      <td>${roleLabel[u.role] || u.role}</td>
+      <td><span style="font-family:var(--font-mono)">${safeText(u.username)}</span>
+        ${u.is_superuser ? '<div style="font-size:.68rem;color:var(--muted)">superuser</div>' : ''}</td>
+      <td>${safeText(u.full_name)}</td>
+      <td style="line-height:1.9">${badges}</td>
       <td style="font-size:.75rem">${modules}</td>
-      <td>${editBtn}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-secondary btn-sm" onclick="openRolesModal(${u.id})">Change roles</button>
+        ${isTutor ? `<button class="btn btn-ghost btn-sm" onclick="openTeacherModulesModal(${u.id})">Modules</button>` : ''}
+      </td>
     </tr>`;
   }).join('');
+}
+
+const ROLE_LABELS = {
+  tutor: 'Tutor', accountant: 'Accountant', estate_officer: 'Estate Officer',
+  secretary: 'Secretary', principal: 'Principal', hod: 'Head of Department',
+  exam_officer: 'Exam Officer',
+};
+const ROLE_NOTES = {
+  exam_officer: 'Results, eligibility and exam declarations. Full academic admin.',
+  principal: 'Everything academic. Not the ledger, not the asset register.',
+  hod: 'Runs the department and reads examinations, but does not decide them.',
+  tutor: 'Takes attendance and enters CA marks for their own modules.',
+  secretary: 'Answers what students have asked the College for.',
+  accountant: 'The fees ledger, payments and clearance.',
+  estate_officer: 'The asset register and college property.',
+};
+
+// Roles are a set, not a single label. Promoting somebody is a tick, not a
+// second account: the modules they teach hang off the module, so they survive.
+function openRolesModal(userId) {
+  const user = (state.staffAccounts || []).find(u => u.id === userId);
+  if (!user) return;
+  const held = new Set(user.roles || []);
+  document.getElementById('roles-user-id').value = userId;
+  document.getElementById('roles-user-name').textContent = user.full_name;
+  document.getElementById('roles-list').innerHTML = Object.keys(ROLE_LABELS).map(role => `
+    <label class="check-item">
+      <input type="checkbox" name="user-role" value="${role}" ${held.has(role) ? 'checked' : ''}>
+      <span><strong>${safeText(ROLE_LABELS[role])}</strong>
+        <div style="font-size:.72rem;color:var(--muted)">${safeText(ROLE_NOTES[role])}</div></span>
+    </label>`).join('');
+  document.getElementById('roles-modal').classList.add('open');
+}
+
+function closeRolesModal() { document.getElementById('roles-modal').classList.remove('open'); }
+
+async function saveUserRoles() {
+  const userId = document.getElementById('roles-user-id').value;
+  const roles = [...document.querySelectorAll('input[name="user-role"]:checked')].map(el => el.value);
+  if (!roles.length) { toast('An account must hold at least one role', 'var(--red)'); return; }
+  try {
+    await api('POST', `/staff-accounts/${userId}/roles/`, { roles });
+    toast('Roles updated — they take effect at their next sign-in', 'var(--green)');
+    closeRolesModal();
+    loadStaffAccounts();
+  } catch (e) {
+    toast(e?.detail || 'Could not change the roles', 'var(--red)');
+  }
 }
 
 async function openTeacherModulesModal(userId) {

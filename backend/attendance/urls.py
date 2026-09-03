@@ -55,6 +55,7 @@ urlpatterns = [
     path('change-password/', views.change_password, name='change-password'),
     path('staff-accounts/', views.create_staff_account, name='staff-accounts'),
     path('staff-accounts/<int:user_id>/set-modules/', views.set_staff_modules, name='staff-set-modules'),
+    path('staff-accounts/<int:user_id>/roles/', views.set_staff_roles, name='staff-set-roles'),
     path('inventory/template/', views.inventory_template, name='inventory-template'),
     path('inventory/import/', views.inventory_import, name='inventory-import'),
     path('inventory/bulk-create/', views.inventory_bulk_create, name='inventory-bulk-create'),

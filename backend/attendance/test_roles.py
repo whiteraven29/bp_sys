@@ -14,8 +14,9 @@ from rest_framework.test import APIClient
 from .models import (
     AcademicYear, AccountantProfile, ClassLevel, EstateOfficerProfile,
     HeadOfDepartmentProfile, Module, PrincipalProfile, Semester, Student,
-    StudentResult,
+    StudentResult, TeacherProfile,
 )
+from .views import roles_for as roles_of
 
 User = get_user_model()
 
@@ -220,3 +221,154 @@ class FinanceAndEstateAreUnchangedTests(RoleTestBase):
 
         self.assertEqual(api.get('/api/assets/').status_code, 200)
         self.assertEqual(api.get('/api/charge-types/').status_code, 403)
+
+
+class ChangingSomebodysRoleTests(RoleTestBase):
+    """A tutor promoted to Head of Department is the same person.
+
+    Making a second account for them loses the modules they teach and gives the
+    college two rows for one member of staff, so a role is something an account
+    gains rather than something it is replaced by.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.user, self.client_api = self._account('tutor', 'jmwangi')
+        self.module.teachers.add(self.user)
+
+    def _roles(self, *roles, actor=None):
+        return (actor or self.api).post(f'/api/staff-accounts/{self.user.id}/roles/',
+                                        {'roles': list(roles)}, format='json')
+
+    def test_a_tutor_promoted_keeps_the_modules_they_teach(self):
+        promoted = self._roles('tutor', 'hod')
+        self.assertEqual(promoted.status_code, 200, promoted.data)
+        self.assertEqual(promoted.data['roles'], ['hod', 'tutor'])
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_staff)
+        self.assertTrue(HeadOfDepartmentProfile.objects.filter(user=self.user).exists())
+        # The whole point: nothing they already had was taken away.
+        self.assertIn(self.module, self.user.modules_taught.all())
+        self.assertEqual(self.user.profile.full_name, 'Tutor Person')
+
+    def test_moving_them_out_of_tutoring_still_leaves_the_modules_alone(self):
+        """Module assignments live on the module. Dropping the tutor profile is
+        the college saying "this is no longer their job", not erasing history."""
+        self._roles('principal')
+
+        self.user.refresh_from_db()
+        self.assertFalse(hasattr(self.user, 'profile'))
+        self.assertTrue(PrincipalProfile.objects.filter(user=self.user).exists())
+        self.assertIn(self.module, self.user.modules_taught.all())
+
+    def test_an_office_brings_its_access_with_it(self):
+        self.assertFalse(self.user.is_staff)
+        self._roles('tutor', 'principal')
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_staff)
+
+        payload = self.client_api.get('/api/dashboard/').json()
+        self.assertTrue(payload['is_principal'])
+        self.assertTrue(payload['can_manage_exams'])
+
+    def test_taking_the_office_away_takes_the_access_with_it(self):
+        self._roles('tutor', 'principal')
+        self._roles('tutor')
+
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_staff)
+        self.assertFalse(PrincipalProfile.objects.filter(user=self.user).exists())
+        self.assertEqual(self.client_api.get('/api/results/').status_code, 200)  # own modules
+        self.assertEqual(self.client_api.get('/api/charge-types/').status_code, 403)
+
+    def test_the_exam_officer_can_be_handed_on(self):
+        """It is the one role with no profile of its own — is_staff and neither
+        office — so the editor has to be able to grant and revoke it by name."""
+        self._roles('tutor', 'exam_officer')
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_staff)
+        self.assertIn('exam_officer', roles_of(self.user))
+
+        self._roles('tutor')
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_staff)
+
+    def test_an_account_may_hold_several_offices(self):
+        answered = self._roles('tutor', 'hod', 'secretary')
+        self.assertEqual(answered.status_code, 200)
+        self.assertEqual(answered.data['roles'], ['hod', 'secretary', 'tutor'])
+        self.assertEqual(answered.data['role'], 'hod')       # listed under the senior one
+
+    def test_an_account_cannot_be_left_with_no_role(self):
+        refused = self._roles()
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('at least one role', refused.data['detail'])
+
+    def test_a_role_nobody_defined_is_refused(self):
+        refused = self._roles('tutor', 'chancellor')
+        self.assertEqual(refused.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_staff)
+
+    def test_only_the_administrator_may_change_roles(self):
+        refused = self._roles('principal', actor=self.client_api)
+        self.assertEqual(refused.status_code, 403)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_staff)
+
+    def test_an_administrator_cannot_lock_themselves_out(self):
+        refused = self.api.post(f'/api/staff-accounts/{self.admin.id}/roles/',
+                                {'roles': ['tutor']}, format='json')
+        self.assertEqual(refused.status_code, 400)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_staff)
+
+    def test_every_account_is_listed_including_ones_with_no_profile(self):
+        """The examination officer has no profile row, so they used to be
+        invisible on the very screen that hands the job to somebody else."""
+        listed = {row['username']: row for row in self.api.get('/api/staff-accounts/').json()}
+        self.assertIn('admin', listed)
+        self.assertEqual(listed['admin']['roles'], ['exam_officer'])
+        self.assertTrue(listed['admin']['is_superuser'])
+        self.assertEqual(listed['jmwangi']['roles'], ['tutor'])
+
+
+class DjangoAdminRoleChangeTests(RoleTestBase):
+    """Attaching a profile in Django's own admin is a role change too.
+
+    It sets no `is_staff`, so before this the account carried the title and none
+    of the access — you signed in and were still shown a tutor's screen.
+    """
+
+    def test_attaching_a_principal_profile_grants_the_access(self):
+        user = User.objects.create_user('jmwangi', password='pw')
+        TeacherProfile.objects.create(user=user, full_name='J Mwangi')
+        self.assertFalse(user.is_staff)
+
+        PrincipalProfile.objects.create(user=user, full_name='J Mwangi')
+
+        user.refresh_from_db()
+        self.assertTrue(user.is_staff)
+
+    def test_attaching_a_head_of_department_profile_grants_it_too(self):
+        user = User.objects.create_user('amtei', password='pw')
+        HeadOfDepartmentProfile.objects.create(user=user, full_name='A Mtei')
+
+        user.refresh_from_db()
+        self.assertTrue(user.is_staff)
+
+    def test_an_inactive_profile_grants_nothing(self):
+        user = User.objects.create_user('retired', password='pw')
+        PrincipalProfile.objects.create(user=user, full_name='Retired', is_active=False)
+
+        user.refresh_from_db()
+        self.assertFalse(user.is_staff)
+
+    def test_the_accountant_and_estate_offices_carry_no_admin_rights(self):
+        for model, username in ((AccountantProfile, 'accounts'),
+                                (EstateOfficerProfile, 'estate')):
+            user = User.objects.create_user(username, password='pw')
+            model.objects.create(user=user, full_name=username)
+            user.refresh_from_db()
+            self.assertFalse(user.is_staff, username)
