@@ -5,6 +5,7 @@ from .models import (
     StudentFinanceObligation, StudentFinanceClearance, Announcement,
     EstateOfficerProfile,
     SecretaryProfile,
+    RequestAttachment,
     PrincipalProfile,
     HeadOfDepartmentProfile,
 )
@@ -155,3 +156,9 @@ class StudentFinanceClearanceAdmin(admin.ModelAdmin):
     list_display = ['student', 'semester', 'period', 'is_cleared', 'approved_by', 'updated_at']
     list_filter = ['semester', 'period', 'is_cleared']
     search_fields = ['student__name', 'student__nactvet_reg_no', 'note']
+
+
+@admin.register(RequestAttachment)
+class RequestAttachmentAdmin(admin.ModelAdmin):
+    list_display = ['display_name', 'request', 'uploaded_by', 'uploaded_at']
+    readonly_fields = ['uploaded_at']

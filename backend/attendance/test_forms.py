@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from io import BytesIO
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import Client, TestCase
 from rest_framework.test import APIClient
@@ -17,8 +18,8 @@ from . import evaluations
 from .serializers import FormResponseSerializer
 from .models import (
     AcademicYear, ClassLevel, Form, FormAnswer, FormQuestion, FormResponse,
-    FormSection, FormSubmissionReceipt, Module, SecretaryProfile, Semester, Student,
-    TeacherProfile,
+    FormSection, FormSubmissionReceipt, Module, RequestAttachment, SecretaryProfile,
+    Semester, Student, TeacherProfile,
 )
 
 User = get_user_model()
@@ -1573,3 +1574,121 @@ class SeededCollegeFormsTests(TestCase):
         asked = [q.text for q in evaluations.answerable_questions(form)]
         self.assertIn('Sababu ya kutokuwepo Chuoni kwa muda huo', asked)
         self.assertNotIn('Saini', asked)
+
+
+class SendingTheDocumentBackTests(FormTestBase):
+    """Approving a request used to end with the student walking to an office to
+    collect a piece of paper the college had already produced. The request came
+    through the portal; the answer goes back the same way."""
+
+    def setUp(self):
+        super().setUp()
+        self.service = self._form(title='Official Letter Request', slug='letter',
+                                  kind=Form.REQUEST, allow_multiple=True)
+        self.question = self._question(text='Addressed to', type=FormQuestion.SHORT_TEXT,
+                                       options=[], required=True)
+        self.portal.post('/api/my-forms/letter/submit/',
+                         {'answers': {str(self.question.id): 'CRDB Bank'}},
+                         content_type='application/json')
+        self.made = FormResponse.objects.get()
+        evaluations.decide(self.made, status=FormResponse.APPROVED,
+                           note='Ready.', by=self.admin)
+
+        self.secretary = User.objects.create_user('secretary', password='pw')
+        SecretaryProfile.objects.create(user=self.secretary, full_name='Neema')
+        self.sec_api = APIClient()
+        self.sec_api.force_authenticate(self.secretary)
+
+    def _letter(self, name='introduction-letter.pdf', content=b'%PDF-1.4 letter'):
+        return SimpleUploadedFile(name, content, content_type='application/pdf')
+
+    def _attach(self, api=None, name='introduction-letter.pdf', **kw):
+        payload = {'file': self._letter(name), **kw}
+        return (api or self.sec_api).post(
+            f'/api/service-requests/{self.made.id}/attach/', payload, format='multipart')
+
+    def test_the_secretary_sends_the_letter_and_the_student_downloads_it(self):
+        sent = self._attach(note='Signed and stamped')
+        self.assertEqual(sent.status_code, 201, sent.data)
+        self.assertEqual([a['name'] for a in sent.data['attachments']],
+                         ['introduction-letter.pdf'])
+        self.assertEqual(sent.data['attachments'][0]['note'], 'Signed and stamped')
+
+        attachment = RequestAttachment.objects.get()
+        self.assertEqual(attachment.uploaded_by, self.secretary)
+
+        got = self.portal.get(f'/api/request-documents/{attachment.id}/')
+        self.assertEqual(got.status_code, 200)
+        self.assertEqual(b''.join(got.streaming_content), b'%PDF-1.4 letter')
+        self.assertIn('introduction-letter.pdf', got['Content-Disposition'])
+
+    def test_the_student_sees_it_on_my_requests(self):
+        self._attach()
+        page = self.portal.get('/student-dashboard/')
+        self.assertContains(page, 'introduction-letter.pdf')
+        self.assertContains(page, f'/api/request-documents/{RequestAttachment.objects.get().id}/')
+
+    def test_a_letter_belongs_to_the_student_it_names_and_nobody_else(self):
+        """It carries their name, their number and where they are going."""
+        self._attach()
+        attachment = RequestAttachment.objects.get()
+
+        other = Student.objects.create(nactvet_reg_no='BPH/2026/999', name='Someone Else',
+                                       module=self.module)
+        other.set_portal_pin('Portal#2026', require_change=False)
+        other.save()
+        intruder = Client()
+        intruder.post('/login/', {'identifier': 'BPH/2026/999', 'secret': 'Portal#2026'})
+        self.assertEqual(intruder.get(f'/api/request-documents/{attachment.id}/').status_code, 404)
+
+        # And a stranger with no session at all is sent to sign in.
+        self.assertEqual(Client().get(f'/api/request-documents/{attachment.id}/').status_code, 302)
+
+    def test_the_office_can_read_back_what_it_sent(self):
+        self._attach()
+        attachment = RequestAttachment.objects.get()
+        office = Client()
+        office.force_login(self.secretary)
+        self.assertEqual(office.get(f'/api/request-documents/{attachment.id}/').status_code, 200)
+
+    def test_a_tutor_cannot_send_a_document_on_a_request(self):
+        tutor = User.objects.create_user('tutor', password='pw')
+        TeacherProfile.objects.create(user=tutor, full_name='Tutor')
+        api = APIClient()
+        api.force_authenticate(tutor)
+
+        self.assertEqual(self._attach(api=api).status_code, 403)
+        self.assertFalse(RequestAttachment.objects.exists())
+
+    def test_more_than_one_document_can_go_back(self):
+        self._attach(name='letter.pdf')
+        self._attach(name='annex.pdf')
+        listed = self.sec_api.get('/api/service-requests/').data[0]
+        self.assertEqual(sorted(a['name'] for a in listed['attachments']),
+                         ['annex.pdf', 'letter.pdf'])
+
+    def test_a_document_can_be_withdrawn(self):
+        self._attach()
+        attachment = RequestAttachment.objects.get()
+        removed = self.sec_api.post(
+            f'/api/service-requests/{self.made.id}/remove-attachment/',
+            {'attachment_id': attachment.id}, format='json')
+
+        self.assertEqual(removed.status_code, 200)
+        self.assertEqual(removed.data['attachments'], [])
+        self.assertFalse(RequestAttachment.objects.exists())
+        self.assertEqual(self.portal.get(f'/api/request-documents/{attachment.id}/').status_code, 404)
+
+    def test_a_file_type_nobody_asked_for_is_refused(self):
+        refused = self.sec_api.post(
+            f'/api/service-requests/{self.made.id}/attach/',
+            {'file': SimpleUploadedFile('payload.exe', b'MZ', content_type='application/x-msdownload')},
+            format='multipart')
+        self.assertEqual(refused.status_code, 400)
+        self.assertFalse(RequestAttachment.objects.exists())
+
+    def test_sending_nothing_is_refused(self):
+        refused = self.sec_api.post(f'/api/service-requests/{self.made.id}/attach/',
+                                    {}, format='multipart')
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('Choose a file', refused.data['detail'])

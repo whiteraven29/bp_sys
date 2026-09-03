@@ -1748,6 +1748,55 @@ class FormResponse(models.Model):
         return f'REQ-{self.id:05d}'
 
 
+class RequestAttachment(models.Model):
+    """A document the college sends back on a service request.
+
+    The decision note tells a student their letter is ready; this is the letter.
+    Approving a request used to end with them walking to an office to collect a
+    piece of paper the college had already produced — the point of the request
+    going through the portal is that the answer can come back the same way.
+
+    Downloads are gated (see attendance.views.request_attachment_download)
+    rather than served from a public /media/ URL: a student's introduction
+    letter carries their name, their registration number and the facility they
+    are going to, and belongs to them alone.
+    """
+    request = models.ForeignKey(
+        FormResponse, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(
+        upload_to='request_answers/%Y/%m/',
+        validators=[FileExtensionValidator(['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'])],
+        help_text='The signed letter or document, as a PDF, Word file or scan.',
+    )
+    original_name = models.CharField(max_length=255, blank=True)
+    note = models.CharField(
+        max_length=200, blank=True,
+        help_text='Shown to the student beside the file — "signed and stamped", say.',
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='request_attachments',
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['uploaded_at']
+
+    def __str__(self):
+        return self.display_name
+
+    @property
+    def display_name(self):
+        return self.original_name or self.file.name.rsplit('/', 1)[-1]
+
+    @property
+    def size(self):
+        try:
+            return self.file.size
+        except (OSError, ValueError):
+            return 0
+
+
 class FormAnswer(models.Model):
     """One answer, shaped by its question's type.
 

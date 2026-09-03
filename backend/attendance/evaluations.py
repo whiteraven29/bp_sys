@@ -134,6 +134,7 @@ def my_requests(profile):
         FormResponse.objects
         .filter(form__kind=Form.REQUEST, profile=profile)
         .select_related('form')
+        .prefetch_related('attachments')
         .order_by('-submitted_at')
     )
 

@@ -2005,7 +2005,7 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Student</th><th>Asked for</th><th>Level</th><th>Requested</th><th>Status</th><th>Answered by</th><th></th></tr></thead>
+            <thead><tr><th>Student</th><th>Asked for</th><th>Level</th><th>Requested</th><th>Status</th><th>Answered by</th><th>Sent</th><th></th></tr></thead>
             <tbody id="sr-tbody"></tbody>
           </table>
         </div>
@@ -2532,12 +2532,17 @@ function getCookie(name) {
   return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith(name + '='))?.split('=')[1] ?? null;
 }
 async function api(method, path, body) {
+  // A file upload must not be JSON-stringified, and must not carry a
+  // Content-Type of our own — the browser writes the multipart boundary.
+  const isUpload = body instanceof FormData;
   const opts = {
     method,
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+    headers: isUpload
+      ? { 'X-CSRFToken': getCookie('csrftoken') }
+      : { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
     credentials: 'same-origin',
   };
-  if (body !== undefined) opts.body = JSON.stringify(body);
+  if (body !== undefined) opts.body = isUpload ? body : JSON.stringify(body);
   const r = await fetch(API + path, opts);
   const data = r.status === 204 ? null : await r.json().catch(() => null);
   if (!r.ok) throw data || { detail: 'Unknown error' };
@@ -6077,9 +6082,12 @@ function renderServiceRequests() {
         <td style="font-size:.78rem">${new Date(r.submitted_at).toLocaleDateString()}</td>
         <td><span class="badge ${badge[r.status]}">${label[r.status]}</span></td>
         <td style="font-size:.78rem">${safeText(r.decided_by_name) || '—'}</td>
+        <td style="text-align:center">${(r.attachments || []).length
+          ? `<span class="badge badge-green" title="Document sent to the student">📎 ${r.attachments.length}</span>`
+          : '<span style="color:var(--muted)">—</span>'}</td>
         <td><button class="btn btn-ghost btn-sm" onclick="openServiceRequest(${r.id})">Open</button></td>
       </tr>`).join('')
-    : '<tr><td colspan="7"><div class="empty"><div class="ei">📨</div>Nothing here — students have not asked for anything under this filter</div></td></tr>';
+    : '<tr><td colspan="8"><div class="empty"><div class="ei">📨</div>Nothing here — students have not asked for anything under this filter</div></td></tr>';
 }
 
 function openServiceRequest(id) {
@@ -6088,6 +6096,19 @@ function openServiceRequest(id) {
   const answers = (request.answers || []).map(a => `
     <tr><th style="text-align:left;width:44%">${safeText(a.text)}</th>
         <td>${safeText(formatAnswerValue(a.value))}</td></tr>`).join('');
+  const attachments = (request.attachments || []).length
+    ? `<div class="table-wrap" style="margin-bottom:12px"><table>
+        <thead><tr><th>Document sent</th><th>Note</th><th>Sent</th><th>By</th><th></th></tr></thead>
+        <tbody>${request.attachments.map(a => `
+          <tr>
+            <td><a class="btn btn-ghost btn-sm" href="/api/request-documents/${a.id}/" target="_blank" rel="noopener">⬇ ${safeText(a.name)}</a></td>
+            <td style="font-size:.76rem;color:var(--muted)">${safeText(a.note) || '—'}</td>
+            <td style="font-size:.76rem">${new Date(a.uploaded_at).toLocaleDateString()}</td>
+            <td style="font-size:.76rem">${safeText(a.uploaded_by) || '—'}</td>
+            <td><button class="btn btn-ghost btn-sm decider-only" style="color:var(--red)"
+                  onclick="removeRequestAttachment(${request.id}, ${a.id})">Withdraw</button></td>
+          </tr>`).join('')}</tbody></table></div>`
+    : '';
   const panel = document.getElementById('sr-detail');
   panel.style.display = '';
   panel.innerHTML = `
@@ -6099,6 +6120,20 @@ function openServiceRequest(id) {
              placeholder="e.g. Ready for collection at the Dean of Students' office from Tuesday"
              value="${safeText(request.decision_note || '')}" />
     </div>
+    <div class="field" style="margin-top:14px">
+      <label>Send the student a document</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="file" id="sr-file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="max-width:340px" />
+        <input id="sr-file-note" maxlength="200" placeholder="Optional note — e.g. signed and stamped" style="max-width:280px" />
+        <button class="btn btn-secondary btn-sm decider-only" onclick="attachToRequest(${id})">⬆ Send it</button>
+      </div>
+    </div>
+    <p class="help-note">
+      The signed letter itself — a PDF, a Word file or a scan, up to 10 MB. The student
+      downloads it from My Requests instead of walking to an office to collect a piece of
+      paper you have already produced.
+    </p>
+    ${attachments}
     <div class="decider-only" style="gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-success btn-sm" onclick="decideRequest(${id}, 'approved')">✓ Approve</button>
       <button class="btn btn-sm" style="color:var(--red)" onclick="decideRequest(${id}, 'declined')">✕ Decline</button>
@@ -6121,6 +6156,35 @@ function formatAnswerValue(value) {
     return Object.entries(value).map(([row, choice]) => `${row}: ${choice}`).join('; ');
   }
   return String(value);
+}
+
+async function attachToRequest(id) {
+  const input = document.getElementById('sr-file');
+  const file = input?.files?.[0];
+  if (!file) { toast('Choose a file first', 'var(--red)'); return; }
+  const body = new FormData();
+  body.append('file', file);
+  body.append('note', document.getElementById('sr-file-note').value.trim());
+  try {
+    await api('POST', `/service-requests/${id}/attach/`, body);
+    toast('Sent — the student can download it now', 'var(--green)');
+    await loadServiceRequests();
+    openServiceRequest(id);
+  } catch (e) {
+    toast(e?.detail || 'Could not send that file', 'var(--red)');
+  }
+}
+
+async function removeRequestAttachment(id, attachmentId) {
+  if (!confirm('Withdraw this document? The student will no longer be able to download it.')) return;
+  try {
+    await api('POST', `/service-requests/${id}/remove-attachment/`, { attachment_id: attachmentId });
+    toast('Withdrawn', 'var(--green)');
+    await loadServiceRequests();
+    openServiceRequest(id);
+  } catch (e) {
+    toast(e?.detail || 'Could not withdraw it', 'var(--red)');
+  }
 }
 
 async function decideRequest(id, decision) {

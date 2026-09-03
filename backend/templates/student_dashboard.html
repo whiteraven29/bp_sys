@@ -910,6 +910,12 @@
                   <a class="btn-mini" href="{% url 'request-print' request.id %}" target="_blank" rel="noopener">View</a>
                   <a class="btn-mini" href="{% url 'request-print' request.id %}?download=1" target="_blank" rel="noopener">Download</a>
                 {% else %}—{% endif %}
+                {% for file in request.attachments.all %}
+                  <div style="margin-top:5px">
+                    <a class="btn-mini" href="{% url 'request-attachment' file.id %}"
+                       title="{{ file.note }}">📎 {{ file.display_name }}</a>
+                  </div>
+                {% endfor %}
               </td>
             </tr>
             {% empty %}
@@ -921,7 +927,9 @@
           <p class="panel-note">
             Once a request is approved, download it and print it. The printed form carries the
             College letterhead and your details; the parts left blank are for the health
-            facility or the signing officer to complete, sign and stamp.
+            facility or the signing officer to complete, sign and stamp. Where the College has
+            prepared the document for you — a signed letter, say — it appears here as an
+            attachment to download instead.
           </p>
         </section>
       </section>

@@ -57,6 +57,10 @@ urlpatterns = [
     path('staff-accounts/<int:user_id>/set-modules/', views.set_staff_modules, name='staff-set-modules'),
     path('staff-accounts/<int:user_id>/roles/', views.set_staff_roles, name='staff-set-roles'),
     path('module-scope/', views.set_module_scope, name='module-scope'),
+    # A document the college attached to a service request. Gated: it belongs
+    # to the student it names and to the office that answered them.
+    path('request-documents/<int:pk>/', views.request_attachment_download,
+         name='request-attachment'),
     path('inventory/template/', views.inventory_template, name='inventory-template'),
     path('inventory/import/', views.inventory_import, name='inventory-import'),
     path('inventory/bulk-create/', views.inventory_bulk_create, name='inventory-bulk-create'),

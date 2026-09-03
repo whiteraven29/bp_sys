@@ -1382,12 +1382,13 @@ class FormResponseSerializer(serializers.ModelSerializer):
     form_title = serializers.CharField(source='form.title', read_only=True)
     form_kind = serializers.CharField(source='form.kind', read_only=True)
     decided_by_name = serializers.SerializerMethodField()
+    attachments = serializers.SerializerMethodField()
 
     class Meta:
         model = FormResponse
         fields = ['id', 'form', 'form_title', 'form_kind', 'student_name', 'student_reg_no',
                   'class_level_name', 'submitted_at', 'answers',
-                  'status', 'decision_note', 'decided_at', 'decided_by_name']
+                  'status', 'decision_note', 'decided_at', 'decided_by_name', 'attachments']
         read_only_fields = ['status', 'decision_note', 'decided_at']
 
     def get_student_name(self, obj):
@@ -1402,6 +1403,17 @@ class FormResponseSerializer(serializers.ModelSerializer):
             {'question': answer.question_id, 'text': answer.question.text,
              'type': answer.question.type, 'value': answer.value}
             for answer in obj.answers.select_related('question')
+        ]
+
+    def get_attachments(self, obj):
+        # No file URL: downloads go through a gated view, because a letter
+        # carries the student's name, number and where they are going.
+        return [
+            {'id': a.id, 'name': a.display_name, 'note': a.note, 'size': a.size,
+             'uploaded_at': a.uploaded_at, 'uploaded_by': (
+                 a.uploaded_by.get_full_name() or a.uploaded_by.username)
+             if a.uploaded_by else ''}
+            for a in obj.attachments.all()
         ]
 
     def get_decided_by_name(self, obj):

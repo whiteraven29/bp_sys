@@ -5,6 +5,7 @@ import re
 from io import BytesIO
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.contrib.auth import get_user_model
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -17,6 +18,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework import mixins, viewsets, status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission, IsAuthenticated, SAFE_METHODS
@@ -33,7 +35,7 @@ from .models import (
     StudentResult, PaymentCategory, StudentFinanceObligation, StudentPayment,
     StudentFinanceClearance, Announcement,
     EstateOfficerProfile, SecretaryProfile, PrincipalProfile, HeadOfDepartmentProfile,
-    ResultEntryWindow,
+    ResultEntryWindow, RequestAttachment,
     InventoryLocation, AssetCategory, InventoryItemType, Asset, AssetImport,
     AssetTransfer, AssetMaintenance, InventoryInspection, InventoryInspectionItem, AssetDisposal,
     ChargeType, FeeStructure, FeeInstallment, StudentProfile, StudentCharge,
@@ -5495,6 +5497,68 @@ class ServiceRequestViewSet(mixins.RetrieveModelMixin,
                       ip=finance.client_ip(request))
         return Response(FormResponseSerializer(service_request).data)
 
+    #: A signed letter is a scan or a Word file as often as a PDF.
+    ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
+
+    @action(detail=True, methods=['post'], url_path='attach',
+            parser_classes=[MultiPartParser, FormParser])
+    def attach(self, request, pk=None):
+        """Send the student the document itself, not just the news of it.
+
+        Approving a request used to end with the student walking to an office to
+        collect a piece of paper the college had already produced. The request
+        came through the portal; the answer can go back the same way.
+        """
+        if not can_answer_requests(request.user):
+            raise PermissionDenied('Only the secretary or the admin can answer a service request.')
+        service_request = self.get_object()
+
+        upload = request.FILES.get('file')
+        if upload is None:
+            return Response({'detail': 'Choose a file to send back.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if upload.size > self.ATTACHMENT_MAX_BYTES:
+            return Response({'detail': 'That file is larger than 10 MB. Scan it at a lower '
+                                       'resolution, or send a PDF.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        attachment = RequestAttachment(
+            request=service_request, file=upload,
+            original_name=upload.name[:255],
+            note=str(request.data.get('note', '')).strip()[:200],
+            uploaded_by=request.user,
+        )
+        try:
+            attachment.full_clean(exclude=['request', 'uploaded_by'])
+        except DjangoValidationError as exc:
+            return Response({'detail': '; '.join(exc.messages)},
+                            status=status.HTTP_400_BAD_REQUEST)
+        attachment.save()
+
+        finance.audit('service_request.attach', 'FormResponse', actor=request.user,
+                      entity_id=service_request.id,
+                      summary=f'{service_request.form.title} — sent "{attachment.display_name}"',
+                      ip=finance.client_ip(request))
+        return Response(FormResponseSerializer(service_request).data,
+                        status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='remove-attachment')
+    def remove_attachment(self, request, pk=None):
+        if not can_answer_requests(request.user):
+            raise PermissionDenied('Only the secretary or the admin can answer a service request.')
+        service_request = self.get_object()
+        attachment = get_object_or_404(
+            RequestAttachment, pk=request.data.get('attachment_id'), request=service_request)
+
+        finance.audit('service_request.unattach', 'FormResponse', actor=request.user,
+                      entity_id=service_request.id,
+                      summary=f'{service_request.form.title} — withdrew '
+                              f'"{attachment.display_name}"',
+                      ip=finance.client_ip(request))
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return Response(FormResponseSerializer(service_request).data)
+
 
 def request_print(request, pk):
     """An approved request as the college's own paper form, ready to print.
@@ -5548,6 +5612,35 @@ def request_print(request, pk):
         'notes': [line for line in service_request.form.print_note.splitlines() if line.strip()],
         'auto_print': request.GET.get('download') == '1',
     })
+
+
+def request_attachment_download(request, pk):
+    """Stream a document the college attached to a service request.
+
+    Gated rather than served from /media/: an introduction letter carries the
+    student's name, their registration number and the facility they are going
+    to, so it belongs to them and to the office that answered them — nobody
+    else, and certainly not to anyone who can guess a filename.
+
+    Not a DRF view, because the student side authenticates on the session alone
+    and never against request.user.
+    """
+    attachment = get_object_or_404(
+        RequestAttachment.objects.select_related('request__profile'), pk=pk)
+    owner = attachment.request.profile
+
+    if request.session.get('student_id'):
+        viewer = _student_profile(request)
+        if viewer is None or owner is None or viewer.id != owner.id:
+            raise Http404('No such document.')
+    elif not can_answer_requests(request.user):
+        return redirect('login')
+
+    try:
+        handle = attachment.file.open('rb')
+    except FileNotFoundError:
+        raise Http404('That file is no longer available.')
+    return FileResponse(handle, as_attachment=True, filename=attachment.display_name)
 
 
 @api_view(['GET'])
