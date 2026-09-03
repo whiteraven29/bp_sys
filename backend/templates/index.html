@@ -197,6 +197,14 @@
      tightening them with a negative top margin is unnecessary — and that rule
      fired off a *hidden* sibling, which is what pulled the compulsory note
      flush against the instructions box above it. */
+  .scope-switch { display: flex; align-items: center; gap: 7px; padding: 4px 10px 4px 12px;
+    border: 1px solid rgba(255,255,255,.35); border-radius: 999px; background: rgba(255,255,255,.12); }
+  .scope-switch span { font-size: .7rem; letter-spacing: .04em; text-transform: uppercase;
+    color: rgba(255,255,255,.8); white-space: nowrap; }
+  .scope-switch select { width: auto; padding: 3px 6px; border: 0; border-radius: 3px;
+    background: #fff; color: var(--text); font-size: .78rem; font-weight: 600; cursor: pointer; }
+  @media (max-width: 900px) { .scope-switch span { display: none; } }
+
   .help-note { font-size: .76rem; line-height: 1.55; color: var(--muted); margin: 10px 0; }
   .help-note strong { color: var(--text); font-weight: 600; }
 
@@ -661,6 +669,15 @@
     <div class="sem-badge" id="header-sem-badge">Loading…</div>
   </div>
   <div class="header-right">
+    <!-- Offered only to somebody who both teaches and holds an office: a
+         Principal promoted from tutoring still has classes of their own. -->
+    <label class="scope-switch" id="scope-switch" style="display:none" title="Whose modules you are looking at">
+      <span>Working on</span>
+      <select id="scope-select" onchange="setModuleScope(this.value)">
+        <option value="college">The whole college</option>
+        <option value="mine">My modules only</option>
+      </select>
+    </label>
     <div class="user-chip" onclick="openProfileModal()" title="My modules">
       <div class="user-avatar" id="user-avatar"><i class="bi bi-person"></i></div>
       <span class="uname" id="user-name">Me</span>
@@ -2866,6 +2883,15 @@ async function boot() {
     state.isAccountant = dash.is_accountant;
     state.isEstateOfficer = dash.is_estate_officer;
     state.isSecretary = dash.is_secretary;
+    state.teaches = dash.teaches;
+    state.moduleScope = dash.module_scope || 'college';
+    // Somebody who only teaches has nothing to switch between, and somebody
+    // who only administers has no modules of their own to switch to.
+    if (dash.teaches && state.isStaff) {
+      const box = document.getElementById('scope-switch');
+      document.getElementById('scope-select').value = state.moduleScope;
+      box.style.display = '';
+    }
     if (state.isAccountant) document.body.classList.add('is-finance');
     if (!state.isStaff && state.isAccountant) {
       document.getElementById('role-badge').textContent = 'Accountant';
@@ -5572,6 +5598,21 @@ async function loadForms() {
   if (!state.editingForm) renderFormLevels([]);
   renderForms();
   loadServiceRequests();
+}
+
+// A view scope, never a permission: a Principal working on "my modules" keeps
+// every principal right and is simply looking at a narrower set. The whole page
+// reloads because module lists are baked into half the screens at boot.
+async function setModuleScope(scope) {
+  try {
+    await api('POST', '/module-scope/', { scope });
+    toast(scope === 'mine' ? 'Showing only the modules you teach'
+                           : 'Showing the whole college', 'var(--green)');
+    setTimeout(() => window.location.reload(), 700);
+  } catch (e) {
+    toast(e?.detail || 'Could not change what you are working on', 'var(--red)');
+    document.getElementById('scope-select').value = state.moduleScope || 'college';
+  }
 }
 
 // ── the Services page ───────────────────────────────────────────────────────

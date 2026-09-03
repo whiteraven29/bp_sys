@@ -83,9 +83,25 @@ def student_password_is_strong(password):
 # ── HELPERS ────────────────────────────────────────────────────────────────────
 
 def user_modules(user):
+    """The modules this account is working with.
+
+    An admin role covers the whole college. One who also teaches can narrow it
+    to their own modules — see TeachingScopeMiddleware — because a Principal
+    promoted from tutoring still has classes to take attendance for, and finding
+    them in a list of every module the college runs is not a promotion.
+
+    Narrowing only. The switch cannot show anybody a module they could not
+    already reach, and it changes nothing about what they are allowed to do.
+    """
+    if getattr(user, 'teaching_scope_only', False):
+        return user.modules_taught.all()
     if user.is_staff:
         return Module.objects.all()
     return user.modules_taught.all()
+
+
+def teaches_anything(user):
+    return bool(user and user.is_authenticated and user.modules_taught.exists())
 
 
 def is_accountant(user):
@@ -962,6 +978,28 @@ def staff_account_row(user):
 
 @api_view(['POST'])
 @login_required
+def set_module_scope(request):
+    """Switch between the whole college and the modules you teach yourself.
+
+    A view scope, not a role: a Principal working in "my modules" still holds
+    every principal right. It exists because being promoted should not bury
+    your own classes in a list of the college's.
+    """
+    scope = str(request.data.get('scope', '')).strip()
+    if scope not in ('mine', 'college'):
+        return Response({'detail': 'Scope must be "mine" or "college".'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if scope == 'mine' and not teaches_anything(request.user):
+        return Response({'detail': 'You are not assigned to any module to narrow down to.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    request.session['teaching_scope_only'] = scope == 'mine'
+    request.user.teaching_scope_only = scope == 'mine'
+    return Response({'scope': scope, 'modules': user_modules(request.user).count()})
+
+
+@api_view(['POST'])
+@login_required
 def set_staff_roles(request, user_id):
     """Move an account between roles, or give it a second one.
 
@@ -1405,6 +1443,7 @@ def dashboard(request):
             'is_staff': False, 'is_accountant': False, 'is_estate_officer': True,
             'is_secretary': False, 'is_principal': False,
             'is_head_of_department': False, 'can_manage_exams': False,
+            'teaches': False, 'module_scope': 'college',
         })
     today = timezone.localdate()
     my_modules = user_modules(request.user)
@@ -1513,6 +1552,12 @@ def dashboard(request):
         'is_principal': is_principal(request.user),
         'is_head_of_department': is_head_of_department(request.user),
         'can_manage_exams': can_manage_exams(request.user),
+        # Whether this account has classes of its own, and which hat it is
+        # currently wearing. Only somebody who both teaches and holds an admin
+        # role is ever offered the switch.
+        'teaches': teaches_anything(request.user),
+        'module_scope': ('mine' if getattr(request.user, 'teaching_scope_only', False)
+                         else 'college'),
     })
 
 
@@ -1552,7 +1597,9 @@ def performance(request):
     """
     # None means "no restriction". A tutor with no modules assigned gets an
     # empty queryset, which is not the same thing and must show nothing.
-    modules = None if can_read_exams(request.user) else user_modules(request.user)
+    modules = (None if can_read_exams(request.user)
+               and not getattr(request.user, 'teaching_scope_only', False)
+               else user_modules(request.user))
 
     def pick(model, param):
         value = request.query_params.get(param)

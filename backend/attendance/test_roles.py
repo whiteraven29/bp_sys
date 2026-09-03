@@ -372,3 +372,101 @@ class DjangoAdminRoleChangeTests(RoleTestBase):
             model.objects.create(user=user, full_name=username)
             user.refresh_from_db()
             self.assertFalse(user.is_staff, username)
+
+
+class WearingTwoHatsTests(RoleTestBase):
+    """A tutor promoted to Principal does not stop teaching.
+
+    Every admin role sees the whole college, so their own two modules arrive
+    buried in a list of every module it runs. Being promoted should not make
+    your own classes harder to find.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.mine = self.module
+        self.theirs = Module.objects.create(name='Anatomy', code='ANA101', teacher='T',
+                                            class_level=self.level, semester=self.sem)
+        Student.objects.create(nactvet_reg_no='BPH/2026/002', name='Neema Paul',
+                               module=self.theirs)
+
+        self.user, _ = self._account('tutor', 'jmwangi')
+        self.mine.teachers.add(self.user)
+        self.api.post(f'/api/staff-accounts/{self.user.id}/roles/',
+                      {'roles': ['tutor', 'principal']}, format='json')
+        self.user.refresh_from_db()
+
+        self.browser = Client()
+        self.browser.force_login(self.user)
+
+    def _codes(self):
+        return sorted(m['code'] for m in self.browser.get('/api/modules/').json())
+
+    def _scope(self, scope):
+        return self.browser.post('/api/module-scope/', {'scope': scope},
+                                 content_type='application/json')
+
+    def test_a_promoted_tutor_sees_the_whole_college_by_default(self):
+        self.assertEqual(self._codes(), ['ANA101', 'PHM101'])
+        self.assertEqual(self.browser.get('/api/dashboard/').json()['module_scope'], 'college')
+
+    def test_they_can_narrow_to_the_modules_they_teach(self):
+        self.assertEqual(self._scope('mine').status_code, 200)
+        self.assertEqual(self._codes(), ['PHM101'])
+        self.assertEqual(self.browser.get('/api/dashboard/').json()['module_scope'], 'mine')
+
+    def test_and_switch_back(self):
+        self._scope('mine')
+        self._scope('college')
+        self.assertEqual(self._codes(), ['ANA101', 'PHM101'])
+
+    def test_the_switch_narrows_the_view_and_never_the_office(self):
+        """A Principal working on their own modules is still the Principal."""
+        self._scope('mine')
+        payload = self.browser.get('/api/dashboard/').json()
+        self.assertTrue(payload['is_principal'])
+        self.assertTrue(payload['can_manage_exams'])
+        # Still barred from the same places as before — the switch is not a role.
+        self.assertEqual(self.browser.get('/api/charge-types/').status_code, 403)
+        self.assertEqual(self.browser.get('/api/assets/').status_code, 403)
+
+    def test_the_switch_cannot_widen_anything(self):
+        """A plain tutor asking for the whole college gets their own modules,
+        because the scope only ever narrows what the account already had."""
+        tutor, _ = self._account('tutor', 'atutor')
+        self.mine.teachers.add(tutor)
+        browser = Client()
+        browser.force_login(tutor)
+        browser.post('/api/module-scope/', {'scope': 'college'}, content_type='application/json')
+
+        self.assertEqual(sorted(m['code'] for m in browser.get('/api/modules/').json()),
+                         ['PHM101'])
+
+    def test_performance_follows_the_same_switch(self):
+        StudentResult.objects.create(student=Student.objects.get(nactvet_reg_no='BPH/2026/001'),
+                                     assign1=70, assign2=70, cat1_theory=70, cat2_theory=70,
+                                     end_theory=70)
+        StudentResult.objects.create(student=Student.objects.get(nactvet_reg_no='BPH/2026/002'),
+                                     assign1=30, assign2=30, cat1_theory=30, cat2_theory=30,
+                                     end_theory=30)
+
+        whole = self.browser.get('/api/performance/?assessment=final').json()
+        self.assertEqual(whole['scope'], 'college')
+        self.assertEqual(whole['headline']['assessed'], 2)
+
+        self._scope('mine')
+        narrowed = self.browser.get('/api/performance/?assessment=final').json()
+        self.assertEqual(narrowed['scope'], 'my-modules')
+        self.assertEqual([row['code'] for row in narrowed['by_module']], ['PHM101'])
+        self.assertEqual(narrowed['headline']['mean'], 70.0)
+
+    def test_somebody_who_teaches_nothing_is_not_offered_the_switch(self):
+        payload = self.api.get('/api/dashboard/').json()
+        self.assertFalse(payload['teaches'])
+        refused = self.client.post('/api/module-scope/', {'scope': 'mine'},
+                                   content_type='application/json')
+        self.assertIn(refused.status_code, (302, 400, 403))
+
+    def test_asking_for_a_scope_nobody_defined_is_refused(self):
+        self.assertEqual(self._scope('everything').status_code, 400)
+        self.assertEqual(self._codes(), ['ANA101', 'PHM101'])
