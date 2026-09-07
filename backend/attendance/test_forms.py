@@ -1393,20 +1393,31 @@ class SecretaryTests(FormTestBase):
         self.assertIn(('amtei', 'secretary'),
                       [(row['username'], row['role']) for row in listed])
 
-    def test_the_secretary_answers_requests(self):
+    def test_the_secretary_receives_a_request_and_passes_it_on(self):
+        """Receiving and checking is theirs; the decision is not."""
         self._ask()
         made = FormResponse.objects.get()
 
         queue = self.sec_api.get('/api/service-requests/?status=pending')
         self.assertEqual([row['id'] for row in queue.data], [made.id])
 
-        answered = self.sec_api.post(f'/api/service-requests/{made.id}/decide/', {
-            'status': 'approved', 'note': 'Print it and take it to the facility.',
-        }, format='json')
-        self.assertEqual(answered.status_code, 200, answered.data)
+        passed = self.sec_api.post(f'/api/service-requests/{made.id}/forward/',
+                                   {'note': 'Details check out.'}, format='json')
+        self.assertEqual(passed.status_code, 200, passed.data)
         made.refresh_from_db()
-        self.assertEqual(made.status, FormResponse.APPROVED)
-        self.assertEqual(made.decided_by, self.secretary)
+        self.assertEqual(made.status, FormResponse.FORWARDED)
+        self.assertEqual(made.forwarded_by, self.secretary)
+        self.assertEqual(made.forward_note, 'Details check out.')
+
+    def test_the_secretary_does_not_decide(self):
+        self._ask()
+        made = FormResponse.objects.get()
+        refused = self.sec_api.post(f'/api/service-requests/{made.id}/decide/',
+                                    {'status': 'approved'}, format='json')
+        self.assertEqual(refused.status_code, 403)
+        self.assertIn('Principal or the Head of Department', refused.data['detail'])
+        made.refresh_from_db()
+        self.assertEqual(made.status, FormResponse.PENDING)
 
     def test_the_secretary_is_told_apart_from_the_other_roles(self):
         self.sec_api.force_authenticate(self.secretary)

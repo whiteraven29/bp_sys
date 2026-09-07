@@ -1383,12 +1383,15 @@ class FormResponseSerializer(serializers.ModelSerializer):
     form_kind = serializers.CharField(source='form.kind', read_only=True)
     decided_by_name = serializers.SerializerMethodField()
     attachments = serializers.SerializerMethodField()
+    status_label = serializers.CharField(source='get_status_display', read_only=True)
+    forwarded_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = FormResponse
         fields = ['id', 'form', 'form_title', 'form_kind', 'student_name', 'student_reg_no',
                   'class_level_name', 'submitted_at', 'answers',
-                  'status', 'decision_note', 'decided_at', 'decided_by_name', 'attachments']
+                  'status', 'status_label', 'decision_note', 'decided_at', 'decided_by_name',
+                  'forwarded_at', 'forwarded_by_name', 'forward_note', 'attachments']
         read_only_fields = ['status', 'decision_note', 'decided_at']
 
     def get_student_name(self, obj):
@@ -1420,3 +1423,8 @@ class FormResponseSerializer(serializers.ModelSerializer):
         if not obj.decided_by:
             return ''
         return obj.decided_by.get_full_name() or obj.decided_by.username
+
+    def get_forwarded_by_name(self, obj):
+        if not obj.forwarded_by:
+            return ''
+        return obj.forwarded_by.get_full_name() or obj.forwarded_by.username

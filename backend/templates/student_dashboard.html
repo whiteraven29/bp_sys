@@ -34,6 +34,31 @@
     --radius: 3px;
     --sidebar-width: 250px;
   }
+  /* The same portal with the ground and the ink swapped. Only the palette
+     moves — every rule below reads these. The blue lightens because #1565c0 on
+     a dark ground fails contrast; it has to come up to meet it. */
+  html[data-theme="dark"] {
+    --bg: #10151b;
+    --sidebar: #151b23;
+    --sidebar-2: #1c2634;
+    --surface: #171d26;
+    --surface-2: #1e2632;
+    --surface-3: #253040;
+    --line: #303b4a;
+    --text: #e3e9f0;
+    --muted: #93a2b5;
+    --blue: #4a9eff;
+    --blue-dark: #6fb4ff;
+    --blue-soft: #1b2a3d;
+    --green: #35c46a;
+    --green-soft: #16301f;
+    --amber: #e0a03a;
+    --amber-soft: #33270f;
+    --red: #ff6b6b;
+    --red-soft: #351b1b;
+    --violet: #a78bfa;
+    color-scheme: dark;
+  }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
@@ -272,6 +297,30 @@
   /* A row action is a thing you click, not a state you read. These used to
      borrow the green "pass" badge, so View and Download looked like a status
      and nobody could tell they were links. */
+  .top-icon { display: grid; place-items: center; width: 34px; height: 34px; padding: 0;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+    color: var(--text); font-size: 1rem; cursor: pointer; position: relative; }
+  .top-icon:hover { border-color: var(--blue); color: var(--blue); }
+  .bell-wrap { position: relative; }
+  .bell-count { position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px;
+    padding: 0 4px; border-radius: 9px; background: var(--red); color: #fff;
+    font-size: .66rem; font-weight: 700; line-height: 17px; text-align: center; }
+  .bell-panel { display: none; position: absolute; right: 0; top: calc(100% + 8px);
+    width: min(340px, 90vw); max-height: 60vh; overflow-y: auto; z-index: 60;
+    border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+    box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+  .bell-panel.open { display: block; }
+  .bell-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: .85rem; }
+  .bell-item { display: block; width: 100%; text-align: left; padding: 11px 14px;
+    border: 0; border-bottom: 1px solid var(--line); background: none;
+    color: var(--text); font: inherit; cursor: pointer; }
+  .bell-item:hover { background: var(--surface-2); }
+  .bell-item.unread { border-left: 3px solid var(--blue); background: var(--surface-2); }
+  .bell-item .t { font-size: .82rem; font-weight: 600; margin-bottom: 2px; }
+  .bell-item .b { font-size: .76rem; color: var(--muted); line-height: 1.5; }
+  .bell-item .w { font-size: .68rem; color: var(--muted); margin-top: 3px; }
+
   .btn-mini {
     display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px;
     border: 1px solid var(--line); border-radius: var(--radius);
@@ -477,6 +526,17 @@
       <button class="menu-button" id="menu-button" aria-label="Open navigation"><i class="bi bi-list"></i></button>
       <label class="search"><span>⌕</span><input id="portal-search" type="search" placeholder="Search modules..." aria-label="Search modules"></label>
       <div class="top-meta">
+        <button class="top-icon" id="theme-btn" onclick="toggleTheme()" title="Light or dark" aria-label="Switch between light and dark"><i class="bi bi-moon-stars"></i></button>
+        <div class="bell-wrap">
+          <button class="top-icon" onclick="toggleNotifications(event)" title="Notifications" aria-label="Notifications">
+            <i class="bi bi-bell"></i><span class="bell-count" id="bell-count" style="display:none">0</span>
+          </button>
+          <div class="bell-panel" id="bell-panel">
+            <div class="bell-head"><strong>Notifications</strong>
+              <button type="button" class="btn btn-quiet" onclick="markNotificationsRead()">Mark all read</button></div>
+            <div id="bell-list"></div>
+          </div>
+        </div>
         <span class="semester-pill">{{ active_semester }}</span>
         <div class="top-avatar" title="{{ student_name }} — {{ registration_number }}">{{ student_name|slice:":1"|upper }}</div>
         <a href="{% url 'student-logout' %}" class="logout"><i class="bi bi-box-arrow-right"></i><span class="logout-text">Sign out</span></a>
@@ -1128,6 +1188,86 @@
   // land the student back where they started.
   let returnView = 'forms';
 
+  // ── light and dark ────────────────────────────────────────────────────────
+  // Remembered per browser; unset means "whatever the phone is set to", so a
+  // student who has never touched it still gets the right one at night.
+  function currentTheme() {
+    // An explicit choice wins. Otherwise follow the machine, so somebody who has
+    // never touched the toggle still gets the right one at night.
+    try {
+      const saved = localStorage.getItem('edutrackTheme');
+      if (saved === 'dark' || saved === 'light') return saved;
+    } catch (e) { /* private mode */ }
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+    const icon = document.querySelector('#theme-btn i');
+    if (icon) icon.className = theme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+  }
+
+  function toggleTheme() {
+    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('edutrackTheme', next); } catch (e) { /* private mode */ }
+    applyTheme(next);
+  }
+
+  // Somebody who has not chosen follows the machine when the machine changes.
+  window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
+    let chosen = null;
+    try { chosen = localStorage.getItem('edutrackTheme'); } catch (e) { /* private mode */ }
+    if (!chosen) applyTheme(currentTheme());
+  });
+
+  // ── notifications ─────────────────────────────────────────────────────────
+  let notifications = [];
+
+  async function loadNotifications() {
+    try {
+      const data = await api('GET', '/my-notifications/');
+      notifications = data.items || [];
+      const badge = document.getElementById('bell-count');
+      badge.textContent = data.unread > 99 ? '99+' : data.unread;
+      badge.style.display = data.unread ? '' : 'none';
+      renderNotifications();
+    } catch (e) { /* the bell is never worth an error message */ }
+  }
+
+  function renderNotifications() {
+    const list = document.getElementById('bell-list');
+    if (!list) return;
+    list.innerHTML = notifications.length
+      ? notifications.map(n => `
+        <button type="button" class="bell-item ${n.is_read ? '' : 'unread'}" data-note="${n.id}" data-goto="${esc(n.link)}">
+          <div class="t">${esc(n.title)}</div>
+          ${n.body ? `<div class="b">${esc(n.body)}</div>` : ''}
+          <div class="w">${new Date(n.created_at).toLocaleString()}</div>
+        </button>`).join('')
+      : '<div class="empty" style="padding:24px 14px">Nothing new</div>';
+    list.querySelectorAll('[data-note]').forEach(item =>
+      item.addEventListener('click', () => openNotification(Number(item.dataset.note), item.dataset.goto)));
+  }
+
+  function toggleNotifications(event) {
+    event.stopPropagation();
+    const panel = document.getElementById('bell-panel');
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) loadNotifications();
+  }
+
+  async function openNotification(id, link) {
+    document.getElementById('bell-panel').classList.remove('open');
+    try { await api('POST', '/my-notifications/', { ids: [id] }); } catch (e) { /* no matter */ }
+    loadNotifications();
+    if (link && document.getElementById(`view-${link}`)) showView(link);
+  }
+
+  async function markNotificationsRead() {
+    try { await api('POST', '/my-notifications/', {}); loadNotifications(); }
+    catch (e) { /* no matter */ }
+  }
+
   async function openForm(slug, from) {
     returnView = from || 'forms';
     const asService = returnView === 'services';
@@ -1337,6 +1477,16 @@
       toast('Portal password updated.');
     } catch (error) {
       toast(error?.detail || 'Could not update portal password.');
+    }
+  });
+
+  applyTheme(currentTheme());
+  loadNotifications();
+  setInterval(loadNotifications, 60000);
+  document.addEventListener('click', event => {
+    const panel = document.getElementById('bell-panel');
+    if (panel?.classList.contains('open') && !event.target.closest('.bell-wrap')) {
+      panel.classList.remove('open');
     }
   });
 

@@ -19,6 +19,21 @@
     --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --radius: 3px; --sidebar-w: 250px; --header-h: 56px;
+    --shadow: rgba(0,0,0,.08); --row-hover: #f5f9fd;
+    --accent-soft: #e8f1fb; --green-soft: #f1faf4;
+  }
+  /* Dark is the same layout with the ground and the ink swapped. Only the
+     palette moves: every rule below reads these, so nothing else needs a
+     second version of itself. The accent lightens because #1565c0 on a dark
+     ground fails contrast — the blue has to come up to meet it. */
+  html[data-theme="dark"] {
+    --bg: #10151b; --surface: #171d26; --surface2: #1e2632; --border: #303b4a;
+    --accent: #4a9eff; --accent-dark: #6fb4ff; --accent2: #7aa7ff;
+    --green: #35c46a; --red: #ff6b6b;
+    --yellow: #e0a03a; --orange: #f0894c; --text: #e3e9f0; --muted: #93a2b5;
+    --shadow: rgba(0,0,0,.5); --row-hover: #202a38;
+    --accent-soft: #1b2a3d; --green-soft: #16301f;
+    color-scheme: dark;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: var(--font-sans); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
@@ -112,7 +127,7 @@
     text-align: left; width: 100%; transition: background .12s, color .12s;
   }
   .nav-btn:hover { background: var(--surface2); }
-  .nav-btn.active { background: #e8f1fb; color: var(--accent-dark); border-left-color: var(--accent); font-weight: 600; }
+  .nav-btn.active { background: var(--accent-soft); color: var(--accent-dark); border-left-color: var(--accent); font-weight: 600; }
   .nav-btn .icon { font-size: 1rem; width: 20px; text-align: center; flex-shrink: 0; color: var(--muted); }
   .nav-btn.active .icon { color: var(--accent); }
   .nav-group { display: flex; flex-direction: column; }
@@ -197,12 +212,36 @@
      tightening them with a negative top margin is unnecessary — and that rule
      fired off a *hidden* sibling, which is what pulled the compulsory note
      flush against the instructions box above it. */
+  .icon-btn { display: grid; place-items: center; width: 34px; height: 34px; padding: 0;
+    border: 1px solid rgba(255,255,255,.35); border-radius: 6px; background: rgba(255,255,255,.12);
+    color: #fff; font-size: 1rem; cursor: pointer; position: relative; }
+  .icon-btn:hover { background: rgba(255,255,255,.24); }
+  .bell-wrap { position: relative; }
+  .bell-count { position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px;
+    padding: 0 4px; border-radius: 9px; background: var(--red); color: #fff;
+    font-size: .66rem; font-weight: 700; line-height: 17px; text-align: center; }
+  .bell-panel { display: none; position: absolute; right: 0; top: calc(100% + 8px); width: 340px;
+    max-height: 60vh; overflow-y: auto; z-index: 60;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+    box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+  .bell-panel.open { display: block; }
+  .bell-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: .85rem; }
+  .bell-item { display: block; width: 100%; text-align: left; padding: 11px 14px;
+    border: 0; border-bottom: 1px solid var(--border); background: none;
+    color: var(--text); font: inherit; cursor: pointer; }
+  .bell-item:hover { background: var(--surface2); }
+  .bell-item.unread { border-left: 3px solid var(--accent); background: var(--surface2); }
+  .bell-item .t { font-size: .82rem; font-weight: 600; margin-bottom: 2px; }
+  .bell-item .b { font-size: .76rem; color: var(--muted); line-height: 1.5; }
+  .bell-item .w { font-size: .68rem; color: var(--muted); margin-top: 3px; }
+
   .scope-switch { display: flex; align-items: center; gap: 7px; padding: 4px 10px 4px 12px;
     border: 1px solid rgba(255,255,255,.35); border-radius: 999px; background: rgba(255,255,255,.12); }
   .scope-switch span { font-size: .7rem; letter-spacing: .04em; text-transform: uppercase;
     color: rgba(255,255,255,.8); white-space: nowrap; }
   .scope-switch select { width: auto; padding: 3px 6px; border: 0; border-radius: 3px;
-    background: #fff; color: var(--text); font-size: .78rem; font-weight: 600; cursor: pointer; }
+    background: var(--surface); color: var(--text); font-size: .78rem; font-weight: 600; cursor: pointer; }
   @media (max-width: 900px) { .scope-switch span { display: none; } }
 
   .help-note { font-size: .76rem; line-height: 1.55; color: var(--muted); margin: 10px 0; }
@@ -258,7 +297,7 @@
   input[type="file"]::file-selector-button:hover { border-color: var(--accent); color: var(--accent); }
 
   .field input, .field select, .field textarea {
-    background: #fff; border: 1px solid var(--border); color: var(--text);
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
     border-radius: var(--radius); padding: 7px 10px; font-family: var(--font-sans); font-size: .85rem;
     outline: none; transition: border .13s; width: 100%;
   }
@@ -322,7 +361,7 @@
   .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
   .check-item {
     display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-    border: 1px solid var(--border); border-radius: var(--radius); background: #fff;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
     font-size: .82rem; color: var(--text);
   }
   .check-item input { width: auto; }
@@ -332,7 +371,7 @@
   .type-toggle label {
     flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
     padding: 8px 12px; border-radius: 0; border: 1px solid var(--border); margin-left: -1px;
-    background: #fff; cursor: pointer; font-size: .84rem; transition: all .13s;
+    background: var(--surface); cursor: pointer; font-size: .84rem; transition: all .13s;
   }
   .type-toggle label:first-child { margin-left: 0; border-radius: var(--radius) 0 0 var(--radius); }
   .type-toggle label:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
@@ -344,13 +383,13 @@
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius); border: 1px solid transparent; font-family: var(--font-sans); font-size: .83rem; font-weight: 500; cursor: pointer; transition: background .13s, border-color .13s, color .13s; }
   .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
-  .btn-secondary { background: #fff; color: var(--text); border-color: var(--border); }
+  .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
   .btn-secondary:hover { background: var(--surface2); border-color: #b3bec9; }
-  .btn-danger { background: #fff; color: var(--red); border-color: #e5b4b4; }
+  .btn-danger { background: var(--surface); color: var(--red); border-color: var(--border); }
   .btn-danger:hover { background: var(--red); border-color: var(--red); color: #fff; }
-  .btn-green { background: #fff; color: var(--green); border-color: #b0d9bf; }
+  .btn-green { background: var(--surface); color: var(--green); border-color: var(--border); }
   .btn-green:hover { background: var(--green); border-color: var(--green); color: #fff; }
-  .btn-warning { background: #fff; color: var(--yellow); border-color: #ddc09b; }
+  .btn-warning { background: var(--surface); color: var(--yellow); border-color: var(--border); }
   .btn-warning:hover { background: var(--yellow); border-color: var(--yellow); color: #fff; }
   /* Used 35 times across the panel — charge types, the forms builder, inventory
      — but never defined, so every one of them rendered as bare text with
@@ -369,7 +408,7 @@
   thead tr { background: var(--surface2); }
   th { padding: 8px 11px; text-align: left; font-size: .8rem; font-weight: 600; color: var(--text); border: 1px solid var(--border); white-space: nowrap; }
   td { padding: 7px 11px; border: 1px solid var(--border); vertical-align: middle; }
-  tbody tr:hover td { background: #f5f9fd; }
+  tbody tr:hover td { background: var(--row-hover); }
 
   /* Small square tags, like the reference's blue "Important" label. */
   .badge { display: inline-block; padding: 2px 7px; border-radius: 2px; font-size: .72rem; font-weight: 600; white-space: nowrap; color: #fff; }
@@ -385,7 +424,7 @@
 
   /* 3-state attendance toggle */
   .att-toggle { display: inline-flex; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
-  .att-toggle button { border: none; background: #fff; color: var(--muted); padding: 4px 9px; font-size: .76rem; font-weight: 600; cursor: pointer; transition: all .1s; }
+  .att-toggle button { border: none; background: var(--surface); color: var(--muted); padding: 4px 9px; font-size: .76rem; font-weight: 600; cursor: pointer; transition: all .1s; }
   .att-toggle button.st-p { background: var(--green); color: #fff; }
   .att-toggle button.st-s { background: var(--orange); color: #fff; }
   .att-toggle button.st-a { background: var(--red); color: #fff; }
@@ -415,7 +454,7 @@
   .level-tab-bar { display: flex; gap: 2px; flex-wrap: wrap; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
   .level-tab { padding: 7px 14px; border-radius: var(--radius) var(--radius) 0 0; border: 1px solid transparent; border-bottom: 0; background: transparent; color: var(--muted); font-size: .82rem; font-weight: 500; cursor: pointer; transition: all .13s; margin-bottom: -1px; }
   .level-tab:hover { color: var(--text); background: var(--surface2); }
-  .level-tab.active { background: #fff; color: var(--accent-dark); border-color: var(--border); font-weight: 600; }
+  .level-tab.active { background: var(--surface); color: var(--accent-dark); border-color: var(--border); font-weight: 600; }
   .student-subview, .module-subview { display: none; }
   .student-subview.active, .module-subview.active { display: block; }
   .row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
@@ -425,9 +464,9 @@
   .claim-item {
     display: flex; align-items: center; gap: 8px;
     padding: 9px 11px; border-radius: var(--radius); border: 1px solid var(--border);
-    background: #fff; cursor: pointer; transition: all .13s;
+    background: var(--surface); cursor: pointer; transition: all .13s;
   }
-  .claim-item.claimed { border-color: var(--green); background: #f1faf4; }
+  .claim-item.claimed { border-color: var(--green); background: var(--green-soft); }
   .claim-item .ci-info { flex: 1; min-width: 0; }
   .claim-item .ci-name { font-size: .8rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .claim-item .ci-code { font-size: .72rem; color: var(--muted); font-family: var(--font-mono); }
@@ -468,14 +507,19 @@
   body:not(.is-hod) .hod-notice { display: none !important; }
   .hod-notice { display: flex; align-items: flex-start; gap: 10px; padding: 11px 16px; margin-bottom: 14px;
     border: 1px solid #cfe0f5; border-left: 3px solid var(--accent); border-radius: 4px;
-    background: #e8f1fb; font-size: .8rem; line-height: 1.55; }
+    background: var(--accent-soft); font-size: .8rem; line-height: 1.55; }
 
   .secretary-only { display: none !important; }
   body.is-secretary .secretary-only { display: flex !important; }
-  /* Answering a request is the secretary's job and the admin's cover for it. */
-  .decider-only { display: none !important; }
+  /* Two desks. The secretary receives a request and passes it on; the Principal
+     and the Head of Department answer it. The admin covers both, because
+     somebody has to when neither is here. */
+  .handler-only, .decider-only { display: none !important; }
+  body.is-admin .handler-only,
+  body.is-secretary .handler-only { display: flex !important; }
   body.is-admin .decider-only,
-  body.is-secretary .decider-only { display: flex !important; }
+  body.is-principal .decider-only,
+  body.is-hod .decider-only { display: flex !important; }
   body.is-secretary .academic-only,
   body.is-secretary .finance-only,
   body.is-secretary .estate-only,
@@ -671,6 +715,17 @@
   <div class="header-right">
     <!-- Offered only to somebody who both teaches and holds an office: a
          Principal promoted from tutoring still has classes of their own. -->
+    <button class="icon-btn" id="theme-btn" onclick="toggleTheme()" title="Light or dark" aria-label="Switch between light and dark"><i class="bi bi-moon-stars"></i></button>
+    <div class="bell-wrap">
+      <button class="icon-btn" id="bell-btn" onclick="toggleNotifications(event)" title="Notifications" aria-label="Notifications">
+        <i class="bi bi-bell"></i><span class="bell-count" id="bell-count" style="display:none">0</span>
+      </button>
+      <div class="bell-panel" id="bell-panel">
+        <div class="bell-head"><strong>Notifications</strong>
+          <button class="btn btn-ghost btn-sm" onclick="markNotificationsRead()">Mark all read</button></div>
+        <div id="bell-list"></div>
+      </div>
+    </div>
     <label class="scope-switch" id="scope-switch" style="display:none" title="Whose modules you are looking at">
       <span>Working on</span>
       <select id="scope-select" onchange="setModuleScope(this.value)">
@@ -1996,7 +2051,8 @@
           <div class="field">
             <label>Show</label>
             <select id="sr-status" onchange="loadServiceRequests()">
-              <option value="pending">Waiting on the College</option>
+              <option value="pending">New — with the secretary</option>
+              <option value="forwarded">Awaiting a decision</option>
               <option value="approved">Approved</option>
               <option value="declined">Declined</option>
               <option value="">All requests</option>
@@ -2954,6 +3010,10 @@ async function boot() {
     }
     updatePeriodLocks();
     loadAnnouncements();
+    loadNotifications();
+    // Quiet enough not to matter, often enough that a request waiting for a
+    // decision is not discovered tomorrow.
+    setInterval(loadNotifications, 60000);
 
     // Dashboard stats
     document.getElementById('stat-modules').textContent = dash.modules;
@@ -5689,6 +5749,96 @@ async function loadForms() {
   loadServiceRequests();
 }
 
+// ── light and dark ──────────────────────────────────────────────────────────
+//
+// Remembered per browser, and unset means "whatever the machine is set to", so
+// somebody who has never touched it still gets the right one at night.
+
+function currentTheme() {
+  // An explicit choice wins. Otherwise follow the machine, so somebody who has
+  // never touched the toggle still gets the right one at night.
+  try {
+    const saved = localStorage.getItem('edutrackTheme');
+    if (saved === 'dark' || saved === 'light') return saved;
+  } catch (e) { /* private mode */ }
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+  const icon = document.querySelector('#theme-btn i');
+  if (icon) icon.className = theme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+}
+
+function toggleTheme() {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('edutrackTheme', next); } catch (e) { /* private mode */ }
+  applyTheme(next);
+}
+
+// Somebody who has not chosen follows the machine when the machine changes.
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
+  let chosen = null;
+  try { chosen = localStorage.getItem('edutrackTheme'); } catch (e) { /* private mode */ }
+  if (!chosen) applyTheme(currentTheme());
+});
+
+// ── notifications ───────────────────────────────────────────────────────────
+//
+// A request used to sit in a queue nobody had a reason to open.
+
+const NOTIFICATION_LINKS = {
+  'forms:requests': () => showFormsSection('requests'),
+};
+
+async function loadNotifications() {
+  try {
+    const data = await api('GET', '/notifications/');
+    state.notifications = data.items || [];
+    const badge = document.getElementById('bell-count');
+    badge.textContent = data.unread > 99 ? '99+' : data.unread;
+    badge.style.display = data.unread ? '' : 'none';
+    renderNotifications();
+  } catch (e) { /* the bell is never worth an error message */ }
+}
+
+function renderNotifications() {
+  const list = document.getElementById('bell-list');
+  if (!list) return;
+  const rows = state.notifications || [];
+  list.innerHTML = rows.length
+    ? rows.map(n => `
+      <button class="bell-item ${n.is_read ? '' : 'unread'}" onclick="openNotification(${n.id})">
+        <div class="t">${safeText(n.title)}</div>
+        ${n.body ? `<div class="b">${safeText(n.body)}</div>` : ''}
+        <div class="w">${new Date(n.created_at).toLocaleString()}</div>
+      </button>`).join('')
+    : '<div class="empty" style="padding:24px 14px">Nothing new</div>';
+}
+
+function toggleNotifications(event) {
+  event.stopPropagation();
+  const panel = document.getElementById('bell-panel');
+  panel.classList.toggle('open');
+  if (panel.classList.contains('open')) loadNotifications();
+}
+
+async function openNotification(id) {
+  const row = (state.notifications || []).find(n => n.id === id);
+  document.getElementById('bell-panel').classList.remove('open');
+  try { await api('POST', '/notifications/read/', { ids: [id] }); } catch (e) { /* no matter */ }
+  loadNotifications();
+  const go = row && NOTIFICATION_LINKS[row.link];
+  if (go) go();
+}
+
+async function markNotificationsRead() {
+  try {
+    await api('POST', '/notifications/read/', {});
+    loadNotifications();
+  } catch (e) { toast('Could not mark them read', 'var(--red)'); }
+}
+
 // A view scope, never a permission: a Principal working on "my modules" keeps
 // every principal right and is simply looking at a narrower set. The whole page
 // reloads because module lists are baked into half the screens at boot.
@@ -6069,8 +6219,10 @@ async function loadServiceRequests() {
 }
 
 function renderServiceRequests() {
-  const badge = { pending: 'badge-yellow', approved: 'badge-green', declined: 'badge-red' };
-  const label = { pending: 'Waiting', approved: 'Approved', declined: 'Declined' };
+  const badge = { pending: 'badge-yellow', forwarded: 'badge-blue',
+                  approved: 'badge-green', declined: 'badge-red' };
+  const label = { pending: 'With the secretary', forwarded: 'Awaiting decision',
+                  approved: 'Approved', declined: 'Declined' };
   const rows = state.serviceRequests || [];
   document.getElementById('sr-tbody').innerHTML = rows.length
     ? rows.map(r => `
@@ -6115,7 +6267,7 @@ function openServiceRequest(id) {
     <div class="card-title">${safeText(request.form_title)} — ${safeText(request.student_name)}</div>
     <div class="table-wrap"><table><tbody>${answers || '<tr><td>No answers recorded.</td></tr>'}</tbody></table></div>
     <div class="field" style="margin-top:12px">
-      <label>What the student will be told</label>
+      <label>Note — what the student is told on a decision, or what you tell the Principal when passing it on</label>
       <input id="sr-note" maxlength="500"
              placeholder="e.g. Ready for collection at the Dean of Students' office from Tuesday"
              value="${safeText(request.decision_note || '')}" />
@@ -6134,10 +6286,21 @@ function openServiceRequest(id) {
       paper you have already produced.
     </p>
     ${attachments}
+    <div class="handler-only" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <button class="btn btn-primary btn-sm" onclick="forwardRequest(${id})"
+              ${request.status === 'pending' ? '' : 'disabled'}>
+        ➜ Pass to the Principal / HoD
+      </button>
+      <span style="font-size:.75rem;color:var(--muted)">
+        ${request.forwarded_by_name
+          ? `Passed on by ${safeText(request.forwarded_by_name)}`
+          : 'Check the details, then send it for a decision.'}
+      </span>
+    </div>
     <div class="decider-only" style="gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-success btn-sm" onclick="decideRequest(${id}, 'approved')">✓ Approve</button>
       <button class="btn btn-sm" style="color:var(--red)" onclick="decideRequest(${id}, 'declined')">✕ Decline</button>
-      <button class="btn btn-ghost btn-sm" onclick="decideRequest(${id}, 'pending')">Undo — put it back in the queue</button>
+      <button class="btn btn-ghost btn-sm" onclick="decideRequest(${id}, 'pending')">Undo — back to the secretary</button>
       ${request.status === 'approved'
         ? `<a class="btn btn-ghost btn-sm" href="/request/${id}/" target="_blank" rel="noopener">📄 See what the student prints</a>`
         : ''}
@@ -6184,6 +6347,17 @@ async function removeRequestAttachment(id, attachmentId) {
     openServiceRequest(id);
   } catch (e) {
     toast(e?.detail || 'Could not withdraw it', 'var(--red)');
+  }
+}
+
+async function forwardRequest(id) {
+  const note = document.getElementById('sr-note')?.value.trim() || '';
+  try {
+    await api('POST', `/service-requests/${id}/forward/`, { note });
+    toast('Passed on — the Principal and HoD have been notified', 'var(--green)');
+    loadServiceRequests();
+  } catch (e) {
+    toast(e?.detail || 'Could not pass it on', 'var(--red)');
   }
 }
 
@@ -7977,6 +8151,8 @@ installWebIconReplacements();
   const isPrincipal = {% if request.user.principal_profile.is_active %}true{% else %}false{% endif %};
   const isHod = {% if request.user.hod_profile.is_active %}true{% else %}false{% endif %};
   const initials = username.slice(0, 2).toUpperCase();
+  // Before anything paints, so a dark-mode user never sees a white flash.
+  applyTheme(currentTheme());
   document.getElementById('user-name').textContent   = username;
   document.getElementById('user-avatar').textContent = initials;
   if (isStaff) {
@@ -7991,6 +8167,13 @@ installWebIconReplacements();
     document.getElementById('role-badge').className    = 'role-badge tutor';
   }
 })();
+
+document.addEventListener('click', event => {
+  const panel = document.getElementById('bell-panel');
+  if (panel && panel.classList.contains('open') && !event.target.closest('.bell-wrap')) {
+    panel.classList.remove('open');
+  }
+});
 
 document.getElementById('att-date').value = new Date().toISOString().split('T')[0];
 document.getElementById('fin-pay-date').value = new Date().toISOString().split('T')[0];

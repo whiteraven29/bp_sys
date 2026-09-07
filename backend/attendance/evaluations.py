@@ -143,18 +143,41 @@ def request_queue(status=None):
     """Every service request the college has been sent, newest first."""
     qs = (FormResponse.objects
           .filter(form__kind=Form.REQUEST)
-          .select_related('form', 'profile', 'class_level', 'decided_by')
-          .prefetch_related('answers__question')
+          .select_related('form', 'profile', 'class_level', 'decided_by', 'forwarded_by')
+          .prefetch_related('answers__question', 'attachments')
           .order_by('-submitted_at'))
     return qs.filter(status=status) if status else qs
+
+
+def forward(response, *, note='', by=None):
+    """Put a request in front of the Principal and the Head of Department.
+
+    The secretary receives what students ask for and checks it; the decision is
+    not theirs. Passing it on is the act that makes it somebody else's to
+    answer, and it is recorded as one.
+    """
+    from django.utils import timezone
+
+    if response.form.kind != Form.REQUEST:
+        raise ValueError('Only a service request can be passed on for a decision.')
+    if response.status in FormResponse.ANSWERED_STATUSES:
+        raise ValueError('That request has already been answered.')
+
+    response.status = FormResponse.FORWARDED
+    response.forward_note = (note or '').strip()[:300]
+    response.forwarded_by = by
+    response.forwarded_at = timezone.now()
+    response.save(update_fields=['status', 'forward_note', 'forwarded_by', 'forwarded_at'])
+    return response
 
 
 def decide(response, *, status, note='', by=None):
     """Answer a service request.
 
-    Sending one back to pending is allowed and clears the decision with it —
-    an officer who approved the wrong request should be able to undo it, not
-    live with a decision nobody made.
+    Sending one back clears the decision with it — an officer who approved the
+    wrong request should be able to undo it, not live with a decision nobody
+    made. It goes back to the secretary's desk, which is where an unanswered
+    request lives.
     """
     from django.utils import timezone
 
@@ -165,7 +188,7 @@ def decide(response, *, status, note='', by=None):
 
     response.status = status
     response.decision_note = (note or '').strip()
-    decided = status != FormResponse.PENDING
+    decided = status in FormResponse.ANSWERED_STATUSES
     response.decided_by = by if decided else None
     response.decided_at = timezone.now() if decided else None
     response.save(update_fields=['status', 'decision_note', 'decided_by', 'decided_at'])
@@ -332,6 +355,9 @@ def submit(form, answers, *, profile=None, class_level=None, academic_year=None,
     ])
     if profile is not None:
         FormSubmissionReceipt.objects.get_or_create(form=form, profile=profile)
+    if form.kind == Form.REQUEST and profile is not None:
+        from . import notifications
+        notifications.request_submitted(response)
     return response
 
 

@@ -57,6 +57,9 @@ urlpatterns = [
     path('staff-accounts/<int:user_id>/set-modules/', views.set_staff_modules, name='staff-set-modules'),
     path('staff-accounts/<int:user_id>/roles/', views.set_staff_roles, name='staff-set-roles'),
     path('module-scope/', views.set_module_scope, name='module-scope'),
+    path('notifications/', views.my_notifications, name='notifications'),
+    path('notifications/read/', views.read_notifications, name='notifications-read'),
+    path('my-notifications/', views.student_notifications, name='my-notifications'),
     # A document the college attached to a service request. Gated: it belongs
     # to the student it names and to the office that answered them.
     path('request-documents/<int:pk>/', views.request_attachment_download,

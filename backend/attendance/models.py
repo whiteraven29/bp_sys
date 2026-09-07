@@ -1713,15 +1713,36 @@ class FormResponse(models.Model):
     # A service request is owed an answer. An evaluation is not, and stays
     # PENDING for ever without meaning anything — the student's Services page
     # only reads these on a request-kind form.
+    #: A request passes through two desks. The secretary receives it, checks it
+    #: and puts it in front of the Principal or the Head of Department; they are
+    #: the ones who say yes or no. It comes back to the secretary to be acted on
+    #: — the letter typed, signed and sent. Deciding and processing are separate
+    #: jobs, and one office doing both is how a request gets approved by the
+    #: person who wanted it approved.
     PENDING = 'pending'
+    FORWARDED = 'forwarded'
     APPROVED = 'approved'
     DECLINED = 'declined'
     STATUS_CHOICES = [
-        (PENDING, 'With the college'),
+        (PENDING, 'With the secretary'),
+        (FORWARDED, 'With the Principal / Head of Department'),
         (APPROVED, 'Approved'),
         (DECLINED, 'Declined'),
     ]
+    #: The statuses a decision-maker has answered.
+    ANSWERED_STATUSES = (APPROVED, DECLINED)
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=PENDING)
+    forwarded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='form_forwards',
+    )
+    forwarded_at = models.DateTimeField(null=True, blank=True)
+    forward_note = models.CharField(
+        max_length=300, blank=True,
+        help_text='What the secretary wants the Principal or HoD to know. Not shown '
+                  'to the student.',
+    )
     decided_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='form_decisions',
@@ -1746,6 +1767,64 @@ class FormResponse(models.Model):
     def reference(self):
         """What the printed document is called when somebody has to find it again."""
         return f'REQ-{self.id:05d}'
+
+
+class Notification(models.Model):
+    """Something that has happened and somebody needs to know about.
+
+    A request used to sit in a queue nobody had a reason to open. The secretary
+    found out a student had asked for a letter by going and looking; the
+    Principal found out one was waiting for a decision the same way. Work that
+    depends on somebody noticing it is work that waits.
+
+    One row per recipient — a notification is read by one person, so a shared
+    row with a read flag would mean the first reader clears it for everybody.
+    """
+
+    REQUEST_SUBMITTED = 'request.submitted'
+    REQUEST_FORWARDED = 'request.forwarded'
+    REQUEST_DECIDED = 'request.decided'
+    REQUEST_DOCUMENT = 'request.document'
+    FORM_PUBLISHED = 'form.published'
+    KIND_CHOICES = [
+        (REQUEST_SUBMITTED, 'A student asked for something'),
+        (REQUEST_FORWARDED, 'A request needs a decision'),
+        (REQUEST_DECIDED, 'A request was answered'),
+        (REQUEST_DOCUMENT, 'A document was sent'),
+        (FORM_PUBLISHED, 'A form was opened'),
+    ]
+
+    # Exactly one of these two is set: staff sign in as Django users, students
+    # on a session keyed to their profile.
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='notifications',
+    )
+    profile = models.ForeignKey(
+        'StudentProfile', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='notifications',
+    )
+    kind = models.CharField(max_length=32, choices=KIND_CHOICES)
+    title = models.CharField(max_length=200)
+    body = models.CharField(max_length=300, blank=True)
+    #: Where to go to act on it — a page name the dashboard understands.
+    link = models.CharField(max_length=120, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'read_at', '-created_at']),
+            models.Index(fields=['profile', 'read_at', '-created_at']),
+        ]
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def is_read(self):
+        return self.read_at is not None
 
 
 class RequestAttachment(models.Model):

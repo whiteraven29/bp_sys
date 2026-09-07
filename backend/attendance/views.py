@@ -27,7 +27,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import analytics, evaluations, finance
+from . import analytics, evaluations, finance, notifications
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
 from .models import (
     AcademicYear, Semester, ClassLevel, Module,
@@ -252,14 +252,42 @@ def is_secretary(user):
     )
 
 
-def can_answer_requests(user):
-    """Who may approve or decline what a student has asked the college for.
+def can_handle_requests(user):
+    """Whose desk a request lands on — receiving it, checking it, passing it on,
+    and sending the document back once it has been answered.
 
-    The secretary's own job, and the admin's because somebody has to be able to
-    do it when the secretary is away. Not the accountant and not a tutor: a
-    request for leave of absence is neither a payment nor a mark.
+    The secretary's job, with the examination officer as cover because somebody
+    has to work the queue when they are away. Deliberately not the Principal or
+    the Head of Department: theirs is the decision, and an office that both
+    prepares a request and approves it is how a request gets approved by the
+    person who wanted it approved.
     """
-    return bool(user and user.is_authenticated and (user.is_staff or is_secretary(user)))
+    if not (user and user.is_authenticated):
+        return False
+    if is_secretary(user):
+        return True
+    return bool(user.is_staff and not is_principal(user) and not is_head_of_department(user))
+
+
+def can_decide_requests(user):
+    """Who says yes or no.
+
+    The Principal and the Head of Department. Deliberately not the secretary:
+    they receive what students ask for and put it in front of somebody who can
+    answer it, and an office that both prepares and approves its own work is how
+    a request gets approved by the person who wanted it approved.
+
+    The examination officer keeps it as the system administrator — somebody has
+    to be able to answer when neither of the other two is here.
+    """
+    return bool(user and user.is_authenticated
+                and (is_principal(user) or is_head_of_department(user)
+                     or (user.is_staff and not is_secretary(user))))
+
+
+# Kept as the old name so nothing that only needs "may touch the queue" changes
+# meaning underneath it.
+can_answer_requests = can_handle_requests
 
 
 def active_semester():
@@ -356,7 +384,8 @@ class IsRequestOfficer(BasePermission):
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
             return False
-        return request.method in SAFE_METHODS or can_answer_requests(request.user)
+        return (request.method in SAFE_METHODS
+                or can_handle_requests(request.user) or can_decide_requests(request.user))
 
 
 def _make_both_semesters(year):
@@ -5475,10 +5504,45 @@ class ServiceRequestViewSet(mixins.RetrieveModelMixin,
     def get_queryset(self):
         return evaluations.request_queue(self.request.query_params.get('status'))
 
+    def _reloaded(self, service_request):
+        """Re-read after changing the attachments.
+
+        The queue prefetches them, and adding or removing a row does not
+        invalidate that cache — so the response would echo the list as it was
+        before the change, and sending a document looked like it had done
+        nothing until the page was reloaded.
+        """
+        return evaluations.request_queue().get(pk=service_request.pk)
+
+    @action(detail=True, methods=['post'])
+    def forward(self, request, pk=None):
+        """Pass a request to the Principal and the Head of Department.
+
+        The secretary's act. It is what makes the request somebody else's to
+        answer, so it is recorded rather than being a state that just appears.
+        """
+        if not can_handle_requests(request.user):
+            raise PermissionDenied('Only the secretary or the admin handles service requests.')
+        service_request = self.get_object()
+        try:
+            evaluations.forward(service_request,
+                                note=request.data.get('note', ''), by=request.user)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        notifications.request_forwarded(service_request)
+        finance.audit('service_request.forward', 'FormResponse', actor=request.user,
+                      entity_id=service_request.id,
+                      summary=f'{service_request.form.title} — passed on for a decision',
+                      ip=finance.client_ip(request))
+        return Response(FormResponseSerializer(service_request).data)
+
     @action(detail=True, methods=['post'])
     def decide(self, request, pk=None):
-        if not can_answer_requests(request.user):
-            raise PermissionDenied('Only the secretary or the admin can answer a service request.')
+        if not can_decide_requests(request.user):
+            raise PermissionDenied(
+                'Only the Principal or the Head of Department can approve or decline a '
+                'request. The secretary passes it on for them to answer.')
         service_request = self.get_object()
         try:
             evaluations.decide(
@@ -5490,6 +5554,8 @@ class ServiceRequestViewSet(mixins.RetrieveModelMixin,
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
+        if service_request.status in FormResponse.ANSWERED_STATUSES:
+            notifications.request_decided(service_request)
         finance.audit('service_request.decide', 'FormResponse', actor=request.user,
                       entity_id=service_request.id,
                       summary=f'{service_request.form.title} — '
@@ -5509,8 +5575,8 @@ class ServiceRequestViewSet(mixins.RetrieveModelMixin,
         collect a piece of paper the college had already produced. The request
         came through the portal; the answer can go back the same way.
         """
-        if not can_answer_requests(request.user):
-            raise PermissionDenied('Only the secretary or the admin can answer a service request.')
+        if not can_handle_requests(request.user):
+            raise PermissionDenied('Only the secretary or the admin sends a document back.')
         service_request = self.get_object()
 
         upload = request.FILES.get('file')
@@ -5535,17 +5601,18 @@ class ServiceRequestViewSet(mixins.RetrieveModelMixin,
                             status=status.HTTP_400_BAD_REQUEST)
         attachment.save()
 
+        notifications.document_sent(service_request, attachment)
         finance.audit('service_request.attach', 'FormResponse', actor=request.user,
                       entity_id=service_request.id,
                       summary=f'{service_request.form.title} — sent "{attachment.display_name}"',
                       ip=finance.client_ip(request))
-        return Response(FormResponseSerializer(service_request).data,
+        return Response(FormResponseSerializer(self._reloaded(service_request)).data,
                         status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'], url_path='remove-attachment')
     def remove_attachment(self, request, pk=None):
-        if not can_answer_requests(request.user):
-            raise PermissionDenied('Only the secretary or the admin can answer a service request.')
+        if not can_handle_requests(request.user):
+            raise PermissionDenied('Only the secretary or the admin sends a document back.')
         service_request = self.get_object()
         attachment = get_object_or_404(
             RequestAttachment, pk=request.data.get('attachment_id'), request=service_request)
@@ -5557,7 +5624,7 @@ class ServiceRequestViewSet(mixins.RetrieveModelMixin,
                       ip=finance.client_ip(request))
         attachment.file.delete(save=False)
         attachment.delete()
-        return Response(FormResponseSerializer(service_request).data)
+        return Response(FormResponseSerializer(self._reloaded(service_request)).data)
 
 
 def request_print(request, pk):
@@ -5641,6 +5708,48 @@ def request_attachment_download(request, pk):
     except FileNotFoundError:
         raise Http404('That file is no longer available.')
     return FileResponse(handle, as_attachment=True, filename=attachment.display_name)
+
+
+def _notification_rows(rows):
+    return [{
+        'id': n.id, 'kind': n.kind, 'title': n.title, 'body': n.body,
+        'link': n.link, 'is_read': n.is_read, 'created_at': n.created_at,
+    } for n in rows]
+
+
+@api_view(['GET'])
+@login_required
+def my_notifications(request):
+    """What has happened that this member of staff needs to know about."""
+    return Response({
+        'unread': notifications.unread_for(user=request.user).count(),
+        'items': _notification_rows(notifications.recent_for(user=request.user)),
+    })
+
+
+@api_view(['POST'])
+@login_required
+def read_notifications(request):
+    ids = request.data.get('ids')
+    marked = notifications.mark_read(user=request.user,
+                                     ids=ids if isinstance(ids, list) else None)
+    return Response({'marked': marked,
+                     'unread': notifications.unread_for(user=request.user).count()})
+
+
+@api_view(['GET', 'POST'])
+def student_notifications(request):
+    """The same thing for the portal, which authenticates on the session."""
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Authentication required.'}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == 'POST':
+        ids = request.data.get('ids')
+        notifications.mark_read(profile=profile, ids=ids if isinstance(ids, list) else None)
+    return Response({
+        'unread': notifications.unread_for(profile=profile).count(),
+        'items': _notification_rows(notifications.recent_for(profile=profile)),
+    })
 
 
 @api_view(['GET'])
