@@ -246,3 +246,50 @@ class BeingToldTests(WorkflowTestBase):
         SecretaryProfile.objects.all().delete()
         made = self._ask()
         self.assertEqual(made.status, FormResponse.PENDING)
+
+
+class SendingTheAnswerBackTests(WorkflowTestBase):
+    """The secretary types and sends the letter the decision authorised. It is
+    their desk that does the processing, so it is their button."""
+
+    def _approved(self):
+        made = self._ask()
+        self.secretary.api.post(f'/api/service-requests/{made.id}/forward/', {}, format='json')
+        self.principal.api.post(f'/api/service-requests/{made.id}/decide/',
+                                {'status': 'approved', 'note': 'Ready.'}, format='json')
+        return made
+
+    def _send(self, made, api):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        return api.post(f'/api/service-requests/{made.id}/attach/',
+                        {'file': SimpleUploadedFile('letter.pdf', b'%PDF signed')},
+                        format='multipart')
+
+    def test_the_secretary_sends_the_answered_letter(self):
+        made = self._approved()
+        sent = self._send(made, self.secretary.api)
+        self.assertEqual(sent.status_code, 201, sent.data)
+        self.assertEqual([a['name'] for a in sent.data['attachments']], ['letter.pdf'])
+
+    def test_a_decision_maker_does_not_do_the_typing(self):
+        made = self._approved()
+        for officer in (self.principal, self.hod):
+            self.assertEqual(self._send(made, officer.api).status_code, 403, officer.username)
+
+    def test_everyone_who_touched_the_request_can_read_what_went_out(self):
+        made = self._approved()
+        self._send(made, self.secretary.api)
+        attachment = made.attachments.get()
+
+        for user in (self.secretary, self.principal, self.hod, self.admin):
+            browser = Client()
+            browser.force_login(user)
+            self.assertEqual(
+                browser.get(f'/api/request-documents/{attachment.id}/').status_code,
+                200, user.username)
+
+    def test_and_so_can_the_student_it_belongs_to(self):
+        made = self._approved()
+        self._send(made, self.secretary.api)
+        attachment = made.attachments.get()
+        self.assertEqual(self.portal.get(f'/api/request-documents/{attachment.id}/').status_code, 200)

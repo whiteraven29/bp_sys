@@ -18,8 +18,9 @@ from . import evaluations
 from .serializers import FormResponseSerializer
 from .models import (
     AcademicYear, ClassLevel, Form, FormAnswer, FormQuestion, FormResponse,
-    FormSection, FormSubmissionReceipt, Module, RequestAttachment, SecretaryProfile,
-    Semester, Student, TeacherProfile,
+    FormSection, FormSubmissionReceipt, HeadOfDepartmentProfile, Module,
+    PrincipalProfile, RequestAttachment, SecretaryProfile, Semester, Student,
+    TeacherProfile,
 )
 
 User = get_user_model()
@@ -1655,12 +1656,33 @@ class SendingTheDocumentBackTests(FormTestBase):
         # And a stranger with no session at all is sent to sign in.
         self.assertEqual(Client().get(f'/api/request-documents/{attachment.id}/').status_code, 302)
 
-    def test_the_office_can_read_back_what_it_sent(self):
+    def test_both_desks_can_read_back_what_went_out(self):
+        """The secretary prepared and sent it; the Principal and the Head of
+        Department approved the request it answers, and seeing what actually
+        went out in their name is part of having approved it."""
         self._attach()
         attachment = RequestAttachment.objects.get()
-        office = Client()
-        office.force_login(self.secretary)
-        self.assertEqual(office.get(f'/api/request-documents/{attachment.id}/').status_code, 200)
+
+        principal = User.objects.create_user('principal', password='pw')
+        PrincipalProfile.objects.create(user=principal, full_name='Principal')
+        hod = User.objects.create_user('hod', password='pw')
+        HeadOfDepartmentProfile.objects.create(user=hod, full_name='HoD')
+
+        for user in (self.secretary, principal, hod, self.admin):
+            office = Client()
+            office.force_login(user)
+            self.assertEqual(
+                office.get(f'/api/request-documents/{attachment.id}/').status_code,
+                200, user.username)
+
+    def test_a_tutor_cannot_read_somebody_elses_letter(self):
+        self._attach()
+        attachment = RequestAttachment.objects.get()
+        tutor = User.objects.create_user('tutor', password='pw')
+        TeacherProfile.objects.create(user=tutor, full_name='Tutor')
+        browser = Client()
+        browser.force_login(tutor)
+        self.assertEqual(browser.get(f'/api/request-documents/{attachment.id}/').status_code, 302)
 
     def test_a_tutor_cannot_send_a_document_on_a_request(self):
         tutor = User.objects.create_user('tutor', password='pw')

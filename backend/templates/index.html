@@ -517,6 +517,10 @@
   .handler-only, .decider-only { display: none !important; }
   body.is-admin .handler-only,
   body.is-secretary .handler-only { display: flex !important; }
+  body.is-admin .handler-only[style*="display:block"],
+  body.is-secretary .handler-only[style*="display:block"] { display: block !important; }
+  body.is-admin .handler-only[style*="flex-direction:column"],
+  body.is-secretary .handler-only[style*="flex-direction:column"] { display: flex !important; }
   body.is-admin .decider-only,
   body.is-principal .decider-only,
   body.is-hod .decider-only { display: flex !important; }
@@ -6257,7 +6261,7 @@ function openServiceRequest(id) {
             <td style="font-size:.76rem;color:var(--muted)">${safeText(a.note) || '—'}</td>
             <td style="font-size:.76rem">${new Date(a.uploaded_at).toLocaleDateString()}</td>
             <td style="font-size:.76rem">${safeText(a.uploaded_by) || '—'}</td>
-            <td><button class="btn btn-ghost btn-sm decider-only" style="color:var(--red)"
+            <td><button class="btn btn-ghost btn-sm handler-only" style="color:var(--red)"
                   onclick="removeRequestAttachment(${request.id}, ${a.id})">Withdraw</button></td>
           </tr>`).join('')}</tbody></table></div>`
     : '';
@@ -6272,15 +6276,15 @@ function openServiceRequest(id) {
              placeholder="e.g. Ready for collection at the Dean of Students' office from Tuesday"
              value="${safeText(request.decision_note || '')}" />
     </div>
-    <div class="field" style="margin-top:14px">
+    <div class="field handler-only" style="margin-top:14px;display:flex;flex-direction:column">
       <label>Send the student a document</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="file" id="sr-file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="max-width:340px" />
         <input id="sr-file-note" maxlength="200" placeholder="Optional note — e.g. signed and stamped" style="max-width:280px" />
-        <button class="btn btn-secondary btn-sm decider-only" onclick="attachToRequest(${id})">⬆ Send it</button>
+        <button class="btn btn-secondary btn-sm" onclick="attachToRequest(${id})">⬆ Send it</button>
       </div>
     </div>
-    <p class="help-note">
+    <p class="help-note handler-only" style="display:block">
       The signed letter itself — a PDF, a Word file or a scan, up to 10 MB. The student
       downloads it from My Requests instead of walking to an office to collect a piece of
       paper you have already produced.

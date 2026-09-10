@@ -5700,7 +5700,10 @@ def request_attachment_download(request, pk):
         viewer = _student_profile(request)
         if viewer is None or owner is None or viewer.id != owner.id:
             raise Http404('No such document.')
-    elif not can_answer_requests(request.user):
+    # Both desks read it: the secretary prepared and sent it, and the Principal
+    # or Head of Department approved the request it answers — being able to see
+    # what actually went out in their name is part of having approved it.
+    elif not (can_handle_requests(request.user) or can_decide_requests(request.user)):
         return redirect('login')
 
     try:
