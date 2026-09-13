@@ -1,0 +1,378 @@
+---
+# EduTrack server, written down as code.
+#
+# Everything DEPLOYMENT.md tells you to type by hand, as a list of the states the
+# server should be in: "nginx is installed", "the service file looks like
+# this", "the firewall allows SSH and web traffic". Ansible logs in over SSH,
+# compares each one with the server, and changes only what differs. Running it
+# twice is safe; the second run changes nothing.
+#
+#   Dry run — shows what WOULD change and changes nothing:
+#       ansible-playbook site.yml --check --diff
+#   For real:
+#       ansible-playbook site.yml
+#
+# What it deliberately does NOT do:
+#   * update the code on a running server  → that is edutrack-deploy's job
+#   * seed data or create the admin account → first-install steps, done once by hand
+#   * overwrite an existing backend/.env    → your secrets stay as they are
+#   * connect Google Drive for backups      → needs you to sign in (guide 01)
+#
+# Guide: ops/guides/04-ansible.md
+
+- name: EduTrack server
+  hosts: edutrack
+  become: true
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Restart edutrack
+      ansible.builtin.systemd_service:
+        name: "{{ service_name }}"
+        state: restarted
+
+    - name: Test nginx configuration
+      ansible.builtin.command: nginx -t
+      changed_when: false
+      listen: Reload nginx
+
+    - name: Reload nginx service
+      ansible.builtin.systemd_service:
+        name: nginx
+        state: reloaded
+      listen: Reload nginx
+
+    - name: Test the whole SSH configuration
+      ansible.builtin.command: /usr/sbin/sshd -t
+      changed_when: false
+      listen: Reload ssh
+
+    - name: Reload the SSH service (open sessions stay connected)
+      ansible.builtin.systemd_service:
+        name: ssh
+        state: reloaded
+      listen: Reload ssh
+
+  tasks:
+    # ── 1. Packages ──────────────────────────────────────────────────────────
+    - name: Install the system packages
+      ansible.builtin.apt:
+        name:
+          - acl               # lets Ansible run commands as the edutrack user
+          - certbot           # free HTTPS certificates from Let's Encrypt
+          - curl
+          - git
+          - nginx
+          - postgresql
+          - postgresql-contrib
+          - python3-psycopg2  # lets Ansible create PostgreSQL users and databases
+          - python3-venv
+          - rclone            # talks to Google Drive
+          - restic            # encrypted backups
+          - rsync
+          - ufw               # the firewall
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # ── 2. SSH: keys only ────────────────────────────────────────────────────
+    - name: Does the account Ansible logs in as have an SSH key installed?
+      ansible.builtin.stat:
+        path: "~{{ ansible_user | default('root') }}/.ssh/authorized_keys"
+      register: authorized_keys
+
+    - name: Stop before switching password logins off, if nobody could log in afterwards
+      ansible.builtin.assert:
+        that: authorized_keys.stat.exists and authorized_keys.stat.size > 0
+        fail_msg: >-
+          ~{{ ansible_user | default('root') }}/.ssh/authorized_keys is missing or empty.
+          Turning password logins off now would lock everyone out.
+        quiet: true
+
+    - name: SSH accepts keys only — no password logins
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/00-edutrack-keys-only.conf
+        content: |
+          # {{ ansible_managed }}
+          # Source: ops/ansible/site.yml. Nobody can log in over SSH with a password,
+          # only with a key. "00-" makes this file win over any later one that says otherwise.
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+        mode: "0644"
+        validate: /usr/sbin/sshd -t -f %s
+        backup: true
+      notify: Reload ssh
+
+    - name: Which ports does SSH listen on?
+      ansible.builtin.command: /usr/sbin/sshd -T
+      register: sshd_settings
+      changed_when: false
+      check_mode: false   # only reads, so it is safe to run during a dry run too
+
+    # ── 3. Firewall ──────────────────────────────────────────────────────────
+    - name: Firewall — allow SSH first, on the ports it really uses, so the firewall cannot lock you out
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ sshd_settings.stdout_lines | select('match', '^port ') | map('split', ' ') | map('last') | list }}"
+
+    - name: Firewall — allow web traffic (HTTP and HTTPS)
+      community.general.ufw:
+        rule: allow
+        name: Nginx Full
+
+    - name: Firewall — refuse everything else coming in
+      community.general.ufw:
+        default: deny
+        direction: incoming
+
+    - name: Firewall — switch it on
+      community.general.ufw:
+        state: enabled
+
+    # ── 4. The app's account and folders ─────────────────────────────────────
+    - name: The edutrack account that owns the code and runs the app
+      ansible.builtin.user:
+        name: "{{ app_user }}"
+        shell: /bin/bash
+        create_home: true
+
+    - name: Folders
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.owner }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ repo_dir }}", owner: "{{ app_user }}", mode: "0755" }
+        - { path: /etc/edutrack, owner: root, mode: "0700" }
+        - { path: /var/backups/edutrack, owner: root, mode: "0700" }
+
+    # ── 5. The code ──────────────────────────────────────────────────────────
+    - name: Get the code from GitHub (first time only — later updates are edutrack-deploy's job)
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dir }}"
+        version: "{{ repo_branch }}"
+        update: false
+      become: true
+      become_user: "{{ app_user }}"
+
+    # ── 6. Secrets (.env) ────────────────────────────────────────────────────
+    - name: Is there already a .env on the server?
+      ansible.builtin.stat:
+        path: "{{ backend_dir }}/.env"
+      register: server_env
+
+    - name: Copy the .env from your laptop (only when the server has none)
+      ansible.builtin.copy:
+        src: "{{ env_file | expanduser }}"
+        dest: "{{ backend_dir }}/.env"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0600"
+      when: not server_env.stat.exists
+
+    - name: Read the server's .env
+      ansible.builtin.slurp:
+        src: "{{ backend_dir }}/.env"
+      register: server_env_content
+      when: server_env.stat.exists
+      no_log: true
+
+    - name: Pick the database name, user and password out of it
+      ansible.builtin.set_fact:
+        db: "{{ db | default({}) | combine({item | lower: value}) }}"
+      vars:
+        env_text: >-
+          {{ server_env_content.content | b64decode if server_env.stat.exists
+             else lookup('ansible.builtin.file', env_file | expanduser) }}
+        env_values: "{{ dict(env_text | regex_findall('(?m)^([A-Za-z_][A-Za-z0-9_]*)=(.*)$')) }}"
+        raw: "{{ env_values[item] | default('') | string | trim }}"
+        # python-decouple accepts VALUE, "VALUE" and 'VALUE' — take the quotes off.
+        value: "{{ raw[1:-1] if (raw | length > 1 and raw[0] == raw[-1] and raw[0] in ['\"', \"'\"]) else raw }}"
+      loop: [DB_NAME, DB_USER, DB_PASSWORD]
+      no_log: true
+
+    - name: Stop if .env is missing a database setting
+      ansible.builtin.assert:
+        that:
+          - db.db_name | length > 0
+          - db.db_user | length > 0
+          - db.db_password | length > 0
+        fail_msg: "backend/.env must set DB_NAME, DB_USER and DB_PASSWORD."
+        quiet: true
+
+    # ── 7. Database ──────────────────────────────────────────────────────────
+    - name: PostgreSQL user for the app, with the password from .env
+      community.postgresql.postgresql_user:
+        name: "{{ db.db_user }}"
+        password: "{{ db.db_password }}"
+      become: true
+      become_user: postgres
+      no_log: true
+
+    - name: The EduTrack database, owned by that user
+      community.postgresql.postgresql_db:
+        name: "{{ db.db_name }}"
+        owner: "{{ db.db_user }}"
+      become: true
+      become_user: postgres
+
+    # ── 8. Python, database structure, static files ──────────────────────────
+    - name: Python packages in the virtual environment
+      ansible.builtin.pip:
+        requirements: "{{ backend_dir }}/requirements.txt"
+        virtualenv: "{{ backend_dir }}/venv"
+        virtualenv_command: python3 -m venv
+      become: true
+      become_user: "{{ app_user }}"
+      notify: Restart edutrack
+
+    - name: Bring the database structure up to date
+      ansible.builtin.command:
+        cmd: venv/bin/python manage.py migrate --noinput
+        chdir: "{{ backend_dir }}"
+      become: true
+      become_user: "{{ app_user }}"
+      register: migrate
+      changed_when: "'No migrations to apply' not in migrate.stdout"
+
+    - name: Collect static files for nginx
+      ansible.builtin.command:
+        cmd: venv/bin/python manage.py collectstatic --noinput
+        chdir: "{{ backend_dir }}"
+      become: true
+      become_user: "{{ app_user }}"
+      register: collectstatic
+      changed_when: "not collectstatic.stdout is search('^0 static files copied', multiline=True)"
+
+    # ── 9. Gunicorn service ──────────────────────────────────────────────────
+    - name: The gunicorn service file
+      ansible.builtin.template:
+        src: edutrack.service.j2
+        dest: "/etc/systemd/system/{{ service_name }}.service"
+        mode: "0644"
+        backup: true   # keeps the old file next to it, dated, as an undo
+      notify: [Reload systemd, Restart edutrack]
+
+    - name: Run the app now and at every boot
+      ansible.builtin.systemd_service:
+        name: "{{ service_name }}"
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    # ── 10. HTTPS certificate ─────────────────────────────────────────────────
+    - name: Is there already an HTTPS certificate?
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ main_domain }}/fullchain.pem"
+      register: certificate
+
+    - name: Get a free certificate from Let's Encrypt (first time only; the domain must point here)
+      ansible.builtin.command:
+        argv: "{{ ['certbot', 'certonly', '--webroot', '-w', '/var/www/html',
+                   '--email', letsencrypt_email, '--agree-tos', '--no-eff-email',
+                   '--non-interactive', '--deploy-hook', 'systemctl reload nginx']
+                  + (domain_list | map('regex_replace', '^', '--domain=') | list) }}"
+      when: enable_https | bool and not certificate.stat.exists
+      register: certbot
+      changed_when: true   # it only runs when there is no certificate, and success creates one
+
+    # ── 11. Nginx ────────────────────────────────────────────────────────────
+    - name: The nginx site
+      ansible.builtin.template:
+        src: nginx-edutrack.conf.j2
+        dest: /etc/nginx/sites-available/edutrack
+        mode: "0644"
+        backup: true   # keeps the old file next to it, dated, as an undo
+      vars:
+        # A certificate that was already there, or one certbot just fetched.
+        https: "{{ enable_https | bool and (certificate.stat.exists or certbot is changed) }}"
+      notify: Reload nginx
+
+    - name: Switch the site on
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/edutrack
+        dest: /etc/nginx/sites-enabled/edutrack
+        state: link
+      notify: Reload nginx
+
+    - name: Switch off nginx's welcome page
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+
+    # ── 12. Backup, restore and deploy commands ──────────────────────────────
+    - name: Install edutrack-backup, edutrack-restore, edutrack-restic and edutrack-deploy
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../{{ item.src }}"
+        dest: "/usr/local/sbin/{{ item.name }}"
+        owner: root
+        group: root
+        mode: "0700"
+      loop:
+        - { src: backup/backup.sh, name: edutrack-backup }
+        - { src: backup/restore.sh, name: edutrack-restore }
+        - { src: backup/restic.sh, name: edutrack-restic }
+        - { src: deploy.sh, name: edutrack-deploy }
+
+    - name: Operations settings file (created once; your later edits are kept)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../ops.env.example"
+        dest: /etc/edutrack/ops.env
+        owner: root
+        group: root
+        mode: "0600"
+        force: false
+
+    - name: Keep the settings that come from this inventory in step
+      ansible.builtin.lineinfile:
+        path: /etc/edutrack/ops.env
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+      loop:
+        - { key: REPO_DIR, value: "{{ repo_dir }}" }
+        - { key: APP_USER, value: "{{ app_user }}" }
+        - { key: SERVICE, value: "{{ service_name }}" }
+        - { key: BRANCH, value: "{{ repo_branch }}" }
+        - { key: DB_NAME, value: "{{ db.db_name }}" }
+        - { key: DB_USER, value: "{{ db.db_user }}" }
+        - { key: HEALTHCHECK_URL, value: "{{ healthcheck_url | default('') }}" }
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Nightly backup service and timer
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../backup/{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop: [edutrack-backup.service, edutrack-backup.timer]
+      notify: Reload systemd
+
+    - name: Is Google Drive connected yet?
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: [/etc/edutrack/rclone.conf, /etc/edutrack/restic-password]
+      register: backup_files
+
+    - name: Switch on nightly backups
+      ansible.builtin.systemd_service:
+        name: edutrack-backup.timer
+        state: started
+        enabled: true
+        daemon_reload: true
+      when: backup_files.results | map(attribute='stat.exists') | min
+
+    - name: Remind you when backups are not connected
+      ansible.builtin.debug:
+        msg: >-
+          Nightly backups are NOT switched on yet: Google Drive is not connected on
+          this server. Follow ops/guides/01-backups.md steps 5–6, then run this playbook again.
+      when: not (backup_files.results | map(attribute='stat.exists') | min)

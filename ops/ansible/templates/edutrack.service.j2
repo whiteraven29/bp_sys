@@ -1,0 +1,24 @@
+# {{ ansible_managed }}
+# Source: ops/ansible/templates/edutrack.service.j2 — change that file and run
+# the playbook; edits made here by hand are overwritten.
+
+[Unit]
+Description=EduTrack Gunicorn Daemon
+After=network.target postgresql.service
+
+[Service]
+User={{ app_user }}
+Group=www-data
+WorkingDirectory={{ backend_dir }}
+ExecStart={{ backend_dir }}/venv/bin/gunicorn \
+    edutrack.wsgi \
+    --bind 127.0.0.1:8000 \
+    --workers {{ gunicorn_workers }} \
+    --worker-class gthread \
+    --threads {{ gunicorn_threads }} \
+    --timeout 120
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

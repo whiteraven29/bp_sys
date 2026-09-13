@@ -1,0 +1,17 @@
+# When to run edutrack-backup.service: every night at 02:30 Tanzania time.
+# Installed in /etc/systemd/system/. Guide: ops/guides/01-backups.md, step 10.
+#
+#   When is the next one?  systemctl list-timers edutrack-backup
+
+[Unit]
+Description=Nightly EduTrack backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 Africa/Dar_es_Salaam
+# Start somewhere in the next 10 minutes, not exactly on the minute.
+RandomizedDelaySec=10min
+# If the server was off at 02:30, back up as soon as it is on again.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

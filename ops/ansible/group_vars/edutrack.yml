@@ -1,0 +1,21 @@
+# Settings for every server in the [edutrack] group of inventory.ini.
+# These are the same on any server, so they live in git. Values particular to
+# one server (its IP, domain, email) belong in inventory.ini instead.
+
+app_user: edutrack
+repo_url: https://github.com/whiteraven29/bp_sys.git
+repo_branch: master
+repo_dir: /var/www/edutrack
+backend_dir: "{{ repo_dir }}/backend"
+service_name: edutrack
+
+# Gunicorn: (2 x CPU cores) + 1 workers, capped at 9 so a big VPS doesn't use
+# all its memory and PostgreSQL connections on idle workers.
+gunicorn_workers: "{{ [ansible_facts['processor_vcpus'] * 2 + 1, 9] | min }}"
+gunicorn_threads: 4
+
+# The largest file anyone can upload (letters, announcement PDFs).
+upload_limit: 10M
+
+domain_list: "{{ domains.split(',') | map('trim') | reject('equalto', '') | list }}"
+main_domain: "{{ domain_list | first }}"

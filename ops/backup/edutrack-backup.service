@@ -1,0 +1,19 @@
+# What to run for a backup. edutrack-backup.timer decides when.
+# Installed in /etc/systemd/system/. Guide: ops/guides/01-backups.md, step 10.
+#
+#   Run one now:        sudo systemctl start edutrack-backup
+#   See what happened:  journalctl -u edutrack-backup -n 80
+
+[Unit]
+Description=EduTrack backup (database, uploaded files, settings) to Google Drive
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/edutrack-backup
+# Stay out of the way of the website if a backup overlaps with real use.
+Nice=10
+IOSchedulingClass=idle
+# Give up rather than hang forever if Google Drive stops answering.
+TimeoutStartSec=2h

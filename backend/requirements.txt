@@ -5,3 +5,4 @@ psycopg[binary]>=3.1
 python-decouple==3.8
 openpyxl==3.1.5
 python-docx==1.2.0
+gunicorn>=23.0

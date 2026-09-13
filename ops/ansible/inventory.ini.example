@@ -1,0 +1,29 @@
+# The "inventory": which servers Ansible manages, and the values that are
+# particular to them.
+#
+#     cp inventory.ini.example inventory.ini     (git ignores inventory.ini)
+#
+# Then replace every value below. Guide: ops/guides/04-ansible.md, step 3.
+
+[edutrack]
+# A name you choose, the server's IP address, and the account Ansible logs in as.
+contabo ansible_host=203.0.113.10 ansible_user=root
+
+[edutrack:vars]
+# Your domain(s), separated by commas. The first is the main one. Use the same
+# list as ALLOWED_HOSTS in the server's .env.
+domains=yourdomain.com,www.yourdomain.com
+
+# Where Let's Encrypt emails warnings about certificates that are about to expire.
+letsencrypt_email=you@example.com
+
+# true  = get/keep an HTTPS certificate. The domain must already point at this server.
+# false = HTTP only. Use this while rebuilding a server before you move the domain to it.
+enable_https=true
+
+# Only used when the server has NO backend/.env yet (a brand new server): this
+# file from your laptop is copied there. Keep it OUTSIDE the repository.
+env_file=~/edutrack-secrets/env
+
+# Optional: your free healthchecks.io ping URL (ops/guides/01-backups.md, step 11).
+healthcheck_url=
