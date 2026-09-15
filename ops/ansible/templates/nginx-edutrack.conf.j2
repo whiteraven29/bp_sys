@@ -22,11 +22,17 @@ server {
     listen 443 ssl;
     server_name {{ domain_list | join(' ') }};
 
-    ssl_certificate     /etc/letsencrypt/live/{{ main_domain }}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/{{ main_domain }}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/{{ tls_certificate_name }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ tls_certificate_name }}/privkey.pem;
+{% if certbot_ssl_options %}
+    # Certbot's recommended TLS settings, the same ones the other sites on this server use.
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+{% else %}
     ssl_protocols       TLSv1.2 TLSv1.3;
     ssl_session_cache   shared:EduTrackSSL:10m;
     ssl_session_timeout 1d;
+{% endif %}
 {% endif %}
 
     location /static/ {
@@ -38,7 +44,7 @@ server {
     # Uploaded files are NOT served here: every download goes through Django,
     # which checks who is asking.
     location / {
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://{{ gunicorn_bind }};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

@@ -57,11 +57,186 @@
       listen: Reload ssh
 
   tasks:
+    # ── 0. Is this server set up the way this playbook thinks? ───────────────
+    # On a server that already runs EduTrack, /etc/edutrack/ops.env holds the names
+    # the backup and deploy scripts use successfully. If this playbook would use
+    # different ones, it would clone a second copy of the code or write a second
+    # service. So it stops here, before changing anything.
+    - name: Read the operations settings already on the server (if any)
+      ansible.builtin.slurp:
+        src: /etc/edutrack/ops.env
+      register: existing_ops_env
+      failed_when: false
+
+    - name: Note the names the server already uses
+      ansible.builtin.set_fact:
+        server_ops: "{{ dict((existing_ops_env.content | default('') | b64decode) | regex_findall('(?m)^([A-Z_]+)=([^#\\n]*)')) }}"
+
+    - name: Stop if the server uses different names than group_vars/edutrack.yml
+      ansible.builtin.assert:
+        that: (server_ops[item.key] | default('') | trim) in ['', item.expected]
+        fail_msg: >-
+          Nothing was changed. This server's /etc/edutrack/ops.env says
+          {{ item.key }}={{ server_ops[item.key] | default('') | trim }}, but this playbook
+          would use {{ item.expected }}. Change {{ item.var }} in
+          ops/ansible/group_vars/edutrack.yml to match the server, then run again.
+        quiet: true
+      loop:
+        - { key: REPO_DIR, var: repo_dir, expected: "{{ repo_dir }}" }
+        - { key: APP_USER, var: app_user, expected: "{{ app_user }}" }
+        - { key: SERVICE, var: service_name, expected: "{{ service_name }}" }
+        - { key: BRANCH, var: repo_branch, expected: "{{ repo_branch }}" }
+        - { key: NGINX_SITE, var: nginx_site, expected: "/etc/nginx/sites-available/{{ nginx_site }}" }
+      loop_control:
+        label: "{{ item.key }}"
+
+    # The domains decide which website nginx hands to EduTrack. This server also
+    # hosts other sites, so a wrong domain here would take one of them over.
+    - name: Read the app's .env, if the server has one
+      ansible.builtin.slurp:
+        src: "{{ backend_dir }}/.env"
+      register: early_env
+      failed_when: false
+      no_log: true
+
+    - name: Stop if a domain in inventory.ini is not one EduTrack answers to
+      ansible.builtin.assert:
+        that: early_env.content is not defined or unknown.split() | length == 0
+        fail_msg: >-
+          Nothing was changed. inventory.ini says domains={{ domains }}, but EduTrack's
+          .env only answers to ALLOWED_HOSTS={{ allowed_hosts | join(',') }}. Not in that list:
+          {{ unknown.split() | join(', ') }}. Set domains in inventory.ini to EduTrack's own
+          domain(s), the ones in ALLOWED_HOSTS, then run again.
+        quiet: true
+      vars:
+        env_text: "{{ early_env.content | default('') | b64decode }}"
+        allowed_hosts: >-
+          {{ (env_text | regex_findall('(?m)^ALLOWED_HOSTS=(.*)$') | last | default(''))
+             | replace('"', '') | replace("'", '') | split(',') | map('trim') | reject('equalto', '') | list }}
+        # Django also accepts "*" and ".example.com" (example.com and all its subdomains).
+        unknown: >-
+          {%- for d in domain_list -%}
+            {%- set ns = namespace(ok=(d in allowed_hosts or '*' in allowed_hosts)) -%}
+            {%- for h in allowed_hosts if h.startswith('.') and (d == h[1:] or d.endswith(h)) -%}
+              {%- set ns.ok = true -%}
+            {%- endfor -%}
+            {{ '' if ns.ok else d ~ ' ' }}
+          {%- endfor -%}
+
+    - name: Find enabled nginx sites that answer to exactly these domains
+      # grep -R follows the symlinks in sites-enabled. Whole names only:
+      # "todo.example.com" must not count as "example.com".
+      ansible.builtin.command:
+        argv:
+          - grep
+          - -lRE
+          - "server_name[^;]*[[:space:]]({{ domain_list | map('regex_escape') | join('|') }})([[:space:];]|$)"
+          - "{{ nginx_sites_enabled }}"
+      register: domain_sites
+      changed_when: false
+      failed_when: domain_sites.rc > 1 and 'No such file' not in domain_sites.stderr
+      check_mode: false
+
+    - name: Stop if another site on this server already answers to these domains
+      ansible.builtin.assert:
+        that: others | length == 0
+        fail_msg: >-
+          Nothing was changed. {{ domain_list | join(', ') }} is already served by
+          sites-enabled/{{ others | join(', sites-enabled/') }}, which is not EduTrack's site
+          ("{{ nginx_site }}"). If that is another project, domains in inventory.ini is wrong:
+          use EduTrack's own domain(s). If that file really is EduTrack's site, set nginx_site
+          to its name in group_vars/edutrack.yml.
+        quiet: true
+      vars:
+        others: "{{ domain_sites.stdout_lines | map('basename') | reject('equalto', nginx_site) | list }}"
+
+    - name: Read EduTrack's current nginx site, if there is one
+      ansible.builtin.slurp:
+        src: "/etc/nginx/sites-available/{{ nginx_site }}"
+      register: existing_site
+      failed_when: false
+
+    - name: Stop if the playbook would change which domains or certificate EduTrack's site uses
+      ansible.builtin.assert:
+        that:
+          - site_names | length == 0 or site_names == (domain_list | unique | sort)
+          - site_certs | length == 0 or site_certs == [tls_certificate_name]
+        fail_msg: >-
+          Nothing was changed. /etc/nginx/sites-available/{{ nginx_site }} answers to
+          [{{ site_names | join(' ') }}] with the certificate in /etc/letsencrypt/live/[{{ site_certs | join(' ') }}].
+          The playbook would use [{{ domain_list | unique | sort | join(' ') }}] and
+          /etc/letsencrypt/live/{{ tls_certificate_name }}. Set domains in inventory.ini to the
+          first list, and certificate_name in inventory.ini to the certificate folder name,
+          then run again.
+        quiet: true
+      vars:
+        site_text: "{{ existing_site.content | default('') | b64decode }}"
+        site_names: "{{ site_text | regex_findall('server_name[ \t]+([^;]+);') | join(' ') | split | unique | sort }}"
+        site_certs: "{{ site_text | regex_findall('/etc/letsencrypt/live/([^/]+)/') | unique }}"
+
+    - name: Read the SSH server's settings (ports, who may log in)
+      ansible.builtin.command: /usr/sbin/sshd -T
+      register: sshd_settings
+      changed_when: false
+      check_mode: false   # only reads, so it is safe to run during a dry run too
+
+    - name: Stop if the SSH login list in inventory.ini differs from the server's
+      ansible.builtin.assert:
+        that:
+          - wanted | length == 0 or ansible_user in wanted
+          - enforced | length == 0 or (enforced | sort) == (wanted | sort)
+        fail_msg: >-
+          Nothing was changed. The server lets these accounts log in over SSH:
+          [{{ enforced | join(' ') }}]. inventory.ini says ssh_allow_users=[{{ wanted | join(' ') }}],
+          and Ansible logs in as {{ ansible_user }}. Make ssh_allow_users list exactly
+          the server's accounts, including the one in ansible_user, then run again.
+        quiet: true
+      vars:
+        wanted: "{{ (ssh_allow_users | default('')).split() }}"
+        enforced: "{{ sshd_settings.stdout_lines | select('match', '^allowusers ') | map('split', ' ') | map('last') | list }}"
+
+    # Other projects on this server may listen on their own ports. Switching the
+    # firewall on without allowing those would cut them off.
+    - name: Which TCP ports are open to the outside right now?
+      ansible.builtin.command: ss -tlnH
+      register: listening
+      changed_when: false
+      check_mode: false
+
+    - name: Is the firewall already on and refusing by default?
+      ansible.builtin.command: ufw status verbose
+      register: ufw_status
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Stop if the firewall would block a port something on this server listens on
+      ansible.builtin.assert:
+        that: not firewall_enabled or firewall_already_strict or blocked | length == 0
+        fail_msg: >-
+          Nothing was changed. The firewall is not refusing connections yet, and switching it on
+          would block these ports, which programs on this server listen on publicly:
+          {{ blocked | join(', ') }}. If other projects need them, add them to inventory.ini as
+          firewall_extra_ports={{ blocked | join(',') }}. If you'd rather not manage the firewall
+          with Ansible on this server, set manage_firewall=false instead.
+        quiet: true
+      vars:
+        firewall_already_strict: "{{ 'Status: active' in ufw_status.stdout and 'deny (incoming)' in ufw_status.stdout }}"
+        public_ports: >-
+          {{ listening.stdout_lines | map('split') | map(attribute='3')
+             | reject('match', '^(127[.]|[[]::1[]]|::1)') | reject('search', '%lo')
+             | map('regex_replace', '^.*:', '') | unique | list }}
+        allowed: >-
+          {{ ['80', '443']
+             + (sshd_settings.stdout_lines | select('match', '^port ') | map('split', ' ') | map('last') | list)
+             + firewall_open_ports }}
+        blocked: "{{ public_ports | reject('in', allowed) | list }}"
+
     # ── 1. Packages ──────────────────────────────────────────────────────────
     - name: Install the system packages
       ansible.builtin.apt:
         name:
-          - acl               # lets Ansible run commands as the edutrack user
+          - acl               # lets Ansible run commands as the project account
           - certbot           # free HTTPS certificates from Let's Encrypt
           - curl
           - git
@@ -92,53 +267,66 @@
           Turning password logins off now would lock everyone out.
         quiet: true
 
-    - name: SSH accepts keys only — no password logins
+    - name: SSH accepts keys only, and only from the accounts in ssh_allow_users
       ansible.builtin.copy:
         dest: /etc/ssh/sshd_config.d/00-edutrack-keys-only.conf
         content: |
-          # {{ ansible_managed }}
-          # Source: ops/ansible/site.yml. Nobody can log in over SSH with a password,
+          # Managed by Ansible — edit ops/ansible/site.yml, not this file.
+          # Nobody can log in over SSH with a password,
           # only with a key. "00-" makes this file win over any later one that says otherwise.
           PasswordAuthentication no
           KbdInteractiveAuthentication no
+          {% if ssh_allow_users | default('') | trim %}
+          # Only these accounts may log in over SSH at all. Everyone else, root
+          # included, first logs in as one of them and then uses sudo.
+          AllowUsers {{ ssh_allow_users | trim }}
+          {% endif %}
         mode: "0644"
         validate: /usr/sbin/sshd -t -f %s
         backup: true
       notify: Reload ssh
 
-    - name: Which ports does SSH listen on?
-      ansible.builtin.command: /usr/sbin/sshd -T
-      register: sshd_settings
-      changed_when: false
-      check_mode: false   # only reads, so it is safe to run during a dry run too
-
     # ── 3. Firewall ──────────────────────────────────────────────────────────
-    - name: Firewall — allow SSH first, on the ports it really uses, so the firewall cannot lock you out
-      community.general.ufw:
-        rule: allow
-        port: "{{ item }}"
-        proto: tcp
-      loop: "{{ sshd_settings.stdout_lines | select('match', '^port ') | map('split', ' ') | map('last') | list }}"
+    # Rules are only ever added here, never removed, so other projects' rules stay.
+    # Plain port rules ("22", "80", "443"), the same form the live server's
+    # hand-made rules use, so ufw recognises them as already there.
+    # A port listed in firewall_extra_ports is ALLOWED: never list a port the
+    # server denies on purpose.
+    - name: Firewall
+      when: firewall_enabled
+      block:
+        - name: Firewall — allow SSH first, on the ports it really uses, so the firewall cannot lock you out
+          community.general.ufw:
+            rule: allow
+            port: "{{ item }}"
+          loop: "{{ sshd_settings.stdout_lines | select('match', '^port ') | map('split', ' ') | map('last') | list }}"
 
-    - name: Firewall — allow web traffic (HTTP and HTTPS)
-      community.general.ufw:
-        rule: allow
-        name: Nginx Full
+        - name: Firewall — allow web traffic (HTTP and HTTPS)
+          community.general.ufw:
+            rule: allow
+            port: "{{ item }}"
+          loop: ["80", "443"]
 
-    - name: Firewall — refuse everything else coming in
-      community.general.ufw:
-        default: deny
-        direction: incoming
+        - name: Firewall — allow the extra ports other projects need (firewall_extra_ports)
+          community.general.ufw:
+            rule: allow
+            port: "{{ item }}"
+            proto: tcp
+          loop: "{{ firewall_open_ports }}"
 
-    - name: Firewall — switch it on
-      community.general.ufw:
-        state: enabled
+        - name: Firewall — refuse everything else coming in
+          community.general.ufw:
+            default: deny
+            direction: incoming
+
+        - name: Firewall — switch it on
+          community.general.ufw:
+            state: enabled
 
     # ── 4. The app's account and folders ─────────────────────────────────────
-    - name: The edutrack account that owns the code and runs the app
+    - name: The project account (app_user) that owns the code and runs the app
       ansible.builtin.user:
         name: "{{ app_user }}"
-        shell: /bin/bash
         create_home: true
 
     - name: Folders
@@ -209,20 +397,42 @@
         quiet: true
 
     # ── 7. Database ──────────────────────────────────────────────────────────
-    - name: PostgreSQL user for the app, with the password from .env
-      community.postgresql.postgresql_user:
-        name: "{{ db.db_user }}"
-        password: "{{ db.db_password }}"
-      become: true
-      become_user: postgres
-      no_log: true
+    # The PostgreSQL tasks need python3-psycopg2 on the server. Step 1 installs it,
+    # but a dry run (--check) installs nothing, so on a server without it the dry
+    # run skips these two tasks and says so instead of failing.
+    - name: Is python3-psycopg2 installed yet?
+      ansible.builtin.command:
+        argv: ["{{ ansible_facts['python']['executable'] }}", -c, import psycopg2]
+      register: psycopg2_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
 
-    - name: The EduTrack database, owned by that user
-      community.postgresql.postgresql_db:
-        name: "{{ db.db_name }}"
-        owner: "{{ db.db_user }}"
-      become: true
-      become_user: postgres
+    - name: Database user and database
+      when: not (ansible_check_mode and psycopg2_check.rc != 0)
+      block:
+        - name: PostgreSQL user for the app, with the password from .env
+          community.postgresql.postgresql_user:
+            name: "{{ db.db_user }}"
+            password: "{{ db.db_password }}"
+          become: true
+          become_user: postgres
+          no_log: true
+
+        - name: The EduTrack database, owned by that user
+          community.postgresql.postgresql_db:
+            name: "{{ db.db_name }}"
+            owner: "{{ db.db_user }}"
+          become: true
+          become_user: postgres
+
+    - name: Explain the skipped database tasks
+      ansible.builtin.debug:
+        msg: >-
+          DRY RUN: the two database tasks were skipped, because python3-psycopg2 is not
+          installed on the server yet (a real run installs it first). To see what they would
+          change, install it (sudo apt install python3-psycopg2) and dry-run again.
+      when: ansible_check_mode and psycopg2_check.rc != 0
 
     # ── 8. Python, database structure, static files ──────────────────────────
     - name: Python packages in the virtual environment
@@ -271,43 +481,51 @@
     # ── 10. HTTPS certificate ─────────────────────────────────────────────────
     - name: Is there already an HTTPS certificate?
       ansible.builtin.stat:
-        path: "/etc/letsencrypt/live/{{ main_domain }}/fullchain.pem"
+        path: "/etc/letsencrypt/live/{{ tls_certificate_name }}/fullchain.pem"
       register: certificate
 
     - name: Get a free certificate from Let's Encrypt (first time only; the domain must point here)
       ansible.builtin.command:
         argv: "{{ ['certbot', 'certonly', '--webroot', '-w', '/var/www/html',
                    '--email', letsencrypt_email, '--agree-tos', '--no-eff-email',
-                   '--non-interactive', '--deploy-hook', 'systemctl reload nginx']
+                   '--non-interactive', '--deploy-hook', 'systemctl reload nginx',
+                   '--cert-name', tls_certificate_name]
                   + (domain_list | map('regex_replace', '^', '--domain=') | list) }}"
       when: enable_https | bool and not certificate.stat.exists
       register: certbot
       changed_when: true   # it only runs when there is no certificate, and success creates one
 
     # ── 11. Nginx ────────────────────────────────────────────────────────────
+    - name: Are certbot's shared TLS settings on this server?
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: [/etc/letsencrypt/options-ssl-nginx.conf, /etc/letsencrypt/ssl-dhparams.pem]
+      register: certbot_ssl_files
+
     - name: The nginx site
       ansible.builtin.template:
         src: nginx-edutrack.conf.j2
-        dest: /etc/nginx/sites-available/edutrack
+        dest: "/etc/nginx/sites-available/{{ nginx_site }}"
         mode: "0644"
         backup: true   # keeps the old file next to it, dated, as an undo
+        # Test the new file with nginx BEFORE it replaces the old one. A broken
+        # site file would stop nginx for every site on this server at its next restart.
+        validate: >-
+          bash -c 't=$(mktemp) && printf "events {}\nhttp {\n include /etc/nginx/mime.types;\n include %s;\n}\n" > "$t"
+          && nginx -t -q -c "$t"; s=$?; rm -f "$t"; exit $s'
       vars:
         # A certificate that was already there, or one certbot just fetched.
         https: "{{ enable_https | bool and (certificate.stat.exists or certbot is changed) }}"
+        certbot_ssl_options: "{{ certbot_ssl_files.results | map(attribute='stat.exists') | min }}"
       notify: Reload nginx
 
     - name: Switch the site on
       ansible.builtin.file:
-        src: /etc/nginx/sites-available/edutrack
-        dest: /etc/nginx/sites-enabled/edutrack
+        src: "/etc/nginx/sites-available/{{ nginx_site }}"
+        dest: "/etc/nginx/sites-enabled/{{ nginx_site }}"
         state: link
       notify: Reload nginx
 
-    - name: Switch off nginx's welcome page
-      ansible.builtin.file:
-        path: /etc/nginx/sites-enabled/default
-        state: absent
-      notify: Reload nginx
 
     # ── 12. Backup, restore and deploy commands ──────────────────────────────
     - name: Install edutrack-backup, edutrack-restore, edutrack-restic and edutrack-deploy
@@ -344,6 +562,7 @@
         - { key: BRANCH, value: "{{ repo_branch }}" }
         - { key: DB_NAME, value: "{{ db.db_name }}" }
         - { key: DB_USER, value: "{{ db.db_user }}" }
+        - { key: NGINX_SITE, value: "/etc/nginx/sites-available/{{ nginx_site }}" }
         - { key: HEALTHCHECK_URL, value: "{{ healthcheck_url | default('') }}" }
       loop_control:
         label: "{{ item.key }}"

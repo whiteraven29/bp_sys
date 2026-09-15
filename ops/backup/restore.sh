@@ -35,7 +35,7 @@ if [[ -r $CONFIG ]]; then           # the server has one; a laptop drill doesn't
     set +a
 fi
 
-: "${REPO_DIR:=/var/www/edutrack}" "${APP_USER:=edutrack}" "${SERVICE:=edutrack}"
+: "${REPO_DIR:=/var/www/edutrack}" "${APP_USER:=bphacoh}" "${SERVICE:=edutrack}"
 : "${DB_NAME:=edutrack_db}" "${DB_USER:=edutrack_user}" "${BACKUP_ROOT:=/var/backups/edutrack}"
 : "${APP_URL:=http://127.0.0.1:8000/login/}"
 : "${POSTGRES_RUN_AS=postgres}"     # empty = connect as yourself (PGHOST, PGUSER …)

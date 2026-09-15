@@ -6,13 +6,34 @@
 # Then replace every value below. Guide: ops/guides/04-ansible.md, step 3.
 
 [edutrack]
-# A name you choose, the server's IP address, and the account Ansible logs in as.
-contabo ansible_host=203.0.113.10 ansible_user=root
+# A name you choose, the server's IP address, and YOUR SSH login: the same
+# account you type in `ssh YOU@server`. Ansible logs in as you, with your key,
+# then uses sudo. Add ansible_port=NNNN if SSH is not on port 22.
+contabo ansible_host=203.0.113.10 ansible_user=YOU
 
 [edutrack:vars]
-# Your domain(s), separated by commas. The first is the main one. Use the same
-# list as ALLOWED_HOSTS in the server's .env.
-domains=yourdomain.com,www.yourdomain.com
+# The accounts allowed to log in over SSH, separated by spaces: exactly the
+# AllowUsers list the server has now (`sudo sshd -T | grep allowusers` shows it).
+# It must include the ansible_user above. A rebuilt server gets the same list.
+ssh_allow_users=YOU
+
+# EduTrack's OWN domain(s), separated by commas: exactly what EduTrack's nginx site
+# answers to (`sudo grep server_name /etc/nginx/sites-available/edutrack`), all of
+# them listed in ALLOWED_HOSTS in EduTrack's .env. NOT the main domain of other
+# sites on this server. The playbook stops if they don't match.
+domains=edutrack.yourdomain.com
+
+# Optional: the folder name in /etc/letsencrypt/live/ that holds EduTrack's
+# certificate, if it isn't the first domain above (for example "…-0001").
+# certificate_name=edutrack.yourdomain.com
+
+# Only matters if the firewall is OFF (`sudo ufw status`). Then list the public
+# ports other projects need, separated by commas, and they are ALLOWED. The playbook
+# stops and names any port it would otherwise block. If the firewall is already
+# active with "deny (incoming)", leave this empty: never list a port you deny on
+# purpose. Or set manage_firewall=false to leave the firewall entirely alone.
+firewall_extra_ports=
+manage_firewall=true
 
 # Where Let's Encrypt emails warnings about certificates that are about to expire.
 letsencrypt_email=you@example.com

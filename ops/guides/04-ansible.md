@@ -56,56 +56,117 @@ missing:
 $ ansible-galaxy collection install community.general community.postgresql
 ```
 
-## Step 2 — Check your SSH key login
+## How Ansible gets in, on a server like yours
 
-Ansible logs in exactly the way you do, with your SSH key. Your server already
-accepts only keys, so there's nothing to set up. Just confirm it works without
-any password prompt from the server:
+Your server lets only a few named accounts log in over SSH, and only with a key.
+The project belongs to `bphacoh`, which nobody logs in as directly. By hand, you
+log in as yourself and then switch to `bphacoh`.
+
+Ansible does the same, without adding any new way in:
 
 ```
-$ ssh YOU@YOUR-SERVER-IP 'echo logged in with my key'
+laptop ──SSH, your key──▶ YOU ──sudo──▶ root      packages, nginx, firewall, SSH settings
+                               └──sudo──▶ bphacoh   git, pip, migrate, collectstatic
+                               └──sudo──▶ postgres  the database user and database
 ```
 
-If your key has a passphrase (guide 01 step 12), load it into the SSH agent
+- It logs in as **you** (`ansible_user`), the account SSH already allows.
+- `become` is Ansible's word for switching account. It uses `sudo`, so it asks
+  for **your sudo password** once at the start of each run, shown as `BECOME password:`.
+  That's the password `sudo` asks for on the server, not an SSH password.
+- `bphacoh` needs no SSH key and no password. Nothing about who can log in changes.
+
+That means **your own account needs `sudo`** on the server. Step 2 checks that.
+
+## Step 2 — Check your login and sudo
+
+**laptop:**
+
+```
+$ ssh -t YOU@YOUR-SERVER-IP 'sudo -v && sudo -u bphacoh whoami'
+```
+
+It should ask for your sudo password, then print `bphacoh`. That's exactly the
+path Ansible takes.
+
+If you see `YOU is not in the sudoers file`, your account can't use sudo, and
+Ansible can't either. Give it sudo from the account that has it: log in as you
+do now, switch to that account, and run `sudo usermod -aG sudo YOU`. Then log
+out and back in, and repeat the check.
+
+> **Worth doing while you're there:** keep `sudo` on *your* login account, and
+> think about removing it from `bphacoh`. The website runs as `bphacoh`. If a bug
+> in the site ever let an attacker run commands as that account, sudo rights there
+> are one password away from the whole server.
+
+If your SSH key has a passphrase (guide 01 step 12), load it into the SSH agent
 once, so Ansible doesn't need it typed for each of its many logins:
 
 ```
 $ ssh-add ~/.ssh/id_ed25519
 ```
 
-> If you log in as a normal user with `sudo` instead of `root`, use that user in
-> step 3 and add `-K` to every `ansible-playbook` command below. Ansible then asks
-> for your **sudo** password. That's the account's password on the server, used
-> by `sudo`, not an SSH login password.
->
-> If SSH on the server listens on a port other than 22, add `ansible_port=THAT-PORT`
-> after `ansible_user=…` in step 3.
-
 ## Step 3 — Fill in the inventory
 
+On the **server**, look at who SSH lets in:
+
 ```
-$ cd ~/Documents/BPHACOH/bp_sys/ops/ansible
-$ cp inventory.ini.example inventory.ini
+$ sudo sshd -T | grep -E '^(port|allowusers) '
+```
+
+Then on the **laptop**:
+
+```
+$ cd /home/whiteraven/Documents/BPHACOH/bp_sys/ops/ansible
+$ cp -n inventory.ini.example inventory.ini
 $ nano inventory.ini
 ```
 
-Set `ansible_host` to the server's IP, `domains` to the same list as
-`ALLOWED_HOSTS` in the server's `.env`, and `letsencrypt_email`. Leave
-`enable_https=true` for the live server. `inventory.ini` is ignored by git, so your
-server details stay off GitHub.
+`cp -n` doesn't overwrite an inventory you already filled in. Compare yours with
+`inventory.ini.example` and add any lines it's missing (`ssh_allow_users`).
 
-## Step 4 — Check Ansible can reach the server
+> **Run Ansible from the same laptop account you run `ssh` from.** Ansible uses
+> that account's SSH key (`~/.ssh/`) and SSH settings (`~/.ssh/config`). If you
+> SSH to the server as the laptop's **root** (from `sudo -i`, or `sudo ssh …`),
+> then run every `ansible` and `ansible-playbook` command as root too. From a
+> normal laptop account, the server would refuse the login with
+> `Permission denied (publickey)`.
+>
+> As root, `~` means `/root`, not your home folder. That's why the commands in this
+> guide use the full path `/home/whiteraven/Documents/BPHACOH/bp_sys`.
+>
+> `sudo` on the *server* is still separate: it's Ansible's `become`, and it's what
+> `BECOME password` asks for.
+
+- `ansible_host`: the server's IP.
+- `ansible_user`: **your** login, the one you type in `ssh YOU@…`.
+- `ansible_port=…`: add this on the same line only if `sshd -T` showed a port other than 22.
+- `ssh_allow_users`: **exactly** the accounts after `allowusers` above, separated by
+  spaces. The playbook writes this list into the server's SSH settings, so a
+  rebuilt server gets the same restriction. It refuses to run if the list differs
+  from what the server has now: that difference would either lock someone out or
+  quietly let someone new in.
+- `domains`: the same list as `ALLOWED_HOSTS` in the server's `.env`.
+- `letsencrypt_email`, and leave `enable_https=true` for the live server.
+
+`inventory.ini` is ignored by git, so your login name and IP stay off GitHub.
+
+Now check the names in [`group_vars/edutrack.yml`](../ansible/group_vars/edutrack.yml)
+against `/etc/edutrack/ops.env` on the server: `app_user: bphacoh`, `repo_dir`,
+`service_name`, and `nginx_site` (the file name in `/etc/nginx/sites-enabled/`).
+You don't have to get this perfect from memory. The first thing the playbook does
+is compare them with the server, and it stops with a message naming the value to
+fix before it changes anything.
+
+## Step 4 — Check Ansible can reach the server, and become bphacoh
 
 ```
 $ ansible edutrack -m ping
+$ ansible edutrack -m command -a whoami --become --become-user bphacoh
 ```
 
-```
-contabo | SUCCESS => {
-    "changed": false,
-    "ping": "pong"
-}
-```
+Both ask for your sudo password. The first prints `"ping": "pong"`. The second
+prints `bphacoh`: Ansible logged in as you, and switched to the project account.
 
 ## Step 5 — Prepare your undo
 
@@ -140,10 +201,27 @@ At the end, `PLAY RECAP` counts them.
 
 **What to expect on your existing server**, the first time:
 
+Before the list of changes, the first tasks (section 0 in `site.yml`) compare the
+playbook with your server. If one of them stops with `Nothing was changed…`, it
+says which value to fix. Fix it and dry-run again. Section 0 checks:
+
+- **Project names:** folder, account, service and nginx site match `/etc/edutrack/ops.env`.
+- **Domains:** every entry in `domains` is in EduTrack's `ALLOWED_HOSTS`, no *other*
+  site on the server already answers to it, and EduTrack's nginx site answers to
+  exactly that list with the same certificate.
+- **SSH logins:** `ssh_allow_users` equals what the server allows today.
+- **Firewall:** switching the firewall on wouldn't block a port something already listens on.
+
+> **This server hosts other projects** (blog, portfolio, bots…). The playbook only
+> manages EduTrack's own files. The two server-wide pieces, the SSH settings and
+> the firewall, only ever *add* what's missing, never remove other projects'
+> settings, and section 0 stops first if either would lock something out. Backups
+> and these guides cover **EduTrack only**: the other sites need their own.
+
 | Task | Why it may say `changed` |
 |---|---|
-| SSH accepts keys only | The file `/etc/ssh/sshd_config.d/00-edutrack-keys-only.conf` is new. It writes down the rule you already set by hand (no password logins), so a rebuilt server gets it too. Before writing it, the playbook checks your login account has a key installed |
-| Firewall tasks | If `ufw` was never switched on. It first allows the port(s) SSH really listens on (read from the server, not guessed), then HTTP and HTTPS, and blocks everything else. **If the server runs anything else that must be reachable from outside, stop here**: it would be blocked |
+| SSH accepts keys only, and only from the accounts in ssh_allow_users | The file `/etc/ssh/sshd_config.d/00-edutrack-keys-only.conf` is new. It writes down the rules you already set by hand (no password logins, `AllowUsers`), so a rebuilt server gets them too. It changes nothing about who can log in today: section 0 already made sure the list is identical |
+| Firewall tasks | If `ufw` was never switched on. It allows the port(s) SSH really listens on (read from the server, not guessed), HTTP, HTTPS and `firewall_extra_ports`, then refuses everything else. Section 0 already stopped if another project's port would have been blocked. With `manage_firewall=false` these tasks are skipped |
 | The gunicorn service file | The worker count is now calculated from the CPU count, and a comment header is added |
 | The nginx site | When certbot was first run, it edited this file itself. The template writes the same settings in a tidier form |
 | The EduTrack database | The playbook makes `edutrack_user` the owner of the database |
@@ -233,15 +311,32 @@ and the next real run puts it back to what git says.
 ## When something goes wrong
 
 **`UNREACHABLE! … Permission denied (publickey)`**: Ansible isn't using the key
-you log in with. Check `ansible_user` in `inventory.ini` is the account you use,
-and run `ssh-add` (step 2). If your key isn't `~/.ssh/id_ed25519`, add
-`ansible_ssh_private_key_file=~/.ssh/YOUR-KEY` after `ansible_user=…`.
+you log in with. Check three things:
+1. You run Ansible as the **same laptop account** you run `ssh` from (root, in your case).
+2. `ansible_user` in `inventory.ini` is the server account written before the `@` in your `ssh` command.
+3. The key: run `ssh-add` (step 2), or, if your key isn't `~/.ssh/id_ed25519`, add
+   `ansible_ssh_private_key_file=/root/.ssh/YOUR-KEY` after `ansible_user=…`.
 
-**`Missing sudo password`**: you log in as a normal user; add `-K`.
+**`Missing sudo password`** or **`Incorrect sudo password`**: at `BECOME password:`,
+type your account's sudo password on the server.
+
+**`YOU is not in the sudoers file`**: your login account has no sudo. See step 2.
+
+**`Nothing was changed. This server's /etc/edutrack/ops.env says …`**: a name in
+`group_vars/edutrack.yml` differs from the server. Set it to the server's value.
+
+**`Nothing was changed. The server lets these accounts log in over SSH …`**:
+`ssh_allow_users` in `inventory.ini` must list exactly the accounts from
+`sudo sshd -T | grep allowusers`, including your own.
 
 **`authorized_keys is missing or empty`**: the playbook stopped *before* touching
 SSH, because the account in `ansible_user` has no key installed where it looked.
 Check `ansible_user` is the account you really log in as.
+
+**`chmod: … Operation not permitted` / `Failed to set permissions on the temporary files`**
+when a task runs as `bphacoh`: the `acl` package is missing on the server. The
+playbook installs it in its first step, so run it again; or install it by hand
+with `sudo apt install acl`.
 
 **`couldn't resolve module/action 'community.postgresql.postgresql_user'`**: run the `ansible-galaxy collection install` line from step 1.
 

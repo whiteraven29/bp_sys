@@ -39,7 +39,9 @@ cron. Two files work together: a **`.service`** says *what* to run, and a
 ## Step 1 — Look at the server first
 
 Log in with your SSH key, as you always do. Wherever this guide says
-`YOU@YOUR-SERVER-IP`, use your usual login (for example `root@…`):
+`YOU@YOUR-SERVER-IP`, use your own login, the account SSH allows. Run the
+commands in these guides as that account, with `sudo`: you don't need to switch
+to `bphacoh`, because the scripts do that themselves wherever the project is involved.
 
 ```
 $ ssh YOU@YOUR-SERVER-IP
@@ -60,9 +62,9 @@ What you should see, and why each one matters:
   `media/`. A few GB free is plenty for now.
 - **`SHOW server_version`**: the PostgreSQL version (16 on Ubuntu 24.04).
 - **`.env`** must exist. It holds the secrets that get backed up.
-- **`stat`** must print `edutrack`, the account that owns the code. If it prints
-  `root`, fix it now, because the deploy script refuses to run otherwise:
-  `sudo chown -R edutrack: /var/www/edutrack`
+- **`stat`** must print `bphacoh`, the project account that owns the code. If it
+  prints `root`, fix it now, because the deploy script refuses to run otherwise:
+  `sudo chown -R bphacoh: /var/www/edutrack`
 
 ## Step 2 — Get this `ops/` folder onto the server
 
@@ -81,7 +83,7 @@ $ git push origin master
 
 ```
 $ cd /var/www/edutrack
-$ sudo -u edutrack git status --short
+$ sudo -u bphacoh git status --short
 ```
 
 - **Nothing printed**: good, go on to the pull below.
@@ -89,7 +91,7 @@ $ sudo -u edutrack git status --short
   added WhiteNoise by hand. Look at the change:
 
   ```
-  $ sudo -u edutrack git diff backend/edutrack/settings.py
+  $ sudo -u bphacoh git diff backend/edutrack/settings.py
   ```
 
   If the only changes are the `whitenoise` middleware line and
@@ -98,7 +100,7 @@ $ sudo -u edutrack git status --short
   handles those requests.
 
   ```
-  $ sudo -u edutrack git checkout -- backend/edutrack/settings.py
+  $ sudo -u bphacoh git checkout -- backend/edutrack/settings.py
   ```
 
   If the diff shows anything else, stop and copy that change into the project on
@@ -107,7 +109,7 @@ $ sudo -u edutrack git status --short
 Now pull and restart:
 
 ```
-$ sudo -u edutrack git pull origin master
+$ sudo -u bphacoh git pull origin master
 $ sudo systemctl restart edutrack
 $ curl -sI https://YOURDOMAIN/static/admin/css/base.css | head -1
 ```

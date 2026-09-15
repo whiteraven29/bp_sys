@@ -1,21 +1,48 @@
 # Settings for every server in the [edutrack] group of inventory.ini.
-# These are the same on any server, so they live in git. Values particular to
-# one server (its IP, domain, email) belong in inventory.ini instead.
+# These describe how EduTrack is laid out on any of its servers, so they live in
+# git. Values particular to one server (its IP, your login, the domain) belong in
+# inventory.ini instead.
+#
+# They must match /etc/edutrack/ops.env on the live server. The playbook compares
+# them before changing anything, and stops if they differ.
 
-app_user: edutrack
+# The account that owns the project and runs the app. Nobody logs in over SSH as
+# this account: you log in as yourself, and Ansible uses sudo to act as it.
+app_user: bphacoh
 repo_url: https://github.com/whiteraven29/bp_sys.git
 repo_branch: master
 repo_dir: /var/www/edutrack
 backend_dir: "{{ repo_dir }}/backend"
 service_name: edutrack
+# The file name in /etc/nginx/sites-available/.
+nginx_site: edutrack
+nginx_sites_enabled: /etc/nginx/sites-enabled
 
-# Gunicorn: (2 x CPU cores) + 1 workers, capped at 9 so a big VPS doesn't use
-# all its memory and PostgreSQL connections on idle workers.
-gunicorn_workers: "{{ [ansible_facts['processor_vcpus'] * 2 + 1, 9] | min }}"
-gunicorn_threads: 4
+# Gunicorn, as the live server runs it. The VPS is shared with other projects,
+# so these are deliberately modest. Each worker is one Python process (~100 MB)
+# with its own database connection. To serve more users at once, raise threads
+# first (threads > 1 switches gunicorn to its gthread worker), e.g. workers 3,
+# threads 4, then run the playbook: it restarts EduTrack.
+gunicorn_bind: 127.0.0.1:8000
+gunicorn_workers: 3
+gunicorn_threads: 1
 
 # The largest file anyone can upload (letters, announcement PDFs).
 upload_limit: 10M
 
 domain_list: "{{ domains.split(',') | map('trim') | reject('equalto', '') | list }}"
 main_domain: "{{ domain_list | first }}"
+
+# The next three can be set in inventory.ini. They are read here with default(),
+# never defined here directly: a value defined in this file would silently win
+# over the same name in inventory.ini's [edutrack:vars].
+#
+# certificate_name: the folder under /etc/letsencrypt/live/ holding EduTrack's
+# certificate. Certbot names it after the first domain.
+tls_certificate_name: "{{ certificate_name | default(main_domain) }}"
+
+# manage_firewall / firewall_extra_ports: this server hosts other projects too.
+# The firewall tasks only ever add rules, and the playbook stops first if switching
+# the firewall on would block a port something already listens on.
+firewall_enabled: "{{ manage_firewall | default(true) | bool }}"
+firewall_open_ports: "{{ (firewall_extra_ports | default('') | string).split(',') | map('trim') | reject('equalto', '') | list }}"

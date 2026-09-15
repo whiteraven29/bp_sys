@@ -23,7 +23,7 @@ if [[ -r $CONFIG ]]; then
     set +a
 fi
 
-: "${REPO_DIR:=/var/www/edutrack}" "${APP_USER:=edutrack}" "${SERVICE:=edutrack}" "${BRANCH:=master}"
+: "${REPO_DIR:=/var/www/edutrack}" "${APP_USER:=bphacoh}" "${SERVICE:=edutrack}" "${BRANCH:=master}"
 : "${DB_NAME:=edutrack_db}" "${BACKUP_ROOT:=/var/backups/edutrack}" "${PRE_DEPLOY_KEEP:=10}"
 : "${APP_URL:=http://127.0.0.1:8000/login/}"
 : "${POSTGRES_RUN_AS=postgres}"

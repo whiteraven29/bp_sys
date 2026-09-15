@@ -12,10 +12,12 @@ Group=www-data
 WorkingDirectory={{ backend_dir }}
 ExecStart={{ backend_dir }}/venv/bin/gunicorn \
     edutrack.wsgi \
-    --bind 127.0.0.1:8000 \
+    --bind {{ gunicorn_bind }} \
     --workers {{ gunicorn_workers }} \
+{% if gunicorn_threads | int > 1 %}
     --worker-class gthread \
     --threads {{ gunicorn_threads }} \
+{% endif %}
     --timeout 120
 Restart=always
 RestartSec=5

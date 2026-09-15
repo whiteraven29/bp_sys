@@ -73,12 +73,12 @@ These files were changed by hand on the server, so they differ from GitHub:
 The deploy stopped before changing anything. See what was changed:
 
 ```
-$ sudo -u edutrack git -C /var/www/edutrack diff
+$ sudo -u bphacoh git -C /var/www/edutrack diff
 ```
 
 - **The change should stay:** make the same change on your laptop, commit and
   push it. Then throw the server's copy away and deploy:
-  `sudo -u edutrack git -C /var/www/edutrack checkout -- backend/edutrack/settings.py`
+  `sudo -u bphacoh git -C /var/www/edutrack checkout -- backend/edutrack/settings.py`
   and `sudo edutrack-deploy`
 - **The change was a mistake or an experiment:** run the same `checkout` line and
   deploy.
@@ -94,7 +94,7 @@ situation. They look like this:
 ```
 DEPLOY STOPPED. To go back to how things were before this deploy:
 
-    sudo -u edutrack git -C /var/www/edutrack reset --hard 70f87e0
+    sudo -u bphacoh git -C /var/www/edutrack reset --hard 70f87e0
     sudo edutrack-restore /var/backups/edutrack/pre-deploy/edutrack_db-2026-10-02_1412-code-70f87e0.dump        # also restarts the app
 ```
 

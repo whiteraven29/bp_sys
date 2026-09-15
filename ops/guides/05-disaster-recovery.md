@@ -32,7 +32,7 @@ commit that was running before, for example `…-code-70f87e0.dump`:
 
 ```
 $ sudo ls -lt /var/backups/edutrack/pre-deploy/ | head -3
-$ sudo -u edutrack git -C /var/www/edutrack reset --hard 70f87e0
+$ sudo -u bphacoh git -C /var/www/edutrack reset --hard 70f87e0
 $ sudo edutrack-restore /var/backups/edutrack/pre-deploy/edutrack_db-…-code-70f87e0.dump
 ```
 
@@ -135,12 +135,31 @@ laptop:
 $ cat ~/.ssh/id_ed25519.pub
 ```
 
-Note the new IP address, and check your key gets you in: `ssh root@NEW-IP`.
+Note the new IP address.
 
 > **If you forgot the key**, a fresh Contabo server usually still accepts the root
 > password Contabo emailed you. Use it just once to install your key:
 > `ssh-copy-id root@NEW-IP`. Step 4 then switches password logins off, the same
 > as on the old server.
+
+**Create your own login account on it**, the same name you use today. After
+step 4, SSH lets in only the accounts in `ssh_allow_users`, not root, so this
+account is how you and Ansible get in from then on:
+
+```
+$ ssh root@NEW-IP
+# adduser YOU                    # asks for a password: this becomes your sudo password
+# usermod -aG sudo YOU
+# install -d -m 700 -o YOU -g YOU /home/YOU/.ssh
+# install -m 600 -o YOU -g YOU /root/.ssh/authorized_keys /home/YOU/.ssh/authorized_keys
+# exit
+$ ssh -t YOU@NEW-IP 'sudo -v && echo ready'
+```
+
+The last line must print `ready`. The `bphacoh` project account doesn't need
+creating by hand: the playbook creates it. If `ssh_allow_users` in `inventory.ini`
+lists other people too, create their accounts and keys the same way, or remove
+them from the list.
 
 ### 2. Get the newest backup onto the laptop
 
@@ -170,19 +189,21 @@ Ansible copies it to the new server.
 
 ### 4. Build the server with Ansible
 
-**laptop:** in `ops/ansible/inventory.ini`, set `ansible_host` to the **new** IP and
-`ansible_user=root`. If your domain still points at the old (dead) server, also
-set `enable_https=false` for now.
+**laptop:** in `ops/ansible/inventory.ini`, set `ansible_host` to the **new** IP.
+Keep `ansible_user` and `ssh_allow_users` as they are: your account from step 1.
+If your domain still points at the old (dead) server, also set `enable_https=false`
+for now.
 
 ```
-$ cd ~/Documents/BPHACOH/bp_sys/ops/ansible
+$ cd /home/whiteraven/Documents/BPHACOH/bp_sys/ops/ansible
 $ ansible edutrack -m ping
 $ ansible-playbook site.yml
 ```
 
-It switches password logins off and the firewall on, installs everything, clones
-the code, copies `.env`, creates the database user and an empty database, and
-starts the site. At the end it tells you backups are not connected yet. That's
+It asks for your sudo password (`BECOME password:`). It then allows SSH only with
+keys and only for `ssh_allow_users`, switches the firewall on, installs everything,
+creates `bphacoh`, clones the code, copies `.env`, creates the database user and an
+empty database, and starts the site. At the end it tells you backups are not connected yet. That's
 expected, and comes in step 9.
 
 > SSH may warn `REMOTE HOST IDENTIFICATION HAS CHANGED` if the new server got an
@@ -193,13 +214,13 @@ expected, and comes in step 9.
 **laptop:** send the backup to the new server:
 
 ```
-$ rsync -a ~/edutrack-recovery/ root@NEW-IP:/root/recovery/
+$ rsync -a ~/edutrack-recovery/ YOU@NEW-IP:recovery/
 ```
 
-**server:**
+**server** (logged in as you):
 
 ```
-$ sudo edutrack-restore /root/recovery
+$ sudo edutrack-restore ~/recovery
 ```
 
 Type `RESTORE`. Replacing the empty database is exactly what you want here. The
@@ -254,7 +275,7 @@ The new server has no connection to Google Drive yet. **server:**
 ### 10. Clean up
 
 ```
-$ sudo rm -rf /root/recovery                           # server
+$ rm -rf ~/recovery                                    # server, as you
 $ rm -rf ~/edutrack-recovery ~/edutrack-secrets        # laptop
 ```
 
