@@ -43,8 +43,12 @@ def bill_new_enrollment(sender, instance, created, **kwargs):
 
     try:
         profile = finance.profile_for_student(instance)
-        raised = finance.generate_charges(
-            profile, academic_year, class_level=module.class_level)
+        # No level passed in: the student's registration decides it. This used
+        # to pass the module's own level, which billed a level 5 student at
+        # level 4 the moment they were enrolled in a level 4 module to repeat —
+        # and since a charge is raised only once, the level 5 amount never
+        # replaced it.
+        raised = finance.generate_charges(profile, academic_year)
     except ValueError as exc:
         # The fee structure exists but has no due dates yet. Registration must
         # not fail over that — the accountant's bulk run will catch this

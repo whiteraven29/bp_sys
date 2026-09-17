@@ -528,6 +528,16 @@
   body.is-secretary .finance-only,
   body.is-secretary .estate-only,
   body.is-secretary .non-secretary-only { display: none !important; }
+  /* The records and admission officers keep the student record. They hold no
+     administrator rights, so the academic menus stay out of their way. */
+  .records-only { display: none !important; }
+  body.is-records .records-only { display: flex !important; }
+  body.is-records .records-only.card { display: block !important; }
+  body.is-records:not(.is-admin) .academic-only { display: none !important; }
+  /* Departments are changed by the people who hand out roles — the Principal
+     and the examination officer — not by a Head of Department. */
+  body.is-hod .account-manager-only,
+  body.is-hod .account-manager-only.card { display: none !important; }
 
   body.is-estate .estate-only { display: flex !important; }
   body.is-estate .estate-only.card { display: block !important; }
@@ -753,6 +763,8 @@
     <div class="aside-label non-estate-only">Navigation</div>
     <button class="nav-btn active academic-only" data-page="dashboard" onclick="showPage('dashboard',this)"><span class="icon"><i class="bi bi-speedometer2"></i></span> Dashboard</button>
     <button class="nav-btn admin-only" data-page="accounts" onclick="showPage('accounts',this)"><span class="icon"><i class="bi bi-people"></i></span> User Accounts</button>
+    <button class="nav-btn admin-only" data-page="departments" onclick="showPage('departments',this); loadDepartments()"><span class="icon"><i class="bi bi-diagram-3"></i></span> Departments</button>
+    <button class="nav-btn records-only admin-only account-manager-only" data-page="student-records" onclick="showPage('student-records',this)"><span class="icon"><i class="bi bi-person-vcard"></i></span> Student Records</button>
     <div class="aside-label estate-only">Inventory</div>
     <button class="nav-btn estate-only inventory-nav-btn active" title="Overview" data-page="inventory" data-inventory-section="overview" onclick="showInventorySection('overview',this)"><span class="icon"><i class="bi bi-grid-1x2"></i></span> Overview</button>
     <div class="nav-group estate-only" id="inventory-assets-nav-group">
@@ -941,6 +953,51 @@
     </div>
 
     <!-- USER ACCOUNTS -->
+    <div class="page" id="page-departments">
+      <div class="page-title">Departments</div>
+      <div class="page-sub">Each department's programmes, head and staff. Fees differ by programme and are set by the accountant.</div>
+
+      <div class="card admin-only account-manager-only">
+        <div class="card-title" id="dept-form-title">Register a department</div>
+        <input type="hidden" id="dept-id">
+        <div class="form-grid-3">
+          <div class="field"><label>Department name *</label><input id="dept-name" placeholder="e.g. Pharmaceutical Sciences" /></div>
+          <div class="field"><label>Code *</label><input id="dept-code" placeholder="e.g. PST" /></div>
+          <div class="field"><label>Head of department</label><select id="dept-hod"></select></div>
+        </div>
+        <div class="field"><label>Staff</label><div id="dept-staff" class="check-grid"></div></div>
+        <p class="help-note">
+          The head is chosen from accounts that already hold the Head of Department role — give the role
+          under User Accounts first. Add the department's programmes once it is saved.
+        </p>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input type="checkbox" id="dept-active" checked> Active</label>
+        <button class="btn btn-primary btn-sm" onclick="saveDepartment()" id="dept-save">Save department</button>
+        <button class="btn btn-ghost btn-sm" onclick="resetDepartmentForm()" id="dept-cancel" style="display:none">Cancel</button>
+      </div>
+
+      <div id="dept-list"></div>
+    </div>
+
+    <div class="page" id="page-student-records">
+      <div class="page-title">Student Records</div>
+      <div class="page-sub">College ID numbers and the student record.</div>
+
+      <div class="card records-only admin-only account-manager-only">
+        <div class="card-title">Record the college ID numbers students already carry</div>
+        <p class="help-note">
+          Upload an Excel sheet with two columns: the NACTVET registration number, then the college ID number
+          (a header row is fine). <strong>Check the sheet</strong> first — nothing is saved until you choose
+          <strong>Record</strong>. A student who already has a different college ID keeps it; the report says so.
+        </p>
+        <div class="form-grid-3">
+          <div class="field"><label>Excel file (.xlsx)</label><input type="file" id="cid-file" accept=".xlsx" /></div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="importCollegeIds(true)">Check the sheet</button>
+        <button class="btn btn-primary btn-sm" onclick="importCollegeIds(false)">Record</button>
+        <div id="cid-result" style="margin-top:12px"></div>
+      </div>
+    </div>
+
     <div class="page" id="page-accounts">
       <div class="page-title">User Accounts</div>
       <div class="page-sub">Create tutor and accountant login credentials</div>
@@ -957,6 +1014,8 @@
               <option value="secretary">Secretary</option>
               <option value="principal">Principal</option>
               <option value="hod">Head of Department</option>
+              <option value="records_officer">Records Officer</option>
+              <option value="admission_officer">Admission Officer</option>
             </select>
           </div>
           <div class="field"><label>Full Name</label><input id="acct-full-name" placeholder="e.g. Jane Mwangi" /></div>
@@ -996,6 +1055,7 @@
           <div class="field"><label>Module Code *</label><input id="mod-code" placeholder="e.g. BM401" /></div>
           <div class="field"><label>Tutor Display Name *</label><input id="mod-teacher" placeholder="e.g. Mr. Mwangi" /></div>
           <div class="field"><label>Module Credits *</label><input id="mod-credits" type="number" min="1" value="1" /></div>
+          <div class="field"><label>Programme</label><select id="mod-programme"><option value="">— no programme —</option></select></div>
         </div>
         <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;margin-bottom:14px;cursor:pointer;">
           <input type="checkbox" id="mod-has-practical" style="width:16px;height:16px;">
@@ -1559,6 +1619,26 @@
             </div>
             <div style="font-size:.75rem;color:var(--muted)">Tuition normally blocks everything; a graduation gown should block nothing but results.</div>
           </div>
+          <div class="form-grid-3" style="margin-top:6px">
+            <div class="field">
+              <label>Raised when the exam office declares</label>
+              <select id="fin-ct-declaration">
+                <option value="">— not a declaration —</option>
+                <option value="supp_exam">Supplementary exam</option>
+                <option value="special_exam">Special exam</option>
+                <option value="repeat_module">Repeat module</option>
+              </select>
+            </div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;margin-bottom:6px;cursor:pointer;">
+            <input type="checkbox" id="fin-ct-charged_again_on_readmission" checked />
+            <span>Bill it again when a discontinued student is readmitted
+              <span style="color:var(--muted);font-size:.78rem;">(only matters for a charge billed Once)</span></span>
+          </label>
+          <div class="help-note">
+            A declaration charge is priced per module: set its rate in the fee structure, for each programme and level.
+            A student declared for two modules is charged twice.
+          </div>
           <button class="btn btn-primary btn-sm" onclick="saveChargeType()" id="fin-ct-save">💾 Save charge type</button>
           <button class="btn btn-ghost btn-sm" onclick="cancelChargeTypeEdit()" id="fin-ct-cancel"
                   style="display:none">Cancel</button>
@@ -1633,6 +1713,12 @@
           <div class="card-title">Fee structure</div>
           <div class="form-grid-3">
             <div class="field"><label>Academic year</label><select id="fin-fs-year" onchange="loadFeeGrid()"></select></div>
+            <div class="field"><label>Programme</label><select id="fin-fs-programme" onchange="loadFeeGrid()"><option value="">Every programme</option></select></div>
+          </div>
+          <div class="help-note">
+            <strong>Every programme</strong> holds the amounts all programmes pay. Choose a programme to set the
+            amounts that differ for it — where a programme sets nothing, its students pay the every-programme amount,
+            shown faded.
           </div>
           <div class="table-wrap">
             <table id="fin-fee-grid">
@@ -2393,6 +2479,7 @@
       <div class="field"><label>Module Code *</label><input id="edit-mod-code"></div>
       <div class="field"><label>Tutor Display Name *</label><input id="edit-mod-teacher"></div>
       <div class="field"><label>Credits *</label><input id="edit-mod-credits" type="number" min="1"></div>
+      <div class="field"><label>Programme</label><select id="edit-mod-programme"><option value="">— no programme —</option></select></div>
     </div>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input id="edit-mod-practical" type="checkbox"> Has Practical Component</label>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input id="edit-mod-field" type="checkbox"> Field Results Module (CA 40% + Final 60%)</label>
@@ -2401,6 +2488,25 @@
 </div>
 
 <!-- TEACHER MODULES MODAL -->
+<div class="modal-overlay" id="programme-modal">
+  <div class="modal">
+    <div class="modal-title">
+      <span id="prog-modal-title">Add a programme</span>
+      <button class="modal-close" onclick="closeProgrammeModal()">✕</button>
+    </div>
+    <input type="hidden" id="prog-id">
+    <input type="hidden" id="prog-department">
+    <div class="form-grid" style="margin-bottom:10px;">
+      <div class="field"><label>Programme name *</label><input id="prog-name" placeholder="e.g. Pharmaceutical Sciences" /></div>
+      <div class="field"><label>Course code *</label><input id="prog-code" placeholder="e.g. PST" /></div>
+    </div>
+    <div class="field"><label>Taught at</label><div id="prog-levels" class="check-grid"></div></div>
+    <p class="help-note">The course code is printed in college ID numbers, so no two programmes may share one.</p>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input type="checkbox" id="prog-active" checked> Active</label>
+    <button class="btn btn-primary btn-sm" onclick="saveProgramme()">Save programme</button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="roles-modal">
   <div class="modal">
     <div class="modal-title">
@@ -2964,6 +3070,14 @@ async function boot() {
       document.getElementById('role-badge').textContent = 'Accountant';
       document.getElementById('role-badge').className = 'role-badge admin';
     }
+    state.isRecordsOffice = !!(dash.is_records_officer || dash.is_admission_officer);
+    state.canEditStudentRecords = !!dash.can_edit_student_records;
+    if (state.isRecordsOffice && !state.isStaff) {
+      document.body.classList.add('is-records');
+      document.getElementById('role-badge').textContent =
+        dash.is_admission_officer ? 'Admission Officer' : 'Records Officer';
+      document.getElementById('role-badge').className = 'role-badge tutor';
+    }
     if (state.isSecretary && !state.isStaff) {
       document.body.classList.add('is-secretary');
       document.getElementById('role-badge').textContent = 'Secretary';
@@ -3011,6 +3125,10 @@ async function boot() {
     // rather than on an attendance dashboard that reads all zeros for them.
     if (state.isSecretary && !state.isStaff) {
       showPage('forms', document.querySelector('[data-page="forms"]'));
+    }
+    // Likewise the records and admission offices, whose work is the student record.
+    if (state.isRecordsOffice && !state.isStaff && !state.isSecretary) {
+      showPage('student-records', document.querySelector('[data-page="student-records"]'));
     }
     updatePeriodLocks();
     loadAnnouncements();
@@ -3110,6 +3228,7 @@ function buildModuleOptions(el, modules, includeAll = false) {
 function populateAllSelects() {
   buildSemOptions(document.getElementById('mod-semester'));
   buildLevelOptions(document.getElementById('mod-level'));
+  if (state.isStaff) ensureProgrammes().then(() => buildProgrammeOptions(document.getElementById('mod-programme')));
   buildSemOptions(document.getElementById('flt-mod-sem'), true);
   buildLevelOptions(document.getElementById('flt-mod-level'), true);
   buildSemOptions(document.getElementById('stu-flt-sem'), true);
@@ -3256,7 +3375,7 @@ function renderStaffAccounts() {
 const ROLE_LABELS = {
   tutor: 'Tutor', accountant: 'Accountant', estate_officer: 'Estate Officer',
   secretary: 'Secretary', principal: 'Principal', hod: 'Head of Department',
-  exam_officer: 'Exam Officer',
+  exam_officer: 'Exam Officer', records_officer: 'Records Officer', admission_officer: 'Admission Officer',
 };
 const ROLE_NOTES = {
   exam_officer: 'Results, eligibility and exam declarations. Full academic admin.',
@@ -3266,6 +3385,8 @@ const ROLE_NOTES = {
   secretary: 'Answers what students have asked the College for.',
   accountant: 'The fees ledger, payments and clearance.',
   estate_officer: 'The asset register and college property.',
+  records_officer: 'Keeps the student record: personal details, college ID numbers, admissions.',
+  admission_officer: 'Admits students: requirements, college ID numbers, final admission.',
 };
 
 // Roles are a set, not a single label. Promoting somebody is a tick, not a
@@ -3418,7 +3539,7 @@ async function loadModules() {
     }
     tbody.innerHTML = state.modules.map(m =>
       `<tr>
-        <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${m.code}</span></td>
+        <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${m.code}</span>${m.programme_code ? `<div style="font-size:.68rem;color:var(--muted);margin-top:2px">${safeText(m.programme_code)}</div>` : ''}</td>
         <td><strong>${m.name}</strong></td>
         <td>${m.credits}</td>
         <td>${m.class_level_name}</td>
@@ -3450,14 +3571,15 @@ async function createModule() {
     toast('Please fill in all required fields', 'var(--red)'); return;
   }
   try {
-    await api('POST', '/modules/', { semester: semId, class_level: lvlId, name, code, teacher, credits, has_practical: is_field_module ? false : has_practical, is_field_module });
+    const programme = document.getElementById('mod-programme').value || null;
+    await api('POST', '/modules/', { semester: semId, class_level: lvlId, name, code, teacher, credits, has_practical: is_field_module ? false : has_practical, is_field_module, programme });
     toast('Module added!', 'var(--green)');
     ['mod-name','mod-code','mod-teacher'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('mod-has-practical').checked = false;
     document.getElementById('mod-is-field').checked = false;
     document.getElementById('mod-credits').value = 1;
     loadModules(); buildSidebarModules();
-  } catch(e) { toast(e?.detail || JSON.stringify(e), 'var(--red)'); }
+  } catch(e) { toast(apiErrorText(e, 'Could not add the module'), 'var(--red)'); }
 }
 
 async function deleteModule(id, name) {
@@ -3520,6 +3642,9 @@ function openModuleEditModal(id) {
   document.getElementById('edit-mod-credits').value = module.credits;
   document.getElementById('edit-mod-practical').checked = module.has_practical;
   document.getElementById('edit-mod-field').checked = module.is_field_module;
+  const programmeSelect = document.getElementById('edit-mod-programme');
+  buildProgrammeOptions(programmeSelect);
+  programmeSelect.value = module.programme ? String(module.programme) : '';
   document.getElementById('module-edit-modal').classList.add('open');
 }
 function closeModuleEditModal() { document.getElementById('module-edit-modal').classList.remove('open'); }
@@ -3530,7 +3655,8 @@ async function saveModuleEdit() {
     name: document.getElementById('edit-mod-name').value.trim(), code: document.getElementById('edit-mod-code').value.trim().toUpperCase(),
     teacher: document.getElementById('edit-mod-teacher').value.trim(), credits: Number(document.getElementById('edit-mod-credits').value),
     has_practical: document.getElementById('edit-mod-field').checked ? false : document.getElementById('edit-mod-practical').checked,
-    is_field_module: document.getElementById('edit-mod-field').checked
+    is_field_module: document.getElementById('edit-mod-field').checked,
+    programme: document.getElementById('edit-mod-programme').value || null,
   };
   if (!payload.semester || !payload.class_level || !payload.name || !payload.code || !payload.teacher || payload.credits < 1) {
     toast('Please fill in all required module details', 'var(--red)'); return;
@@ -3539,7 +3665,231 @@ async function saveModuleEdit() {
     await api('PATCH', `/modules/${id}/`, payload);
     closeModuleEditModal(); toast('Module updated', 'var(--green)');
     await loadModules(); buildSidebarModules();
-  } catch(e) { toast(e?.detail || 'Could not update module', 'var(--red)'); }
+  } catch(e) { toast(apiErrorText(e, 'Could not update module'), 'var(--red)'); }
+}
+
+// ── DEPARTMENTS AND PROGRAMMES ─────────────────────────────────────────────────
+
+// The first readable message in a DRF error — a detail, or the first field error.
+function apiErrorText(e, fallback) {
+  if (!e) return fallback;
+  if (typeof e.detail === 'string') return e.detail;
+  for (const value of Object.values(e)) {
+    if (Array.isArray(value) && value.length) return String(value[0]);
+    if (typeof value === 'string') return value;
+  }
+  return fallback;
+}
+
+async function ensureProgrammes(force = false) {
+  if (!force && state.programmes) return state.programmes;
+  try { state.programmes = await api('GET', '/programmes/'); }
+  catch (e) { state.programmes = []; }
+  return state.programmes;
+}
+
+function buildProgrammeOptions(el, emptyLabel = '— no programme —') {
+  if (!el) return;
+  const current = el.value;
+  el.innerHTML = `<option value="">${safeText(emptyLabel)}</option>` + (state.programmes || [])
+    .filter(p => p.is_active || String(p.id) === String(current))
+    .map(p => `<option value="${p.id}">${safeText(p.code)} – ${safeText(p.name)}</option>`).join('');
+  el.value = [...el.options].some(o => o.value === String(current)) ? current : '';
+}
+
+async function loadDepartments() {
+  try {
+    const [departments] = await Promise.all([api('GET', '/departments/'), ensureProgrammes(true)]);
+    state.departments = departments;
+    if (state.isStaff && !state.staffAccounts) await loadStaffAccounts();
+    if (!document.getElementById('dept-id').value) renderDepartmentFormPickers();
+    renderDepartments();
+  } catch (e) { toast(apiErrorText(e, 'Failed to load departments'), 'var(--red)'); }
+}
+
+function renderDepartmentFormPickers(hodId = null, staffIds = []) {
+  const accounts = state.staffAccounts || [];
+  const heads = accounts.filter(a => (a.roles || []).includes('hod'));
+  const hod = document.getElementById('dept-hod');
+  hod.innerHTML = '<option value="">— none yet —</option>' +
+    heads.map(a => `<option value="${a.id}">${safeText(a.full_name)}</option>`).join('');
+  hod.value = hodId ? String(hodId) : '';
+  const chosen = new Set((staffIds || []).map(String));
+  document.getElementById('dept-staff').innerHTML = accounts.length ? accounts.map(a => `
+    <label class="check-item">
+      <input type="checkbox" name="dept-staff" value="${a.id}" ${chosen.has(String(a.id)) ? 'checked' : ''}>
+      <span><strong>${safeText(a.full_name)}</strong>
+        <div style="font-size:.72rem;color:var(--muted)">${safeText((a.role_labels || []).join(', '))}</div></span>
+    </label>`).join('')
+    : '<div style="font-size:.8rem;color:var(--muted)">No staff accounts yet.</div>';
+}
+
+function renderDepartments() {
+  const list = document.getElementById('dept-list');
+  const departments = state.departments || [];
+  const canChange = state.isStaff && !document.body.classList.contains('is-hod');
+  if (!departments.length) {
+    list.innerHTML = '<div class="card"><div class="empty"><div class="ei">🏛️</div>No departments registered yet</div></div>';
+    return;
+  }
+  list.innerHTML = departments.map(d => `
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>${safeText(d.name)}
+          <span class="badge badge-blue" style="font-family:var(--font-mono)">${safeText(d.code)}</span>
+          ${d.is_active ? '' : '<span class="badge badge-yellow">Inactive</span>'}</span>
+        ${canChange ? `<span class="row-actions">
+          <button class="btn btn-secondary btn-sm" onclick="editDepartment(${d.id})">✎ Edit</button>
+          <button class="btn btn-primary btn-sm" onclick="openProgrammeModal(${d.id})">➕ Programme</button>
+        </span>` : ''}
+      </div>
+      <div style="font-size:.82rem;margin-bottom:10px">
+        <strong>Head:</strong> ${d.hod_name ? safeText(d.hod_name) : '<span style="color:var(--muted)">not set</span>'}
+        · <strong>Staff:</strong> ${d.staff_names.length ? d.staff_names.map(safeText).join(', ') : '<span style="color:var(--muted)">none listed</span>'}
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Code</th><th>Programme</th><th>Taught at</th><th>Modules</th><th>Status</th>${canChange ? '<th></th>' : ''}</tr></thead>
+        <tbody>${d.programmes.length ? d.programmes.map(p => `
+          <tr>
+            <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${safeText(p.code)}</span></td>
+            <td><strong>${safeText(p.name)}</strong></td>
+            <td style="font-size:.78rem">${p.level_names.length ? p.level_names.map(safeText).join(', ') : '<span style="color:var(--muted)">not restricted</span>'}</td>
+            <td>${p.module_count}</td>
+            <td>${p.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-yellow">Inactive</span>'}</td>
+            ${canChange ? `<td><div class="row-actions">
+              <button class="btn btn-secondary btn-sm" title="Edit programme" onclick="openProgrammeModal(${d.id}, ${p.id})">✎</button>
+              <button class="btn btn-ghost btn-sm" title="Link modules registered before this programme existed" onclick="linkProgrammeModules(${p.id})">🔗 Link modules</button>
+            </div></td>` : ''}
+          </tr>`).join('') : `<tr><td colspan="${canChange ? 6 : 5}"><div class="empty">No programmes yet</div></td></tr>`}
+        </tbody>
+      </table></div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
+        The fees for these programmes are set by the accountant, under Finance → Fee Setup.
+      </div>
+    </div>`).join('');
+}
+
+function editDepartment(id) {
+  const d = (state.departments || []).find(x => x.id === id);
+  if (!d) return;
+  document.getElementById('dept-id').value = d.id;
+  document.getElementById('dept-name').value = d.name;
+  document.getElementById('dept-code').value = d.code;
+  document.getElementById('dept-active').checked = d.is_active;
+  renderDepartmentFormPickers(d.hod, d.staff);
+  document.getElementById('dept-form-title').textContent = `Editing: ${d.name}`;
+  document.getElementById('dept-save').textContent = 'Save changes';
+  document.getElementById('dept-cancel').style.display = '';
+  document.getElementById('page-departments').scrollIntoView({ behavior: 'smooth' });
+}
+
+function resetDepartmentForm() {
+  ['dept-id', 'dept-name', 'dept-code'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('dept-active').checked = true;
+  renderDepartmentFormPickers();
+  document.getElementById('dept-form-title').textContent = 'Register a department';
+  document.getElementById('dept-save').textContent = 'Save department';
+  document.getElementById('dept-cancel').style.display = 'none';
+}
+
+async function saveDepartment() {
+  const id = document.getElementById('dept-id').value;
+  const payload = {
+    name: document.getElementById('dept-name').value.trim(),
+    code: document.getElementById('dept-code').value.trim().toUpperCase(),
+    hod: document.getElementById('dept-hod').value || null,
+    staff: [...document.querySelectorAll('input[name="dept-staff"]:checked')].map(el => Number(el.value)),
+    is_active: document.getElementById('dept-active').checked,
+  };
+  if (!payload.name || !payload.code) { toast('Give the department a name and a code', 'var(--red)'); return; }
+  try {
+    if (id) await api('PATCH', `/departments/${id}/`, payload);
+    else await api('POST', '/departments/', payload);
+    toast(id ? 'Department updated' : 'Department registered — now add its programmes', 'var(--green)');
+    resetDepartmentForm();
+    loadDepartments();
+  } catch (e) { toast(apiErrorText(e, 'Could not save the department'), 'var(--red)'); }
+}
+
+function openProgrammeModal(departmentId, programmeId = null) {
+  const d = (state.departments || []).find(x => x.id === departmentId);
+  const p = programmeId && d ? d.programmes.find(x => x.id === programmeId) : null;
+  document.getElementById('prog-id').value = p ? p.id : '';
+  document.getElementById('prog-department').value = departmentId;
+  document.getElementById('prog-name').value = p ? p.name : '';
+  document.getElementById('prog-code').value = p ? p.code : '';
+  document.getElementById('prog-active').checked = p ? p.is_active : true;
+  const chosen = new Set((p ? p.levels : []).map(String));
+  document.getElementById('prog-levels').innerHTML = state.levels.map(l => `
+    <label class="check-item">
+      <input type="checkbox" name="prog-level" value="${l.id}" ${chosen.has(String(l.id)) ? 'checked' : ''}>
+      <span>${safeText(l.name)}</span>
+    </label>`).join('');
+  document.getElementById('prog-modal-title').textContent =
+    p ? `Edit ${p.code}` : `Add a programme to ${d ? d.name : 'the department'}`;
+  document.getElementById('programme-modal').classList.add('open');
+}
+
+function closeProgrammeModal() { document.getElementById('programme-modal').classList.remove('open'); }
+
+async function saveProgramme() {
+  const id = document.getElementById('prog-id').value;
+  const payload = {
+    department: Number(document.getElementById('prog-department').value),
+    name: document.getElementById('prog-name').value.trim(),
+    code: document.getElementById('prog-code').value.trim().toUpperCase(),
+    levels: [...document.querySelectorAll('input[name="prog-level"]:checked')].map(el => Number(el.value)),
+    is_active: document.getElementById('prog-active').checked,
+  };
+  if (!payload.name || !payload.code) { toast('Give the programme a name and a course code', 'var(--red)'); return; }
+  try {
+    if (id) await api('PATCH', `/programmes/${id}/`, payload);
+    else await api('POST', '/programmes/', payload);
+    closeProgrammeModal();
+    toast(id ? 'Programme updated' : 'Programme added', 'var(--green)');
+    await loadDepartments();
+    buildProgrammeOptions(document.getElementById('mod-programme'));
+  } catch (e) { toast(apiErrorText(e, 'Could not save the programme'), 'var(--red)'); }
+}
+
+async function linkProgrammeModules(programmeId) {
+  const p = (state.programmes || []).find(x => x.id === programmeId);
+  const prefix = prompt('Link every module whose code starts with this — only modules not yet in any programme are linked:',
+                        p ? p.code : '');
+  if (prefix === null) return;
+  if (!prefix.trim()) { toast('Give a module code prefix', 'var(--red)'); return; }
+  try {
+    const r = await api('POST', `/programmes/${programmeId}/link-modules/`, { code_prefix: prefix.trim() });
+    const skipped = r.skipped.length
+      ? ` ${r.skipped.length} skipped: ${r.skipped.map(x => `${x.module} (${x.reason})`).join('; ')}` : '';
+    toast(`Linked ${r.linked} module(s).${skipped}`, r.skipped.length ? 'var(--orange)' : 'var(--green)');
+    loadDepartments();
+  } catch (e) { toast(apiErrorText(e, 'Could not link the modules'), 'var(--red)'); }
+}
+
+// ── STUDENT RECORDS ────────────────────────────────────────────────────────────
+
+async function importCollegeIds(dryRun) {
+  const file = document.getElementById('cid-file').files[0];
+  if (!file) { toast('Choose the Excel file first', 'var(--red)'); return; }
+  if (!dryRun && !confirm('Record the college ID numbers in this sheet?')) return;
+  const form = new FormData();
+  form.append('file', file);
+  form.append('dry_run', dryRun ? 'true' : 'false');
+  try {
+    const r = await api('POST', '/student-records/college-ids/', form);
+    const labels = { recorded: dryRun ? 'would be recorded' : 'recorded', unchanged: 'already recorded', error: 'need attention' };
+    const summary = Object.entries(r.counts).map(([k, n]) => `${n} ${labels[k] || k}`).join(' · ') || 'The sheet had no rows';
+    const problems = r.rows.filter(row => row.status === 'error');
+    document.getElementById('cid-result').innerHTML = `
+      <div class="badge ${problems.length ? 'badge-yellow' : 'badge-green'}">${safeText(summary)}</div>
+      ${problems.length ? `<div class="table-wrap" style="margin-top:10px"><table>
+        <thead><tr><th>Row</th><th>NACTVET Reg. No.</th><th>College ID</th><th>Not recorded because</th></tr></thead>
+        <tbody>${problems.map(row => `<tr><td>${row.row}</td><td>${safeText(row.nactvet_reg_no)}</td>
+          <td>${safeText(row.college_id)}</td><td>${safeText(row.detail)}</td></tr>`).join('')}</tbody>
+      </table></div>` : ''}`;
+    toast(dryRun ? 'Checked — nothing has been saved yet' : 'College ID numbers recorded', 'var(--green)');
+  } catch (e) { toast(apiErrorText(e, 'Could not read the sheet'), 'var(--red)'); }
 }
 
 // ── STUDENTS PAGE ──────────────────────────────────────────────────────────────
@@ -4658,6 +5008,8 @@ function updateResultRowCalc(rid) {
 
 let declarationModuleInfo = null;
 let declarationData = [];
+// {enrollment id: [declaration kinds already charged]} for the chosen module.
+let declaredKinds = {};
 
 async function onDeclarationFilterChange() {
   const semId = document.getElementById('decl-flt-sem').value;
@@ -4677,9 +5029,13 @@ async function loadDeclarationModule() {
     return;
   }
   try {
-    const data = await api('GET', `/results/module/?module_id=${modId}`);
+    const [data, declared] = await Promise.all([
+      api('GET', `/results/module/?module_id=${modId}`),
+      api('GET', `/exam-declarations/?module_id=${modId}`),
+    ]);
     declarationModuleInfo = data.module;
     declarationData = data.results || [];
+    declaredKinds = declared.declared || {};
     renderExamDeclarations();
   } catch(e) { toast('Failed to load declaration candidates', 'var(--red)'); }
 }
@@ -4705,13 +5061,14 @@ function examDeclarationReason(r, type) {
 
 function examDeclarationCandidates() {
   const type = document.getElementById('decl-type')?.value || state.declarationType || 'special_exam';
-  if (type === 'special_exam') {
-    return declarationData
-      .map(r => ({ result: r, reason: examDeclarationReason(r, type), selectable: true, candidate: true }))
-      .filter(item => item.reason);
-  }
+  // Discontinuation is reviewed, not charged, so there is nobody to declare.
+  const chargeable = type !== 'discontinuation';
   return declarationData
-    .map(r => ({ result: r, reason: examDeclarationReason(r, type), selectable: true, candidate: true }))
+    .map(r => {
+      const declared = (declaredKinds[String(r.student)] || []).includes(type);
+      return { result: r, reason: examDeclarationReason(r, type), declared,
+               selectable: chargeable && !declared, candidate: true };
+    })
     .filter(item => item.reason);
 }
 
@@ -4734,7 +5091,7 @@ function renderExamDeclarations() {
   } else if (type === 'repeat_module') {
     note.textContent = 'Students who score below 50 in the supplementary exam automatically repeat the module.';
   } else {
-    note.textContent = 'A GPA below 2.0 requires discontinuation review.';
+    note.textContent = 'A GPA below 2.0 requires discontinuation review. Discontinuation is not charged here — it is decided when the semester results are reviewed.';
   }
   const helper = document.getElementById('decl-helper-filter')?.value || 'needs_action';
   const q = (document.getElementById('decl-search')?.value || '').toLowerCase().trim();
@@ -4742,7 +5099,9 @@ function renderExamDeclarations() {
   if (helper === 'all' && type === 'special_exam') {
     candidates = declarationData.map(r => {
       const reason = examDeclarationReason(r, type);
-      return { result: r, reason: reason || 'CAT 1 and CAT 2 marks are filled', selectable: !!reason, candidate: !!reason };
+      const declared = (declaredKinds[String(r.student)] || []).includes(type);
+      return { result: r, reason: reason || 'CAT 1 and CAT 2 marks are filled', declared,
+               selectable: !!reason && !declared, candidate: !!reason };
     });
   }
   if (q) {
@@ -4755,7 +5114,9 @@ function renderExamDeclarations() {
       <td>${item.result.student_name}</td>
       <td>${declarationModuleInfo.code}</td>
       <td>${item.reason}</td>
-      <td>${item.selectable ? '<span class="badge badge-yellow">Ready to declare</span>' : '<span class="badge badge-green">No action</span>'}</td>
+      <td>${item.declared ? '<span class="badge badge-blue">Declared · charged</span>'
+          : item.selectable ? '<span class="badge badge-yellow">Ready to declare</span>'
+          : '<span class="badge badge-green">No action</span>'}</td>
     </tr>
   `).join('') : '<tr><td colspan="6"><div class="empty"><div class="ei">✅</div>No candidates for this declaration type</div></td></tr>';
 }
@@ -4770,19 +5131,18 @@ async function declareSelectedExamStudents() {
   const students = checked.map(el => ({ id: el.value, reason: el.dataset.reason || '' }));
   if (!students.length) { toast('Select at least one student to declare', 'var(--red)'); return; }
   if (!declarationModuleInfo?.semester_id) { toast('Module semester is missing', 'var(--red)'); return; }
+  if (type === 'discontinuation') { toast('Discontinuation is not declared for a charge', 'var(--red)'); return; }
   try {
-    for (const student of students) {
-      await api('POST', '/finance-obligations/', {
-        student: student.id,
-        semester: declarationModuleInfo.semester_id,
-        module: declarationModuleInfo.id,
-        obligation_type: type,
-        note: `${student.reason || type.replace('_', ' ')}. Declared by admin for ${declarationModuleInfo.code}; finance to assign pricing and payment clearance.`,
-      });
-    }
-    toast(`Declared ${students.length} student(s) for finance processing`, 'var(--green)');
-    renderExamDeclarations();
-  } catch(e) { toast(e?.detail || 'Failed to declare students', 'var(--red)'); }
+    // One request for the whole selection: if the accountant has not set the
+    // rate, nobody is charged, rather than some students and not others.
+    const result = await api('POST', '/exam-declarations/', {
+      kind: type,
+      students: students.map(s => ({ id: Number(s.id), reason: s.reason })),
+    });
+    const already = result.already_declared ? ` (${result.already_declared} already declared)` : '';
+    toast(`Declared and charged ${result.created} student(s)${already}`, 'var(--green)');
+    await loadDeclarationModule();
+  } catch(e) { toast(apiErrorText(e, 'Failed to declare students'), 'var(--red)'); }
 }
 
 function renderResultsTable() {
@@ -5651,6 +6011,8 @@ function editChargeType(id) {
   document.getElementById('fin-ct-account').value = c.bank_account || '';
   document.getElementById('fin-ct-code').value = c.code || '';
   document.getElementById('fin-ct-sort_order').value = c.sort_order || 0;
+  document.getElementById('fin-ct-declaration').value = c.declaration || '';
+  document.getElementById('fin-ct-charged_again_on_readmission').checked = c.charged_again_on_readmission !== false;
   BLOCK_FIELDS.forEach(f => { document.getElementById(`fin-ct-${f}`).checked = !!c[f]; });
 
   document.getElementById('fin-ct-title').textContent = `Editing: ${c.name}`;
@@ -5670,6 +6032,8 @@ function cancelChargeTypeEdit() {
     id => document.getElementById(id).value = '');
   document.getElementById('fin-ct-sort_order').value = '';
   document.getElementById('fin-ct-account').value = '';
+  document.getElementById('fin-ct-declaration').value = '';
+  document.getElementById('fin-ct-charged_again_on_readmission').checked = true;
   BLOCK_FIELDS.forEach(f => { document.getElementById(`fin-ct-${f}`).checked = false; });
   document.getElementById('fin-ct-title').textContent = 'Add a charge type';
   document.getElementById('fin-ct-save').textContent = '💾 Save charge type';
@@ -5689,6 +6053,8 @@ async function saveChargeType() {
     bank_account: document.getElementById('fin-ct-account').value || null,
     code: document.getElementById('fin-ct-code').value.trim(),
     sort_order: order === '' ? 0 : Number(order),
+    declaration: document.getElementById('fin-ct-declaration').value,
+    charged_again_on_readmission: document.getElementById('fin-ct-charged_again_on_readmission').checked,
   };
   BLOCK_FIELDS.forEach(f => { payload[f] = document.getElementById(`fin-ct-${f}`).checked; });
 
@@ -5703,7 +6069,7 @@ async function saveChargeType() {
     toast(editing ? 'Charge type corrected' : 'Charge type saved', 'var(--green)');
     loadChargeTypes();
   } catch (e) {
-    toast(e?.detail || e?.name?.[0] || 'Failed to save', 'var(--red)');
+    toast(apiErrorText(e, 'Failed to save'), 'var(--red)');
   }
 }
 
@@ -6948,7 +7314,11 @@ async function loadWhoResponded() {
 async function loadFeeGrid() {
   const yearId = document.getElementById('fin-fs-year')?.value;
   if (!yearId) return;
-  const grid = await api('GET', `/fee-structures/grid/?academic_year_id=${yearId}`);
+  await ensureProgrammes();
+  buildProgrammeOptions(document.getElementById('fin-fs-programme'), 'Every programme');
+  const programmeId = document.getElementById('fin-fs-programme').value;
+  const grid = await api('GET', `/fee-structures/grid/?academic_year_id=${yearId}` +
+                                (programmeId ? `&programme_id=${programmeId}` : ''));
   state.feeGrid = grid;
   renderFeeGrid();
 }
@@ -6970,7 +7340,10 @@ function renderFeeGrid() {
           ${cell.amount
             ? `<div style="font-family:var(--font-mono)">${money(cell.amount)}</div>
                <div style="font-size:.7rem;color:var(--muted)">${cell.installments} installment${cell.installments === 1 ? '' : 's'}${cell.due_dates.length ? '' : ' · no dates'}</div>`
-            : '<span style="color:var(--muted)">— set —</span>'}
+            : cell.inherited_amount
+              ? `<div style="font-family:var(--font-mono);color:var(--muted)">${money(cell.inherited_amount)}</div>
+                 <div style="font-size:.7rem;color:var(--muted)">every programme</div>`
+              : '<span style="color:var(--muted)">— set —</span>'}
         </td>`).join('')}
     </tr>`).join('')
     : `<tr><td colspan="${grid.class_levels.length + 2}"><div class="empty"><div class="ei">📊</div>Add charge types first</div></td></tr>`;
@@ -6983,7 +7356,8 @@ function openFeeCell(chargeTypeId, classLevelId) {
   const level = grid.class_levels.find(l => l.id === classLevelId);
   state.feeCell = { chargeTypeId, classLevelId, structureId: cell.structure_id };
 
-  document.getElementById('fee-cell-title').textContent = `${row.charge_type_name} · ${level.name}`;
+  const scope = grid.programme ? grid.programme.code : 'Every programme';
+  document.getElementById('fee-cell-title').textContent = `${row.charge_type_name} · ${scope} · ${level.name}`;
   document.getElementById('fee-cell-amount').value = cell.amount || '';
   document.getElementById('fee-cell-installments').value = cell.installments || 1;
   document.getElementById('fee-cell-period').value = cell.billing_period || 'academic_year';
@@ -7024,6 +7398,7 @@ async function saveFeeCell() {
     charge_type: chargeTypeId,
     class_level: classLevelId,
     academic_year: Number(document.getElementById('fin-fs-year').value),
+    programme: document.getElementById('fin-fs-programme').value || null,
     amount,
     installments,
     billing_period: document.getElementById('fee-cell-period').value,
@@ -7037,7 +7412,7 @@ async function saveFeeCell() {
     toast('Fee structure saved', 'var(--green)');
     loadFeeGrid();
   } catch (e) {
-    toast(e?.detail || e?.due_dates?.[0] || e?.non_field_errors?.[0] || 'Failed to save', 'var(--red)');
+    toast(apiErrorText(e, 'Failed to save'), 'var(--red)');
   }
 }
 

@@ -86,18 +86,61 @@ def profile_for_student(student):
     return profile
 
 
+def registration_for(profile, academic_year=None):
+    """The student's latest semester registration — within this academic year
+    when one is given."""
+    registrations = profile.registrations.select_related(
+        'class_level', 'programme', 'semester__academic_year',
+    )
+    if academic_year is not None:
+        registrations = registrations.filter(semester__academic_year=academic_year)
+    return registrations.order_by('-semester__academic_year__name', '-semester__number').first()
+
+
+def _latest_enrollment(profile, academic_year=None):
+    """The enrollment that best says where a student stands, for students
+    registered before semester registrations were kept.
+
+    Latest semester first, then the highest level within it: a level 5 student
+    repeating a level 4 module is a level 5 student. Enrollments used to be
+    taken in their default order, which sorts by the student's name — the same
+    on every row — so which one came first, and so which level was billed, was
+    up to the database.
+    """
+    enrollments = profile.enrollments.select_related(
+        'module__class_level', 'module__semester__academic_year', 'module__programme',
+    )
+    if academic_year is not None:
+        scoped = enrollments.filter(module__semester__academic_year=academic_year)
+        enrollments = scoped if scoped.exists() else enrollments
+    return enrollments.order_by(
+        '-module__semester__academic_year__name', '-module__semester__number',
+        '-module__class_level__order', 'id',
+    ).first()
+
+
 def class_level_for(profile, academic_year=None):
     """The NTA level a student is studying at, which decides their fees.
 
-    Taken from their enrollments — a student is enrolled in modules, and every
-    module belongs to a class level.
+    Read from their semester registration. Students enrolled before
+    registrations were kept fall back to their enrollments.
     """
-    enrollments = profile.enrollments.select_related('module__class_level', 'module__semester')
-    if academic_year is not None:
-        scoped = enrollments.filter(module__semester__academic_year=academic_year)
-        enrollments = scoped or enrollments
-    enrollment = enrollments.first()
+    registration = registration_for(profile, academic_year)
+    if registration is not None:
+        return registration.class_level
+    enrollment = _latest_enrollment(profile, academic_year)
     return enrollment.module.class_level if enrollment else None
+
+
+def programme_for(profile, academic_year=None):
+    """The programme a student studies, which decides their fees alongside the
+    level. None for a student whose modules are not yet linked to one — they
+    are charged the amounts set for every programme."""
+    registration = registration_for(profile, academic_year)
+    if registration is not None:
+        return registration.programme
+    enrollment = _latest_enrollment(profile, academic_year)
+    return enrollment.module.programme if enrollment else None
 
 
 # ── the fee structure ─────────────────────────────────────────────────────────
@@ -128,10 +171,33 @@ def set_installment_schedule(fee_structure, due_dates):
     return FeeInstallment.objects.bulk_create(rows)
 
 
+def structures_for(class_level, academic_year, programme=None):
+    """The fee structure that applies to each charge type, for a student at this
+    level in this programme and year, keyed by charge type id.
+
+    A programme's own row wins over the amount set for every programme. With no
+    programme, only the every-programme amounts apply.
+    """
+    rows = (
+        FeeStructure.objects
+        .filter(class_level=class_level, academic_year=academic_year, is_active=True,
+                charge_type__is_active=True)
+        .filter(Q(programme__isnull=True) | Q(programme=programme) if programme is not None
+                else Q(programme__isnull=True))
+        .select_related('charge_type', 'programme', 'class_level')
+        .prefetch_related('installment_schedule')
+    )
+    chosen = {}
+    for structure in rows:
+        if structure.programme_id or structure.charge_type_id not in chosen:
+            chosen[structure.charge_type_id] = structure
+    return chosen
+
+
 # ── raising charges ───────────────────────────────────────────────────────────
 
 @transaction.atomic
-def generate_charges(profile, academic_year, *, actor=None, class_level=None):
+def generate_charges(profile, academic_year, *, actor=None, class_level=None, programme=None):
     """Raise every automatic charge this student owes for the year.
 
     Idempotent: running it twice does not double-bill, because a charge is
@@ -141,14 +207,14 @@ def generate_charges(profile, academic_year, *, actor=None, class_level=None):
     level = class_level or class_level_for(profile, academic_year)
     if level is None:
         return []
+    programme = programme or programme_for(profile, academic_year)
+    registration = registration_for(profile, academic_year)
+    readmitted = bool(registration and registration.kind == registration.READMISSION)
 
-    structures = (
-        FeeStructure.objects
-        .filter(class_level=level, academic_year=academic_year, is_active=True,
-                charge_type__is_active=True, charge_type__applies=ChargeType.AUTOMATIC)
-        .select_related('charge_type')
-        .prefetch_related('installment_schedule')
-    )
+    structures = [
+        structure for structure in structures_for(level, academic_year, programme).values()
+        if structure.charge_type.applies == ChargeType.AUTOMATIC
+    ]
 
     created = []
     for structure in structures:
@@ -161,11 +227,13 @@ def generate_charges(profile, academic_year, *, actor=None, class_level=None):
         # A "once" charge is billed one time for the whole programme — caution
         # money, admission, ID card, uniforms. It is the only thing separating a
         # first-year's bill from a continuing student's, so skip it the moment
-        # the student has ever been charged it, in any year.
+        # the student has ever been charged it, in any year. A readmitted
+        # student starts afresh and is billed it again — once more, this year.
         if structure.billing_period == FeeStructure.ONCE:
-            already = StudentCharge.objects.filter(
-                profile=profile, charge_type=structure.charge_type).exists()
-            if already:
+            previous = StudentCharge.objects.filter(profile=profile, charge_type=structure.charge_type)
+            if readmitted and structure.charge_type.charged_again_on_readmission:
+                previous = previous.filter(academic_year=academic_year)
+            if previous.exists():
                 continue
 
         semesters = [None]
@@ -213,6 +281,89 @@ def raise_charge(profile, charge_type, academic_year, amount, due_date, *,
     audit('charge.raise', 'StudentCharge', actor=actor, entity_id=charge.id, profile=profile,
           summary=f'{charge_type} {money(amount)} due {due_date}')
     return charge
+
+
+class DeclarationError(ValueError):
+    """A declaration that cannot be charged — no charge type or no rate set."""
+
+
+def declaration_charge_type(kind):
+    """The charge type the accountant linked to this kind of exam declaration."""
+    charge_type = ChargeType.objects.filter(declaration=kind, is_active=True).first()
+    if charge_type is None:
+        label = dict(ChargeType.DECLARATION_CHOICES).get(kind, kind)
+        raise DeclarationError(
+            f'No charge type is linked to "{label}" declarations. The accountant links one '
+            f'under Finance → Charge Types.'
+        )
+    return charge_type
+
+
+def declaration_rate(charge_type, module):
+    """What one module's declaration costs: the accountant's rate for the
+    module's own programme and level, in the module's academic year."""
+    year = module.semester.academic_year
+    structure = structures_for(module.class_level, year, module.programme).get(charge_type.id)
+    if structure is None:
+        programme = f'{module.programme.code} ' if module.programme_id else ''
+        raise DeclarationError(
+            f'The accountant has not set a rate for {charge_type} at {programme}'
+            f'{module.class_level} in {year}.'
+        )
+    return structure
+
+
+@transaction.atomic
+def declare_exam_charge(enrollment, kind, *, actor, reason=''):
+    """Charge a student for a supplementary exam, special exam or repeat of one
+    module, at the accountant's per-module rate.
+
+    Declaring the same student for the same module twice returns the charge
+    already raised rather than billing again. Returns (charge, created).
+    """
+    charge_type = declaration_charge_type(kind)
+    module = enrollment.module
+    structure = declaration_rate(charge_type, module)
+    profile = profile_for_student(enrollment)
+    year = module.semester.academic_year
+
+    existing = StudentCharge.objects.filter(
+        profile=profile, charge_type=charge_type, module=module, academic_year=year,
+    ).first()
+    if existing is not None:
+        return existing, False
+
+    # Due on the date the accountant set for it, or straight away when none was.
+    schedule = list(structure.installment_schedule.all())
+    due_date = schedule[0].due_date if schedule else date.today()
+    taken = StudentCharge.objects.filter(
+        profile=profile, charge_type=charge_type, academic_year=year, semester=module.semester,
+    ).count()
+    charge = StudentCharge.objects.create(
+        profile=profile, charge_type=charge_type, academic_year=year, semester=module.semester,
+        module=module, fee_structure=structure, installment_number=taken + 1,
+        amount=money(structure.amount), due_date=due_date, source=StudentCharge.ON_REQUEST,
+        note=(reason or f'{charge_type} for {module.code}')[:300], created_by=actor,
+    )
+    audit('charge.declare', 'StudentCharge', actor=actor, entity_id=charge.id, profile=profile,
+          summary=f'{charge_type} for {module.code}: {money(structure.amount)} due {due_date}')
+    return charge, True
+
+
+def declared_charges(module):
+    """Every declaration already charged for this module, as
+    {profile id: [declaration kinds]}, so the declaration screen can show who is
+    already declared rather than inviting a second one."""
+    declared = {}
+    rows = (
+        StudentCharge.objects
+        .filter(module=module)
+        .exclude(charge_type__declaration='')
+        .values_list('profile_id', 'charge_type__declaration')
+    )
+    for profile_id, kind in rows:
+        declared.setdefault(profile_id, []).append(kind)
+    return declared
 
 
 @transaction.atomic

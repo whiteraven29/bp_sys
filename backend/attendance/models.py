@@ -178,6 +178,59 @@ class ClassLevel(models.Model):
         return self.name
 
 
+class Department(models.Model):
+    """An academic department: the programmes it runs, its head and its staff.
+
+    Fees are not kept here. They differ by programme and they are the
+    accountant's to set (FeeStructure.programme); the department screen only
+    shows them.
+    """
+    name = models.CharField(max_length=160, unique=True)
+    code = models.CharField(max_length=20, unique=True)
+    # Chosen from accounts that already hold the Head of Department role. The
+    # department screen does not hand out roles: that stays with the role
+    # editor, which is where "nobody changes their own role" is enforced.
+    hod = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='departments_headed', verbose_name='Head of department',
+    )
+    staff = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='departments')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class Programme(models.Model):
+    """A course of study run by one department, at one or more NTA levels.
+
+    `code` is the course code printed in college ID numbers, which is why it is
+    unique across the whole college rather than within its department.
+    """
+    department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name='programmes')
+    name = models.CharField(max_length=160)
+    code = models.CharField(max_length=20, unique=True)
+    levels = models.ManyToManyField(
+        ClassLevel, blank=True, related_name='programmes',
+        help_text='The NTA levels this programme is taught at.',
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['department__name', 'name']
+        constraints = [
+            models.UniqueConstraint(fields=['department', 'name'], name='unique_programme_name_per_department'),
+        ]
+
+    def __str__(self):
+        return f'{self.code} – {self.name}'
+
+
 class TeacherProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
     full_name = models.CharField(max_length=200)
@@ -237,6 +290,39 @@ class SecretaryProfile(models.Model):
     academic register.
     """
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='secretary_profile')
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
+class RecordsOfficerProfile(models.Model):
+    """The records officer: keeps the student record.
+
+    Captures and verifies a student's personal details at admission, and works
+    the admission alongside the accountant and the admission officer. Holds no
+    administrator rights, like the accountant and the secretary.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='records_officer_profile',
+    )
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
+class AdmissionOfficerProfile(models.Model):
+    """The admission officer: admits students.
+
+    Checks the admission requirements, issues the college ID number and
+    finalises the admission. Holds no administrator rights.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='admission_officer_profile',
+    )
     full_name = models.CharField(max_length=200)
     is_active = models.BooleanField(default=True)
 
@@ -431,6 +517,11 @@ class Module(models.Model):
     teacher = models.CharField(max_length=200)
     class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, related_name='modules')
     semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='modules')
+    # Optional so the modules that existed before departments did keep working
+    # untouched; they are linked to their programme afterwards, one link at a time.
+    programme = models.ForeignKey(
+        'Programme', on_delete=models.PROTECT, null=True, blank=True, related_name='modules',
+    )
     has_practical = models.BooleanField(
         default=False,
         verbose_name='Has Practical Component',
@@ -803,8 +894,22 @@ class StudentProfile(models.Model):
     invoices and clearance can attach to the person instead of being
     duplicated across every module they take.
     """
+    MALE = 'M'
+    FEMALE = 'F'
+    GENDER_CHOICES = [(MALE, 'Male'), (FEMALE, 'Female')]
+
     nactvet_reg_no = models.CharField(max_length=50, unique=True, verbose_name='NACTVET Reg. No.')
     name = models.CharField(max_length=200)
+    # The college's own number, as printed on the student ID card. Issued once
+    # by the admission office and kept until the student finishes their studies
+    # — a readmitted student keeps theirs. Null rather than blank while unset,
+    # so any number of students can be waiting for one without colliding.
+    college_id = models.CharField(
+        max_length=40, unique=True, null=True, blank=True, verbose_name='College ID No.',
+    )
+    phone = models.CharField(max_length=30, blank=True)
+    gender = models.CharField(max_length=1, choices=GENDER_CHOICES, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -812,6 +917,84 @@ class StudentProfile(models.Model):
 
     def __str__(self):
         return f'{self.nactvet_reg_no} – {self.name}'
+
+
+class NextOfKin(models.Model):
+    """Someone the college contacts about a student. The admission form takes two."""
+    PARENT = 'parent'
+    GUARDIAN = 'guardian'
+    SPOUSE = 'spouse'
+    SIBLING = 'sibling'
+    RELATIVE = 'relative'
+    OTHER = 'other'
+    RELATIONSHIP_CHOICES = [
+        (PARENT, 'Parent'), (GUARDIAN, 'Guardian'), (SPOUSE, 'Spouse'),
+        (SIBLING, 'Sibling'), (RELATIVE, 'Other relative'), (OTHER, 'Other'),
+    ]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='next_of_kin')
+    position = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(2)],
+        help_text='First or second next of kin.',
+    )
+    name = models.CharField(max_length=200)
+    phone = models.CharField(max_length=30)
+    relationship = models.CharField(max_length=20, choices=RELATIONSHIP_CHOICES)
+
+    class Meta:
+        ordering = ['profile', 'position']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'position'], name='one_next_of_kin_per_position'),
+            models.CheckConstraint(check=Q(position__in=[1, 2]), name='next_of_kin_position_one_or_two'),
+        ]
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} – next of kin {self.position}: {self.name}'
+
+
+class SemesterRegistration(models.Model):
+    """Where one student studies in one semester: which programme, at which NTA
+    level, and on what footing.
+
+    The level used to be read off whichever module enrollment happened to come
+    first. For a level 5 student repeating a level 4 module that could be the
+    wrong one, and the level decides the fees. It is recorded here instead.
+
+    Registrations only ever add to the record. The module enrollments, marks
+    and results they sit beside are never rewritten through them.
+    """
+    NEW = 'new'
+    CONTINUING = 'continuing'
+    REPEATING = 'repeating'
+    READMISSION = 'readmission'
+    IMPORTED = 'imported'
+    KIND_CHOICES = [
+        (NEW, 'New to the college'),
+        (CONTINUING, 'Continuing'),
+        (REPEATING, 'Repeating failed modules'),
+        (READMISSION, 'Readmitted'),
+        (IMPORTED, 'Recorded from enrollments made before registrations were kept'),
+    ]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='registrations')
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='registrations')
+    programme = models.ForeignKey(Programme, on_delete=models.PROTECT, related_name='registrations')
+    class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, related_name='registrations')
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='registrations_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-semester__academic_year__name', '-semester__number', 'profile__name']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'semester'], name='one_registration_per_semester'),
+        ]
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · {self.semester} · {self.programme.code} {self.class_level}'
 
 
 class CollegeProfile(models.Model):
@@ -949,6 +1132,28 @@ class ChargeType(models.Model):
     blocks_final = models.BooleanField(default=False, verbose_name='Blocks end-of-semester exam')
     blocks_results = models.BooleanField(default=False, verbose_name='Blocks results release')
 
+    # Which exam declaration raises this charge. A declared charge is priced
+    # per module: the fee structure holds the rate, and a student declared for
+    # two modules is charged twice.
+    SPECIAL_EXAM = 'special_exam'
+    SUPP_EXAM = 'supp_exam'
+    REPEAT_MODULE = 'repeat_module'
+    DECLARATION_CHOICES = [
+        (SPECIAL_EXAM, 'Special exam'),
+        (SUPP_EXAM, 'Supplementary exam'),
+        (REPEAT_MODULE, 'Repeat module'),
+    ]
+    declaration = models.CharField(
+        max_length=20, choices=DECLARATION_CHOICES, blank=True,
+        help_text='Raised per module when the examination office declares a student for this.',
+    )
+    # A readmitted student starts afresh, so a charge billed once for the whole
+    # programme (admission fee, caution money, uniforms) is billed again.
+    charged_again_on_readmission = models.BooleanField(
+        default=True,
+        help_text='For a charge billed once, bill it again when a discontinued student is readmitted.',
+    )
+
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -968,6 +1173,14 @@ class ChargeType(models.Model):
 
     class Meta:
         ordering = ['family', 'sort_order', 'name']
+        constraints = [
+            # One charge per kind of declaration, or a declared student could be
+            # billed twice for the same supplementary exam.
+            models.UniqueConstraint(
+                fields=['declaration'], condition=~Q(declaration=''),
+                name='one_charge_type_per_declaration',
+            ),
+        ]
 
     def __str__(self):
         return self.name
@@ -1001,6 +1214,12 @@ class FeeStructure(models.Model):
     ]
 
     charge_type = models.ForeignKey(ChargeType, on_delete=models.PROTECT, related_name='fee_structures')
+    # Fees differ by programme. Blank means the same amount for every programme;
+    # where a programme has its own row, that row wins for its students.
+    programme = models.ForeignKey(
+        Programme, on_delete=models.PROTECT, null=True, blank=True, related_name='fee_structures',
+        help_text='Leave blank for an amount every programme pays.',
+    )
     class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, related_name='fee_structures')
     academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='fee_structures')
     amount = models.DecimalField(
@@ -1019,14 +1238,24 @@ class FeeStructure(models.Model):
     class Meta:
         ordering = ['academic_year__name', 'class_level__order', 'charge_type__family', 'charge_type__name']
         constraints = [
+            # Two constraints rather than one: a unique index treats NULLs as
+            # distinct, so a single one over programme would let a college-wide
+            # cell be entered twice.
             models.UniqueConstraint(
                 fields=['charge_type', 'class_level', 'academic_year'],
+                condition=Q(programme__isnull=True),
                 name='unique_fee_structure_cell',
+            ),
+            models.UniqueConstraint(
+                fields=['charge_type', 'programme', 'class_level', 'academic_year'],
+                condition=Q(programme__isnull=False),
+                name='unique_programme_fee_structure_cell',
             ),
         ]
 
     def __str__(self):
-        return f'{self.charge_type} · {self.class_level} · {self.academic_year} = {self.amount}'
+        scope = self.programme.code if self.programme_id else 'all programmes'
+        return f'{self.charge_type} · {scope} · {self.class_level} · {self.academic_year} = {self.amount}'
 
 
 class FeeInstallment(models.Model):
@@ -1082,6 +1311,11 @@ class StudentCharge(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))])
     due_date = models.DateField()
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default=STRUCTURE)
+    # The module a declared charge is for — one supplementary exam, special exam
+    # or repeat per module. Also what stops the same declaration billing twice.
+    module = models.ForeignKey(
+        'Module', on_delete=models.PROTECT, null=True, blank=True, related_name='charges',
+    )
 
     # A waiver reduces what is owed without pretending money arrived, so a
     # bursary never looks like a payment in the collections report.

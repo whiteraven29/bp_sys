@@ -41,6 +41,7 @@ from .models import (
     ChargeType, FeeStructure, FeeInstallment, StudentProfile, StudentCharge,
     Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
     BankAccount, CollegeProfile,
+    Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration,
     Form, FormSection, FormQuestion, FormAnswer, FormResponse, FormSubmissionReceipt,
 )
 from .serializers import (
@@ -61,6 +62,7 @@ from .serializers import (
     FinanceAuditLogSerializer,
     FormSerializer, FormSectionSerializer, FormQuestionSerializer,
     FormResponseSerializer, StudentFormSerializer, ResultEntryWindowSerializer,
+    DepartmentSerializer, ProgrammeSerializer,
 )
 from .grading import grade_for_mark, gpa_classification, parse_authority_grade
 
@@ -252,6 +254,30 @@ def is_secretary(user):
     )
 
 
+def is_records_officer(user):
+    return bool(
+        user and user.is_authenticated
+        and RecordsOfficerProfile.objects.filter(user=user, is_active=True).exists()
+    )
+
+
+def is_admission_officer(user):
+    return bool(
+        user and user.is_authenticated
+        and AdmissionOfficerProfile.objects.filter(user=user, is_active=True).exists()
+    )
+
+
+def can_edit_student_records(user):
+    """Keeping the student record — college ID numbers, personal details.
+
+    The records and admission officers' work, with the Principal and the
+    examination officer able to step in. Not the accountant or the Head of
+    Department.
+    """
+    return is_records_officer(user) or is_admission_officer(user) or can_manage_accounts(user)
+
+
 def can_handle_requests(user):
     """Whose desk a request lands on — receiving it, checking it, passing it on,
     and sending the document back once it has been answered.
@@ -375,6 +401,19 @@ class DeclaresExamWindows(BasePermission):
         if not (request.user and request.user.is_authenticated):
             return False
         return request.method in SAFE_METHODS or can_manage_exams(request.user)
+
+
+class ReadStaffWriteAccountManagers(BasePermission):
+    """Departments and programmes: every signed-in member of staff reads them —
+    the accountant prices fees by programme, the records office registers
+    students into one. Only the Principal and the examination officer change
+    them, the same people who hand out roles."""
+    message = 'Only the Principal or the examination officer can change departments and programmes.'
+
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return request.method in SAFE_METHODS or can_manage_accounts(request.user)
 
 
 class IsRequestOfficer(BasePermission):
@@ -926,6 +965,8 @@ ROLE_PROFILES = {
     'secretary': SecretaryProfile,
     'principal': PrincipalProfile,
     'hod': HeadOfDepartmentProfile,
+    'records_officer': RecordsOfficerProfile,
+    'admission_officer': AdmissionOfficerProfile,
 }
 #: The roles that carry Django's `is_staff`. "exam_officer" has no profile of
 #: its own — it *is* is_staff with neither of the other two offices — so it is
@@ -933,12 +974,13 @@ ROLE_PROFILES = {
 #: rather than an invisible side effect.
 STAFF_ROLES = ('principal', 'hod', 'exam_officer')
 #: Which title an account is listed under when it holds more than one.
-ROLE_ORDER = ('principal', 'hod', 'exam_officer', 'secretary', 'accountant',
-              'estate_officer', 'tutor')
+ROLE_ORDER = ('principal', 'hod', 'exam_officer', 'admission_officer', 'records_officer',
+              'secretary', 'accountant', 'estate_officer', 'tutor')
 ROLE_LABELS = {
     'tutor': 'Tutor', 'accountant': 'Accountant', 'estate_officer': 'Estate Officer',
     'secretary': 'Secretary', 'principal': 'Principal', 'hod': 'Head of Department',
     'exam_officer': 'Exam Officer',
+    'records_officer': 'Records Officer', 'admission_officer': 'Admission Officer',
 }
 
 
@@ -1114,9 +1156,11 @@ def create_staff_account(request):
     password = str(request.data.get('password', '')).strip()
     module_ids = request.data.get('module_ids') or []
 
-    if role not in ('tutor', 'accountant', 'estate_officer', 'secretary', 'principal', 'hod'):
-        return Response({'detail': 'Role must be tutor, accountant, estate officer, secretary, '
-                                   'principal, or head of department.'},
+    # Every role that has a profile of its own. The examination officer has none
+    # — it is granted in the role editor, not by creating an account for it.
+    if role not in ROLE_PROFILES:
+        choices = ', '.join(ROLE_LABELS[r].lower() for r in ROLE_ORDER if r in ROLE_PROFILES)
+        return Response({'detail': f'Role must be one of: {choices}.'},
                         status=status.HTTP_400_BAD_REQUEST)
     if not full_name or not username or len(password) < 6:
         return Response({'detail': 'Full name, username, and a 6+ character password are required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1266,6 +1310,85 @@ class ClassLevelViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedReadOnlyOrAdmin]
 
 
+# ── DEPARTMENTS AND PROGRAMMES ─────────────────────────────────────────────────
+
+def _refuse_protected_delete(instance, what, uses):
+    from django.db.models.deletion import ProtectedError
+    try:
+        instance.delete()
+    except ProtectedError:
+        raise PermissionDenied(
+            f'This {what} already has {uses}, so it cannot be deleted. Mark it inactive instead.')
+
+
+class DepartmentViewSet(viewsets.ModelViewSet):
+    serializer_class = DepartmentSerializer
+    permission_classes = [ReadStaffWriteAccountManagers]
+
+    def get_queryset(self):
+        qs = Department.objects.select_related('hod').prefetch_related(
+            'staff', 'programmes__levels', 'programmes__department')
+        if self.request.query_params.get('is_active') == 'true':
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def perform_destroy(self, instance):
+        _refuse_protected_delete(instance, 'department', 'programmes')
+
+
+class ProgrammeViewSet(viewsets.ModelViewSet):
+    serializer_class = ProgrammeSerializer
+    permission_classes = [ReadStaffWriteAccountManagers]
+
+    def get_queryset(self):
+        qs = Programme.objects.select_related('department').prefetch_related('levels')
+        department_id = self.request.query_params.get('department_id')
+        if department_id:
+            qs = qs.filter(department_id=department_id)
+        if self.request.query_params.get('is_active') == 'true':
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def perform_destroy(self, instance):
+        _refuse_protected_delete(instance, 'programme', 'modules, fees or registrations')
+
+    @action(detail=True, methods=['post'], url_path='link-modules')
+    def link_modules(self, request, pk=None):
+        """Link modules to this programme.
+
+        For the modules that existed before departments did. Either name the
+        modules, or give a code prefix to link every module whose code starts
+        with it — "PST" for PST04101, PST05208 and so on. A prefix only ever
+        picks up modules not yet linked to any programme, so it cannot move a
+        module out of another one by accident. Only the module's programme is
+        written; its code, name, students and results are untouched.
+        """
+        programme = self.get_object()
+        module_ids = request.data.get('module_ids')
+        prefix = str(request.data.get('code_prefix', '')).strip().upper()
+        if module_ids:
+            if not isinstance(module_ids, list):
+                return Response({'detail': 'Send module_ids as a list.'}, status=status.HTTP_400_BAD_REQUEST)
+            modules = Module.objects.filter(id__in=module_ids)
+        elif prefix:
+            modules = Module.objects.filter(programme__isnull=True, code__istartswith=prefix)
+        else:
+            return Response({'detail': 'Choose the modules, or give a module code prefix.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        taught_at = set(programme.levels.values_list('id', flat=True))
+        linked, skipped = [], []
+        with transaction.atomic():
+            for module in modules.select_related('class_level'):
+                if taught_at and module.class_level_id not in taught_at:
+                    skipped.append({'module': module.code,
+                                    'reason': f'{programme.code} is not taught at {module.class_level}'})
+                    continue
+                Module.objects.filter(pk=module.pk).update(programme=programme)
+                linked.append(module.code)
+        return Response({'linked': len(linked), 'modules': linked, 'skipped': skipped})
+
+
 # ── ANNOUNCEMENTS ──────────────────────────────────────────────────────────────
 
 class AnnouncementViewSet(viewsets.ModelViewSet):
@@ -1288,6 +1411,7 @@ class ModuleViewSet(viewsets.ModelViewSet):
         for param, field in [
             ('class_level_id', 'class_level_id'),
             ('semester_id', 'semester_id'),
+            ('programme_id', 'programme_id'),
         ]:
             val = self.request.query_params.get(param)
             if val:
@@ -1664,6 +1788,9 @@ def dashboard(request):
         'is_accountant': is_accountant(request.user),
         'is_estate_officer': False,
         'is_secretary': is_secretary(request.user),
+        'is_records_officer': is_records_officer(request.user),
+        'is_admission_officer': is_admission_officer(request.user),
+        'can_edit_student_records': can_edit_student_records(request.user),
         'is_principal': is_principal(request.user),
         'is_head_of_department': is_head_of_department(request.user),
         'can_manage_exams': can_manage_exams(request.user),
@@ -4461,7 +4588,7 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = FeeStructure.objects.select_related(
-            'charge_type', 'class_level', 'academic_year'
+            'charge_type', 'class_level', 'academic_year', 'programme'
         ).prefetch_related('installment_schedule')
         year_id = self.request.query_params.get('academic_year_id')
         if year_id:
@@ -4469,6 +4596,12 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
         level_id = self.request.query_params.get('class_level_id')
         if level_id:
             qs = qs.filter(class_level_id=level_id)
+        # "none" asks for the amounts every programme pays.
+        programme_id = self.request.query_params.get('programme_id')
+        if programme_id == 'none':
+            qs = qs.filter(programme__isnull=True)
+        elif programme_id:
+            qs = qs.filter(programme_id=programme_id)
         return qs.order_by('class_level__order', 'charge_type__family', 'charge_type__name')
 
     def _save_with_schedule(self, serializer):
@@ -4482,7 +4615,7 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
         structure = self._save_with_schedule(serializer)
         finance.audit('fee_structure.create', 'FeeStructure', actor=self.request.user,
                       entity_id=structure.id,
-                      summary=f'{structure.charge_type} · {structure.class_level} = {structure.amount}',
+                      summary=f'{structure.charge_type} · {structure.programme.code if structure.programme_id else "all programmes"} · {structure.class_level} = {structure.amount}',
                       ip=finance.client_ip(self.request))
 
     def perform_update(self, serializer):
@@ -4502,19 +4635,33 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
     def grid(self, request):
         """The whole fee structure as one sheet — charge types down, class
         levels across. Accountants read a grid far faster than a list, and this
-        is the screen that replaces the Excel workbook."""
+        is the screen that replaces the Excel workbook.
+
+        One sheet per programme, plus one for the amounts every programme pays
+        (no programme_id). On a programme's sheet, a cell it has not set shows
+        the every-programme amount its students are charged instead.
+        """
         year_id = request.query_params.get('academic_year_id')
         year = AcademicYear.objects.filter(id=year_id).first() or active_academic_year()
         if year is None:
             return Response({'detail': 'No academic year selected.'}, status=status.HTTP_400_BAD_REQUEST)
+        programme = None
+        programme_id = request.query_params.get('programme_id')
+        if programme_id and programme_id != 'none':
+            programme = Programme.objects.filter(id=programme_id).first()
+            if programme is None:
+                return Response({'detail': 'No such programme.'}, status=status.HTTP_400_BAD_REQUEST)
 
         levels = list(ClassLevel.objects.order_by('order', 'name'))
         types = list(ChargeType.objects.filter(is_active=True).order_by('family', 'name'))
-        cells = {
-            (s.charge_type_id, s.class_level_id): s
-            for s in FeeStructure.objects.filter(academic_year=year)
-            .prefetch_related('installment_schedule')
-        }
+        year_rows = FeeStructure.objects.filter(academic_year=year).prefetch_related('installment_schedule')
+        every_programme = {(s.charge_type_id, s.class_level_id): s
+                           for s in year_rows.filter(programme__isnull=True)}
+        if programme is None:
+            cells, inherited = every_programme, {}
+        else:
+            cells = {(s.charge_type_id, s.class_level_id): s for s in year_rows.filter(programme=programme)}
+            inherited = every_programme
 
         rows = []
         for charge_type in types:
@@ -4528,6 +4675,7 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
             }
             for level in levels:
                 structure = cells.get((charge_type.id, level.id))
+                fallback = inherited.get((charge_type.id, level.id))
                 row['cells'].append({
                     'class_level_id': level.id,
                     'structure_id': structure.id if structure else None,
@@ -4535,11 +4683,14 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
                     'installments': structure.installments if structure else None,
                     'billing_period': structure.billing_period if structure else None,
                     'due_dates': [str(i.due_date) for i in structure.installment_schedule.all()] if structure else [],
+                    'inherited_amount': str(fallback.amount) if fallback and not structure else None,
                 })
             rows.append(row)
 
         return Response({
             'academic_year': {'id': year.id, 'name': year.name},
+            'programme': ({'id': programme.id, 'code': programme.code, 'name': programme.name}
+                          if programme else None),
             'class_levels': [{'id': lv.id, 'name': lv.name} for lv in levels],
             'rows': rows,
         })
@@ -4952,6 +5103,167 @@ def finance_generate_charges(request):
         'failures': failures,
         'detail': f'Raised {raised} charge(s) across {billed} student(s).',
     }, status=status.HTTP_200_OK if not failures else status.HTTP_207_MULTI_STATUS)
+
+
+@api_view(['GET', 'POST'])
+def exam_declarations(request):
+    """Declare students for a supplementary exam, special exam or repeat, and
+    charge them for it.
+
+    GET ?module_id= lists who on that module is already declared, and for what,
+    keyed by enrollment. POST {kind, students: [{id, reason}]} charges each
+    student at the accountant's per-module rate. A student already declared for
+    this module is left as they are rather than billed again.
+
+    Declaring is the examination officer's decision; the price is the
+    accountant's. If no rate is set, nothing is charged and the reply says so —
+    the whole batch, rather than some students billed and others not.
+
+    Discontinuation is not a charge. It is decided when a student's semester
+    results are reviewed, so it is refused here.
+    """
+    user = request.user
+    if request.method == 'GET':
+        if not (can_read_exams(user) or can_manage_finance(user)):
+            return Response({'detail': 'Staff only.'}, status=status.HTTP_403_FORBIDDEN)
+        module = get_object_or_404(Module, pk=request.query_params.get('module_id'))
+        by_profile = finance.declared_charges(module)
+        declared = {
+            str(enrollment.id): by_profile[enrollment.profile_id]
+            for enrollment in module.students.filter(profile_id__in=by_profile)
+        }
+        return Response({'module_id': module.id, 'declared': declared})
+
+    if not can_manage_exams(user):
+        return Response({'detail': 'Declaring students for exams belongs to the examination officer.'},
+                        status=status.HTTP_403_FORBIDDEN)
+    kind = str(request.data.get('kind', '')).strip()
+    if kind == 'discontinuation':
+        return Response({'detail': 'Discontinuation is not charged. It is decided when the semester '
+                                   'results are reviewed, not declared here.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if kind not in dict(ChargeType.DECLARATION_CHOICES):
+        return Response({'detail': 'Choose a supplementary exam, special exam or repeat module.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    students = request.data.get('students')
+    if not isinstance(students, list) or not students:
+        return Response({'detail': 'Select at least one student to declare.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    reasons = {str(item.get('id')): str(item.get('reason', '')).strip()
+               for item in students if isinstance(item, dict)}
+    enrollments = list(Student.objects.filter(id__in=[i for i in reasons if i.isdigit()])
+                       .select_related('module__semester__academic_year', 'module__class_level',
+                                       'module__programme', 'profile'))
+    if len(enrollments) != len(reasons):
+        return Response({'detail': 'Some of the selected students could not be found. Reload and try again.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # Check every module's rate before charging anyone.
+        charge_type = finance.declaration_charge_type(kind)
+        for module in {e.module for e in enrollments}:
+            finance.declaration_rate(charge_type, module)
+        created = already = 0
+        with transaction.atomic():
+            for enrollment in enrollments:
+                _, made = finance.declare_exam_charge(
+                    enrollment, kind, actor=user, reason=reasons.get(str(enrollment.id), ''))
+                created += made
+                already += not made
+    except finance.DeclarationError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'created': created, 'already_declared': already}, status=status.HTTP_201_CREATED)
+
+
+def _import_rows(request):
+    """(row number, reg no, college id) from an uploaded .xlsx, or from JSON rows.
+
+    For a spreadsheet the row number is the one Excel shows, header included,
+    so a problem reported on row 4 is found on row 4.
+    """
+    upload = request.FILES.get('file')
+    if upload is None:
+        rows = request.data.get('rows')
+        if not isinstance(rows, list):
+            raise ValueError('Upload an Excel file, or send rows as a list.')
+        return [(number, str(r.get('nactvet_reg_no', '')).strip(), str(r.get('college_id', '')).strip())
+                for number, r in enumerate(rows, start=1) if isinstance(r, dict)]
+    try:
+        sheet = load_workbook(upload, read_only=True, data_only=True).active
+    except Exception:
+        raise ValueError('That file could not be read as an Excel workbook (.xlsx).')
+    triples, header_seen = [], False
+    for number, raw in enumerate(sheet.iter_rows(values_only=True), start=1):
+        cells = [str(c).strip() if c is not None else '' for c in (raw or ())[:2]]
+        cells += [''] * (2 - len(cells))
+        if not any(cells):
+            continue
+        if not header_seen:
+            header_seen = True
+            if 'reg' in cells[0].lower() or 'college' in cells[1].lower():
+                continue          # a header row
+        triples.append((number, cells[0], cells[1]))
+    return triples
+
+
+@api_view(['POST'])
+def import_college_ids(request):
+    """Record the college ID numbers current students already carry.
+
+    Two columns: NACTVET registration number, college ID number. Each row is
+    reported back — recorded, already recorded, or why it was not. Nothing is
+    overwritten: a student who already has a different college ID keeps it, and
+    the row says so. Send dry_run=true to see the report without saving.
+    """
+    if not can_edit_student_records(request.user):
+        return Response({'detail': 'Only the records or admission office can record college ID numbers.'},
+                        status=status.HTTP_403_FORBIDDEN)
+    try:
+        pairs = _import_rows(request)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    dry_run = str(request.data.get('dry_run', '')).lower() in ('1', 'true', 'yes')
+
+    report, seen_ids = [], {}
+    with transaction.atomic():
+        for number, reg_no, college_id in pairs:
+            row = {'row': number, 'nactvet_reg_no': reg_no, 'college_id': college_id}
+            report.append(row)
+            if not reg_no or not college_id:
+                row.update(status='error', detail='Both the registration number and the college ID are needed.')
+                continue
+            if college_id.upper() in seen_ids:
+                row.update(status='error', detail=f'The same college ID is on row {seen_ids[college_id.upper()]} too.')
+                continue
+            seen_ids[college_id.upper()] = number
+
+            profile = StudentProfile.objects.filter(nactvet_reg_no__iexact=reg_no).first()
+            if profile is None:
+                enrollment = Student.objects.filter(nactvet_reg_no__iexact=reg_no).first()
+                profile = finance.profile_for_student(enrollment) if enrollment else None
+            if profile is None:
+                row.update(status='error', detail='No student has this registration number.')
+                continue
+            if profile.college_id and profile.college_id.upper() == college_id.upper():
+                row.update(status='unchanged', detail='Already recorded.')
+                continue
+            if profile.college_id:
+                row.update(status='error', detail=f'This student already has college ID {profile.college_id}; it was not changed.')
+                continue
+            holder = StudentProfile.objects.filter(college_id__iexact=college_id).exclude(pk=profile.pk).first()
+            if holder is not None:
+                row.update(status='error', detail=f'College ID already belongs to {holder.nactvet_reg_no}.')
+                continue
+            if not dry_run:
+                StudentProfile.objects.filter(pk=profile.pk).update(college_id=college_id)
+            row.update(status='recorded', detail='Recorded.' if not dry_run else 'Would be recorded.')
+        if dry_run:
+            transaction.set_rollback(True)
+
+    counts = {}
+    for row in report:
+        counts[row['status']] = counts.get(row['status'], 0) + 1
+    return Response({'dry_run': dry_run, 'counts': counts, 'rows': report})
 
 
 @api_view(['POST'])

@@ -31,6 +31,8 @@ router.register('asset-disposals', views.AssetDisposalViewSet, basename='asset-d
 # finance-clearances routes above, which stay registered until the old finance
 # UI is retired.
 router.register('bank-accounts', views.BankAccountViewSet, basename='bank-account')
+router.register('departments', views.DepartmentViewSet, basename='department')
+router.register('programmes', views.ProgrammeViewSet, basename='programme')
 router.register('charge-types', views.ChargeTypeViewSet, basename='charge-type')
 router.register('fee-structures', views.FeeStructureViewSet, basename='fee-structure')
 router.register('student-charges', views.StudentChargeViewSet, basename='student-charge')
@@ -81,6 +83,8 @@ urlpatterns = [
     path('finance/statement/<int:profile_id>/', views.finance_statement, name='finance-statement'),
     path('finance/generate-charges/', views.finance_generate_charges, name='finance-generate-charges'),
     path('finance/raise-charge/', views.finance_raise_charge, name='finance-raise-charge'),
+    path('exam-declarations/', views.exam_declarations, name='exam-declarations'),
+    path('student-records/college-ids/', views.import_college_ids, name='import-college-ids'),
     path('finance/issue-invoice/', views.finance_issue_invoice, name='finance-issue-invoice'),
     path('finance/collections/', views.finance_collections, name='finance-collections'),
     path('finance/college/', views.college_profile, name='finance-college'),

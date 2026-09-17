@@ -17,6 +17,7 @@ from .models import (
     Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
     BankAccount, CollegeProfile,
     Form, FormSection, FormQuestion, FormResponse, ResultEntryWindow,
+    Department, Programme, HeadOfDepartmentProfile,
 )
 
 MAX_ANNOUNCEMENT_FILE_BYTES = 10 * 1024 * 1024  # matches nginx client_max_body_size 10M
@@ -219,6 +220,7 @@ class ModuleSerializer(serializers.ModelSerializer):
     practical_count = serializers.SerializerMethodField()
     class_level_name = serializers.CharField(source='class_level.name', read_only=True)
     semester_label = serializers.CharField(source='semester.label', read_only=True)
+    programme_code = serializers.CharField(source='programme.code', read_only=True, default='')
 
     class Meta:
         model = Module
@@ -226,6 +228,7 @@ class ModuleSerializer(serializers.ModelSerializer):
             'id', 'name', 'code', 'teacher', 'has_practical', 'is_field_module', 'credits',
             'class_level', 'class_level_name',
             'semester', 'semester_label',
+            'programme', 'programme_code',
             'student_count', 'session_count', 'theory_count', 'practical_count',
             'created_at',
         ]
@@ -234,6 +237,15 @@ class ModuleSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if attrs.get('is_field_module'):
             attrs['has_practical'] = False
+        programme = attrs.get('programme', getattr(self.instance, 'programme', None))
+        level = attrs.get('class_level', getattr(self.instance, 'class_level', None))
+        if programme is not None and level is not None:
+            taught_at = list(programme.levels.all())
+            if taught_at and level not in taught_at:
+                raise serializers.ValidationError({
+                    'programme': f'{programme.code} is not taught at {level}. Add the level to the '
+                                 f'programme first, or choose another programme.'
+                })
         return attrs
 
     def get_student_count(self, obj):
@@ -899,6 +911,7 @@ class ChargeTypeSerializer(serializers.ModelSerializer):
     frequency_display = serializers.CharField(source='get_frequency_display', read_only=True)
     group_label = serializers.CharField(read_only=True)
     bank_account_label = serializers.CharField(source='bank_account.purpose', read_only=True, default='')
+    declaration_display = serializers.CharField(source='get_declaration_display', read_only=True)
     in_use = serializers.SerializerMethodField()
 
     class Meta:
@@ -909,7 +922,8 @@ class ChargeTypeSerializer(serializers.ModelSerializer):
             'frequency', 'frequency_display', 'invoice_group', 'group_label',
             'bank_account', 'bank_account_label',
             'blocks_registration', 'blocks_cat1', 'blocks_cat2', 'blocks_final',
-            'blocks_results', 'is_active', 'in_use', 'created_at',
+            'blocks_results', 'declaration', 'declaration_display', 'charged_again_on_readmission',
+            'is_active', 'in_use', 'created_at',
         ]
         read_only_fields = ['id', 'created_at']
 
@@ -931,6 +945,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
     applies = serializers.CharField(source='charge_type.applies', read_only=True)
     class_level_name = serializers.CharField(source='class_level.name', read_only=True)
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True)
+    programme_code = serializers.CharField(source='programme.code', read_only=True, default='')
     billing_period_display = serializers.CharField(source='get_billing_period_display', read_only=True)
     schedule = FeeInstallmentSerializer(source='installment_schedule', many=True, read_only=True)
     # Write-only: the due date for each installment, in order. The service
@@ -944,11 +959,16 @@ class FeeStructureSerializer(serializers.ModelSerializer):
         model = FeeStructure
         fields = [
             'id', 'charge_type', 'charge_type_name', 'family', 'applies',
+            'programme', 'programme_code',
             'class_level', 'class_level_name', 'academic_year', 'academic_year_name',
             'amount', 'billing_period', 'billing_period_display', 'installments',
             'schedule', 'due_dates', 'is_active', 'created_at',
         ]
         read_only_fields = ['id', 'created_at']
+        # DRF builds a uniqueness check from the model's constraints but ignores
+        # their conditions, so it took a programme's own fee for a duplicate of
+        # the every-programme one. validate() checks the right cell instead.
+        validators = []
 
     def validate(self, data):
         due_dates = data.get('due_dates')
@@ -958,6 +978,24 @@ class FeeStructureSerializer(serializers.ModelSerializer):
                 'due_dates': f'Give one due date per installment — {installments} expected, '
                              f'{len(due_dates)} given.'
             })
+
+        # The database refuses a second row for the same cell, but its
+        # constraints are conditional and DRF does not check those, so say it
+        # here rather than let the save fail with a server error.
+        def current(field):
+            return data.get(field, getattr(self.instance, field, None))
+        cell = FeeStructure.objects.filter(
+            charge_type=current('charge_type'), class_level=current('class_level'),
+            academic_year=current('academic_year'), programme=current('programme'),
+        )
+        if self.instance is not None:
+            cell = cell.exclude(pk=self.instance.pk)
+        if cell.exists():
+            scope = current('programme').code if current('programme') else 'every programme'
+            raise serializers.ValidationError(
+                f'{current("charge_type")} already has an amount for {scope} at '
+                f'{current("class_level")} in {current("academic_year")}. Edit that one instead.'
+            )
         return data
 
 
@@ -1428,3 +1466,97 @@ class FormResponseSerializer(serializers.ModelSerializer):
         if not obj.forwarded_by:
             return ''
         return obj.forwarded_by.get_full_name() or obj.forwarded_by.username
+
+
+# ── Departments and programmes ────────────────────────────────────────────────
+
+def _normalise_code(value):
+    code = str(value or '').strip().upper()
+    if not code:
+        raise serializers.ValidationError('A code is required.')
+    return code
+
+
+class ProgrammeSerializer(serializers.ModelSerializer):
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    level_names = serializers.SerializerMethodField()
+    module_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Programme
+        fields = [
+            'id', 'department', 'department_name', 'name', 'code', 'levels', 'level_names',
+            'module_count', 'is_active', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+        # The database enforces one name per department; the message is ours.
+        validators = []
+
+    def validate_code(self, value):
+        return _normalise_code(value)
+
+    def validate(self, attrs):
+        department = attrs.get('department', getattr(self.instance, 'department', None))
+        name = attrs.get('name', getattr(self.instance, 'name', None))
+        code = attrs.get('code', getattr(self.instance, 'code', None))
+        others = Programme.objects.exclude(pk=self.instance.pk) if self.instance else Programme.objects.all()
+        if others.filter(department=department, name__iexact=name).exists():
+            raise serializers.ValidationError({'name': f'{department} already runs a programme called {name}.'})
+        if others.filter(code__iexact=code).exists():
+            raise serializers.ValidationError({'code': f'The course code {code} is already in use.'})
+        return attrs
+
+    def get_level_names(self, obj):
+        return [level.name for level in obj.levels.all()]
+
+    def get_module_count(self, obj):
+        return obj.modules.count()
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    hod_name = serializers.SerializerMethodField()
+    staff_names = serializers.SerializerMethodField()
+    programmes = ProgrammeSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Department
+        fields = [
+            'id', 'name', 'code', 'hod', 'hod_name', 'staff', 'staff_names',
+            'programmes', 'is_active', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def validate_code(self, value):
+        return _normalise_code(value)
+
+    def validate(self, attrs):
+        others = Department.objects.exclude(pk=self.instance.pk) if self.instance else Department.objects.all()
+        name = attrs.get('name', getattr(self.instance, 'name', None))
+        code = attrs.get('code', getattr(self.instance, 'code', None))
+        if others.filter(name__iexact=name).exists():
+            raise serializers.ValidationError({'name': f'There is already a department called {name}.'})
+        if others.filter(code__iexact=code).exists():
+            raise serializers.ValidationError({'code': f'The department code {code} is already in use.'})
+        return attrs
+
+    def validate_hod(self, user):
+        # The department screen does not hand out roles — that is the role
+        # editor's, where nobody may change their own. A head is chosen from
+        # accounts that already hold the office.
+        if user is not None and not HeadOfDepartmentProfile.objects.filter(user=user, is_active=True).exists():
+            raise serializers.ValidationError(
+                'That account does not hold the Head of Department role. Give it the role under '
+                'User Accounts first.'
+            )
+        return user
+
+    @staticmethod
+    def _name(user):
+        from .views import full_name_for
+        return full_name_for(user)
+
+    def get_hod_name(self, obj):
+        return self._name(obj.hod) if obj.hod_id else ''
+
+    def get_staff_names(self, obj):
+        return [self._name(user) for user in obj.staff.all()]
