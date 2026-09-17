@@ -22,7 +22,7 @@ from django.db.models.functions import Coalesce
 from .models import (
     BankAccount, ChargeType, CollegeProfile, FeeInstallment, FeeStructure,
     FinanceAuditLog, FinanceOverride, Invoice, InvoiceLine, Payment,
-    PaymentAllocation, Student, StudentCharge, StudentProfile,
+    PaymentAllocation, SemesterRegistration, Student, StudentCharge, StudentProfile,
 )
 
 ZERO = Decimal('0.00')
@@ -89,7 +89,9 @@ def profile_for_student(student):
 def registration_for(profile, academic_year=None):
     """The student's latest semester registration — within this academic year
     when one is given."""
-    registrations = profile.registrations.select_related(
+    registrations = profile.registrations.exclude(
+        status=SemesterRegistration.CANCELLED,
+    ).select_related(
         'class_level', 'programme', 'semester__academic_year',
     )
     if academic_year is not None:
@@ -210,6 +212,16 @@ def generate_charges(profile, academic_year, *, actor=None, class_level=None, pr
     programme = programme or programme_for(profile, academic_year)
     registration = registration_for(profile, academic_year)
     readmitted = bool(registration and registration.kind == registration.READMISSION)
+
+    # A student whose latest registration is a repeat sits the module(s) they
+    # failed and nothing else, and pays the accountant's rate per module
+    # instead of a year of programme fees. Once they pass and go back to a full
+    # semester their registration says so, and the year's charges are raised
+    # then — a fresh start, as the college bills it.
+    if registration is not None and registration.kind == registration.REPEATING:
+        audit('charges.skip_repeat', 'StudentProfile', actor=actor, profile=profile,
+              summary=f'{academic_year}: repeat semester, billed per module only')
+        return []
 
     structures = [
         structure for structure in structures_for(level, academic_year, programme).values()

@@ -18,6 +18,7 @@ from .models import (
     BankAccount, CollegeProfile,
     Form, FormSection, FormQuestion, FormResponse, ResultEntryWindow,
     Department, Programme, HeadOfDepartmentProfile,
+    OutstandingRepeat, SemesterReview, StudentStanding,
 )
 
 MAX_ANNOUNCEMENT_FILE_BYTES = 10 * 1024 * 1024  # matches nginx client_max_body_size 10M
@@ -1560,3 +1561,92 @@ class DepartmentSerializer(serializers.ModelSerializer):
 
     def get_staff_names(self, obj):
         return [self._name(user) for user in obj.staff.all()]
+
+
+# ── PROGRESSION ───────────────────────────────────────────────────────────────
+
+class SemesterReviewSerializer(serializers.ModelSerializer):
+    """One student's semester, as the records officer sees it before deciding."""
+    reg_no = serializers.CharField(source='profile.nactvet_reg_no', read_only=True)
+    college_id = serializers.CharField(source='profile.college_id', read_only=True)
+    student_name = serializers.CharField(source='profile.name', read_only=True)
+    semester_label = serializers.CharField(source='semester.label', read_only=True)
+    programme_code = serializers.CharField(source='programme.code', read_only=True)
+    class_level_name = serializers.CharField(source='class_level.name', read_only=True)
+    proposed_display = serializers.CharField(source='get_proposed_display', read_only=True)
+    confirmed_display = serializers.CharField(source='get_confirmed_display', read_only=True)
+    confirmed_by_name = serializers.SerializerMethodField()
+    outcome = serializers.CharField(read_only=True)
+    standing = serializers.SerializerMethodField()
+    outstanding = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SemesterReview
+        fields = [
+            'id', 'profile', 'reg_no', 'college_id', 'student_name', 'semester', 'semester_label',
+            'programme', 'programme_code', 'class_level', 'class_level_name', 'gpa', 'modules',
+            'proposed', 'proposed_display', 'proposed_reason',
+            'confirmed', 'confirmed_display', 'confirmed_reason', 'confirmed_by', 'confirmed_by_name',
+            'confirmed_at', 'outcome', 'standing', 'outstanding', 'updated_at',
+        ]
+        read_only_fields = fields
+
+    def get_confirmed_by_name(self, obj):
+        from .views import full_name_for
+        return full_name_for(obj.confirmed_by) if obj.confirmed_by_id else ''
+
+    def get_standing(self, obj):
+        standing = getattr(obj.profile, 'standing', None)
+        return standing.status if standing else ''
+
+    def get_outstanding(self, obj):
+        return [repeat.module_code for repeat in obj.profile.outstanding_repeats.all()
+                if repeat.status == OutstandingRepeat.OPEN]
+
+
+class StudentStandingSerializer(serializers.ModelSerializer):
+    reg_no = serializers.CharField(source='profile.nactvet_reg_no', read_only=True)
+    college_id = serializers.CharField(source='profile.college_id', read_only=True)
+    student_name = serializers.CharField(source='profile.name', read_only=True)
+    phone = serializers.CharField(source='profile.phone', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    programme_code = serializers.CharField(source='programme.code', read_only=True)
+    class_level_name = serializers.CharField(source='class_level.name', read_only=True)
+    return_year_name = serializers.CharField(source='return_year.name', read_only=True)
+    outstanding = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentStanding
+        fields = [
+            'id', 'profile', 'reg_no', 'college_id', 'student_name', 'phone',
+            'status', 'status_display', 'programme', 'programme_code',
+            'class_level', 'class_level_name', 'return_year', 'return_year_name',
+            'return_semester_number', 'note', 'outstanding', 'updated_at',
+        ]
+        read_only_fields = fields
+
+    def get_outstanding(self, obj):
+        return [
+            {'code': repeat.module_code, 'name': repeat.module_name,
+             'semester_number': repeat.semester_number,
+             'since': repeat.origin_semester.label}
+            for repeat in obj.profile.outstanding_repeats.all()
+            if repeat.status == OutstandingRepeat.OPEN
+        ]
+
+
+class OutstandingRepeatSerializer(serializers.ModelSerializer):
+    reg_no = serializers.CharField(source='profile.nactvet_reg_no', read_only=True)
+    student_name = serializers.CharField(source='profile.name', read_only=True)
+    class_level_name = serializers.CharField(source='class_level.name', read_only=True)
+    origin_label = serializers.CharField(source='origin_semester.label', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = OutstandingRepeat
+        fields = [
+            'id', 'profile', 'reg_no', 'student_name', 'module_code', 'module_name',
+            'class_level', 'class_level_name', 'semester_number', 'origin_semester',
+            'origin_label', 'status', 'status_display', 'note', 'created_at', 'resolved_at',
+        ]
+        read_only_fields = fields

@@ -550,6 +550,19 @@ class Module(models.Model):
         return f"{self.code} – {self.name}"
 
 
+class StudentQuerySet(models.QuerySet):
+    def studying(self):
+        """The class as it stands: everyone still sitting these modules.
+
+        A student stopped mid-semester — a supplementary they failed, a
+        postponement — keeps every row and every mark they had, and comes off
+        the class lists, the attendance register, mark entry and the eligibility
+        lists. `Student.objects` stays unfiltered, because their own record and
+        the college's history must still show what happened.
+        """
+        return self.filter(withdrawn_at__isnull=True)
+
+
 class Student(models.Model):
     """One enrollment: this person, in this module. Attendance and results hang
     off it, and always have.
@@ -558,12 +571,31 @@ class Student(models.Model):
     person — because a student taking eight modules is eight rows here and
     owes one balance, not eight. See StudentProfile.
     """
+    NORMAL = 'normal'
+    REPEAT = 'repeat'
+    ATTEMPT_CHOICES = [(NORMAL, 'First sitting'), (REPEAT, 'Repeat sitting')]
+
     nactvet_reg_no = models.CharField(max_length=50, verbose_name='NACTVET Reg. No.')
     name = models.CharField(max_length=200)
     profile = models.ForeignKey(
         'StudentProfile', on_delete=models.CASCADE, null=True, blank=True, related_name='enrollments',
     )
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='students')
+    # A repeat sitting is billed at the accountant's per-module repeat rate
+    # rather than the programme's fees, and its result is the one that counts
+    # for the module — the failed sitting it points back at stays in the record.
+    attempt = models.CharField(max_length=10, choices=ATTEMPT_CHOICES, default=NORMAL)
+    repeat_of = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='repeat_attempts',
+    )
+    # Set when the student stops studying this module part-way through: they
+    # failed a supplementary for the semester before it, or they postponed.
+    # The authority's rule is that they stop there, so they come off the class
+    # lists — and nothing they had already done is removed.
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
+    withdrawn_reason = models.CharField(max_length=300, blank=True)
+
+    objects = StudentQuerySet.as_manager()
     portal_pin_hash = models.CharField(max_length=128, blank=True, editable=False)
     must_change_portal_password = models.BooleanField(default=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -976,11 +1008,22 @@ class SemesterRegistration(models.Model):
         (IMPORTED, 'Recorded from enrollments made before registrations were kept'),
     ]
 
+    ACTIVE = 'active'
+    CANCELLED = 'cancelled'
+    STATUS_CHOICES = [(ACTIVE, 'Studying'), (CANCELLED, 'Cancelled')]
+
     profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='registrations')
     semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='registrations')
     programme = models.ForeignKey(Programme, on_delete=models.PROTECT, related_name='registrations')
     class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, related_name='registrations')
     kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    # A registration is cancelled when the student turns out not to be studying
+    # that semester after all — they postponed, or a supplementary result that
+    # arrived mid-semester sent them back to repeat the semester before it. The
+    # row stays, with the reason, and the enrollments and marks made while they
+    # were still expected stay exactly as they were.
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=ACTIVE)
+    cancelled_reason = models.CharField(max_length=300, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='registrations_created',
@@ -995,6 +1038,230 @@ class SemesterRegistration(models.Model):
 
     def __str__(self):
         return f'{self.profile.nactvet_reg_no} · {self.semester} · {self.programme.code} {self.class_level}'
+
+
+# ── PROGRESSION ───────────────────────────────────────────────────────────────
+#
+# Advancing the semester used to do one thing: flip the active flags. Students
+# stayed exactly where they were, so a level 4 student was still a level 4
+# student in the new year, a student who failed a module after their
+# supplementary was indistinguishable from one who passed, and a student who
+# stopped coming left no trace of what they still owed the college
+# academically.
+#
+# The four models below are that missing memory:
+#
+#     SemesterReview     what each semester's results mean for one student
+#     StudentStanding    where the student is now, and what they come back to
+#     StandingChange     every move of that standing, and who decided it
+#     OutstandingRepeat  a module failed after its supplementary, still unpassed
+#
+# None of them touches a mark. Results are read, never written; a repeat sitting
+# is a new enrollment with its own result, and the failed one it replaces stays
+# in the record as history.
+
+
+class StudentStanding(models.Model):
+    """Where one student stands with the college today.
+
+    `status` decides what the rest of the system may do for them: who is
+    registered for the coming semester, who appears on the due-back list, and
+    who may still sign in to the portal.
+    """
+    ACTIVE = 'active'
+    REPEATING = 'repeating'
+    POSTPONED = 'postponed'
+    DISCONTINUED = 'discontinued'
+    COMPLETED = 'completed'
+    ARCHIVED = 'archived'
+    STATUS_CHOICES = [
+        (ACTIVE, 'Studying'),
+        (REPEATING, 'Repeating failed modules'),
+        (POSTPONED, 'Postponed'),
+        (DISCONTINUED, 'Discontinued — may return on readmission'),
+        (COMPLETED, 'Finished studies, awaiting clearance'),
+        (ARCHIVED, 'Cleared and archived'),
+    ]
+
+    #: Statuses whose students are expected back on a stated semester.
+    AWAY = {POSTPONED, DISCONTINUED}
+    #: Only an archived student is refused the portal. A discontinued or
+    #: postponed one still needs to see their results, their balance, and the
+    #: services they use to ask for readmission.
+    PORTAL_BLOCKED = {ARCHIVED}
+
+    profile = models.OneToOneField(StudentProfile, on_delete=models.CASCADE, related_name='standing')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=ACTIVE)
+    programme = models.ForeignKey(
+        Programme, on_delete=models.PROTECT, null=True, blank=True, related_name='standings')
+    class_level = models.ForeignKey(
+        ClassLevel, on_delete=models.PROTECT, null=True, blank=True, related_name='standings',
+        help_text='The level the student is at now, or was at when they left.')
+    return_year = models.ForeignKey(
+        AcademicYear, on_delete=models.SET_NULL, null=True, blank=True, related_name='returning_students',
+        help_text='The year a postponed or discontinued student is expected back.')
+    return_semester_number = models.PositiveSmallIntegerField(
+        null=True, blank=True, choices=Semester.NUMBER_CHOICES,
+        help_text='The semester they return to — a student who failed semester 2 '
+                  'comes back to semester 2, not to the start of the year.')
+    note = models.CharField(max_length=300, blank=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='standings_updated')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['profile__name']
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · {self.get_status_display()}'
+
+    @property
+    def blocks_portal(self):
+        return self.status in self.PORTAL_BLOCKED
+
+
+class StandingChange(models.Model):
+    """One move of a standing, kept forever.
+
+    A student who comes back in 2028 asking why they were discontinued is
+    answered from here: the semester it was decided in, the reason, and the
+    officer who confirmed it.
+    """
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='standing_changes')
+    from_status = models.CharField(max_length=20, blank=True)
+    to_status = models.CharField(max_length=20)
+    semester = models.ForeignKey(
+        Semester, on_delete=models.SET_NULL, null=True, blank=True, related_name='standing_changes',
+        help_text='The semester whose results or decision caused the move.')
+    reason = models.CharField(max_length=300, blank=True)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='standing_changes_made')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', 'profile__name']
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no}: {self.from_status or "—"} → {self.to_status}'
+
+
+class SemesterReview(models.Model):
+    """What one semester's results mean for one student.
+
+    The system proposes; the records officer confirms. Both are kept, so an
+    override always shows what the results said before somebody overruled them.
+    Nothing here is read until a human has confirmed it — the semester cannot be
+    advanced while any student is still unconfirmed.
+    """
+    CLEAR = 'clear'
+    REPEAT = 'repeat'
+    DISCONTINUED = 'discontinued'
+    COMPLETED = 'completed'
+    PENDING = 'pending'
+    PROVISIONAL = 'provisional'
+    POSTPONED = 'postponed'
+    OUTCOME_CHOICES = [
+        (CLEAR, 'Passed everything'),
+        (REPEAT, 'Repeats the failed module(s)'),
+        (DISCONTINUED, 'Discontinued — GPA below 2.0'),
+        (COMPLETED, 'Finished level 6'),
+        (PENDING, 'Waiting for results'),
+        (PROVISIONAL, 'Continues while supplementary results are awaited'),
+        (POSTPONED, 'Postponed'),
+    ]
+    #: Outcomes that carry the student into the next semester.
+    CONTINUES = {CLEAR, REPEAT, PROVISIONAL}
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='semester_reviews')
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='reviews')
+    programme = models.ForeignKey(
+        Programme, on_delete=models.PROTECT, null=True, blank=True, related_name='reviews')
+    class_level = models.ForeignKey(
+        ClassLevel, on_delete=models.PROTECT, null=True, blank=True, related_name='reviews')
+    gpa = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    # One entry per module sat: code, name, credits, status, grade, points.
+    # Stored so the list the officer confirmed can be shown again unchanged,
+    # even after a repeat sitting has replaced one of those results.
+    modules = models.JSONField(default=list, blank=True)
+    proposed = models.CharField(max_length=20, choices=OUTCOME_CHOICES)
+    proposed_reason = models.CharField(max_length=300, blank=True)
+    confirmed = models.CharField(max_length=20, choices=OUTCOME_CHOICES, blank=True, default='')
+    confirmed_reason = models.CharField(max_length=300, blank=True)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reviews_confirmed')
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-semester__academic_year__name', '-semester__number', 'profile__name']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'semester'], name='one_review_per_semester'),
+        ]
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · {self.semester} · {self.outcome}'
+
+    @property
+    def outcome(self):
+        """What the college is going by: the confirmed decision, or the proposal
+        while nobody has confirmed one."""
+        return self.confirmed or self.proposed
+
+    @property
+    def is_confirmed(self):
+        return bool(self.confirmed)
+
+
+class OutstandingRepeat(models.Model):
+    """A module failed after its supplementary examination, and not yet passed.
+
+    This is what keeps a repeating student traceable. The row names the module
+    and the semester it was failed in, and it stays open — across academic years
+    — until a repeat sitting passes it. The failed result it refers to is never
+    altered: passing is recorded on the new sitting, and this row points at both.
+    """
+    OPEN = 'open'
+    PASSED = 'passed'
+    CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (OPEN, 'Still to be passed'),
+        (PASSED, 'Passed on a repeat sitting'),
+        (CANCELLED, 'Cancelled by the office'),
+    ]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='outstanding_repeats')
+    module_code = models.CharField(max_length=50)
+    module_name = models.CharField(max_length=200, blank=True)
+    class_level = models.ForeignKey(
+        ClassLevel, on_delete=models.PROTECT, related_name='outstanding_repeats')
+    semester_number = models.PositiveSmallIntegerField(choices=Semester.NUMBER_CHOICES)
+    origin_semester = models.ForeignKey(
+        Semester, on_delete=models.PROTECT, related_name='repeats_raised',
+        help_text='The semester the module was failed in — the year the student is held to.')
+    origin_enrollment = models.ForeignKey(
+        Student, on_delete=models.SET_NULL, null=True, blank=True, related_name='repeats_raised',
+        help_text='The failed enrollment, kept as the evidence. Never rewritten.')
+    attempt_enrollment = models.ForeignKey(
+        Student, on_delete=models.SET_NULL, null=True, blank=True, related_name='repeats_attempted',
+        help_text='The latest repeat sitting of this module.')
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=OPEN)
+    note = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['profile__name', 'origin_semester__academic_year__name', 'module_code']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'module_code', 'origin_semester'],
+                                    name='one_repeat_per_module_per_semester'),
+        ]
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · {self.module_code} · {self.get_status_display()}'
 
 
 class CollegeProfile(models.Model):

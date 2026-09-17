@@ -765,6 +765,7 @@
     <button class="nav-btn admin-only" data-page="accounts" onclick="showPage('accounts',this)"><span class="icon"><i class="bi bi-people"></i></span> User Accounts</button>
     <button class="nav-btn admin-only" data-page="departments" onclick="showPage('departments',this); loadDepartments()"><span class="icon"><i class="bi bi-diagram-3"></i></span> Departments</button>
     <button class="nav-btn records-only admin-only account-manager-only" data-page="student-records" onclick="showPage('student-records',this)"><span class="icon"><i class="bi bi-person-vcard"></i></span> Student Records</button>
+    <button class="nav-btn records-only admin-only" data-page="progression" onclick="showPage('progression',this); loadProgression()"><span class="icon"><i class="bi bi-arrow-up-right-circle"></i></span> Semester Review</button>
     <div class="aside-label estate-only">Inventory</div>
     <button class="nav-btn estate-only inventory-nav-btn active" title="Overview" data-page="inventory" data-inventory-section="overview" onclick="showInventorySection('overview',this)"><span class="icon"><i class="bi bi-grid-1x2"></i></span> Overview</button>
     <div class="nav-group estate-only" id="inventory-assets-nav-group">
@@ -995,6 +996,61 @@
         <button class="btn btn-secondary btn-sm" onclick="importCollegeIds(true)">Check the sheet</button>
         <button class="btn btn-primary btn-sm" onclick="importCollegeIds(false)">Record</button>
         <div id="cid-result" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <div class="page" id="page-progression">
+      <div class="page-title">Semester Review</div>
+      <div class="page-sub">What each student's results mean for the semester ahead. The semester cannot be advanced until every student here has been confirmed.</div>
+
+      <div class="card">
+        <div class="card-title">The semester being closed</div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field"><label>Semester</label><select id="rev-semester" onchange="loadReviews()"></select></div>
+          <div class="field"><label>Show</label>
+            <select id="rev-filter" onchange="renderReviews()">
+              <option value="">Everyone</option>
+              <option value="unconfirmed">Not yet confirmed</option>
+              <option value="pending">Waiting for results</option>
+              <option value="repeat">Repeating</option>
+              <option value="discontinued">Discontinued</option>
+              <option value="clear">Passed everything</option>
+              <option value="completed">Finished</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="buildReviews()"><i class="bi bi-arrow-repeat"></i> Read the results again</button>
+          <button class="btn btn-primary btn-sm" onclick="confirmProposed()"><i class="bi bi-check2-all"></i> Confirm everyone not in doubt</button>
+        </div>
+        <p class="help-note" style="margin-top:12px;">
+          Semester 1 supplementaries are marked well into semester 2, so a student waiting for one stays
+          <strong>waiting for results</strong> and carries on paying as normal. Confirm them as
+          <strong>continues while results are awaited</strong> to let the semester advance, and decide them
+          once the marks arrive — read the results again to pick them up. Overruling what the results say
+          always needs a reason, and both are kept.
+        </p>
+        <div class="quick-facts" id="rev-counts" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Students</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Reg. No.</th><th>Name</th><th>Level</th><th>GPA</th><th>Modules</th><th>The results say</th><th>Confirmed</th><th></th></tr></thead>
+            <tbody id="rev-tbody"><tr><td colspan="8"><div class="empty"><div class="ei"><i class="bi bi-list-check"></i></div>Pick a semester</div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Not studying now — and what they come back to</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Reg. No.</th><th>Name</th><th>Standing</th><th>Level</th><th>Comes back to</th><th>Still to pass</th></tr></thead>
+            <tbody id="standing-tbody"><tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-people"></i></div>Nobody</div></td></tr></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -2504,6 +2560,48 @@
     <p class="help-note">The course code is printed in college ID numbers, so no two programmes may share one.</p>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input type="checkbox" id="prog-active" checked> Active</label>
     <button class="btn btn-primary btn-sm" onclick="saveProgramme()">Save programme</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="review-modal">
+  <div class="modal">
+    <div class="modal-title">
+      <span id="review-modal-title">Decide</span>
+      <button class="modal-close" onclick="closeReviewModal()">✕</button>
+    </div>
+    <input type="hidden" id="review-id">
+    <div id="review-modal-body" style="font-size:.85rem;color:var(--muted);margin-bottom:12px;"></div>
+    <div class="field"><label>Outcome</label>
+      <select id="review-outcome">
+        <option value="clear">Passed everything</option>
+        <option value="repeat">Repeats the failed module(s)</option>
+        <option value="discontinued">Discontinued — GPA below 2.0</option>
+        <option value="completed">Finished level 6</option>
+        <option value="provisional">Continues while supplementary results are awaited</option>
+        <option value="postponed">Postponed</option>
+      </select>
+    </div>
+    <div class="field"><label>Reason</label><input id="review-reason" placeholder="Needed when this differs from what the results say" /></div>
+    <p class="help-note">
+      Confirming acts: a repeat is held against the student until they pass it, a discontinued student is
+      recorded with the semester they return to, and a student who failed a semester 1 module after the
+      supplementary is taken off semester 2. Their marks are never changed.
+    </p>
+    <button class="btn btn-primary btn-sm" onclick="saveReviewDecision()">Confirm</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="advance-modal">
+  <div class="modal" style="max-width:860px;">
+    <div class="modal-title">
+      <span id="advance-modal-title">Advance the semester</span>
+      <button class="modal-close" onclick="closeAdvanceModal()">✕</button>
+    </div>
+    <div id="advance-preview-body">Reading the results…</div>
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button class="btn btn-warning btn-sm" id="advance-go" onclick="doAdvance()" disabled>Advance now</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeAdvanceModal()">Not yet</button>
+    </div>
   </div>
 </div>
 
@@ -8022,12 +8120,261 @@ function updatePeriodLocks() {
   }
 }
 
+// ── SEMESTER REVIEW ───────────────────────────────────────────────────────────
+const REVIEW_LABELS = {
+  clear: 'Passed everything',
+  repeat: 'Repeats failed module(s)',
+  discontinued: 'Discontinued',
+  completed: 'Finished',
+  pending: 'Waiting for results',
+  provisional: 'Continues, results awaited',
+  postponed: 'Postponed',
+};
+const REVIEW_BADGE = {
+  clear: 'badge-green', completed: 'badge-green', repeat: 'badge-yellow',
+  provisional: 'badge-yellow', discontinued: 'badge-red', pending: 'badge-gen', postponed: 'badge-gen',
+};
+const STANDING_LABELS = {
+  active: 'Studying', repeating: 'Repeating', postponed: 'Postponed',
+  discontinued: 'Discontinued', completed: 'Finished, awaiting clearance', archived: 'Archived',
+};
+
+function outcomeBadge(outcome) {
+  const cls = REVIEW_BADGE[outcome] || '';
+  const label = REVIEW_LABELS[outcome] || outcome || '—';
+  return `<span class="badge ${cls}">${safeText(label)}</span>`;
+}
+
+async function loadProgression() {
+  const select = document.getElementById('rev-semester');
+  const semesters = state.semesters || [];
+  if (!select.options.length && semesters.length) {
+    select.innerHTML = semesters.map(sem => `<option value="${sem.id}">${safeText(sem.label)}</option>`).join('');
+    const active = semesters.find(sem => sem.is_active);
+    if (active) select.value = active.id;
+  }
+  await loadReviews();
+  await loadStandings();
+}
+
+async function loadReviews() {
+  const semesterId = document.getElementById('rev-semester').value;
+  if (!semesterId) return;
+  try {
+    const rows = await api('GET', `/semester-reviews/?semester_id=${semesterId}`);
+    state.reviews = rows.results ?? rows;
+    renderReviews();
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not load the review'), 'var(--red)');
+  }
+}
+
+function renderReviews() {
+  const rows = state.reviews || [];
+  const filter = document.getElementById('rev-filter').value;
+  const shown = rows.filter(row => {
+    if (!filter) return true;
+    if (filter === 'unconfirmed') return !row.confirmed;
+    return row.outcome === filter;
+  });
+
+  const counts = {};
+  rows.forEach(row => { counts[row.outcome] = (counts[row.outcome] || 0) + 1; });
+  const unconfirmed = rows.filter(row => !row.confirmed).length;
+  document.getElementById('rev-counts').innerHTML =
+    `<div class="qf-item"><span>Students</span><strong>${rows.length}</strong></div>` +
+    `<div class="qf-item"><span>Still to confirm</span><strong>${unconfirmed}</strong></div>` +
+    Object.entries(counts).map(([outcome, total]) =>
+      `<div class="qf-item"><span>${safeText(REVIEW_LABELS[outcome] || outcome)}</span><strong>${total}</strong></div>`).join('');
+
+  const tbody = document.getElementById('rev-tbody');
+  if (!shown.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="ei"><i class="bi bi-list-check"></i></div>Nobody here — read the results again if the semester has just closed</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = shown.map(row => {
+    const modules = (row.modules || []).map(module => {
+      const cls = module.status === 'PASS' ? 'badge-green'
+        : ['FAIL', 'REPEAT', 'DISCONTINUED'].includes(module.status) ? 'badge-red'
+        : 'badge-yellow';
+      const repeat = module.attempt === 'repeat' ? ' ↻' : '';
+      return `<span class="badge ${cls}" title="${safeText(module.name)}${repeat ? ' — repeat sitting' : ''}">${safeText(module.code)}${repeat} ${safeText(module.grade || module.status)}</span>`;
+    }).join(' ');
+    const outstanding = (row.outstanding || []).length
+      ? `<div style="font-size:.7rem;color:var(--red);margin-top:3px;">still to pass: ${safeText(row.outstanding.join(', '))}</div>` : '';
+    const confirmed = row.confirmed
+      ? `${outcomeBadge(row.confirmed)}<div style="font-size:.68rem;color:var(--muted);">${safeText(row.confirmed_by_name || '')}${row.confirmed_reason ? ' — ' + safeText(row.confirmed_reason) : ''}</div>`
+      : '<span style="color:var(--muted);font-size:.75rem;">—</span>';
+    const actions = row.confirmed
+      ? `<button class="btn btn-ghost btn-sm" onclick="openReviewModal(${row.id})">Change</button>`
+      : `<button class="btn btn-primary btn-sm" onclick="confirmReview(${row.id})"${row.proposed === 'pending' ? ' disabled title="Nothing to confirm while the results are outstanding"' : ''}>Confirm</button>
+         <button class="btn btn-ghost btn-sm" onclick="openReviewModal(${row.id})">Decide…</button>`;
+    return `<tr>
+      <td>${safeText(row.reg_no)}</td>
+      <td>${safeText(row.student_name)}${outstanding}</td>
+      <td>${safeText(row.class_level_name || '—')}</td>
+      <td>${row.gpa === null || row.gpa === undefined ? '—' : safeText(row.gpa)}</td>
+      <td style="max-width:260px;">${modules || '<span style="color:var(--muted);font-size:.75rem;">no modules</span>'}</td>
+      <td>${outcomeBadge(row.proposed)}<div style="font-size:.68rem;color:var(--muted);">${safeText(row.proposed_reason || '')}</div></td>
+      <td>${confirmed}</td>
+      <td style="white-space:nowrap;">${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function buildReviews() {
+  const semesterId = document.getElementById('rev-semester').value;
+  try {
+    const result = await api('POST', '/semester-reviews/build/', { semester_id: semesterId });
+    toast(`${result.reviewed} student(s) read — ${result.unconfirmed} still to confirm`, 'var(--green)');
+    await loadReviews();
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not read the results'), 'var(--red)');
+  }
+}
+
+async function confirmProposed() {
+  const semesterId = document.getElementById('rev-semester').value;
+  if (!confirm('Confirm every student whose outcome is not in doubt? Students still waiting for results are left for you.')) return;
+  try {
+    const result = await api('POST', '/semester-reviews/confirm-proposed/', { semester_id: semesterId });
+    toast(result.detail, 'var(--green)');
+    await loadReviews();
+    await loadStandings();
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not confirm'), 'var(--red)');
+  }
+}
+
+async function confirmReview(id, outcome, reason) {
+  try {
+    const saved = await api('POST', `/semester-reviews/${id}/confirm/`, { outcome, reason });
+    const deferred = saved?.deferred || [];
+    toast(deferred.length
+      ? `Confirmed — taken off ${deferred.join(', ')} until the module is passed`
+      : 'Confirmed', 'var(--green)');
+    await loadReviews();
+    await loadStandings();
+    return true;
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not confirm'), 'var(--red)');
+    return false;
+  }
+}
+
+function openReviewModal(id) {
+  const row = (state.reviews || []).find(review => review.id === id);
+  if (!row) return;
+  document.getElementById('review-id').value = id;
+  document.getElementById('review-modal-title').textContent = `${row.reg_no} — ${row.student_name}`;
+  document.getElementById('review-modal-body').innerHTML =
+    `The results say: <strong>${safeText(REVIEW_LABELS[row.proposed] || row.proposed)}</strong> — ${safeText(row.proposed_reason || '')}`;
+  document.getElementById('review-outcome').value = row.confirmed || (row.proposed === 'pending' ? 'provisional' : row.proposed);
+  document.getElementById('review-reason').value = row.confirmed_reason || '';
+  document.getElementById('review-modal').classList.add('open');
+}
+
+function closeReviewModal() { document.getElementById('review-modal').classList.remove('open'); }
+
+async function saveReviewDecision() {
+  const id = Number(document.getElementById('review-id').value);
+  const outcome = document.getElementById('review-outcome').value;
+  const reason = document.getElementById('review-reason').value.trim();
+  if (await confirmReview(id, outcome, reason)) closeReviewModal();
+}
+
+async function loadStandings() {
+  try {
+    const rows = await api('GET', '/student-standings/?status=repeating,postponed,discontinued,completed,archived');
+    const list = rows.results ?? rows;
+    const tbody = document.getElementById('standing-tbody');
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-people"></i></div>Everybody is studying</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.map(row => {
+      const back = row.return_semester_number
+        ? `${safeText(row.return_year_name || 'next year')} · Semester ${row.return_semester_number}`
+        : '—';
+      const owes = (row.outstanding || []).map(module =>
+        `<span class="badge badge-yellow" title="failed in ${safeText(module.since)}">${safeText(module.code)}</span>`).join(' ');
+      return `<tr>
+        <td>${safeText(row.reg_no)}</td>
+        <td>${safeText(row.student_name)}</td>
+        <td>${safeText(STANDING_LABELS[row.status] || row.status)}</td>
+        <td>${safeText(row.class_level_name || '—')}</td>
+        <td>${back}</td>
+        <td>${owes || '—'}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    /* The table stays as it is; the review above is the page's job. */
+  }
+}
+
 // ── ADVANCE SEMESTER ───────────────────────────────────────────────────────────
 async function advanceSemester() {
-  if (!confirm(`Advance from "${state.activeSem?.label}"? This cannot be undone.`)) return;
+  const modal = document.getElementById('advance-modal');
+  const body = document.getElementById('advance-preview-body');
+  const go = document.getElementById('advance-go');
+  go.disabled = true;
+  body.textContent = 'Reading the results…';
+  modal.classList.add('open');
+  try {
+    const plan = await api('GET', '/academic-years/advance-preview/');
+    const actions = {};
+    (plan.moves || []).forEach(move => { actions[move.action] = (actions[move.action] || 0) + 1; });
+    const labels = {
+      promoted: 'move up a level', continues: 'continue into semester 2', repeats: 'repeat failed module(s)',
+      discontinued: 'discontinued — return on readmission', completed: 'finished, awaiting clearance',
+      deferred: 'held back until semester 1 is passed', away: 'postponed',
+    };
+    const summary = Object.entries(actions).map(([action, total]) =>
+      `<div class="qf-item"><span>${safeText(labels[action] || action)}</span><strong>${total}</strong></div>`).join('');
+    const blocked = (plan.blocked || []).length
+      ? `<div class="card" style="border-color:var(--red);margin-top:12px;">
+           <div class="card-title" style="color:var(--red)">${plan.blocked.length} student(s) not yet confirmed</div>
+           <p class="help-note">Finish the semester review first — open <strong>Semester Review</strong>, read the results and confirm each of them.</p>
+           <div style="font-size:.78rem;max-height:160px;overflow:auto;">${plan.blocked.map(row =>
+             `${safeText(row.reg_no)} — ${safeText(row.name)} (${safeText(row.reason)})`).join('<br>')}</div>
+         </div>`
+      : '';
+    const moves = (plan.moves || []).map(move =>
+      `<tr><td>${safeText(move.reg_no)}</td><td>${safeText(move.name)}</td>
+        <td>${safeText(REVIEW_LABELS[move.outcome] || move.outcome)}</td>
+        <td>${safeText(move.detail || '')}</td></tr>`).join('');
+    const carried = (plan.modules?.to_create || []).length;
+    body.innerHTML = `
+      <p style="font-size:.85rem;margin-bottom:10px;">
+        <strong>${safeText(plan.from)}</strong> closes and <strong>${safeText(plan.to)}</strong> opens.
+        ${carried ? `${carried} module(s) are carried forward from ${safeText(plan.modules.source || 'last year')}: ${safeText((plan.modules.to_create || []).join(', '))}.`
+                  : 'No modules need carrying forward.'}
+      </p>
+      <div class="quick-facts">${summary || '<div class="qf-item"><span>No students</span><strong>0</strong></div>'}</div>
+      ${blocked}
+      <div class="table-wrap" style="margin-top:12px;max-height:280px;overflow:auto;">
+        <table><thead><tr><th>Reg. No.</th><th>Name</th><th>Outcome</th><th>What happens</th></tr></thead>
+        <tbody>${moves || '<tr><td colspan="4">Nobody registered for this semester</td></tr>'}</tbody></table>
+      </div>
+      <p class="help-note" style="margin-top:10px;">
+        Nothing is deleted. Results, enrollments and payments stay exactly as they are, and every student who
+        is not coming back keeps a record of the semester they return to.
+      </p>`;
+    go.disabled = !plan.can_advance;
+  } catch (e) {
+    body.innerHTML = `<p style="color:var(--red)">${safeText(apiErrorText(e, 'Could not read the plan'))}</p>`;
+  }
+}
+
+function closeAdvanceModal() { document.getElementById('advance-modal').classList.remove('open'); }
+
+async function doAdvance() {
+  const go = document.getElementById('advance-go');
+  go.disabled = true;
   try {
     const result = await api('POST', '/academic-years/advance/');
-    toast(`Advanced to ${result.label}`, 'var(--green)');
+    const moved = result.students || {};
+    toast(`Advanced to ${result.label} — ${moved.registered || 0} registered, ${moved.enrolled || 0} enrollment(s)`, 'var(--green)');
     const sems = await api('GET', '/semesters/');
     state.semesters = sems.results ?? sems;
     state.activeSem = { label: result.label, number: result.semester };
@@ -8035,7 +8382,11 @@ async function advanceSemester() {
     document.getElementById('header-sem-badge').className = 'sem-badge active';
     document.getElementById('advance-sem-info').textContent = `Active: ${result.label}`;
     populateAllSelects();
-  } catch(e) { toast(e?.detail || 'Error', 'var(--red)'); }
+    closeAdvanceModal();
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not advance'), 'var(--red)');
+    go.disabled = false;
+  }
 }
 
 // ── INVENTORY ─────────────────────────────────────────────────────────────────

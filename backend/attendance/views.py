@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Exists, OuterRef, Q, Sum
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, render, redirect
 from django.utils import timezone
@@ -27,7 +27,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import analytics, evaluations, finance, notifications
+from . import analytics, evaluations, finance, notifications, progression
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
 from .models import (
     AcademicYear, Semester, ClassLevel, Module,
@@ -42,6 +42,7 @@ from .models import (
     Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
     BankAccount, CollegeProfile,
     Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration,
+    OutstandingRepeat, SemesterReview, StudentStanding, StandingChange,
     Form, FormSection, FormQuestion, FormAnswer, FormResponse, FormSubmissionReceipt,
 )
 from .serializers import (
@@ -63,6 +64,7 @@ from .serializers import (
     FormSerializer, FormSectionSerializer, FormQuestionSerializer,
     FormResponseSerializer, StudentFormSerializer, ResultEntryWindowSerializer,
     DepartmentSerializer, ProgrammeSerializer,
+    SemesterReviewSerializer, StudentStandingSerializer, OutstandingRepeatSerializer,
 )
 from .grading import grade_for_mark, gpa_classification, parse_authority_grade
 
@@ -316,6 +318,39 @@ def can_decide_requests(user):
 can_answer_requests = can_handle_requests
 
 
+def can_review_progression(user):
+    """Deciding what a semester's results mean for a student: who is promoted,
+    who repeats, who is discontinued.
+
+    The records officer's work — they keep the student record — with the
+    Principal and the examination officer able to step in. Not the Head of
+    Department, who reads results but does not decide them, and not the
+    accountant.
+    """
+    return bool(
+        user and user.is_authenticated
+        and (is_records_officer(user)
+             or is_principal(user)
+             or (user.is_staff and not is_head_of_department(user)
+                 and not is_accountant(user) and not is_secretary(user))))
+
+
+def can_advance_semester(user):
+    """Closing one semester and opening the next.
+
+    The heaviest button in the college: it promotes a year group, registers
+    them, enrolls them and sets what the students who failed come back to.
+    The Principal and the examination officer press it. It used to be open to
+    anyone with an admin account, which included the Head of Department.
+    """
+    return bool(
+        user and user.is_authenticated
+        and (is_principal(user)
+             or (user.is_staff and not is_head_of_department(user)
+                 and not is_accountant(user) and not is_secretary(user)
+                 and not is_records_officer(user) and not is_admission_officer(user))))
+
+
 def active_semester():
     return Semester.objects.filter(is_active=True).select_related('academic_year').first()
 
@@ -436,8 +471,35 @@ def _make_both_semesters(year):
         )
 
 
+def _target_semester(current, *, create):
+    """The semester the college moves into when this one closes.
+
+    Semester 1 hands over to semester 2 of the same year; semester 2 hands over
+    to semester 1 of the next. With `create=False` it reports what is there
+    already and nothing else, which is what the preview needs.
+    """
+    if current.number == Semester.SEM1:
+        if create:
+            semester, _ = Semester.objects.get_or_create(
+                academic_year=current.academic_year, number=Semester.SEM2,
+                defaults={'is_active': False})
+            return semester
+        return Semester.objects.filter(
+            academic_year=current.academic_year, number=Semester.SEM2).first()
+
+    next_name = current.academic_year.next_name
+    if create:
+        year, _ = AcademicYear.objects.get_or_create(name=next_name, defaults={'is_active': False})
+        _make_both_semesters(year)
+        return Semester.objects.get(academic_year=year, number=Semester.SEM1)
+    year = AcademicYear.objects.filter(name=next_name).first()
+    if year is None:
+        return None
+    return Semester.objects.filter(academic_year=year, number=Semester.SEM1).first()
+
+
 def _student_scope_for_request(request):
-    qs = Student.objects.filter(module__in=user_modules(request.user))
+    qs = Student.objects.studying().filter(module__in=user_modules(request.user))
     module_id = request.data.get('module_id') or request.query_params.get('module_id')
     class_level_id = request.data.get('class_level_id') or request.query_params.get('class_level_id')
     semester_id = request.data.get('semester_id') or request.query_params.get('semester_id')
@@ -487,6 +549,12 @@ def login_view(request):
 
         if student is None:
             error = 'Invalid credentials.'
+        elif student_portal_is_closed(student):
+            # A student who has been cleared and archived has finished with the
+            # college. Their records stay — results, payments, the statement the
+            # accountant printed — and the portal is where it stops.
+            error = ('Your studies are complete and your portal has been closed. '
+                     'The college keeps your records — contact the office if you need them.')
         else:
             request.session['student_id'] = student.id
             request.session['student_reg_no'] = student.nactvet_reg_no
@@ -495,10 +563,37 @@ def login_view(request):
     return render(request, 'login.html', {'error': error, 'identifier': identifier})
 
 
+def student_portal_is_closed(student):
+    """Whether this student has been archived out of the portal.
+
+    Read from the standing on the person, not from the enrollment, because a
+    student is archived once and has many enrollments. Anyone without a standing
+    yet is studying — everybody who was here before progression was recorded.
+    """
+    profile_id = student.profile_id
+    if profile_id is None:
+        profile = StudentProfile.objects.filter(
+            nactvet_reg_no__iexact=student.nactvet_reg_no).first()
+        profile_id = profile.id if profile else None
+    if profile_id is None:
+        return False
+    return StudentStanding.objects.filter(
+        profile_id=profile_id, status__in=StudentStanding.PORTAL_BLOCKED).exists()
+
+
 def student_login_required(view_func):
     @wraps(view_func)
     def _wrapped(request, *args, **kwargs):
-        if request.session.get('student_id'):
+        student_id = request.session.get('student_id')
+        if student_id:
+            # Checked on every page, not only at the door: a student archived
+            # while they are signed in must not keep the portal until their
+            # session happens to expire.
+            student = Student.objects.filter(id=student_id).only(
+                'id', 'profile_id', 'nactvet_reg_no').first()
+            if student is None or student_portal_is_closed(student):
+                request.session.flush()
+                return redirect('login')
             return view_func(request, *args, **kwargs)
         return redirect('login')
     return _wrapped
@@ -1219,53 +1314,101 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
     serializer_class = AcademicYearSerializer
     permission_classes = [IsAuthenticatedReadOnlyOrAdmin]
 
+    @action(detail=False, methods=['get'], url_path='advance-preview')
+    def advance_preview(self, request):
+        """What pressing Advance would do, before anybody presses it.
+
+        Advancing used to be a button that could not be explained and could not
+        be undone. This is the same work the advance does, computed and thrown
+        away: the modules that would be carried into the new semester, and what
+        would happen to each student.
+        """
+        if not can_advance_semester(request.user):
+            return Response({'detail': 'Only the Principal or the examination officer may advance the semester.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        current = active_semester()
+        if not current:
+            return Response({'detail': 'No active semester found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        plan = progression.plan_advance(current)
+        target_label = ('Semester 2 of the same year' if current.number == Semester.SEM1
+                        else f'Semester 1 of {current.academic_year.next_name}')
+        # The modules the new semester would be taught from. The new academic
+        # year does not exist until the advance creates it, so this is computed
+        # from last year's list rather than from a semester row.
+        target = _target_semester(current, create=False)
+        target_year_name = (current.academic_year.name if current.number == Semester.SEM1
+                            else current.academic_year.next_name)
+        target_number = Semester.SEM2 if current.number == Semester.SEM1 else Semester.SEM1
+        modules = progression.preview_carry(target_year_name, target_number, target)
+        source = modules['source']
+        return Response({
+            'from': current.label,
+            'to': target_label,
+            'moves': plan['moves'],
+            'blocked': plan['blocked'],
+            'can_advance': not plan['blocked'],
+            'modules': {
+                'source': source.label if source else None,
+                'to_create': modules['created'],
+                'already_there': modules['existing'],
+            },
+        })
+
     @action(detail=False, methods=['post'], url_path='advance')
     def advance(self, request):
         """
         Advance the active semester:
           Semester 1 → Semester 2 (same academic year)
           Semester 2 → Semester 1 of the next academic year
-        Staff only.
+
+        It no longer only flips the flags. Every student in the closing semester
+        must have a confirmed review first; the modules the new semester teaches
+        are carried forward from last year's list; and each student is
+        registered, enrolled, promoted, held back to repeat or left with the
+        standing that says what they come back to. Nothing is deleted.
         """
-        if not request.user.is_staff:
-            return Response({'detail': 'Staff only.'}, status=status.HTTP_403_FORBIDDEN)
+        if not can_advance_semester(request.user):
+            return Response({'detail': 'Only the Principal or the examination officer may advance the semester.'},
+                            status=status.HTTP_403_FORBIDDEN)
 
         with transaction.atomic():
             cur = Semester.objects.select_for_update().filter(is_active=True).first()
             if not cur:
                 return Response({'detail': 'No active semester found.'}, status=status.HTTP_400_BAD_REQUEST)
 
+            plan = progression.plan_advance(cur)
+            if plan['blocked']:
+                return Response({
+                    'detail': (f'{len(plan["blocked"])} student(s) in {cur.label} have no confirmed '
+                               f'review. Finish the semester review first.'),
+                    'blocked': plan['blocked'],
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             cur.is_active = False
             cur.save()
 
-            if cur.number == 1:
-                new_sem, _ = Semester.objects.get_or_create(
-                    academic_year=cur.academic_year, number=2,
-                    defaults={'is_active': True}
-                )
-                new_sem.is_active = True
-                new_sem.save()
-                new_year = cur.academic_year
-            else:
+            new_sem = _target_semester(cur, create=True)
+            new_year = new_sem.academic_year
+            if cur.number != Semester.SEM1:
                 cur.academic_year.is_active = False
                 cur.academic_year.save()
-                new_year, _ = AcademicYear.objects.get_or_create(
-                    name=cur.academic_year.next_name,
-                    defaults={'is_active': True}
-                )
                 new_year.is_active = True
                 new_year.save()
-                # Ensure both semesters exist for the new year
-                _make_both_semesters(new_year)
-                new_sem = Semester.objects.get(academic_year=new_year, number=1)
-                new_sem.is_active = True
-                new_sem.save()
+            new_sem.is_active = True
+            new_sem.save()
+
+            carried = progression.carry_modules(new_sem, actor=request.user)
+            moved = progression.apply_advance(cur, new_sem, actor=request.user)
 
         return Response({
             'detail': f'Advanced to {new_sem}',
             'year': new_year.name,
             'semester': new_sem.number,
             'label': new_sem.label,
+            'modules_carried': len(carried['created']),
+            'modules_from': carried['source'].label if carried['source'] else None,
+            'students': {key: value for key, value in moved.items() if key != 'students'},
         })
 
     @action(detail=False, methods=['get'], url_path='active')
@@ -1389,6 +1532,181 @@ class ProgrammeViewSet(viewsets.ModelViewSet):
         return Response({'linked': len(linked), 'modules': linked, 'skipped': skipped})
 
 
+# ── PROGRESSION ────────────────────────────────────────────────────────────────
+
+class ReviewsProgression(BasePermission):
+    """Read for the desk that reviews and for any admin watching; only the
+    reviewing desk decides.
+
+    The records officer is not `is_staff` — they hold their own profile — so
+    reading cannot be gated on admin rights alone, or the office the screen was
+    built for is the one office locked out of it.
+    """
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return can_review_progression(request.user) or can_read_exams(request.user)
+        return can_review_progression(request.user)
+
+
+class SemesterReviewViewSet(viewsets.ReadOnlyModelViewSet):
+    """The semester review: what each student's results mean, and the officer's
+    decision on it.
+
+    Read-only as a resource — a review is never edited field by field. It is
+    built from the results, and then confirmed, which is what makes it real.
+    """
+    serializer_class = SemesterReviewSerializer
+    permission_classes = [ReviewsProgression]
+
+    def get_queryset(self):
+        qs = (SemesterReview.objects
+              .select_related('profile', 'semester__academic_year', 'programme', 'class_level',
+                              'confirmed_by')
+              .prefetch_related('profile__outstanding_repeats', 'profile__standing'))
+        # A student taken off a semester — they failed the supplementary for the
+        # one before it — is not somebody the office has to decide on for that
+        # semester. The review built before they stopped stays in the record;
+        # it is just not put in front of anyone to confirm.
+        qs = qs.exclude(Exists(SemesterRegistration.objects.filter(
+            profile=OuterRef('profile'), semester=OuterRef('semester'),
+            status=SemesterRegistration.CANCELLED)))
+        params = self.request.query_params
+        semester_id = params.get('semester_id')
+        if semester_id:
+            qs = qs.filter(semester_id=semester_id)
+        elif params.get('active') == '1':
+            current = active_semester()
+            qs = qs.filter(semester=current) if current else qs.none()
+        for param, field in [('programme_id', 'programme_id'),
+                             ('class_level_id', 'class_level_id'),
+                             ('outcome', 'proposed')]:
+            value = params.get(param)
+            if value:
+                qs = qs.filter(**{field: value})
+        if params.get('unconfirmed') == '1':
+            qs = qs.filter(confirmed='')
+        return qs
+
+    @action(detail=False, methods=['post'], url_path='build')
+    def build(self, request):
+        """Work out where every student in the semester stands, from the results
+        as they are now. Re-run whenever more results come in; a decision that
+        has already been confirmed is never recalculated."""
+        semester = _semester_from_request(request)
+        if semester is None:
+            return Response({'detail': 'No semester given and none is active.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        reviews = progression.build_reviews(semester, actor=request.user)
+        counts = {}
+        for review in reviews:
+            counts[review.outcome] = counts.get(review.outcome, 0) + 1
+        return Response({
+            'semester': semester.label,
+            'reviewed': len(reviews),
+            'counts': counts,
+            'unconfirmed': sum(1 for review in reviews if not review.is_confirmed),
+        })
+
+    @action(detail=True, methods=['post'], url_path='confirm')
+    def confirm(self, request, pk=None):
+        """The officer's decision on one student.
+
+        Confirming is what acts: repeats are raised and held against the
+        student, a discontinued student's standing is set with the semester they
+        return to, and a student who failed semester 1 after the supplementary
+        is taken off semester 2.
+        """
+        review = self.get_object()
+        outcome = str(request.data.get('outcome') or review.proposed).strip()
+        reason = str(request.data.get('reason') or '').strip()
+        if outcome != review.proposed and not reason:
+            return Response(
+                {'detail': 'Overruling the results needs a reason — it is what the record will show.'},
+                status=status.HTTP_400_BAD_REQUEST)
+        try:
+            progression.confirm_review(review, outcome, actor=request.user, reason=reason)
+        except progression.ProgressionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        deferred = getattr(review, 'deferred', [])
+        review.refresh_from_db()
+        data = SemesterReviewSerializer(review).data
+        # Taking somebody off a semester they were already attending is not
+        # something the officer should have to discover for themselves.
+        data['deferred'] = deferred
+        return Response(data)
+
+    @action(detail=False, methods=['post'], url_path='confirm-proposed')
+    def confirm_proposed(self, request):
+        """Accept the results for everyone the system is sure about.
+
+        Only students whose outcome is not in doubt — a pending student is left
+        for the officer, because "we are still waiting for their marks" is not a
+        decision anybody can take in bulk.
+        """
+        semester = _semester_from_request(request)
+        if semester is None:
+            return Response({'detail': 'No semester given and none is active.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        pending = self.get_queryset().filter(semester=semester, confirmed='')
+        confirmed, left = 0, 0
+        for review in pending:
+            if review.proposed == SemesterReview.PENDING:
+                left += 1
+                continue
+            progression.confirm_review(review, review.proposed, actor=request.user)
+            confirmed += 1
+        return Response({'confirmed': confirmed, 'left_for_you': left,
+                         'detail': f'Confirmed {confirmed} student(s). {left} still waiting on results.'})
+
+
+class StudentStandingViewSet(viewsets.ReadOnlyModelViewSet):
+    """Where every student stands: studying, repeating, postponed, discontinued,
+    finished or archived — and what the ones who are away come back to."""
+    serializer_class = StudentStandingSerializer
+    permission_classes = [ReviewsProgression]
+
+    def get_queryset(self):
+        qs = (StudentStanding.objects
+              .select_related('profile', 'programme', 'class_level', 'return_year')
+              .prefetch_related('profile__outstanding_repeats'))
+        params = self.request.query_params
+        status_param = params.get('status')
+        if status_param:
+            qs = qs.filter(status__in=[value for value in status_param.split(',') if value])
+        if params.get('due_back') == '1':
+            qs = qs.filter(status__in=sorted(StudentStanding.AWAY))
+        search = (params.get('search') or '').strip()
+        if search:
+            qs = qs.filter(Q(profile__name__icontains=search)
+                           | Q(profile__nactvet_reg_no__icontains=search)
+                           | Q(profile__college_id__icontains=search))
+        return qs
+
+
+class OutstandingRepeatViewSet(viewsets.ReadOnlyModelViewSet):
+    """The modules students still have to pass, and the year each was failed in."""
+    serializer_class = OutstandingRepeatSerializer
+    permission_classes = [ReviewsProgression]
+
+    def get_queryset(self):
+        qs = OutstandingRepeat.objects.select_related(
+            'profile', 'class_level', 'origin_semester__academic_year')
+        params = self.request.query_params
+        qs = qs.filter(status=params.get('status') or OutstandingRepeat.OPEN)
+        profile_id = params.get('profile_id')
+        if profile_id:
+            qs = qs.filter(profile_id=profile_id)
+        return qs
+
+
+def _semester_from_request(request):
+    semester_id = request.data.get('semester_id') or request.query_params.get('semester_id')
+    if semester_id:
+        return Semester.objects.filter(id=semester_id).first()
+    return active_semester()
+
+
 # ── ANNOUNCEMENTS ──────────────────────────────────────────────────────────────
 
 class AnnouncementViewSet(viewsets.ModelViewSet):
@@ -1423,6 +1741,10 @@ class ModuleViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Only the administrator can create modules.')
         module = serializer.save()
         module.teachers.add(self.request.user)
+        # Registration and the module list are built in either order. A module
+        # added after the class was registered enrolls them now, so neither
+        # order leaves a class registered for modules they are not in.
+        progression.enroll_module(module, actor=self.request.user)
 
     def update(self, request, *args, **kwargs):
         if not request.user.is_staff:
@@ -1433,6 +1755,21 @@ class ModuleViewSet(viewsets.ModelViewSet):
         if not request.user.is_staff:
             raise PermissionDenied('Only the administrator can delete modules.')
         m = self.get_object()
+        # Deleting a module takes its enrollments, attendance and marks with it
+        # — the cascade is silent and there is no undo. A module anybody has
+        # been marked in is part of the record from then on.
+        marked = StudentResult.objects.filter(student__module=m).count()
+        if marked:
+            return Response({
+                'detail': (f'"{m.name}" has results for {marked} student(s). A module with marks '
+                           f'cannot be deleted — deleting it would delete their results too.'),
+            }, status=status.HTTP_400_BAD_REQUEST)
+        enrolled = m.students.count()
+        if enrolled:
+            return Response({
+                'detail': (f'"{m.name}" has {enrolled} student(s) enrolled. Remove them first if '
+                           f'the module really is not being taught.'),
+            }, status=status.HTTP_400_BAD_REQUEST)
         name = m.name
         m.delete()
         return Response({'detail': f'Module "{name}" deleted.'}, status=status.HTTP_200_OK)
@@ -1469,11 +1806,17 @@ class StudentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        # The class as it stands. A student who stopped part-way through —
+        # a failed supplementary for the semester before, a postponement — is
+        # off it, and `include_withdrawn=1` is how the office looks at who that
+        # was without their marks having gone anywhere.
         qs = Student.objects.filter(
             module__in=user_modules(self.request.user)
         ).select_related('module__class_level', 'module__semester__academic_year').prefetch_related(
             'attendance_records', 'module__sessions'
         )
+        if self.request.query_params.get('include_withdrawn') != '1':
+            qs = qs.studying()
 
         for param, field in [
             ('module_id', 'module_id'),
@@ -1692,7 +2035,7 @@ def dashboard(request):
     # Count distinct students per class level (by registration number) and sum
     # those per-class totals for an overall student count. This prevents
     # double-counting when modules in the same class have different student lists.
-    students_qs = Student.objects.filter(module__in=my_modules)
+    students_qs = Student.objects.studying().filter(module__in=my_modules)
     per_class = (
         students_qs
         .values('module__class_level_id')
@@ -1702,7 +2045,7 @@ def dashboard(request):
     sessions_today = Session.objects.filter(module__in=my_modules, date=today).count()
 
     all_students = (
-        Student.objects.filter(module__in=my_modules)
+        Student.objects.studying().filter(module__in=my_modules)
         .prefetch_related('attendance_records').select_related('module')
     )
 
@@ -1754,7 +2097,7 @@ def dashboard(request):
             continue
         # Distinct students in this class level by registration number
         lvl_students_count = (
-            Student.objects.filter(module__in=lvl_mods)
+            Student.objects.studying().filter(module__in=lvl_mods)
             .values('nactvet_reg_no')
             .distinct()
             .count()
@@ -2483,7 +2826,7 @@ def report(request):
     semester_id = request.query_params.get('semester_id')
 
     students = (
-        Student.objects.filter(module__in=my_modules)
+        Student.objects.studying().filter(module__in=my_modules)
         .select_related('module__class_level', 'module__semester__academic_year')
         .prefetch_related('attendance_records__session')
     )
@@ -2763,7 +3106,7 @@ def eligibility(request):
     semester_id = request.query_params.get('semester_id')
 
     students = (
-        Student.objects.filter(module__in=my_modules)
+        Student.objects.studying().filter(module__in=my_modules)
         .select_related('module__class_level', 'module__semester__academic_year')
         .prefetch_related('attendance_records__session')
         .select_related('result', 'profile')
@@ -3125,7 +3468,7 @@ class ResultViewSet(viewsets.ModelViewSet):
         if module.id not in mod_ids:
             raise PermissionDenied('You do not tutor this module.')
 
-        students = Student.objects.filter(module=module).order_by('name')
+        students = Student.objects.studying().filter(module=module).order_by('name')
         with transaction.atomic():
             results = [StudentResult.objects.get_or_create(student=st)[0] for st in students]
 
@@ -3476,7 +3819,7 @@ def download_ca_signoff(request):
         return HttpResponseForbidden('You do not have access to this module.')
 
     students = list(
-        Student.objects.filter(module=module)
+        Student.objects.studying().filter(module=module)
         .select_related('result')
         .order_by('name', 'nactvet_reg_no')
     )
@@ -3727,7 +4070,7 @@ def download_field_results(request):
         return HttpResponseForbidden('Select a valid field results module.')
 
     students = (
-        Student.objects.filter(module=module)
+        Student.objects.studying().filter(module=module)
         .select_related('result')
         .order_by('name', 'nactvet_reg_no')
     )
@@ -3974,7 +4317,7 @@ def download_eligibility_excel(request):
 
     my_modules = user_modules(request.user)
     students = (
-        Student.objects.filter(module__in=my_modules)
+        Student.objects.studying().filter(module__in=my_modules)
         .select_related('module__class_level', 'module__semester__academic_year', 'result')
         .prefetch_related('attendance_records__session')
         .order_by('module__class_level__order', 'module__name', 'name')
@@ -4193,7 +4536,7 @@ def download_final_eligibility_excel(request):
     modules = list(modules)
 
     enrollments = list(
-        Student.objects.filter(module__in=modules)
+        Student.objects.studying().filter(module__in=modules)
         .select_related('module', 'result')
         .prefetch_related('attendance_records__session')
         .order_by('name', 'nactvet_reg_no', 'module__code')
