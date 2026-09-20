@@ -765,7 +765,7 @@
     <button class="nav-btn admin-only" data-page="accounts" onclick="showPage('accounts',this)"><span class="icon"><i class="bi bi-people"></i></span> User Accounts</button>
     <button class="nav-btn admin-only" data-page="departments" onclick="showPage('departments',this); loadDepartments()"><span class="icon"><i class="bi bi-diagram-3"></i></span> Departments</button>
     <button class="nav-btn records-only admin-only account-manager-only" data-page="student-records" onclick="showPage('student-records',this)"><span class="icon"><i class="bi bi-person-vcard"></i></span> Student Records</button>
-    <button class="nav-btn records-only admin-only" data-page="progression" onclick="showPage('progression',this); loadProgression()"><span class="icon"><i class="bi bi-arrow-up-right-circle"></i></span> Semester Review</button>
+    <button class="nav-btn admin-only" data-page="progression" onclick="showPage('progression',this); loadProgression()"><span class="icon"><i class="bi bi-arrow-up-right-circle"></i></span> Semester Review</button>
     <div class="aside-label estate-only">Inventory</div>
     <button class="nav-btn estate-only inventory-nav-btn active" title="Overview" data-page="inventory" data-inventory-section="overview" onclick="showInventorySection('overview',this)"><span class="icon"><i class="bi bi-grid-1x2"></i></span> Overview</button>
     <div class="nav-group estate-only" id="inventory-assets-nav-group">
@@ -1006,11 +1006,11 @@
       <div class="card">
         <div class="card-title">The semester being closed</div>
         <div class="form-grid-3" style="margin-bottom:12px;">
-          <div class="field"><label>Semester</label><select id="rev-semester" onchange="loadReviews()"></select></div>
+          <div class="field"><label>Semester</label><select id="rev-semester" onchange="loadProgression()"></select></div>
           <div class="field"><label>Show</label>
-            <select id="rev-filter" onchange="renderReviews()">
+            <select id="rev-filter" onchange="loadReviews(1)">
+              <option value="unconfirmed">Still to confirm</option>
               <option value="">Everyone</option>
-              <option value="unconfirmed">Not yet confirmed</option>
               <option value="pending">Waiting for results</option>
               <option value="repeat">Repeating</option>
               <option value="discontinued">Discontinued</option>
@@ -1018,11 +1018,17 @@
               <option value="completed">Finished</option>
             </select>
           </div>
+          <div class="field"><label>Find a student</label>
+            <input id="rev-search" placeholder="Name, registration or college ID" oninput="scheduleReviewSearch()">
+          </div>
         </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-sm" onclick="buildReviews()"><i class="bi bi-arrow-repeat"></i> Read the results again</button>
-          <button class="btn btn-primary btn-sm" onclick="confirmProposed()"><i class="bi bi-check2-all"></i> Confirm everyone not in doubt</button>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;" id="rev-actions">
+          <button class="btn btn-secondary btn-sm" onclick="buildReviews(event)"><i class="bi bi-arrow-repeat"></i> Read the results again</button>
+          <button class="btn btn-primary btn-sm" onclick="confirmProposed(event)"><i class="bi bi-check2-all"></i> Confirm everyone not in doubt</button>
         </div>
+        <p class="help-note" id="rev-readonly" style="display:none;">
+          You are reading this. The Principal and the examination officer decide it.
+        </p>
         <p class="help-note" style="margin-top:12px;">
           Semester 1 supplementaries are marked well into semester 2, so a student waiting for one stays
           <strong>waiting for results</strong> and carries on paying as normal. Confirm them as
@@ -1034,12 +1040,27 @@
       </div>
 
       <div class="card">
-        <div class="card-title">Students</div>
+        <div class="card-title">By class <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— where the work that is left actually is</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Level</th><th>Students</th><th>Confirmed</th><th>Waiting on results</th><th>Left to confirm</th></tr></thead>
+            <tbody id="rev-levels-tbody"><tr><td colspan="5"><div class="empty"><div class="ei"><i class="bi bi-bar-chart"></i></div>Pick a semester</div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Students <span id="rev-range" style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;"></span></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Reg. No.</th><th>Name</th><th>Level</th><th>GPA</th><th>Modules</th><th>The results say</th><th>Confirmed</th><th></th></tr></thead>
             <tbody id="rev-tbody"><tr><td colspan="8"><div class="empty"><div class="ei"><i class="bi bi-list-check"></i></div>Pick a semester</div></td></tr></tbody>
           </table>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:12px;">
+          <button class="btn btn-ghost btn-sm" id="rev-prev" onclick="loadReviews(state.reviewPage - 1)">← Previous</button>
+          <button class="btn btn-ghost btn-sm" id="rev-next" onclick="loadReviews(state.reviewPage + 1)">Next →</button>
+          <span id="rev-page" style="font-size:.78rem;color:var(--muted);"></span>
         </div>
       </div>
 
@@ -3170,6 +3191,7 @@ async function boot() {
     }
     state.isRecordsOffice = !!(dash.is_records_officer || dash.is_admission_officer);
     state.canEditStudentRecords = !!dash.can_edit_student_records;
+    state.canReviewProgression = !!dash.can_review_progression;
     if (state.isRecordsOffice && !state.isStaff) {
       document.body.classList.add('is-records');
       document.getElementById('role-badge').textContent =
@@ -8146,6 +8168,8 @@ function outcomeBadge(outcome) {
 }
 
 async function loadProgression() {
+  document.getElementById('rev-actions').style.display = state.canReviewProgression ? '' : 'none';
+  document.getElementById('rev-readonly').style.display = state.canReviewProgression ? 'none' : '';
   const select = document.getElementById('rev-semester');
   const semesters = state.semesters || [];
   if (!select.options.length && semesters.length) {
@@ -8153,16 +8177,61 @@ async function loadProgression() {
     const active = semesters.find(sem => sem.is_active);
     if (active) select.value = active.id;
   }
-  await loadReviews();
+  await loadReviewSummary();
+  await loadReviews(1);
   await loadStandings();
 }
 
-async function loadReviews() {
+// The headline and the per-class breakdown come from the server, counted over
+// every student in the semester — not from whichever page happens to be open.
+async function loadReviewSummary() {
   const semesterId = document.getElementById('rev-semester').value;
   if (!semesterId) return;
   try {
-    const rows = await api('GET', `/semester-reviews/?semester_id=${semesterId}`);
-    state.reviews = rows.results ?? rows;
+    const summary = await api('GET', `/semester-reviews/summary/?semester_id=${semesterId}`);
+    state.reviewSummary = summary;
+    document.getElementById('rev-counts').innerHTML =
+      `<div class="qf-item"><span>Students</span><strong>${summary.total}</strong></div>` +
+      `<div class="qf-item"><span>Confirmed</span><strong>${summary.confirmed}</strong></div>` +
+      `<div class="qf-item"><span>Ready to confirm</span><strong>${summary.ready_to_confirm}</strong></div>` +
+      `<div class="qf-item"><span>Waiting on results</span><strong>${summary.waiting_on_results}</strong></div>` +
+      Object.entries(summary.outcomes || {}).map(([outcome, total]) =>
+        `<div class="qf-item"><span>${safeText(REVIEW_LABELS[outcome] || outcome)}</span><strong>${total}</strong></div>`).join('');
+
+    const tbody = document.getElementById('rev-levels-tbody');
+    const levels = summary.levels || [];
+    tbody.innerHTML = levels.length ? levels.map(level => `<tr>
+        <td>${safeText(level.name)}</td>
+        <td>${level.total}</td>
+        <td>${level.confirmed}</td>
+        <td>${level.waiting}</td>
+        <td><strong>${level.total - level.confirmed - level.waiting}</strong></td>
+      </tr>`).join('')
+      : '<tr><td colspan="5"><div class="empty"><div class="ei"><i class="bi bi-bar-chart"></i></div>Nothing read yet — press "Read the results again"</div></td></tr>';
+  } catch (e) { /* the list below still works */ }
+}
+
+let reviewSearchTimer;
+function scheduleReviewSearch() {
+  clearTimeout(reviewSearchTimer);
+  reviewSearchTimer = setTimeout(() => loadReviews(1), 250);
+}
+
+async function loadReviews(page = 1) {
+  const semesterId = document.getElementById('rev-semester').value;
+  if (!semesterId) return;
+  const filter = document.getElementById('rev-filter').value;
+  const search = document.getElementById('rev-search').value.trim();
+  let url = `/semester-reviews/?semester_id=${semesterId}&page=${Math.max(1, page)}`;
+  if (filter === 'unconfirmed') url += '&unconfirmed=1';
+  else if (filter) url += `&outcome=${encodeURIComponent(filter)}`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+  try {
+    const data = await api('GET', url);
+    state.reviews = data.results ?? data;
+    state.reviewPage = Math.max(1, page);
+    state.reviewCount = data.count ?? state.reviews.length;
+    state.reviewHasNext = !!data.next;
     renderReviews();
   } catch (e) {
     toast(apiErrorText(e, 'Could not load the review'), 'var(--red)');
@@ -8170,22 +8239,16 @@ async function loadReviews() {
 }
 
 function renderReviews() {
-  const rows = state.reviews || [];
-  const filter = document.getElementById('rev-filter').value;
-  const shown = rows.filter(row => {
-    if (!filter) return true;
-    if (filter === 'unconfirmed') return !row.confirmed;
-    return row.outcome === filter;
-  });
-
-  const counts = {};
-  rows.forEach(row => { counts[row.outcome] = (counts[row.outcome] || 0) + 1; });
-  const unconfirmed = rows.filter(row => !row.confirmed).length;
-  document.getElementById('rev-counts').innerHTML =
-    `<div class="qf-item"><span>Students</span><strong>${rows.length}</strong></div>` +
-    `<div class="qf-item"><span>Still to confirm</span><strong>${unconfirmed}</strong></div>` +
-    Object.entries(counts).map(([outcome, total]) =>
-      `<div class="qf-item"><span>${safeText(REVIEW_LABELS[outcome] || outcome)}</span><strong>${total}</strong></div>`).join('');
+  const shown = state.reviews || [];
+  const page = state.reviewPage || 1;
+  const total = state.reviewCount ?? shown.length;
+  const first = total ? (page - 1) * 50 + 1 : 0;
+  const last = (page - 1) * 50 + shown.length;
+  document.getElementById('rev-range').textContent =
+    total ? `showing ${first}–${last} of ${total}` : '';
+  document.getElementById('rev-page').textContent = total ? `Page ${page}` : '';
+  document.getElementById('rev-prev').disabled = page <= 1;
+  document.getElementById('rev-next').disabled = !state.reviewHasNext;
 
   const tbody = document.getElementById('rev-tbody');
   if (!shown.length) {
@@ -8205,7 +8268,9 @@ function renderReviews() {
     const confirmed = row.confirmed
       ? `${outcomeBadge(row.confirmed)}<div style="font-size:.68rem;color:var(--muted);">${safeText(row.confirmed_by_name || '')}${row.confirmed_reason ? ' — ' + safeText(row.confirmed_reason) : ''}</div>`
       : '<span style="color:var(--muted);font-size:.75rem;">—</span>';
-    const actions = row.confirmed
+    const actions = !state.canReviewProgression
+      ? ''
+      : row.confirmed
       ? `<button class="btn btn-ghost btn-sm" onclick="openReviewModal(${row.id})">Change</button>`
       : `<button class="btn btn-primary btn-sm" onclick="confirmReview(${row.id})"${row.proposed === 'pending' ? ' disabled title="Nothing to confirm while the results are outstanding"' : ''}>Confirm</button>
          <button class="btn btn-ghost btn-sm" onclick="openReviewModal(${row.id})">Decide…</button>`;
@@ -8222,28 +8287,42 @@ function renderReviews() {
   }).join('');
 }
 
-async function buildReviews() {
+function working(button, label) {
+  if (!button) return () => {};
+  const was = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = label;
+  return () => { button.disabled = false; button.innerHTML = was; };
+}
+
+async function buildReviews(event) {
   const semesterId = document.getElementById('rev-semester').value;
+  const done = working(event?.currentTarget || document.querySelector('#rev-actions .btn-secondary'),
+                       'Reading the results…');
   try {
     const result = await api('POST', '/semester-reviews/build/', { semester_id: semesterId });
     toast(`${result.reviewed} student(s) read — ${result.unconfirmed} still to confirm`, 'var(--green)');
-    await loadReviews();
+    await loadReviewSummary();
+    await loadReviews(1);
   } catch (e) {
     toast(apiErrorText(e, 'Could not read the results'), 'var(--red)');
-  }
+  } finally { done(); }
 }
 
-async function confirmProposed() {
+async function confirmProposed(event) {
   const semesterId = document.getElementById('rev-semester').value;
   if (!confirm('Confirm every student whose outcome is not in doubt? Students still waiting for results are left for you.')) return;
+  const done = working(event?.currentTarget || document.querySelector('#rev-actions .btn-primary'),
+                       'Confirming the year group…');
   try {
     const result = await api('POST', '/semester-reviews/confirm-proposed/', { semester_id: semesterId });
     toast(result.detail, 'var(--green)');
-    await loadReviews();
+    await loadReviewSummary();
+    await loadReviews(1);
     await loadStandings();
   } catch (e) {
     toast(apiErrorText(e, 'Could not confirm'), 'var(--red)');
-  }
+  } finally { done(); }
 }
 
 async function confirmReview(id, outcome, reason) {
@@ -8253,7 +8332,8 @@ async function confirmReview(id, outcome, reason) {
     toast(deferred.length
       ? `Confirmed — taken off ${deferred.join(', ')} until the module is passed`
       : 'Confirmed', 'var(--green)');
-    await loadReviews();
+    await loadReviewSummary();
+    await loadReviews(state.reviewPage || 1);
     await loadStandings();
     return true;
   } catch (e) {
@@ -8339,10 +8419,17 @@ async function advanceSemester() {
              `${safeText(row.reg_no)} — ${safeText(row.name)} (${safeText(row.reason)})`).join('<br>')}</div>
          </div>`
       : '';
-    const moves = (plan.moves || []).map(move =>
+    // A year group is hundreds of students. The counts above are the thing to
+    // read; the list is a sample to sanity-check them against, not a document.
+    const SHOWN = 25;
+    const all = plan.moves || [];
+    const moves = all.slice(0, SHOWN).map(move =>
       `<tr><td>${safeText(move.reg_no)}</td><td>${safeText(move.name)}</td>
         <td>${safeText(REVIEW_LABELS[move.outcome] || move.outcome)}</td>
-        <td>${safeText(move.detail || '')}</td></tr>`).join('');
+        <td>${safeText(move.detail || '')}</td></tr>`).join('')
+      + (all.length > SHOWN
+         ? `<tr><td colspan="4" style="color:var(--muted);">…and ${all.length - SHOWN} more, counted above</td></tr>`
+         : '');
     const carried = (plan.modules?.to_create || []).length;
     body.innerHTML = `
       <p style="font-size:.85rem;margin-bottom:10px;">
@@ -8370,7 +8457,7 @@ function closeAdvanceModal() { document.getElementById('advance-modal').classLis
 
 async function doAdvance() {
   const go = document.getElementById('advance-go');
-  go.disabled = true;
+  const done = working(go, 'Advancing the college…');
   try {
     const result = await api('POST', '/academic-years/advance/');
     const moved = result.students || {};
@@ -8385,8 +8472,7 @@ async function doAdvance() {
     closeAdvanceModal();
   } catch (e) {
     toast(apiErrorText(e, 'Could not advance'), 'var(--red)');
-    go.disabled = false;
-  }
+  } finally { done(); }
 }
 
 // ── INVENTORY ─────────────────────────────────────────────────────────────────

@@ -1150,8 +1150,9 @@ class StandingChange(models.Model):
 class SemesterReview(models.Model):
     """What one semester's results mean for one student.
 
-    The system proposes; the records officer confirms. Both are kept, so an
-    override always shows what the results said before somebody overruled them.
+    The system proposes; the examination officer or the Principal confirms.
+    Both are kept, so an override always shows what the results said before
+    somebody overruled them.
     Nothing here is read until a human has confirmed it — the semester cannot be
     advanced while any student is still unconfirmed.
     """

@@ -294,6 +294,26 @@
   .panel {
     border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
   }
+  /* One statement per semester: the semester's name, its modules, and the one
+     line that says where the student stands in it. */
+  .result-statement { margin-bottom: 18px; }
+  .result-statement + .result-statement { margin-top: 0; }
+  .statement-title {
+    margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line);
+    font-size: 1rem; font-weight: 600;
+  }
+  /* The summary is three lines of detail, not a second results table. It sits
+     inset and only as wide as what it says, so its rules never line up with
+     the columns above and the two are never read as one table. */
+  .statement-summary { padding: 12px 16px; border-top: 1px solid var(--line); }
+  .statement-summary table { width: auto; min-width: 0; }
+  .statement-summary th, .statement-summary td {
+    padding: 4px 12px; font-size: .78rem;
+  }
+  .statement-summary th {
+    width: auto; color: var(--muted); font-weight: 600; white-space: nowrap;
+  }
+  .statement-summary tbody tr:hover td { background: transparent; }
   /* A row action is a thing you click, not a state you read. These used to
      borrow the green "pass" badge, so View and Download looked like a status
      and nobody could tell they were links. */
@@ -695,10 +715,35 @@
           <p class="eyebrow">Academic results</p><h2>End of Semester</h2>
           <p>Every semester result the college has published, for {{ academic_year }}.</p>
         </div>
-        {% if has_final_results %}
-        <section class="panel"><p style="padding:14px 16px;"><strong>GPA:</strong> {{ gpa|default_if_none:"Incomplete" }} · {{ gpa_classification }}</p><div class="table-wrap"><table><thead><tr><th>Semester</th><th>Module</th><th>Credits</th><th>CA /40</th><th>ESE /60</th><th>Final /100</th><th>Grade</th><th>Status</th></tr></thead><tbody>
-          {% for module in modules %}{% if module.has_final_result %}<tr><td>Semester {{ module.semester_number }}</td><td><strong>{{ module.module_code }}</strong> · {{ module.module_name }}</td><td>{{ module.credits }}</td><td>{{ module.result.total_ca|default_if_none:"—" }}</td><td><strong>{{ module.result.end_exam_total|default_if_none:"—" }}</strong><div class="meta">Raw: T {{ module.result.end_theory|default_if_none:"—" }}{% if module.result.has_practical %} · P {{ module.result.end_practical|default_if_none:"—" }}{% endif %}</div></td><td><strong>{{ module.result.final_total|default_if_none:"—" }}</strong></td><td>{{ module.result.grade|default_if_none:"—" }}</td><td><span class="status {% if module.result.result_status == 'PASS' %}pass{% elif module.result.result_status == 'SUPP' %}pending{% else %}fail{% endif %}">{{ module.result.result_status }}</span></td></tr>{% endif %}{% endfor %}
-        </tbody></table></div></section>
+        {% if result_statements %}
+        {% for statement in result_statements %}
+        <section class="panel result-statement">
+          <h3 class="statement-title">{{ statement.label }}</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Module</th><th>Grade</th><th>Status</th></tr></thead>
+              <tbody>
+                {% for row in statement.modules %}
+                <tr>
+                  <td><strong>{{ row.code }}</strong> · {{ row.name }}</td>
+                  <td><strong>{{ row.grade }}</strong></td>
+                  <td><span class="status {% if row.status == 'PASS' %}pass{% elif row.status == 'SUPP' %}pending{% else %}fail{% endif %}">{{ row.status }}</span></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="statement-summary">
+            <table>
+              <tbody>
+                <tr><th scope="row">GPA</th><td><strong>{{ statement.gpa|default_if_none:"—" }}</strong></td></tr>
+                <tr><th scope="row">Remarks</th><td>{{ statement.remark }}</td></tr>
+                <tr><th scope="row">Comment</th><td>{{ statement.comment }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        {% endfor %}
         {% else %}<div class="empty">No end-of-semester results have been published yet.</div>{% endif %}
       </section>
 

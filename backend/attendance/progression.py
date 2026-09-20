@@ -19,8 +19,8 @@ The rules the college gave, in the order they are applied:
     in semester 2 for a semester 1 module is marked weeks into the new
     semester, so an unsettled module makes the semester **pending**: the
     student carries on and is billed as normal, and the decision waits for the
-    marks. The records officer may confirm them as **provisional** to let the
-    advance proceed.
+    marks. The examination officer may confirm them as **provisional** to let
+    the advance proceed.
   * GPA below 2.0 discontinues the student. They return by readmission, into
     the exact semester they failed, and are billed as a new student.
   * GPA of 2.0 or better with a module failed after its supplementary means the
@@ -95,6 +95,43 @@ def enrollments_for(profile, semester):
     )
 
 
+def enrollments_by_profile(semester):
+    """Every enrollment in the semester, grouped by the person.
+
+    One query instead of one per student. At 500 students each sitting six
+    modules, the difference between this and asking per student is thousands of
+    round trips on a shared server.
+    """
+    by_profile, by_reg_no = {}, {}
+    rows = (Student.objects.filter(module__semester=semester)
+            .select_related('module__class_level', 'module__programme', 'result')
+            .order_by('module__code'))
+    for row in rows:
+        if row.profile_id:
+            by_profile.setdefault(row.profile_id, []).append(row)
+        else:
+            by_reg_no.setdefault(row.nactvet_reg_no.upper(), []).append(row)
+    return by_profile, by_reg_no
+
+
+def repeats_by_profile(profiles=None):
+    """Open repeats grouped by the person, in one query."""
+    rows = OutstandingRepeat.objects.filter(
+        status=OutstandingRepeat.OPEN).select_related('class_level', 'origin_semester')
+    if profiles is not None:
+        rows = rows.filter(profile__in=profiles)
+    grouped = {}
+    for repeat in rows:
+        grouped.setdefault(repeat.profile_id, []).append(repeat)
+    return grouped
+
+
+def standings_by_profile(profiles):
+    return {standing.profile_id: standing for standing in
+            StudentStanding.objects.filter(profile__in=profiles)
+            .select_related('programme', 'class_level', 'return_year')}
+
+
 def module_row(enrollment, serializer=None):
     """One module's outcome, as the review stores and shows it."""
     from .grading import result_outcome
@@ -132,14 +169,20 @@ def module_row(enrollment, serializer=None):
     return row
 
 
-def evaluate(profile, semester, *, registration=None):
+def evaluate(profile, semester, *, registration=None, enrollments=None,
+             repeats=None, serializer=None):
     """What this semester's results say about this student.
 
     Returns the GPA, a row per module, the proposed outcome and the reason for
-    it. Proposes only — the records officer confirms, and may overrule.
+    it. Proposes only — the examination officer or the Principal confirms, and
+    may overrule.
+
+    `enrollments`, `repeats` and `serializer` are for callers working through a
+    whole semester at once, which load them once for everybody.
     """
-    serializer = _result_serializer()
-    enrollments = list(enrollments_for(profile, semester))
+    serializer = serializer or _result_serializer()
+    if enrollments is None:
+        enrollments = list(enrollments_for(profile, semester))
     rows = [module_row(enrollment, serializer) for enrollment in enrollments]
 
     graded = [(row['points'], row['credits']) for row in rows if row['points'] is not None]
@@ -181,7 +224,8 @@ def evaluate(profile, semester, *, registration=None):
     # is left outstanding — including a module failed in an earlier year.
     if (proposed == SemesterReview.CLEAR and semester.number == Semester.SEM2
             and class_level is not None and is_level_six(class_level)):
-        left = [repeat.module_code for repeat in open_repeats(profile)
+        outstanding = open_repeats(profile) if repeats is None else repeats
+        left = [repeat.module_code for repeat in outstanding
                 if repeat.origin_semester_id != semester.id]
         if left:
             proposed = SemesterReview.REPEAT
@@ -248,36 +292,55 @@ def build_reviews(semester, *, actor=None):
     since: a review nobody has confirmed is recalculated, and a confirmed one is
     left exactly as it was confirmed.
     """
-    reviews = []
-    for profile, registration in students_of(semester):
-        outcome = evaluate(profile, semester, registration=registration)
-        review, created = SemesterReview.objects.get_or_create(
-            profile=profile, semester=semester,
-            defaults={
-                'programme': outcome['programme'],
-                'class_level': outcome['class_level'],
-                'gpa': outcome['gpa'],
-                'modules': outcome['modules'],
-                'proposed': outcome['proposed'],
-                'proposed_reason': outcome['reason'][:300],
-            },
+    people = students_of(semester)
+    profiles = [profile for profile, _ in people]
+    by_profile, by_reg_no = enrollments_by_profile(semester)
+    repeats = repeats_by_profile(profiles)
+    existing = {review.profile_id: review for review in
+                SemesterReview.objects.filter(semester=semester, profile__in=profiles)}
+    serializer = _result_serializer()
+
+    made, changed = [], []
+    for profile, registration in people:
+        outcome = evaluate(
+            profile, semester, registration=registration, serializer=serializer,
+            enrollments=(by_profile.get(profile.id)
+                         or by_reg_no.get(profile.nactvet_reg_no.upper(), [])),
+            repeats=repeats.get(profile.id, []),
         )
-        if not created and not review.is_confirmed:
+        review = existing.get(profile.id)
+        if review is None:
+            made.append(SemesterReview(
+                profile=profile, semester=semester,
+                programme=outcome['programme'], class_level=outcome['class_level'],
+                gpa=outcome['gpa'], modules=outcome['modules'],
+                proposed=outcome['proposed'], proposed_reason=outcome['reason'][:300],
+            ))
+        elif not review.is_confirmed:
             review.programme = outcome['programme']
             review.class_level = outcome['class_level']
             review.gpa = outcome['gpa']
             review.modules = outcome['modules']
             review.proposed = outcome['proposed']
             review.proposed_reason = outcome['reason'][:300]
-            review.save(update_fields=['programme', 'class_level', 'gpa', 'modules',
-                                       'proposed', 'proposed_reason', 'updated_at'])
-        reviews.append(review)
+            changed.append(review)
+
+    if made:
+        SemesterReview.objects.bulk_create(made)
+    if changed:
+        SemesterReview.objects.bulk_update(
+            changed, ['programme', 'class_level', 'gpa', 'modules', 'proposed',
+                      'proposed_reason', 'updated_at'])
+
+    reviews = list(SemesterReview.objects.filter(semester=semester, profile__in=profiles)
+                   .select_related('profile', 'programme', 'class_level'))
     logger.info('Built %d semester review(s) for %s', len(reviews), semester)
     return reviews
 
 
 @transaction.atomic
-def confirm_review(review, outcome, *, actor, reason=''):
+def confirm_review(review, outcome, *, actor, reason='', enrollments=None,
+                   repeats=None, serializer=None, known_standings=None):
     """Record the officer's decision on one student, and act on it.
 
     Confirming is what makes a decision real: repeats are raised, a
@@ -301,7 +364,8 @@ def confirm_review(review, outcome, *, actor, reason=''):
     registration = SemesterRegistration.objects.filter(
         profile=review.profile, semester=review.semester).exclude(
         status=SemesterRegistration.CANCELLED).first()
-    fresh = evaluate(review.profile, review.semester, registration=registration)
+    fresh = evaluate(review.profile, review.semester, registration=registration,
+                     enrollments=enrollments, repeats=repeats, serializer=serializer)
     review.modules = fresh['modules']
     review.gpa = fresh['gpa']
     review.proposed = fresh['proposed']
@@ -319,31 +383,70 @@ def confirm_review(review, outcome, *, actor, reason=''):
                                'class_level', 'programme', 'confirmed', 'confirmed_reason',
                                'confirmed_by', 'confirmed_at', 'updated_at'])
 
-    _resolve_repeat_sittings(review)
+    _resolve_repeat_sittings(review, enrollments=enrollments, repeats=repeats)
 
     if outcome == SemesterReview.REPEAT:
-        _raise_repeats(review, actor=actor)
+        _raise_repeats(review, actor=actor, enrollments=enrollments, known=known_standings)
     elif outcome == SemesterReview.DISCONTINUED:
-        _discontinue(review, actor=actor)
+        _discontinue(review, actor=actor, known=known_standings)
     elif outcome == SemesterReview.COMPLETED:
         set_standing(review.profile, StudentStanding.COMPLETED, actor=actor,
                      semester=review.semester, class_level=review.class_level,
-                     programme=review.programme,
+                     programme=review.programme, known=known_standings,
                      reason=review.confirmed_reason or review.proposed_reason)
     elif outcome in (SemesterReview.CLEAR, SemesterReview.PROVISIONAL):
-        standing = standing_for(review.profile)
+        standing = standing_for(review.profile, class_level=review.class_level,
+                                programme=review.programme, known=known_standings)
         if standing.status not in (StudentStanding.COMPLETED, StudentStanding.ARCHIVED,
                                    StudentStanding.POSTPONED):
-            keep_repeating = open_repeats(review.profile).exists()
+            keep_repeating = (bool(repeats) if repeats is not None
+                              else open_repeats(review.profile).exists())
             set_standing(
                 review.profile,
                 StudentStanding.REPEATING if keep_repeating else StudentStanding.ACTIVE,
                 actor=actor, semester=review.semester, class_level=review.class_level,
-                programme=review.programme, reason=review.confirmed_reason)
+                programme=review.programme, reason=review.confirmed_reason,
+                known=known_standings)
     return review
 
 
-def _resolve_repeat_sittings(review):
+@transaction.atomic
+def confirm_proposed(semester, reviews, *, actor):
+    """Confirm a whole year group's worth of decisions in one pass.
+
+    Five hundred students confirmed one at a time is five hundred trips back to
+    the database for the same semester's enrollments, repeats and standings.
+    They are loaded once here and handed to each decision.
+
+    A student still waiting on a result is left alone: "we do not know yet" is
+    not a decision anybody can take in bulk.
+    """
+    reviews = [review for review in reviews if not review.is_confirmed]
+    profiles = [review.profile for review in reviews]
+    by_profile, by_reg_no = enrollments_by_profile(semester)
+    repeats = repeats_by_profile(profiles)
+    standings = standings_by_profile(profiles)
+    serializer = _result_serializer()
+
+    confirmed, left = 0, 0
+    for review in reviews:
+        if review.proposed == SemesterReview.PENDING:
+            left += 1
+            continue
+        profile = review.profile
+        confirm_review(
+            review, review.proposed, actor=actor,
+            enrollments=(by_profile.get(profile.id)
+                         or by_reg_no.get(profile.nactvet_reg_no.upper(), [])),
+            repeats=repeats.get(profile.id, []),
+            serializer=serializer, known_standings=standings,
+        )
+        confirmed += 1
+    logger.info('Confirmed %d review(s) for %s, %d left waiting', confirmed, semester, left)
+    return confirmed, left
+
+
+def _resolve_repeat_sittings(review, *, enrollments=None, repeats=None):
     """Close the repeats this semester's sittings have settled.
 
     A passed repeat is the result that counts for that module from now on. The
@@ -354,12 +457,14 @@ def _resolve_repeat_sittings(review):
                if row.get('attempt') == Student.REPEAT}
     if not by_code:
         return
-    enrollments = {e.module.code.upper(): e for e in enrollments_for(review.profile, review.semester)}
-    for repeat in open_repeats(review.profile):
+    sittings = {e.module.code.upper(): e for e in
+                (enrollments if enrollments is not None
+                 else enrollments_for(review.profile, review.semester))}
+    for repeat in (repeats if repeats is not None else open_repeats(review.profile)):
         row = by_code.get(repeat.module_code.upper())
         if row is None:
             continue
-        sitting = enrollments.get(repeat.module_code.upper())
+        sitting = sittings.get(repeat.module_code.upper())
         if sitting is not None:
             repeat.attempt_enrollment = sitting
         if row['status'] == 'PASS':
@@ -369,15 +474,17 @@ def _resolve_repeat_sittings(review):
         repeat.save(update_fields=['attempt_enrollment', 'status', 'resolved_at', 'note'])
 
 
-def _raise_repeats(review, *, actor=None):
+def _raise_repeats(review, *, actor=None, enrollments=None, known=None):
     """Record every module this student still has to pass, and hold them to it."""
     failed = {row['code'].upper() for row in review.modules if row['status'] in FAILED_STATUSES}
     if not failed:
         return []
-    enrollments = {e.module.code.upper(): e for e in enrollments_for(review.profile, review.semester)}
+    sittings = {e.module.code.upper(): e for e in
+                (enrollments if enrollments is not None
+                 else enrollments_for(review.profile, review.semester))}
     raised = []
     for code in sorted(failed):
-        enrollment = enrollments.get(code)
+        enrollment = sittings.get(code)
         if enrollment is None:
             continue
         repeat, created = OutstandingRepeat.objects.get_or_create(
@@ -395,7 +502,7 @@ def _raise_repeats(review, *, actor=None):
 
     set_standing(review.profile, StudentStanding.REPEATING, actor=actor,
                  semester=review.semester, class_level=review.class_level,
-                 programme=review.programme,
+                 programme=review.programme, known=known,
                  return_semester_number=review.semester.number,
                  return_year=_next_year(review.semester.academic_year),
                  reason=review.confirmed_reason or review.proposed_reason)
@@ -462,10 +569,10 @@ def withdraw_enrollments(profile, semester, *, reason=''):
     return count
 
 
-def _discontinue(review, *, actor=None):
+def _discontinue(review, *, actor=None, known=None):
     set_standing(review.profile, StudentStanding.DISCONTINUED, actor=actor,
                  semester=review.semester, class_level=review.class_level,
-                 programme=review.programme,
+                 programme=review.programme, known=known,
                  return_semester_number=review.semester.number,
                  return_year=_next_year(review.semester.academic_year),
                  reason=review.confirmed_reason or review.proposed_reason)
@@ -475,32 +582,41 @@ def _discontinue(review, *, actor=None):
 
 # ── standing ──────────────────────────────────────────────────────────────────
 
-def standing_for(profile):
+def standing_for(profile, *, class_level=None, programme=None, known=None):
     """This student's standing, created as 'studying' the first time it is asked
     for — everyone already in the college is studying until something says
-    otherwise."""
+    otherwise.
+
+    `class_level` and `programme` save the two finance lookups that otherwise
+    run for every student a batch touches; `known` is a standings-by-profile
+    map for callers that loaded them all in one query.
+    """
+    if known is not None and profile.id in known:
+        return known[profile.id]
     standing, _ = StudentStanding.objects.get_or_create(
         profile=profile,
         defaults={
             'status': StudentStanding.ACTIVE,
-            'class_level': finance.class_level_for(profile),
-            'programme': finance.programme_for(profile),
+            'class_level': class_level or finance.class_level_for(profile),
+            'programme': programme or finance.programme_for(profile),
         },
     )
+    if known is not None:
+        known[profile.id] = standing
     return standing
 
 
 @transaction.atomic
 def set_standing(profile, status, *, actor=None, semester=None, reason='',
                  class_level=None, programme=None,
-                 return_year=None, return_semester_number=None, note=''):
+                 return_year=None, return_semester_number=None, note='', known=None):
     """Move a student's standing and keep the trail.
 
     Every move is written to StandingChange with its reason, so a student who
     comes back in three years asking why they were discontinued is answered from
     the record rather than from memory.
     """
-    standing = standing_for(profile)
+    standing = standing_for(profile, class_level=class_level, programme=programme, known=known)
     before = standing.status
     standing.status = status
     if class_level is not None:
@@ -613,7 +729,7 @@ def _portal_credentials(profile):
 
 
 @transaction.atomic
-def enroll_registration(registration, *, actor=None):
+def enroll_registration(registration, *, actor=None, repeats=None, modules_by_semester=None):
     """Put a registered student in front of the modules they are to sit.
 
     A continuing student gets every module of their programme, level and
@@ -632,26 +748,36 @@ def enroll_registration(registration, *, actor=None):
     # Whatever else they are studying, a module still to be passed is sat when
     # its semester comes round again — including by a student whose other
     # modules are at a different level.
-    wanted = {repeat.module_code.upper(): repeat for repeat in
-              open_repeats(profile).filter(semester_number=semester.number)}
-    repeats = [module for module in Module.objects.filter(semester=semester)
-               .filter(Q(programme=registration.programme) | Q(programme__isnull=True))
-               if module.code.upper() in wanted]
+    owed = (repeats if repeats is not None
+            else list(open_repeats(profile)))
+    wanted = {repeat.module_code.upper(): repeat for repeat in owed
+              if repeat.semester_number == semester.number}
+    # The semester's modules, loaded once when a caller is working through a
+    # whole year group rather than one student.
+    if modules_by_semester is None:
+        modules_by_semester = list(
+            Module.objects.filter(semester=semester).select_related('class_level'))
+    resitting = [module for module in modules_by_semester
+                 if module.code.upper() in wanted
+                 and module.programme_id in (registration.programme_id, None)]
     if registration.kind == SemesterRegistration.REPEATING:
-        modules = repeats
+        modules = resitting
     else:
         # The repeat row wins over the level's own copy of the same module, so
         # a re-sitting is billed as a repeat and not as a first attempt.
-        by_id = {module.id: module for module in Module.objects.filter(
-            semester=semester, class_level=registration.class_level,
-            programme=registration.programme)}
-        by_id.update({module.id: module for module in repeats})
+        by_id = {module.id: module for module in modules_by_semester
+                 if module.class_level_id == registration.class_level_id
+                 and module.programme_id == registration.programme_id}
+        by_id.update({module.id: module for module in resitting})
         modules = list(by_id.values())
+
+    already = set(Student.objects.filter(
+        nactvet_reg_no=profile.nactvet_reg_no,
+        module__in=[module.id for module in modules]).values_list('module_id', flat=True))
 
     for module in modules:
         repeat = wanted.get(module.code.upper())
-        if Student.objects.filter(
-                nactvet_reg_no=profile.nactvet_reg_no, module=module).exists():
+        if module.id in already:
             continue
         enrollment = Student(
             nactvet_reg_no=profile.nactvet_reg_no, module=module,
@@ -660,11 +786,12 @@ def enroll_registration(registration, *, actor=None):
             attempt=Student.REPEAT if repeat else Student.NORMAL,
             repeat_of=repeat.origin_enrollment if repeat else None,
         )
-        if repeat is not None:
-            # A student sitting a module again pays the accountant's rate for
-            # that module, not another year of programme fees. Enrolling used
-            # to raise the whole year's charges on top of the repeat fee.
-            enrollment.skip_auto_billing = True
+        # Billing is raised once for the registration below, not once for each
+        # module: enrolling a class of 500 into six modules each ran the fee
+        # generator three thousand times for five hundred students' worth of
+        # charges. A student sitting a module again pays the accountant's rate
+        # for that module and no programme fees at all.
+        enrollment.skip_auto_billing = True
         enrollment.save()
         made.append(enrollment)
         if repeat is not None:
@@ -680,6 +807,15 @@ def enroll_registration(registration, *, actor=None):
                 # whole advance over a missing fee row would be worse.
                 logger.warning('No repeat charge for %s on %s: %s',
                                profile.nactvet_reg_no, module.code, exc)
+
+    if made and registration.kind != SemesterRegistration.REPEATING:
+        try:
+            finance.generate_charges(profile, semester.academic_year, actor=actor)
+        except ValueError as exc:
+            # The fee structure has no due dates yet. Registration must not
+            # fail over that; the accountant's bulk run catches them up.
+            logger.warning('Could not bill %s for %s: %s',
+                           profile.nactvet_reg_no, semester.academic_year, exc)
     return made
 
 
@@ -733,6 +869,16 @@ def next_level(programme, class_level):
     return higher[0] if higher else None
 
 
+def _next_level_cached(programme, class_level, cache):
+    """`next_level`, asked once per programme rather than once per student."""
+    key = programme.id if programme else None
+    if key not in cache:
+        cache[key] = list(programme.levels.order_by('order')) if programme else list(
+            ClassLevel.objects.order_by('order'))
+    higher = [level for level in cache[key] if class_level and level.order > class_level.order]
+    return higher[0] if higher else None
+
+
 def plan_advance(semester):
     """What advancing out of this semester would do to each student.
 
@@ -742,9 +888,18 @@ def plan_advance(semester):
     target_number = Semester.SEM2 if semester.number == Semester.SEM1 else Semester.SEM1
     moves, blocked = [], []
 
-    for profile, registration in students_of(semester):
-        review = SemesterReview.objects.filter(profile=profile, semester=semester).first()
-        standing = standing_for(profile)
+    people = students_of(semester)
+    profiles = [profile for profile, _ in people]
+    reviews = {review.profile_id: review for review in
+               SemesterReview.objects.filter(semester=semester, profile__in=profiles)
+               .select_related('class_level', 'programme')}
+    standings = standings_by_profile(profiles)
+    repeats = repeats_by_profile(profiles)
+    levels_of = {}
+
+    for profile, registration in people:
+        review = reviews.get(profile.id)
+        standing = standing_for(profile, known=standings)
         if review is None or not review.is_confirmed:
             blocked.append({
                 'profile_id': profile.id, 'reg_no': profile.nactvet_reg_no,
@@ -780,9 +935,9 @@ def plan_advance(semester):
                             to_semester=target_number, kind=SemesterRegistration.CONTINUING,
                             detail='Continues into semester 2')
         else:
-            repeats = [repeat.module_code for repeat in open_repeats(profile)]
-            if repeats:
-                sem1_repeats = [r.module_code for r in open_repeats(profile)
+            owed = repeats.get(profile.id, [])
+            if owed:
+                sem1_repeats = [r.module_code for r in owed
                                 if r.semester_number == Semester.SEM1]
                 move.update(
                     action='repeats',
@@ -790,10 +945,10 @@ def plan_advance(semester):
                     to_level=level.name if level else None,
                     to_semester=Semester.SEM1 if sem1_repeats else Semester.SEM2,
                     kind=SemesterRegistration.REPEATING,
-                    detail=('Repeats ' + ', '.join(sorted(repeats))
+                    detail=('Repeats ' + ', '.join(sorted(r.module_code for r in owed))
                             + ('' if sem1_repeats else ' — registers in semester 2')))
             else:
-                up = next_level(programme, level)
+                up = _next_level_cached(programme, level, levels_of)
                 if up is None:
                     move.update(action='completed', registers=False,
                                 detail='Finished — awaiting clearance')
@@ -815,14 +970,27 @@ def apply_advance(semester, target, *, actor=None):
     with the standing that says where they are and what they come back to.
     """
     summary = {'registered': 0, 'promoted': 0, 'repeating': 0, 'discontinued': 0,
-               'completed': 0, 'deferred': 0, 'away': 0, 'enrolled': 0, 'students': []}
+               'completed': 0, 'deferred': 0, 'away': 0, 'returned': 0, 'enrolled': 0,
+               'students': []}
 
-    for profile, _registration in students_of(semester):
-        review = SemesterReview.objects.filter(profile=profile, semester=semester).first()
+    people = students_of(semester)
+    profiles = [profile for profile, _ in people]
+    reviews = {review.profile_id: review for review in
+               SemesterReview.objects.filter(semester=semester, profile__in=profiles)
+               .select_related('class_level', 'programme')}
+    standings = standings_by_profile(profiles)
+    repeats_open = repeats_by_profile(profiles)
+    target_modules = list(Module.objects.filter(semester=target).select_related('class_level'))
+    registered_already = set(SemesterRegistration.objects.filter(
+        semester=target, profile__in=profiles).values_list('profile_id', flat=True))
+    levels_of = {}
+
+    for profile, _registration in people:
+        review = reviews.get(profile.id)
         if review is None or not review.is_confirmed:
             raise ProgressionError(
                 f'{profile.nactvet_reg_no} has no confirmed review for {semester}.')
-        standing = standing_for(profile)
+        standing = standing_for(profile, known=standings)
         outcome = review.confirmed
         level = review.class_level or standing.class_level
         programme = review.programme or standing.programme
@@ -843,26 +1011,26 @@ def apply_advance(semester, target, *, actor=None):
                 continue
             kind, to_level = SemesterRegistration.CONTINUING, level
         else:
-            repeats = list(open_repeats(profile))
-            if repeats:
-                if not any(repeat.semester_number == Semester.SEM1 for repeat in repeats):
+            owed = repeats_open.get(profile.id, [])
+            if owed:
+                if not any(repeat.semester_number == Semester.SEM1 for repeat in owed):
                     # Everything they owe is a semester 2 module; they register
                     # when semester 2 opens, not now.
                     set_standing(profile, StudentStanding.REPEATING, actor=actor,
                                  semester=semester, class_level=level, programme=programme,
                                  return_year=target.academic_year,
-                                 return_semester_number=Semester.SEM2,
+                                 return_semester_number=Semester.SEM2, known=standings,
                                  reason='Repeats semester 2 module(s).')
                     summary['repeating'] += 1
                     continue
                 kind, to_level = SemesterRegistration.REPEATING, level
                 summary['repeating'] += 1
             else:
-                up = next_level(programme, level)
+                up = _next_level_cached(programme, level, levels_of)
                 if up is None:
                     set_standing(profile, StudentStanding.COMPLETED, actor=actor,
                                  semester=semester, class_level=level, programme=programme,
-                                 reason='Finished the programme.')
+                                 known=standings, reason='Finished the programme.')
                     summary['completed'] += 1
                     continue
                 kind, to_level = SemesterRegistration.CONTINUING, up
@@ -873,12 +1041,13 @@ def apply_advance(semester, target, *, actor=None):
                 f'{profile.nactvet_reg_no} has no programme or level recorded; '
                 'set it on the review before advancing.')
 
-        registration, created = SemesterRegistration.objects.get_or_create(
-            profile=profile, semester=target,
-            defaults={'programme': programme, 'class_level': to_level,
-                      'kind': kind, 'created_by': actor},
-        )
-        if created:
+        if profile.id in registered_already:
+            registration = SemesterRegistration.objects.get(profile=profile, semester=target)
+        else:
+            registration = SemesterRegistration.objects.create(
+                profile=profile, semester=target, programme=programme,
+                class_level=to_level, kind=kind, created_by=actor)
+            registered_already.add(profile.id)
             summary['registered'] += 1
         set_standing(profile,
                      StudentStanding.REPEATING if kind == SemesterRegistration.REPEATING
@@ -886,14 +1055,75 @@ def apply_advance(semester, target, *, actor=None):
                      actor=actor, semester=semester, class_level=to_level, programme=programme,
                      return_year=target.academic_year if kind == SemesterRegistration.REPEATING else None,
                      return_semester_number=target.number if kind == SemesterRegistration.REPEATING else None,
-                     reason=f'Advanced into {target}.')
-        made = enroll_registration(registration, actor=actor)
+                     reason=f'Advanced into {target}.', known=standings)
+        made = enroll_registration(registration, actor=actor,
+                                   repeats=repeats_open.get(profile.id, []),
+                                   modules_by_semester=target_modules)
         summary['enrolled'] += len(made)
         summary['students'].append({
             'reg_no': profile.nactvet_reg_no, 'name': profile.name,
             'kind': kind, 'level': to_level.name, 'modules': len(made),
         })
 
+    summary['returned'] = len(register_returning_repeats(target, actor=actor, summary=summary))
+
     logger.info('Advanced %s → %s: %s', semester, target,
                 {key: value for key, value in summary.items() if key != 'students'})
     return summary
+
+
+def returning_repeats(target):
+    """The students who owe a module that this semester teaches.
+
+    They are not in the semester that is closing — a student who failed a
+    supplementary stopped there, and one who owes a semester 2 module sat out
+    semester 1 — so nothing in the advance would otherwise look for them. This
+    is the college's rule read forwards: they wait for the module to come round
+    again, and it has.
+    """
+    waiting = []
+    standings = StudentStanding.objects.filter(
+        status=StudentStanding.REPEATING).select_related('profile', 'programme', 'class_level')
+    for standing in standings:
+        repeats = [repeat for repeat in open_repeats(standing.profile)
+                   if repeat.semester_number == target.number]
+        if not repeats:
+            continue
+        if SemesterRegistration.objects.filter(
+                profile=standing.profile, semester=target).exclude(
+                status=SemesterRegistration.CANCELLED).exists():
+            continue
+        waiting.append((standing, repeats))
+    return waiting
+
+
+@transaction.atomic
+def register_returning_repeats(target, *, actor=None, summary=None):
+    """Bring those students back for the module they owe, and bill it."""
+    brought_back = []
+    for standing, repeats in returning_repeats(target):
+        programme = standing.programme or finance.programme_for(standing.profile)
+        level = standing.class_level or repeats[0].class_level
+        if programme is None or level is None:
+            logger.warning('Cannot register %s for their repeat: no programme or level',
+                           standing.profile.nactvet_reg_no)
+            continue
+        registration = SemesterRegistration.objects.create(
+            profile=standing.profile, semester=target, programme=programme,
+            class_level=level, kind=SemesterRegistration.REPEATING, created_by=actor)
+        made = enroll_registration(registration, actor=actor)
+        set_standing(standing.profile, StudentStanding.REPEATING, actor=actor, semester=target,
+                     class_level=level, programme=programme,
+                     return_year=target.academic_year, return_semester_number=target.number,
+                     reason=f'Back for {", ".join(repeat.module_code for repeat in repeats)}.')
+        brought_back.append(registration)
+        if summary is not None:
+            summary['enrolled'] = summary.get('enrolled', 0) + len(made)
+            summary['students'].append({
+                'reg_no': standing.profile.nactvet_reg_no, 'name': standing.profile.name,
+                'kind': SemesterRegistration.REPEATING, 'level': level.name,
+                'modules': len(made),
+            })
+        logger.info('Brought %s back into %s for %d repeat module(s)',
+                    standing.profile.nactvet_reg_no, target, len(made))
+    return brought_back

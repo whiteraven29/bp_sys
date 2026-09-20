@@ -12,7 +12,7 @@ thing is half done, say which half.
 - `[!]` blocked — what it is waiting for is written next to it
 
 Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py test attendance --settings=edutrack.test_settings`
-(541 passing as of `5aefbc4`).
+(561 passing; everything since `5aefbc4` is uncommitted).
 
 ---
 
@@ -45,7 +45,9 @@ records officer and examination officer against a copy of the college at the end
       open across academic years until a repeat sitting passes it
 - [x] Repeat sittings: `Student.attempt` / `repeat_of`, billed at the accountant's
       per-module repeat rate, and the failed result is kept untouched as history
-- [x] Semester Review screen (records officer, Principal, exam officer)
+- [x] Semester Review screen — **the Principal and the examination officer decide**;
+      any admin reads it, the records officer does not (their work is the student
+      record itself: keeping, updating and retrieving it)
 - [x] Advance restricted to Principal and examination officer (the HOD could press it)
 - [x] Advance preview — every student's move and the modules to be carried, before committing
 - [x] Advance refuses to run until every student in the closing semester is confirmed
@@ -69,6 +71,17 @@ records officer and examination officer against a copy of the college at the end
 - [x] A repeat sitting starts with **new continuous assessment** (a new enrollment, blank
       result); the failed sitting's marks are untouched
 - [x] A supplementary pass counts as a C however high the mark (already in `grading.py`)
+- [x] A student who stopped mid-year, or who owes a semester 2 module, is brought back
+      and enrolled when the module runs again — the advance sweeps for them
+- [x] `seed_progression_demo` management command: nine students, one per decision,
+      for practising the year end on a development database (`--reset` undoes it)
+- [x] Module lists and the dashboard show **this academic year**, so the carried-forward
+      list no longer appears twice after an advance; a semester, a year or `all=1` still
+      returns the closed years
+- [x] Built for a real class size: measured at 500 students — reading the results 0.9s,
+      confirming the year group 3.7s, the preview 0.2s, the advance 4.3s. The screen leads
+      with counts and a per-class breakdown, defaults to "still to confirm", is paginated
+      and searchable, and the preview lists 25 moves rather than 500
 
 ## Phase 3b — postponement and finishing
 Not started. Needed soon after the year opens, not on day one.

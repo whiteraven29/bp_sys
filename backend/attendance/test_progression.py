@@ -566,6 +566,10 @@ class ProgressionApiTests(ProgressionBase):
         self.hod = APIClient()
         self.hod.force_authenticate(self.hod_user)
 
+        # The examination officer decides reviews; `self.api` is a superuser,
+        # which is what an examination officer is in this system.
+        self.exam = self.api
+
         self.records_user = User.objects.create_user('officer', password='pw')
         set_roles(self.records_user, ['records_officer'], full_name='Records Officer')
         self.records = APIClient()
@@ -592,8 +596,8 @@ class ProgressionApiTests(ProgressionBase):
         self.assertTrue(self.sem2.is_active)
 
     def test_the_preview_shows_the_moves_and_the_modules_before_anybody_commits(self):
-        self.records.post('/api/semester-reviews/build/', {}, format='json')
-        self.records.post('/api/semester-reviews/confirm-proposed/', {}, format='json')
+        self.exam.post('/api/semester-reviews/build/', {}, format='json')
+        self.exam.post('/api/semester-reviews/confirm-proposed/', {}, format='json')
 
         response = self.api.get('/api/academic-years/advance-preview/')
 
@@ -606,11 +610,11 @@ class ProgressionApiTests(ProgressionBase):
         self.assertEqual(Module.objects.filter(semester__academic_year=self.next_year).count(), 0)
 
     def test_the_review_screen_builds_confirms_and_then_the_advance_runs(self):
-        built = self.records.post('/api/semester-reviews/build/', {}, format='json')
+        built = self.exam.post('/api/semester-reviews/build/', {}, format='json')
         self.assertEqual(built.status_code, 200, built.data)
         self.assertEqual(built.data['unconfirmed'], 1)
 
-        confirmed = self.records.post('/api/semester-reviews/confirm-proposed/', {}, format='json')
+        confirmed = self.exam.post('/api/semester-reviews/confirm-proposed/', {}, format='json')
         self.assertEqual(confirmed.data['confirmed'], 1)
 
         advanced = self.api.post('/api/academic-years/advance/', {}, format='json')
@@ -625,23 +629,23 @@ class ProgressionApiTests(ProgressionBase):
         waiting = self.student('REG/101')
         self.register(waiting, self.sem2, self.level4)
         self.grade(self.enrol(waiting, self.module('PST04202', self.level4, self.sem2)), 40)
-        self.records.post('/api/semester-reviews/build/', {}, format='json')
+        self.exam.post('/api/semester-reviews/build/', {}, format='json')
 
-        response = self.records.post('/api/semester-reviews/confirm-proposed/', {}, format='json')
+        response = self.exam.post('/api/semester-reviews/confirm-proposed/', {}, format='json')
 
         self.assertEqual(response.data['left_for_you'], 1)
         review = SemesterReview.objects.get(profile=waiting, semester=self.sem2)
         self.assertFalse(review.is_confirmed)
 
     def test_overruling_the_results_needs_a_reason(self):
-        self.records.post('/api/semester-reviews/build/', {}, format='json')
+        self.exam.post('/api/semester-reviews/build/', {}, format='json')
         review = SemesterReview.objects.get(profile=self.profile, semester=self.sem2)
 
-        refused = self.records.post(f'/api/semester-reviews/{review.id}/confirm/',
+        refused = self.exam.post(f'/api/semester-reviews/{review.id}/confirm/',
                                     {'outcome': SemesterReview.DISCONTINUED}, format='json')
         self.assertEqual(refused.status_code, 400)
 
-        allowed = self.records.post(f'/api/semester-reviews/{review.id}/confirm/',
+        allowed = self.exam.post(f'/api/semester-reviews/{review.id}/confirm/',
                                     {'outcome': SemesterReview.DISCONTINUED,
                                      'reason': 'Withdrew in writing on 4 July.'}, format='json')
         self.assertEqual(allowed.status_code, 200, allowed.data)
@@ -649,8 +653,36 @@ class ProgressionApiTests(ProgressionBase):
         self.assertEqual(review.confirmed, SemesterReview.DISCONTINUED)
         self.assertEqual(review.proposed, SemesterReview.CLEAR)  # what the results said, kept
 
+    def test_the_records_officer_reads_the_student_record_and_decides_nothing(self):
+        # Their work is keeping, updating and retrieving the student record.
+        # What a semester's results mean is the examination office's decision.
+        self.exam.post('/api/semester-reviews/build/', {}, format='json')
+        review = SemesterReview.objects.get(profile=self.profile, semester=self.sem2)
+
+        refused = self.records.post(f'/api/semester-reviews/{review.id}/confirm/', {}, format='json')
+        built = self.records.post('/api/semester-reviews/build/', {}, format='json')
+        advanced = self.records.post('/api/academic-years/advance/', {}, format='json')
+
+        self.assertEqual(refused.status_code, 403)
+        self.assertEqual(built.status_code, 403)
+        self.assertEqual(advanced.status_code, 403)
+        # They still see where a student stands, which is part of the record.
+        standings = self.records.get('/api/student-standings/')
+        repeats = self.records.get('/api/outstanding-repeats/')
+        self.assertEqual(standings.status_code, 200)
+        self.assertEqual(repeats.status_code, 200)
+
+    def test_the_head_of_department_reads_the_review_but_cannot_confirm_it(self):
+        self.exam.post('/api/semester-reviews/build/', {}, format='json')
+        review = SemesterReview.objects.get(profile=self.profile, semester=self.sem2)
+
+        self.assertEqual(self.hod.get('/api/semester-reviews/').status_code, 200)
+        self.assertEqual(
+            self.hod.post(f'/api/semester-reviews/{review.id}/confirm/', {}, format='json').status_code,
+            403)
+
     def test_the_head_of_department_cannot_confirm_a_review(self):
-        self.records.post('/api/semester-reviews/build/', {}, format='json')
+        self.exam.post('/api/semester-reviews/build/', {}, format='json')
         review = SemesterReview.objects.get(profile=self.profile, semester=self.sem2)
 
         response = self.hod.post(f'/api/semester-reviews/{review.id}/confirm/', {}, format='json')
@@ -807,8 +839,7 @@ class LateSupplementaryTests(ProgressionBase):
         from rest_framework.test import APIClient
         from .views import set_roles
 
-        officer = User.objects.create_user('records2', password='pw')
-        set_roles(officer, ['records_officer'], full_name='Records Officer')
+        officer = User.objects.create_superuser('exam2', 'e2@x.com', 'pw')
         client = APIClient()
         client.force_authenticate(officer)
 
@@ -1002,8 +1033,7 @@ class AuthorityRepeatRuleTests(ProgressionBase):
         from rest_framework.test import APIClient
         from .views import set_roles
 
-        officer = User.objects.create_user('records3', password='pw')
-        set_roles(officer, ['records_officer'], full_name='Records Officer')
+        officer = User.objects.create_superuser('exam3', 'e3@x.com', 'pw')
         client = APIClient()
         client.force_authenticate(officer)
 
@@ -1023,3 +1053,330 @@ class AuthorityRepeatRuleTests(ProgressionBase):
         self.assertEqual([row['reg_no'] for row in rows], [])
         # The row itself is still in the record.
         self.assertTrue(SemesterReview.objects.filter(profile=profile, semester=self.sem2).exists())
+
+    def test_a_student_who_stopped_is_brought_back_when_the_module_runs_again(self):
+        # She failed a semester 1 supplementary and stopped there, so she is in
+        # no semester the advance looks at. The module runs again next year, and
+        # that is when she is due.
+        profile = self.student('REG/057')
+        self.register(profile, self.sem1, self.level4)
+        failed = self.enrol(profile, self.module('PST04101', self.level4, self.sem1))
+        self.grade(failed, 40, supp=30)
+        self.register(profile, self.sem2, self.level4)
+        self.enrol(profile, self.module('PST04201', self.level4, self.sem2))
+        progression.confirm_review(progression.build_reviews(self.sem1)[0],
+                                   SemesterReview.REPEAT, actor=self.officer)
+        self.module('PST04101', self.level4, self.next_sem1)
+        self.repeat_fee(self.next_year, self.level4)
+
+        summary = progression.apply_advance(self.sem2, self.next_sem1, actor=self.officer)
+
+        self.assertEqual(summary['returned'], 1)
+        registration = SemesterRegistration.objects.get(profile=profile, semester=self.next_sem1)
+        self.assertEqual(registration.kind, SemesterRegistration.REPEATING)
+        self.assertEqual(registration.class_level, self.level4)
+        sitting = Student.objects.get(profile=profile, module__semester=self.next_sem1)
+        self.assertEqual(sitting.module.code, 'PST04101')
+        self.assertEqual(sitting.attempt, Student.REPEAT)
+        self.assertTrue(StudentCharge.objects.filter(profile=profile, module=sitting.module).exists())
+
+    def test_a_semester_two_repeat_is_brought_back_when_semester_two_comes_round(self):
+        profile = self.student('REG/058')
+        self.register(profile, self.sem2, self.level4)
+        self.grade(self.enrol(profile, self.module('PST04201', self.level4, self.sem2)), 85)
+        self.grade(self.enrol(profile, self.module('PST04202', self.level4, self.sem2)), 40, supp=30)
+        progression.confirm_review(progression.build_reviews(self.sem2)[0],
+                                   SemesterReview.REPEAT, actor=self.officer)
+        self.module('PST04202', self.level4, self.next_sem2)
+        self.repeat_fee(self.next_year, self.level4)
+        # The year turns; they are due in semester 2, not now.
+        progression.apply_advance(self.sem2, self.next_sem1, actor=self.officer)
+        self.assertFalse(SemesterRegistration.objects.filter(
+            profile=profile, semester=self.next_sem1).exists())
+
+        brought_back = progression.register_returning_repeats(self.next_sem2, actor=self.officer)
+
+        self.assertEqual(len(brought_back), 1)
+        sitting = Student.objects.get(profile=profile, module__semester=self.next_sem2)
+        self.assertEqual(sitting.module.code, 'PST04202')
+        self.assertEqual(sitting.attempt, Student.REPEAT)
+
+    def test_nobody_is_brought_back_twice(self):
+        profile = self.student('REG/059')
+        failed = self.enrol(profile, self.module('PST04101', self.level4, self.sem1))
+        OutstandingRepeat.objects.create(
+            profile=profile, module_code='PST04101', module_name='PST04101',
+            class_level=self.level4, semester_number=1,
+            origin_semester=self.sem1, origin_enrollment=failed)
+        progression.set_standing(profile, StudentStanding.REPEATING, actor=self.officer,
+                                 class_level=self.level4, programme=self.pst)
+        self.module('PST04101', self.level4, self.next_sem1)
+        self.repeat_fee(self.next_year, self.level4)
+
+        progression.register_returning_repeats(self.next_sem1, actor=self.officer)
+        again = progression.register_returning_repeats(self.next_sem1, actor=self.officer)
+
+        self.assertEqual(again, [])
+        self.assertEqual(SemesterRegistration.objects.filter(
+            profile=profile, semester=self.next_sem1).count(), 1)
+        self.assertEqual(Student.objects.filter(
+            profile=profile, module__semester=self.next_sem1).count(), 1)
+
+
+# ── what a student is shown of their results ─────────────────────────────────
+
+class ResultStatementTests(ProgressionBase):
+    """The portal shows a grade and what it means, never the marks behind it,
+    and one statement per semester: the modules, the GPA, a remark and a
+    comment."""
+
+    def setUp(self):
+        super().setUp()
+        self.profile = self.student('REG/300', 'Neema Portal')
+        self.enrollment = None
+
+    def sit(self, code, level, semester, mark=None, **marks):
+        module = self.module(code, level, semester)
+        enrollment = self.enrol(self.profile, module)
+        self.grade(enrollment, mark, **marks)
+        enrollment.set_portal_pin('Portal#2026', require_change=False)
+        enrollment.save()
+        self.enrollment = enrollment
+        return enrollment
+
+    def statements(self):
+        from .views import _result_statements, student_dashboard
+        from django.test import RequestFactory
+
+        session = self.client.session
+        request = RequestFactory().get('/student-dashboard/')
+        request.session = session
+        session['student_id'] = self.enrollment.id
+        session.save()
+        self.client.cookies['sessionid'] = session.session_key
+        response = self.client.get('/student-dashboard/')
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_a_clear_semester_reads_as_its_class_and_pass(self):
+        self.sit('PST04201', self.level4, self.sem2, 80)
+        self.sit('PST04202', self.level4, self.sem2, 78)
+
+        response = self.statements()
+        statement = response.context['result_statements'][0]
+
+        self.assertEqual(statement['label'], self.sem2.label)
+        self.assertEqual(statement['comment'], 'PASS')
+        self.assertEqual(statement['remark'], 'First Class')
+        self.assertEqual(statement['gpa'], 3.5)          # an A and a B
+
+    def test_an_unmarked_supplementary_reads_as_supp_and_names_the_module(self):
+        self.sit('PST04201', self.level4, self.sem2, 80)
+        self.sit('PST04202', self.level4, self.sem2, 40)
+
+        statement = self.statements().context['result_statements'][0]
+
+        self.assertEqual(statement['remark'], 'SUPP')
+        self.assertEqual(statement['comment'], 'PST04202')
+
+    def test_a_weak_semester_reads_as_disco_and_names_what_was_failed(self):
+        # A total under 50 is a fail even where the paper itself was passed, so
+        # both of these are failures and both are named.
+        self.sit('PST04201', self.level4, self.sem2, ca=25, end=50)
+        self.sit('PST04202', self.level4, self.sem2, 40, supp=30)
+
+        statement = self.statements().context['result_statements'][0]
+
+        self.assertEqual(statement['remark'], 'DISCO')
+        self.assertEqual(statement['comment'], 'PST04201, PST04202')
+
+    def test_a_module_to_repeat_reads_as_repeat_and_names_it(self):
+        self.sit('PST04201', self.level4, self.sem2, 85)
+        self.sit('PST04202', self.level4, self.sem2, 85)
+        self.sit('PST04203', self.level4, self.sem2, 40, supp=30)
+
+        statement = self.statements().context['result_statements'][0]
+
+        self.assertEqual(statement['remark'], 'REPEAT')
+        self.assertEqual(statement['comment'], 'PST04203')
+
+    def test_each_semester_is_its_own_statement(self):
+        self.sit('PST04101', self.level4, self.sem1, 80)
+        self.sit('PST04201', self.level4, self.sem2, 40)
+
+        statements = self.statements().context['result_statements']
+
+        self.assertEqual([s['label'] for s in statements], [self.sem1.label, self.sem2.label])
+        self.assertEqual(statements[0]['remark'], 'First Class')
+        self.assertEqual(statements[1]['remark'], 'SUPP')
+
+    def test_no_mark_is_sent_to_the_student_with_a_final_result(self):
+        self.sit('PST04201', self.level4, self.sem2, 84)
+
+        response = self.statements()
+        statement = response.context['result_statements'][0]
+        row = statement['modules'][0]
+
+        self.assertEqual(sorted(row), ['code', 'grade', 'name', 'status'])
+        # And the published page itself carries no end-of-semester mark.
+        page = response.content.decode()
+        self.assertNotIn('>84<', page)
+        self.assertIn('PST04201', page)
+
+
+# ── what the college is shown after the year turns ───────────────────────────
+
+class AfterTheAdvanceTests(ProgressionBase):
+    """The year rollover copies the module list forward, so every unfiltered
+    list had the same module in it twice — once per year. What the screens show
+    by default is this year's work; last year is still there to be asked for."""
+
+    def setUp(self):
+        super().setUp()
+        from rest_framework.test import APIClient
+
+        self.tutor = User.objects.create_user('tutor', password='pw')
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(self.tutor)
+
+        self.old = self.module('PST04101', self.level4, self.sem1)
+        self.old.teachers.add(self.tutor)
+        # The new year, taught from the same list, as the advance makes it.
+        self.next_year = AcademicYear.objects.create(name='2026/2027')
+        self.next_sem1 = Semester.objects.create(academic_year=self.next_year, number=1)
+        progression.carry_modules(self.next_sem1)
+        self.new = Module.objects.get(semester=self.next_sem1, code='PST04101')
+
+        self.year.is_active = False
+        self.year.save(update_fields=['is_active'])
+        self.sem2.is_active = False
+        self.sem2.save(update_fields=['is_active'])
+        self.next_year.is_active = True
+        self.next_year.save(update_fields=['is_active'])
+        self.next_sem1.is_active = True
+        self.next_sem1.save(update_fields=['is_active'])
+
+    def test_the_tutor_keeps_teaching_the_module_in_the_new_year(self):
+        self.assertIn(self.tutor, self.new.teachers.all())
+
+    def test_the_module_list_shows_this_year_once(self):
+        response = self.client_api.get('/api/modules/')
+
+        rows = response.data['results'] if isinstance(response.data, dict) else response.data
+        self.assertEqual([row['id'] for row in rows], [self.new.id])
+
+    def test_last_year_is_still_there_when_it_is_asked_for(self):
+        by_semester = self.client_api.get(f'/api/modules/?semester_id={self.sem1.id}')
+        by_year = self.client_api.get(f'/api/modules/?academic_year_id={self.year.id}')
+        everything = self.client_api.get('/api/modules/?all=1')
+
+        def ids(response):
+            rows = response.data['results'] if isinstance(response.data, dict) else response.data
+            return sorted(row['id'] for row in rows)
+
+        self.assertEqual(ids(by_semester), [self.old.id])
+        self.assertEqual(ids(by_year), [self.old.id])
+        self.assertEqual(ids(everything), sorted([self.old.id, self.new.id]))
+
+    def test_the_dashboard_counts_this_year_not_every_year(self):
+        profile = self.student('REG/400')
+        self.enrol(profile, self.old)
+        self.enrol(profile, self.new)
+
+        response = self.client_api.get('/api/dashboard/')
+
+        self.assertEqual(response.data['modules'], 1)
+        self.assertEqual(response.data['students'], 1)
+        self.assertEqual([level['modules'] for level in response.data['levels']], [1])
+
+    def test_attendance_and_sessions_start_the_year_empty_and_the_old_ones_remain(self):
+        from .models import AttendanceRecord, Session
+
+        profile = self.student('REG/401')
+        old_enrollment = self.enrol(profile, self.old)
+        session = Session.objects.create(module=self.old, date=date(2026, 3, 2),
+                                         topic='Week 6', session_type='general')
+        AttendanceRecord.objects.create(session=session, student=old_enrollment, status='P')
+        self.enrol(profile, self.new)
+
+        response = self.client_api.get('/api/dashboard/')
+
+        # Nothing has been taught in the new year yet.
+        self.assertEqual(response.data['sessions_today'], 0)
+        self.assertEqual(response.data['recent_sessions'], [])
+        # And last year's register is exactly where it was left.
+        self.assertEqual(Session.objects.filter(module=self.old).count(), 1)
+        self.assertEqual(AttendanceRecord.objects.filter(session=session).count(), 1)
+
+    def test_assigning_a_tutor_offers_this_year_s_modules(self):
+        staff = User.objects.create_superuser('admin2', 'a2@x.com', 'pw')
+        from rest_framework.test import APIClient
+        client = APIClient()
+        client.force_authenticate(staff)
+
+        response = client.get('/api/all-modules/')
+        everything = client.get('/api/all-modules/?all=1')
+
+        self.assertEqual([row['id'] for row in response.data], [self.new.id])
+        self.assertEqual(sorted(row['id'] for row in everything.data),
+                         sorted([self.old.id, self.new.id]))
+
+    def test_the_summary_counts_the_whole_semester_not_the_page(self):
+        from rest_framework.test import APIClient
+
+        staff = User.objects.create_superuser('exam4', 'e4@x.com', 'pw')
+        client = APIClient()
+        client.force_authenticate(staff)
+        for index in range(3):
+            profile = self.student(f'REG/50{index}', f'Student {index}')
+            self.register(profile, self.sem2, self.level4)
+            self.grade(self.enrol(profile, self.module(f'PST0420{index}', self.level4, self.sem2)), 80)
+        client.post('/api/semester-reviews/build/', {'semester_id': self.sem2.id}, format='json')
+
+        summary = client.get(f'/api/semester-reviews/summary/?semester_id={self.sem2.id}')
+
+        self.assertEqual(summary.data['total'], 3)
+        self.assertEqual(summary.data['confirmed'], 0)
+        self.assertEqual(summary.data['ready_to_confirm'], 3)
+        self.assertEqual(summary.data['outcomes'], {SemesterReview.CLEAR: 3})
+        self.assertEqual(summary.data['levels'][0]['name'], 'NTA Level 4')
+        self.assertEqual(summary.data['levels'][0]['total'], 3)
+
+    def test_the_list_comes_a_page_at_a_time(self):
+        from rest_framework.test import APIClient
+
+        staff = User.objects.create_superuser('exam5', 'e5@x.com', 'pw')
+        client = APIClient()
+        client.force_authenticate(staff)
+        module = self.module('PST04299', self.level4, self.sem2)
+        for index in range(60):
+            profile = self.student(f'REG/6{index:03d}', f'Student {index}')
+            self.register(profile, self.sem2, self.level4)
+            self.grade(self.enrol(profile, module), 80)
+        client.post('/api/semester-reviews/build/', {'semester_id': self.sem2.id}, format='json')
+
+        first = client.get(f'/api/semester-reviews/?semester_id={self.sem2.id}')
+        second = client.get(f'/api/semester-reviews/?semester_id={self.sem2.id}&page=2')
+
+        self.assertEqual(first.data['count'], 60)
+        self.assertEqual(len(first.data['results']), 50)
+        self.assertEqual(len(second.data['results']), 10)
+        self.assertIsNotNone(first.data['next'])
+
+    def test_a_student_can_be_found_by_name_or_number(self):
+        from rest_framework.test import APIClient
+
+        staff = User.objects.create_superuser('exam6', 'e6@x.com', 'pw')
+        client = APIClient()
+        client.force_authenticate(staff)
+        wanted = self.student('REG/700', 'Zawadi Mushi')
+        self.register(wanted, self.sem2, self.level4)
+        self.grade(self.enrol(wanted, self.module('PST04298', self.level4, self.sem2)), 80)
+        other = self.student('REG/701', 'Someone Else')
+        self.register(other, self.sem2, self.level4)
+        self.grade(self.enrol(other, self.module('PST04297', self.level4, self.sem2)), 80)
+        client.post('/api/semester-reviews/build/', {'semester_id': self.sem2.id}, format='json')
+
+        found = client.get(f'/api/semester-reviews/?semester_id={self.sem2.id}&search=zawadi')
+
+        self.assertEqual([row['reg_no'] for row in found.data['results']], ['REG/700'])

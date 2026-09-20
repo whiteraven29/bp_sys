@@ -22,6 +22,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission, IsAuthenticated, SAFE_METHODS
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
@@ -104,6 +105,23 @@ def user_modules(user):
     if user.is_staff:
         return Module.objects.all()
     return user.modules_taught.all()
+
+
+def current_modules(user):
+    """The modules this account is working on *now* — this academic year's.
+
+    Modules are one row per semester per year, and the year rollover copies
+    last year's list forward, so every unfiltered module list showed the same
+    module once per year it had ever run: a tutor's sidebar listed PST04101
+    twice, the dashboard counted their classes and students twice over, and
+    Manage Modules mixed a closed year in with the open one.
+
+    Last year is not gone — asking for a semester or a year still returns it —
+    but it is no longer what the college is shown by default.
+    """
+    modules = user_modules(user)
+    year = active_academic_year()
+    return modules.filter(semester__academic_year=year) if year else modules
 
 
 def teaches_anything(user):
@@ -322,26 +340,11 @@ def can_review_progression(user):
     """Deciding what a semester's results mean for a student: who is promoted,
     who repeats, who is discontinued.
 
-    The records officer's work — they keep the student record — with the
-    Principal and the examination officer able to step in. Not the Head of
-    Department, who reads results but does not decide them, and not the
-    accountant.
-    """
-    return bool(
-        user and user.is_authenticated
-        and (is_records_officer(user)
-             or is_principal(user)
-             or (user.is_staff and not is_head_of_department(user)
-                 and not is_accountant(user) and not is_secretary(user))))
-
-
-def can_advance_semester(user):
-    """Closing one semester and opening the next.
-
-    The heaviest button in the college: it promotes a year group, registers
-    them, enrolls them and sets what the students who failed come back to.
-    The Principal and the examination officer press it. It used to be open to
-    anyone with an admin account, which included the Head of Department.
+    The Principal and the examination officer, because it is a decision taken
+    on examination results. Not the Head of Department, who reads results but
+    does not decide them; not the accountant; and not the records or admission
+    officer, whose work is the student record itself — keeping it, updating it
+    and retrieving it — rather than what the marks mean.
     """
     return bool(
         user and user.is_authenticated
@@ -349,6 +352,18 @@ def can_advance_semester(user):
              or (user.is_staff and not is_head_of_department(user)
                  and not is_accountant(user) and not is_secretary(user)
                  and not is_records_officer(user) and not is_admission_officer(user))))
+
+
+def can_advance_semester(user):
+    """Closing one semester and opening the next.
+
+    The heaviest button in the college: it promotes a year group, registers
+    them, enrolls them and sets what the students who failed come back to. The
+    same desk that decides the reviews it acts on — the Principal and the
+    examination officer. It used to be open to anyone with an admin account,
+    which included the Head of Department.
+    """
+    return can_review_progression(user)
 
 
 def active_semester():
@@ -673,6 +688,78 @@ def announcement_download(request, pk):
     return FileResponse(handle, content_type='application/pdf', filename=announcement.file.name.rsplit('/', 1)[-1])
 
 
+def _result_statements(modules, class_level):
+    """The student's published results, one statement per semester.
+
+    What a student is shown of a final result is the grade and what it means,
+    never the marks behind it: the marks are the examination office's working,
+    and a mark a student reads off the portal and disputes is a mark being
+    argued about before the authority has confirmed anything.
+
+    Each semester gets its own statement — its modules, its GPA, and one line
+    saying where the student stands:
+
+        waiting on a supplementary   remark SUPP        comment the module code(s)
+        everything passed            remark the class   comment PASS
+        GPA below 2.0                remark DISCO       comment the failed code(s)
+        a module to repeat           remark REPEAT      comment the module code(s)
+    """
+    statements = {}
+    for module in modules:
+        if not module['has_final_result'] or not module['result']:
+            continue
+        key = (module['semester_number'], module['semester'])
+        statement = statements.setdefault(key, {
+            'label': module['semester'],
+            'number': module['semester_number'],
+            'modules': [],
+            'points': [],
+            'supp': [],
+            'failed': [],
+        })
+        result = module['result']
+        status = result.get('result_status') or ''
+        statement['modules'].append({
+            'code': module['module_code'],
+            'name': module['module_name'],
+            'grade': result.get('grade') or '—',
+            'status': status or '—',
+        })
+        if result.get('grade_point') is not None:
+            statement['points'].append((result['grade_point'], module['credits']))
+        if status == 'SUPP':
+            statement['supp'].append(module['module_code'])
+        elif status in ('FAIL', 'REPEAT', 'DISCONTINUED'):
+            statement['failed'].append(module['module_code'])
+
+    ordered = []
+    for key in sorted(statements):
+        statement = statements[key]
+        points = statement.pop('points')
+        semester_gpa = (
+            round(sum(float(point) * credits for point, credits in points)
+                  / sum(credits for _, credits in points), 2)
+            if points else None
+        )
+        supp, failed = statement['supp'], statement['failed']
+        if supp:
+            # Nothing is decided until the supplementary is marked, so the
+            # remark says what is outstanding rather than guessing at a class.
+            remark, comment = 'SUPP', ', '.join(sorted(supp))
+        elif semester_gpa is not None and semester_gpa < progression.PASS_GPA:
+            remark, comment = 'DISCO', ', '.join(sorted(failed)) or 'GPA below 2.0'
+        elif failed:
+            remark, comment = 'REPEAT', ', '.join(sorted(failed))
+        else:
+            remark, comment = gpa_classification(semester_gpa, class_level), 'PASS'
+        statement['gpa'] = semester_gpa
+        statement['remark'] = remark
+        statement['comment'] = comment
+        statement['modules'].sort(key=lambda row: row['code'])
+        ordered.append(statement)
+    return ordered
+
+
 @student_login_required
 def student_dashboard(request):
     student = get_logged_student(request)
@@ -826,6 +913,7 @@ def student_dashboard(request):
     gpa_class = gpa_classification(
         gpa, student.module.class_level
     )
+    result_statements = _result_statements(modules, student.module.class_level)
 
     overall_attendance = round(attendance_sum / attendance_count) if attendance_count else None
     total_present = sum(module['sessions_attended'] for module in modules)
@@ -991,6 +1079,7 @@ def student_dashboard(request):
         'requests_pending': requests_pending,
         'gpa': gpa,
         'gpa_classification': gpa_class,
+        'result_statements': result_statements,
         'overall_attendance': overall_attendance,
         'total_present': total_present,
         'total_sick': total_sick,
@@ -1535,18 +1624,39 @@ class ProgrammeViewSet(viewsets.ModelViewSet):
 # ── PROGRESSION ────────────────────────────────────────────────────────────────
 
 class ReviewsProgression(BasePermission):
-    """Read for the desk that reviews and for any admin watching; only the
-    reviewing desk decides.
-
-    The records officer is not `is_staff` — they hold their own profile — so
-    reading cannot be gated on admin rights alone, or the office the screen was
-    built for is the one office locked out of it.
-    """
+    """Any admin may read a semester review — the Head of Department watches
+    their department's results — and only the Principal and the examination
+    officer decide one."""
 
     def has_permission(self, request, view):
         if request.method in SAFE_METHODS:
-            return can_review_progression(request.user) or can_read_exams(request.user)
+            return can_read_exams(request.user)
         return can_review_progression(request.user)
+
+
+class ReadsStudentStandings(BasePermission):
+    """Where a student stands, and what they still owe the college
+    academically, is part of the student record.
+
+    So the records and admission officers read it — retrieving a student's
+    details is their work — alongside every admin. Nobody writes it here: a
+    standing moves when a review is decided, never by hand on this screen.
+    """
+
+    def has_permission(self, request, view):
+        return bool(request.method in SAFE_METHODS
+                    and (can_read_exams(request.user)
+                         or is_records_officer(request.user)
+                         or is_admission_officer(request.user)))
+
+
+class ReviewPagination(PageNumberPagination):
+    """A page at a time. One course of 500 students is 500 reviews, and no
+    officer reads 500 rows — they read the counts, work the exceptions, and
+    confirm the rest in one press."""
+    page_size = 50
+    page_size_query_param = 'page_size'
+    max_page_size = 200
 
 
 class SemesterReviewViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1558,6 +1668,7 @@ class SemesterReviewViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = SemesterReviewSerializer
     permission_classes = [ReviewsProgression]
+    pagination_class = ReviewPagination
 
     def get_queryset(self):
         qs = (SemesterReview.objects
@@ -1586,7 +1697,55 @@ class SemesterReviewViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(**{field: value})
         if params.get('unconfirmed') == '1':
             qs = qs.filter(confirmed='')
+        search = (params.get('search') or '').strip()
+        if search:
+            qs = qs.filter(Q(profile__name__icontains=search)
+                           | Q(profile__nactvet_reg_no__icontains=search)
+                           | Q(profile__college_id__icontains=search))
         return qs
+
+    @action(detail=False, methods=['get'], url_path='summary')
+    def summary(self, request):
+        """The headline: how many students, how far the review has got, and
+        where the work that is left actually is.
+
+        This is what the screen leads with. At 500 students the list is a way
+        of working through exceptions, not a thing anybody reads top to bottom.
+        """
+        semester = _semester_from_request(request)
+        if semester is None:
+            return Response({'detail': 'No semester given and none is active.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        rows = (SemesterReview.objects.filter(semester=semester)
+                .values('proposed', 'confirmed', 'class_level__name', 'class_level__order')
+                .annotate(count=Count('id')))
+        outcomes, levels, total, confirmed = {}, {}, 0, 0
+        for row in rows:
+            outcome = row['confirmed'] or row['proposed']
+            outcomes[outcome] = outcomes.get(outcome, 0) + row['count']
+            name = row['class_level__name'] or 'No level recorded'
+            bucket = levels.setdefault(name, {'name': name, 'order': row['class_level__order'] or 0,
+                                              'total': 0, 'confirmed': 0, 'waiting': 0})
+            bucket['total'] += row['count']
+            if row['confirmed']:
+                bucket['confirmed'] += row['count']
+            elif row['proposed'] == SemesterReview.PENDING:
+                bucket['waiting'] += row['count']
+            total += row['count']
+            confirmed += row['count'] if row['confirmed'] else 0
+        waiting = SemesterReview.objects.filter(
+            semester=semester, confirmed='', proposed=SemesterReview.PENDING).count()
+        return Response({
+            'semester': semester.label,
+            'semester_id': semester.id,
+            'total': total,
+            'confirmed': confirmed,
+            'unconfirmed': total - confirmed,
+            'waiting_on_results': waiting,
+            'ready_to_confirm': total - confirmed - waiting,
+            'outcomes': outcomes,
+            'levels': sorted(levels.values(), key=lambda row: row['order']),
+        })
 
     @action(detail=False, methods=['post'], url_path='build')
     def build(self, request):
@@ -1648,14 +1807,8 @@ class SemesterReviewViewSet(viewsets.ReadOnlyModelViewSet):
         if semester is None:
             return Response({'detail': 'No semester given and none is active.'},
                             status=status.HTTP_400_BAD_REQUEST)
-        pending = self.get_queryset().filter(semester=semester, confirmed='')
-        confirmed, left = 0, 0
-        for review in pending:
-            if review.proposed == SemesterReview.PENDING:
-                left += 1
-                continue
-            progression.confirm_review(review, review.proposed, actor=request.user)
-            confirmed += 1
+        pending = list(self.get_queryset().filter(semester=semester, confirmed=''))
+        confirmed, left = progression.confirm_proposed(semester, pending, actor=request.user)
         return Response({'confirmed': confirmed, 'left_for_you': left,
                          'detail': f'Confirmed {confirmed} student(s). {left} still waiting on results.'})
 
@@ -1664,7 +1817,7 @@ class StudentStandingViewSet(viewsets.ReadOnlyModelViewSet):
     """Where every student stands: studying, repeating, postponed, discontinued,
     finished or archived — and what the ones who are away come back to."""
     serializer_class = StudentStandingSerializer
-    permission_classes = [ReviewsProgression]
+    permission_classes = [ReadsStudentStandings]
 
     def get_queryset(self):
         qs = (StudentStanding.objects
@@ -1687,7 +1840,7 @@ class StudentStandingViewSet(viewsets.ReadOnlyModelViewSet):
 class OutstandingRepeatViewSet(viewsets.ReadOnlyModelViewSet):
     """The modules students still have to pass, and the year each was failed in."""
     serializer_class = OutstandingRepeatSerializer
-    permission_classes = [ReviewsProgression]
+    permission_classes = [ReadsStudentStandings]
 
     def get_queryset(self):
         qs = OutstandingRepeat.objects.select_related(
@@ -1726,14 +1879,24 @@ class ModuleViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = user_modules(self.request.user).select_related('class_level', 'semester__academic_year')
+        params = self.request.query_params
         for param, field in [
             ('class_level_id', 'class_level_id'),
             ('semester_id', 'semester_id'),
             ('programme_id', 'programme_id'),
+            ('academic_year_id', 'semester__academic_year_id'),
         ]:
-            val = self.request.query_params.get(param)
+            val = params.get(param)
             if val:
                 qs = qs.filter(**{field: val})
+        # Unasked, the list is this year's. A semester or a year asked for by
+        # name is answered as asked, and `all=1` is how the office looks back
+        # over every year at once.
+        asked_for_a_year = params.get('semester_id') or params.get('academic_year_id')
+        if not asked_for_a_year and params.get('all') != '1':
+            year = active_academic_year()
+            if year is not None:
+                qs = qs.filter(semester__academic_year=year)
         return qs
 
     def perform_create(self, serializer):
@@ -2028,7 +2191,9 @@ def dashboard(request):
             'teaches': False, 'module_scope': 'college',
         })
     today = timezone.localdate()
-    my_modules = user_modules(request.user)
+    # This year's work. Counting every year the college has ever run made the
+    # totals grow at each advance instead of starting the year afresh.
+    my_modules = current_modules(request.user)
     sem = active_semester()
 
     subjects_count = my_modules.count()
@@ -2134,6 +2299,7 @@ def dashboard(request):
         'is_records_officer': is_records_officer(request.user),
         'is_admission_officer': is_admission_officer(request.user),
         'can_edit_student_records': can_edit_student_records(request.user),
+        'can_review_progression': can_review_progression(request.user),
         'is_principal': is_principal(request.user),
         'is_head_of_department': is_head_of_department(request.user),
         'can_manage_exams': can_manage_exams(request.user),
@@ -2951,9 +3117,16 @@ def report(request):
 @api_view(['GET'])
 @login_required
 def all_modules(request):
+    """Every module that can be assigned to somebody — this year's, unless
+    `all=1` asks for the closed years too. Assigning a tutor to a module that
+    finished last year helps nobody, and the list only grows."""
     my_ids = set(request.user.modules_taught.values_list('id', flat=True))
+    modules = Module.objects.select_related('class_level', 'semester__academic_year')
+    year = active_academic_year()
+    if year is not None and request.query_params.get('all') != '1':
+        modules = modules.filter(semester__academic_year=year)
     data = []
-    for m in Module.objects.select_related('class_level', 'semester__academic_year').all():
+    for m in modules:
         data.append({
             'id': m.id, 'name': m.name, 'code': m.code,
             'class_level': m.class_level.name,

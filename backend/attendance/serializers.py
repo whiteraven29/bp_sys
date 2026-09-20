@@ -1566,7 +1566,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
 # ── PROGRESSION ───────────────────────────────────────────────────────────────
 
 class SemesterReviewSerializer(serializers.ModelSerializer):
-    """One student's semester, as the records officer sees it before deciding."""
+    """One student's semester, as the examination office sees it before deciding."""
     reg_no = serializers.CharField(source='profile.nactvet_reg_no', read_only=True)
     college_id = serializers.CharField(source='profile.college_id', read_only=True)
     student_name = serializers.CharField(source='profile.name', read_only=True)

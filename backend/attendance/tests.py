@@ -843,8 +843,14 @@ class AttendanceSecurityTests(TestCase):
         response = self.client.get(reverse('student-dashboard'))
 
         self.assertContains(response, '12 credits')
-        self.assertContains(response, 'ESE /60')
+        # The end-of-semester table is a statement now — module, grade, status
+        # — so no column of marks, and no grade point either.
+        self.assertNotContains(response, 'ESE /60')
         self.assertNotContains(response, '<th>Grade Point</th>', html=True)
+        self.assertContains(response, '<th>Grade</th>', html=True)
+        # The summary reads down, not across: two columns, three rows.
+        self.assertContains(response, '<th scope="row">Remarks</th>', html=True)
+        self.assertContains(response, '<th scope="row">Comment</th>', html=True)
 
     def test_student_ca_table_uses_compact_headers_and_average_status(self):
         StudentResult.objects.create(
@@ -1187,8 +1193,14 @@ class AttendanceSecurityTests(TestCase):
 
         response = self.client.get(reverse('student-dashboard'))
 
-        self.assertContains(response, '90.00')
-        self.assertContains(response, '78.0')
+        # The student is shown the grade and what it means. The marks behind it
+        # are the examination office's working and are not published here.
+        statement = response.context['result_statements'][0]
+        self.assertEqual(statement['modules'][0]['grade'], 'B')
+        self.assertEqual(statement['modules'][0]['status'], 'PASS')
+        self.assertEqual(statement['comment'], 'PASS')
+        self.assertNotContains(response, '90.00')
+        self.assertNotContains(response, '78.0')
 
     def test_eligibility_api_and_excel_both_require_sick_certificate(self):
         session = Session.objects.create(
