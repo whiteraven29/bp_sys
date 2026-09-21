@@ -12,6 +12,7 @@ urlpatterns = [
     path('register/', att_views.register_view, name='register'),
     path('student-logout/', att_views.student_logout_view, name='student-logout'),
     path('student-dashboard/', att_views.student_dashboard, name='student-dashboard'),
+    path('password/change/', att_views.password_change_page, name='password-change'),
     path('announcements/<int:pk>/download/', att_views.announcement_download, name='announcement-download'),
     path('invoice/<str:reference>/', att_views.invoice_print, name='invoice-print'),
     # An approved service request, as the college's own paper form.

@@ -18,7 +18,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework import mixins, viewsets, status
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission, IsAuthenticated, SAFE_METHODS
@@ -28,7 +28,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import analytics, evaluations, finance, notifications, progression
+from . import admissions, analytics, evaluations, finance, notifications, passwords, progression
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
 from .models import (
     AcademicYear, Semester, ClassLevel, Module,
@@ -44,6 +44,8 @@ from .models import (
     BankAccount, CollegeProfile,
     Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration,
     OutstandingRepeat, SemesterReview, StudentStanding, StandingChange,
+    AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck, Application,
+    StudentDocument,
     Form, FormSection, FormQuestion, FormAnswer, FormResponse, FormSubmissionReceipt,
 )
 from .serializers import (
@@ -66,6 +68,8 @@ from .serializers import (
     FormResponseSerializer, StudentFormSerializer, ResultEntryWindowSerializer,
     DepartmentSerializer, ProgrammeSerializer,
     SemesterReviewSerializer, StudentStandingSerializer, OutstandingRepeatSerializer,
+    AdmissionWindowSerializer, CollegeIdFormatSerializer, AdmissionRequirementSerializer,
+    ApplicationSerializer, RequirementCheckSerializer, StudentDocumentSerializer,
 )
 from .grading import grade_for_mark, gpa_classification, parse_authority_grade
 
@@ -537,6 +541,9 @@ def login_view(request):
         return redirect('frontend')
     error = None
     identifier = ''
+    if request.GET.get('expired'):
+        error = ('Your password expired and the time to change it has passed. '
+                 'See the administrator for a reset.')
 
     if request.method == 'POST':
         identifier = str(request.POST.get('identifier', '')).strip()
@@ -564,6 +571,8 @@ def login_view(request):
 
         if student is None:
             error = 'Invalid credentials.'
+        elif passwords.student_is_locked(student):
+            error = passwords.student_reading(student)['message']
         elif student_portal_is_closed(student):
             # A student who has been cleared and archived has finished with the
             # college. Their records stay — results, payments, the statement the
@@ -571,11 +580,35 @@ def login_view(request):
             error = ('Your studies are complete and your portal has been closed. '
                      'The college keeps your records — contact the office if you need them.')
         else:
+            reading = passwords.student_reading(student)
+            if reading and reading['state'] == passwords.EXPIRED:
+                # Six months up. The portal already stops at the change-password
+                # page when this flag is set.
+                passwords.require_student_change(student)
             request.session['student_id'] = student.id
             request.session['student_reg_no'] = student.nactvet_reg_no
             return redirect('student-dashboard')
 
     return render(request, 'login.html', {'error': error, 'identifier': identifier})
+
+
+@login_required
+def password_change_page(request):
+    """Where a member of staff whose password has expired is sent.
+
+    The only page such an account can reach, and the only one it needs: it
+    takes the old password and a new one, and lets them back into the system.
+    """
+    reading = passwords.reading_for(request.user)
+    expired = bool(reading and reading['must_change'])
+    return render(request, 'password_change.html', {
+        'college_name': 'Staff',
+        'full_name': full_name_for(request.user),
+        'username': request.user.username,
+        'heading': 'Your password has expired' if expired else 'Change your password',
+        'lead': (reading['message'] if reading else
+                 'Choose a new password for your account.'),
+    })
 
 
 def student_portal_is_closed(student):
@@ -644,6 +677,7 @@ def change_password(request):
             return Response({'detail': 'Current password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
         request.user.set_password(new_password)
         request.user.save(update_fields=['password'])
+        passwords.mark_changed(request.user)
         update_session_auth_hash(request, request.user)
         return Response({'detail': 'Password updated.'})
 
@@ -660,7 +694,7 @@ def change_password(request):
     updated = Student.objects.filter(nactvet_reg_no__iexact=student.nactvet_reg_no).count()
     for enrollment in Student.objects.filter(nactvet_reg_no__iexact=student.nactvet_reg_no):
         enrollment.set_portal_pin(new_password, require_change=False)
-        enrollment.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
+        enrollment.save(update_fields=['portal_pin_hash', 'must_change_portal_password', 'portal_pin_set_at'])
     return Response({'detail': 'Portal password updated.', 'updated': updated})
 
 
@@ -1080,6 +1114,7 @@ def student_dashboard(request):
         'gpa': gpa,
         'gpa_classification': gpa_class,
         'result_statements': result_statements,
+        'password': passwords.student_reading(student),
         'overall_attendance': overall_attendance,
         'total_present': total_present,
         'total_sick': total_sick,
@@ -1369,6 +1404,34 @@ def create_staff_account(request):
                 module.teachers.add(user)
 
     return Response(staff_account_row(user), status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@login_required
+def reset_staff_password(request, user_id):
+    """Give a staff account a new password.
+
+    The way back for somebody whose password expired before they changed it.
+    Whatever they are given is temporary: they are made to choose their own the
+    next time they sign in, and the six months start from then.
+    """
+    if not can_manage_accounts(request.user):
+        return Response({'detail': 'Only the Principal or the examination officer can '
+                                   'reset a password.'}, status=status.HTTP_403_FORBIDDEN)
+    user = User.objects.filter(pk=user_id).first()
+    if user is None:
+        return Response({'detail': 'Staff account not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    given = str(request.data.get('password') or '').strip()
+    if given and len(given) < 6:
+        return Response({'detail': 'A password needs at least 6 characters.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    new_password = given or admissions.generate_portal_pin()
+    user.set_password(new_password)
+    user.save(update_fields=['password'])
+    passwords.mark_reset(user, by=request.user)
+    return Response({'username': user.username, 'password': new_password,
+                     'detail': f'{user.username} must choose their own password at the next sign-in.'})
 
 
 @api_view(['POST'])
@@ -1860,6 +1923,490 @@ def _semester_from_request(request):
     return active_semester()
 
 
+@api_view(['GET'])
+@login_required
+def search_student_records(request):
+    """Find a student the college already knows, by name, registration number
+    or college ID.
+
+    The records desk's lookup: it answers "is this person already on file, and
+    where do they stand" before anybody opens a second record for them.
+    """
+    if not (can_see_admissions(request.user) or can_edit_student_records(request.user)):
+        raise PermissionDenied('The records, admission or finance office only.')
+    search = (request.query_params.get('search') or '').strip()
+    if len(search) < 2:
+        return Response([])
+    profiles = (StudentProfile.objects
+                .filter(Q(name__icontains=search) | Q(nactvet_reg_no__icontains=search)
+                        | Q(college_id__icontains=search))
+                .select_related('standing__class_level', 'standing__programme')
+                .prefetch_related('next_of_kin')[:20])
+    rows = []
+    for profile in profiles:
+        standing = getattr(profile, 'standing', None)
+        rows.append({
+            'id': profile.id,
+            'reg_no': profile.nactvet_reg_no,
+            'college_id': profile.college_id or '',
+            'name': profile.name,
+            'phone': profile.phone,
+            'gender': profile.gender,
+            'date_of_birth': profile.date_of_birth,
+            'standing': standing.status if standing else '',
+            'standing_display': standing.get_status_display() if standing else 'No standing recorded',
+            'class_level': standing.class_level.name if standing and standing.class_level_id else '',
+            'class_level_id': standing.class_level_id if standing else None,
+            'programme_id': standing.programme_id if standing else None,
+            'return_semester_number': standing.return_semester_number if standing else None,
+            'next_of_kin': [{'position': kin.position, 'name': kin.name, 'phone': kin.phone,
+                             'relationship': kin.relationship} for kin in profile.next_of_kin.all()],
+        })
+    return Response(rows)
+
+
+class StudentDocumentViewSet(viewsets.ModelViewSet):
+    """Certificates and other papers, kept against the person.
+
+    The records desk scans what comes over the counter; a student uploads their
+    own from the portal. Either way the file is never served from /media/ — it
+    carries their name and their results.
+    """
+    serializer_class = StudentDocumentSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_queryset(self):
+        if not (can_see_admissions(self.request.user)
+                or can_edit_student_records(self.request.user)
+                or can_read_exams(self.request.user)):
+            return StudentDocument.objects.none()
+        qs = StudentDocument.objects.select_related('profile', 'uploaded_by', 'verified_by')
+        profile_id = self.request.query_params.get('profile_id')
+        if profile_id:
+            qs = qs.filter(profile_id=profile_id)
+        kind = self.request.query_params.get('kind')
+        if kind:
+            qs = qs.filter(kind=kind)
+        return qs
+
+    def perform_create(self, serializer):
+        if not (can_see_admissions(self.request.user)
+                or can_edit_student_records(self.request.user)):
+            raise PermissionDenied('The records or admission office keeps student documents.')
+        upload = self.request.data.get('file')
+        serializer.save(uploaded_by=self.request.user,
+                        original_name=getattr(upload, 'name', '')[:255])
+
+    def perform_destroy(self, instance):
+        if not can_edit_student_records(self.request.user):
+            raise PermissionDenied('Only the records office removes a document.')
+        instance.delete()
+
+    @action(detail=True, methods=['post'], url_path='verify')
+    def verify(self, request, pk=None):
+        """The records desk says it has seen the original."""
+        document = self.get_object()
+        if not can_edit_student_records(request.user):
+            return Response({'detail': 'The records office verifies documents.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        document.verified_by = request.user
+        document.verified_at = timezone.now()
+        document.save(update_fields=['verified_by', 'verified_at'])
+        return Response(StudentDocumentSerializer(document).data)
+
+
+@xframe_options_sameorigin
+def student_document_download(request, pk):
+    """Stream a student's document to the student it belongs to, or to the
+    offices that admit and keep the record. Gated, not public."""
+    document = get_object_or_404(StudentDocument.objects.select_related('profile'), pk=pk)
+    if request.session.get('student_id'):
+        viewer = _student_profile(request)
+        if viewer is None or viewer.id != document.profile_id:
+            raise Http404('No such document.')
+    elif not (request.user.is_authenticated
+              and (can_see_admissions(request.user) or can_edit_student_records(request.user)
+                   or can_read_exams(request.user))):
+        raise Http404('No such document.')
+    try:
+        handle = document.file.open('rb')
+    except FileNotFoundError:
+        raise Http404('That file is no longer available.')
+    return FileResponse(handle, filename=document.display_name)
+
+
+@api_view(['GET', 'POST'])
+def student_own_documents(request):
+    """The student's own documents, from the portal.
+
+    They upload their certificates themselves — most already have a photograph
+    of them — and the records desk verifies them afterwards.
+    """
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Sign in to the student portal first.'},
+                        status=status.HTTP_403_FORBIDDEN)
+    if request.method == 'GET':
+        documents = StudentDocument.objects.filter(profile=profile)
+        return Response(StudentDocumentSerializer(documents, many=True).data)
+
+    serializer = StudentDocumentSerializer(data={
+        'profile': profile.id,
+        'kind': request.data.get('kind') or StudentDocument.OTHER,
+        'file': request.data.get('file'),
+        'note': request.data.get('note', ''),
+    })
+    serializer.is_valid(raise_exception=True)
+    upload = request.data.get('file')
+    serializer.save(profile=profile, uploaded_by_student=True,
+                    original_name=getattr(upload, 'name', '')[:255])
+    return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+# ── ADMISSION ──────────────────────────────────────────────────────────────────
+
+#: Whose desk each step of an admission is. The Principal and the examination
+#: officer cover every desk, because somebody has to be able to work the queue
+#: when an office is empty; nobody else reaches past their own.
+DESK_ROLES = {
+    Application.INTAKE: ('admission officer', is_admission_officer),
+    Application.INFORMATION: ('records officer', lambda user: is_records_officer(user) or is_admission_officer(user)),
+    Application.FINANCE: ('accountant', is_accountant),
+    Application.RECORDS: ('records officer', is_records_officer),
+    Application.ADMISSION: ('admission officer', is_admission_officer),
+}
+
+
+def can_work_desk(user, step):
+    if not (user and user.is_authenticated):
+        return False
+    if is_principal(user) or (user.is_staff and not is_head_of_department(user)):
+        return True
+    entry = DESK_ROLES.get(step)
+    return bool(entry and entry[1](user))
+
+
+def can_see_admissions(user):
+    """The three offices that work an admission, plus the Principal and the
+    examination officer who oversee it."""
+    return bool(user and user.is_authenticated
+                and (is_records_officer(user) or is_admission_officer(user)
+                     or is_accountant(user) or is_principal(user)
+                     or (user.is_staff and not is_head_of_department(user))))
+
+
+class WorksAdmissions(BasePermission):
+    """Read for the offices that work the queue; each desk's own actions are
+    checked where they are taken."""
+
+    def has_permission(self, request, view):
+        # Every office that works a desk may act; which desk they may act on is
+        # checked per application. The accountant clears the finance desk, so
+        # leaving them out here locked the queue at its first step.
+        return can_see_admissions(request.user)
+
+
+class SetsAdmissionRules(BasePermission):
+    """The admission window, the college ID format and the requirement list are
+    the admission officer's to set, with the Principal and the examination
+    officer."""
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return can_see_admissions(request.user)
+        return bool(request.user and request.user.is_authenticated
+                    and (is_admission_officer(request.user) or is_principal(request.user)
+                         or (request.user.is_staff and not is_head_of_department(request.user))))
+
+
+class AdmissionWindowViewSet(viewsets.ModelViewSet):
+    """When the college is admitting."""
+    serializer_class = AdmissionWindowSerializer
+    permission_classes = [SetsAdmissionRules]
+
+    def get_queryset(self):
+        qs = AdmissionWindow.objects.select_related('semester__academic_year')
+        semester_id = self.request.query_params.get('semester_id')
+        if semester_id:
+            qs = qs.filter(semester_id=semester_id)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class CollegeIdFormatViewSet(viewsets.ModelViewSet):
+    """What the college's own student number looks like, and where it starts."""
+    serializer_class = CollegeIdFormatSerializer
+    permission_classes = [SetsAdmissionRules]
+
+    def get_queryset(self):
+        return CollegeIdFormat.objects.select_related('academic_year')
+
+    def perform_create(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='current')
+    def current(self, request):
+        """This year's, made from last year's if the office has not set one up."""
+        year = active_academic_year()
+        if year is None:
+            return Response({'detail': 'No academic year is active.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        return Response(CollegeIdFormatSerializer(admissions.id_format_for(year)).data)
+
+
+class AdmissionRequirementViewSet(viewsets.ModelViewSet):
+    """The TPH book, insurance, a calculator, rim paper."""
+    serializer_class = AdmissionRequirementSerializer
+    permission_classes = [SetsAdmissionRules]
+
+    def get_queryset(self):
+        qs = AdmissionRequirement.objects.prefetch_related('applies_to_levels').select_related('charge_type')
+        if self.request.query_params.get('active') == '1':
+            qs = qs.filter(is_active=True)
+        return qs
+
+
+class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
+    """The admission queue: who is at which desk.
+
+    Read-only as a resource. An application moves by being worked — cleared,
+    sent back, refused — never by having its state written to.
+    """
+    serializer_class = ApplicationSerializer
+    permission_classes = [WorksAdmissions]
+
+    def get_queryset(self):
+        qs = (Application.objects
+              .select_related('profile', 'semester__academic_year', 'programme', 'class_level',
+                              'registration')
+              .prefetch_related('steps__done_by', 'requirement_checks__requirement',
+                                'requirement_checks__charge'))
+        params = self.request.query_params
+        semester_id = params.get('semester_id')
+        if semester_id:
+            qs = qs.filter(semester_id=semester_id)
+        elif params.get('all') != '1':
+            current = active_semester()
+            qs = qs.filter(semester=current) if current else qs.none()
+        for param, field in [('state', 'state'), ('kind', 'kind'),
+                             ('class_level_id', 'class_level_id'),
+                             ('programme_id', 'programme_id')]:
+            value = params.get(param)
+            if value:
+                qs = qs.filter(**{field: value})
+        if params.get('open') == '1':
+            qs = qs.filter(state__in=sorted(Application.OPEN_STATES))
+        if params.get('mine') == '1':
+            desks = [step for step, (_, held) in DESK_ROLES.items() if held(self.request.user)]
+            qs = qs.filter(state__in=desks) if desks else qs.none()
+        search = (params.get('search') or '').strip()
+        if search:
+            qs = qs.filter(Q(profile__name__icontains=search)
+                           | Q(profile__nactvet_reg_no__icontains=search)
+                           | Q(profile__college_id__icontains=search))
+        return qs
+
+    @action(detail=False, methods=['post'], url_path='capture')
+    def capture(self, request):
+        """Write down a student and open their admission — the records desk's
+        first job for somebody the college has never met."""
+        data = request.data
+        kind = str(data.get('kind') or Application.NEW)
+        if not (can_work_desk(request.user, Application.INFORMATION)
+                or can_work_desk(request.user, Application.INTAKE)):
+            return Response({'detail': 'The records or admission office opens an application.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        semester = Semester.objects.filter(id=data.get('semester_id')).first() or active_semester()
+        programme = Programme.objects.filter(id=data.get('programme_id')).first()
+        class_level = ClassLevel.objects.filter(id=data.get('class_level_id')).first()
+        if semester is None or programme is None or class_level is None:
+            return Response({'detail': 'A semester, a programme and a level are all needed.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            with transaction.atomic():
+                profile = admissions.capture_student(
+                    nactvet_reg_no=data.get('nactvet_reg_no', ''),
+                    name=data.get('name', ''),
+                    phone=data.get('phone', ''),
+                    gender=data.get('gender', ''),
+                    date_of_birth=data.get('date_of_birth') or None,
+                    next_of_kin=data.get('next_of_kin') or [],
+                    actor=request.user,
+                )
+                application = admissions.open_application(
+                    profile=profile, semester=semester, programme=programme,
+                    class_level=class_level, kind=kind, actor=request.user,
+                    note=data.get('note', ''))
+        except admissions.AdmissionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(ApplicationSerializer(application).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='complete')
+    def complete(self, request, pk=None):
+        """Clear the desk this application is at."""
+        application = self.get_object()
+        if not can_work_desk(request.user, application.state):
+            office = DESK_ROLES.get(application.state, ('the right office',))[0]
+            return Response({'detail': f'This application is with the {office}.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        try:
+            worked = admissions.complete_step(application, actor=request.user,
+                                              note=str(request.data.get('note') or ''))
+        except admissions.AdmissionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        pin = getattr(worked, 'portal_pin', None)
+        application.refresh_from_db()
+        data = ApplicationSerializer(application).data
+        if pin:
+            # The one moment this can be read. The officer writes it on the
+            # admission slip; after this only the hash is kept.
+            data['portal_pin'] = pin
+        return Response(data)
+
+    @action(detail=True, methods=['post'], url_path='send-back')
+    def send_back(self, request, pk=None):
+        application = self.get_object()
+        if not can_work_desk(request.user, application.state):
+            return Response({'detail': 'Only the desk holding an application can send it back.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        try:
+            admissions.send_back(application, to=str(request.data.get('to') or ''),
+                                 actor=request.user,
+                                 reason=str(request.data.get('reason') or ''))
+        except admissions.AdmissionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        application.refresh_from_db()
+        return Response(ApplicationSerializer(application).data)
+
+    @action(detail=True, methods=['post'], url_path='refuse')
+    def refuse(self, request, pk=None):
+        application = self.get_object()
+        if not (is_admission_officer(request.user) or is_principal(request.user)
+                or (request.user.is_staff and not is_head_of_department(request.user))):
+            return Response({'detail': 'The admission officer or the Principal refuses an application.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        try:
+            admissions.refuse(application, actor=request.user,
+                              reason=str(request.data.get('reason') or ''))
+        except admissions.AdmissionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        application.refresh_from_db()
+        return Response(ApplicationSerializer(application).data)
+
+    @action(detail=True, methods=['post'], url_path='reset-pin')
+    def reset_pin(self, request, pk=None):
+        """Give the student a fresh portal password — they have lost the one
+        they were handed. Shown once, and they must change it at first sign-in."""
+        application = self.get_object()
+        if not (is_admission_officer(request.user) or is_records_officer(request.user)
+                or is_principal(request.user)
+                or (request.user.is_staff and not is_head_of_department(request.user))):
+            return Response({'detail': 'The records or admission office resets a password.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        pin = admissions.issue_portal_pin(application.profile, force=True, actor=request.user)
+        if pin is None:
+            return Response({'detail': 'This student has no enrollments yet, so there is '
+                                       'nothing to sign in to.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        return Response({'portal_pin': pin, 'reg_no': application.profile.nactvet_reg_no})
+
+    @action(detail=True, methods=['get', 'post'], url_path='requirements')
+    def requirements(self, request, pk=None):
+        """What this student has to have, and whether they have it."""
+        application = self.get_object()
+        if request.method == 'GET':
+            checks = {check.requirement_id: check for check in application.requirement_checks.all()}
+            return Response([{
+                'requirement': requirement.id,
+                'name': requirement.name,
+                'description': requirement.description,
+                'mandatory': requirement.mandatory,
+                'status': checks[requirement.id].status if requirement.id in checks else '',
+                'charge': checks[requirement.id].charge_id if requirement.id in checks else None,
+            } for requirement in admissions.requirements_for(application)])
+
+        if not can_work_desk(request.user, application.state):
+            return Response({'detail': 'This application is with another desk.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        requirement = AdmissionRequirement.objects.filter(
+            id=request.data.get('requirement_id')).first()
+        if requirement is None:
+            return Response({'detail': 'No such requirement.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            check = admissions.record_requirement(
+                application, requirement, str(request.data.get('status') or ''),
+                actor=request.user, note=str(request.data.get('note') or ''))
+        except admissions.AdmissionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        data = RequirementCheckSerializer(check).data
+        # Marking something missing that the accountant has no rate for records
+        # the fact and charges nothing. Say so, rather than let the desk assume
+        # the student has been billed.
+        if check.status == RequirementCheck.MISSING and check.charge_id is None:
+            data['warning'] = (
+                f'Recorded, but nothing was charged: the accountant has set no rate for '
+                f'{requirement.name} at {application.class_level}.')
+        return Response(data)
+
+    @action(detail=True, methods=['post'], url_path='nactvet-number')
+    def nactvet_number(self, request, pk=None):
+        """Write in the NACTVET number, which the authority issues during the
+        admission itself — at intake, where the college takes the student on."""
+        application = self.get_object()
+        if not (can_work_desk(request.user, Application.INTAKE)
+                or can_work_desk(request.user, Application.INFORMATION)):
+            return Response({'detail': 'The admission or records office records the number.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        try:
+            admissions.set_nactvet_number(
+                application.profile, str(request.data.get('nactvet_reg_no') or ''),
+                actor=request.user)
+        except admissions.AdmissionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        application.refresh_from_db()
+        return Response(ApplicationSerializer(application).data)
+
+    @action(detail=False, methods=['get'], url_path='queue')
+    def queue(self, request):
+        """How many applications are sitting at each desk, for the dashboards."""
+        semester = _semester_from_request(request)
+        if semester is None:
+            return Response({'detail': 'No semester given and none is active.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        rows = (Application.objects.filter(semester=semester)
+                .values('state', 'kind').annotate(count=Count('id')))
+        by_state, by_kind = {}, {}
+        for row in rows:
+            by_state[row['state']] = by_state.get(row['state'], 0) + row['count']
+            by_kind[row['kind']] = by_kind.get(row['kind'], 0) + row['count']
+        window = admissions.window_for(semester)
+        return Response({
+            'semester': semester.label,
+            'semester_id': semester.id,
+            'open': admissions.admissions_are_open(semester),
+            'window': AdmissionWindowSerializer(window).data if window else None,
+            'by_desk': by_state,
+            'by_kind': by_kind,
+            'due_back': len(admissions.due_back(semester)),
+        })
+
+    @action(detail=False, methods=['get'], url_path='due-back')
+    def due_back(self, request):
+        """The students the year end said would be back this semester."""
+        semester = _semester_from_request(request)
+        if semester is None:
+            return Response({'detail': 'No semester given and none is active.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        return Response(StudentStandingSerializer(
+            admissions.due_back(semester), many=True).data)
+
+
 # ── ANNOUNCEMENTS ──────────────────────────────────────────────────────────────
 
 class AnnouncementViewSet(viewsets.ModelViewSet):
@@ -2105,7 +2652,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             for student in qs.select_for_update():
                 student.set_portal_pin(portal_pin)
-                student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
+                student.save(update_fields=['portal_pin_hash', 'must_change_portal_password', 'portal_pin_set_at'])
                 updated += 1
         return Response({'updated': updated})
 
@@ -2300,6 +2847,7 @@ def dashboard(request):
         'is_admission_officer': is_admission_officer(request.user),
         'can_edit_student_records': can_edit_student_records(request.user),
         'can_review_progression': can_review_progression(request.user),
+        'password': passwords.reading_for(request.user),
         'is_principal': is_principal(request.user),
         'is_head_of_department': is_head_of_department(request.user),
         'can_manage_exams': can_manage_exams(request.user),

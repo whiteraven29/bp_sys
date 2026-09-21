@@ -19,6 +19,8 @@ from .models import (
     Form, FormSection, FormQuestion, FormResponse, ResultEntryWindow,
     Department, Programme, HeadOfDepartmentProfile,
     OutstandingRepeat, SemesterReview, StudentStanding,
+    AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck,
+    Application, ApplicationStep, StudentDocument,
 )
 
 MAX_ANNOUNCEMENT_FILE_BYTES = 10 * 1024 * 1024  # matches nginx client_max_body_size 10M
@@ -299,7 +301,7 @@ class StudentSerializer(serializers.ModelSerializer):
         student = super().create(validated_data)
         if portal_pin:
             student.set_portal_pin(portal_pin)
-            student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
+            student.save(update_fields=['portal_pin_hash', 'must_change_portal_password', 'portal_pin_set_at'])
         return student
 
     def update(self, instance, validated_data):
@@ -307,7 +309,7 @@ class StudentSerializer(serializers.ModelSerializer):
         student = super().update(instance, validated_data)
         if portal_pin:
             student.set_portal_pin(portal_pin)
-            student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
+            student.save(update_fields=['portal_pin_hash', 'must_change_portal_password', 'portal_pin_set_at'])
         return student
 
     # Each of the fields below used to run its own `.filter(...).count()` query
@@ -860,7 +862,7 @@ class BulkStudentSerializer(serializers.Serializer):
                         pin_skipped += 1
                     else:
                         student.set_portal_pin(portal_pin)
-                        student.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
+                        student.save(update_fields=['portal_pin_hash', 'must_change_portal_password', 'portal_pin_set_at'])
                 added += 1
             else:
                 # An existing enrollment is just skipped. Re-uploading the same
@@ -1650,3 +1652,156 @@ class OutstandingRepeatSerializer(serializers.ModelSerializer):
             'origin_label', 'status', 'status_display', 'note', 'created_at', 'resolved_at',
         ]
         read_only_fields = fields
+
+
+# ── ADMISSION ─────────────────────────────────────────────────────────────────
+
+class AdmissionWindowSerializer(serializers.ModelSerializer):
+    semester_label = serializers.CharField(source='semester.label', read_only=True)
+    is_open_now = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AdmissionWindow
+        fields = ['id', 'semester', 'semester_label', 'opens_on', 'closes_on',
+                  'is_active', 'is_open_now', 'note', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def get_is_open_now(self, obj):
+        return obj.is_open()
+
+    def validate(self, attrs):
+        opens = attrs.get('opens_on', getattr(self.instance, 'opens_on', None))
+        closes = attrs.get('closes_on', getattr(self.instance, 'closes_on', None))
+        if opens and closes and closes < opens:
+            raise serializers.ValidationError({'closes_on': 'Admissions cannot close before they open.'})
+        return attrs
+
+
+class CollegeIdFormatSerializer(serializers.ModelSerializer):
+    academic_year_name = serializers.CharField(source='academic_year.name', read_only=True)
+    example = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = CollegeIdFormat
+        fields = ['id', 'academic_year', 'academic_year_name', 'pattern', 'college_code',
+                  'starts_at', 'next_number', 'sequence_width', 'example', 'updated_at']
+        read_only_fields = ['id', 'updated_at']
+
+    def validate_pattern(self, value):
+        if '{SEQ}' not in value:
+            raise serializers.ValidationError(
+                'The pattern needs {SEQ} — without the running number every student '
+                'would be given the same one.')
+        return value.strip()
+
+
+class AdmissionRequirementSerializer(serializers.ModelSerializer):
+    charge_type_name = serializers.CharField(source='charge_type.name', read_only=True)
+    level_names = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AdmissionRequirement
+        fields = ['id', 'name', 'description', 'charge_type', 'charge_type_name',
+                  'frequency', 'applies_to_levels', 'level_names', 'mandatory',
+                  'is_active', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def get_level_names(self, obj):
+        return [level.name for level in obj.applies_to_levels.all()] or ['Every level']
+
+
+class RequirementCheckSerializer(serializers.ModelSerializer):
+    requirement_name = serializers.CharField(source='requirement.name', read_only=True)
+    charge_amount = serializers.DecimalField(source='charge.amount', max_digits=12,
+                                             decimal_places=2, read_only=True)
+
+    class Meta:
+        model = RequirementCheck
+        fields = ['id', 'requirement', 'requirement_name', 'status', 'charge',
+                  'charge_amount', 'note', 'checked_at']
+        read_only_fields = fields
+
+
+class ApplicationStepSerializer(serializers.ModelSerializer):
+    done_by_name = serializers.SerializerMethodField()
+    step_display = serializers.CharField(source='get_step_display', read_only=True)
+
+    class Meta:
+        model = ApplicationStep
+        fields = ['id', 'step', 'step_display', 'done_by', 'done_by_name', 'done_at', 'note']
+        read_only_fields = fields
+
+    def get_done_by_name(self, obj):
+        from .views import full_name_for
+        return full_name_for(obj.done_by) if obj.done_by_id else ''
+
+
+class ApplicationSerializer(serializers.ModelSerializer):
+    reg_no = serializers.CharField(source='profile.nactvet_reg_no', read_only=True)
+    college_id = serializers.CharField(source='profile.college_id', read_only=True)
+    student_name = serializers.CharField(source='profile.name', read_only=True)
+    phone = serializers.CharField(source='profile.phone', read_only=True)
+    semester_label = serializers.CharField(source='semester.label', read_only=True)
+    programme_code = serializers.CharField(source='programme.code', read_only=True)
+    class_level_name = serializers.CharField(source='class_level.name', read_only=True)
+    kind_display = serializers.CharField(source='get_kind_display', read_only=True)
+    state_display = serializers.CharField(source='get_state_display', read_only=True)
+    steps = ApplicationStepSerializer(many=True, read_only=True)
+    requirement_checks = RequirementCheckSerializer(many=True, read_only=True)
+    balance = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Application
+        fields = [
+            'id', 'kind', 'kind_display', 'state', 'state_display', 'profile', 'reg_no',
+            'college_id', 'student_name', 'phone', 'semester', 'semester_label',
+            'programme', 'programme_code', 'class_level', 'class_level_name',
+            'returning_to', 'registration', 'note', 'decided_reason', 'steps',
+            'requirement_checks', 'balance', 'created_at', 'updated_at',
+        ]
+        read_only_fields = fields
+
+    def get_balance(self, obj):
+        """What the student owes for the year they are being admitted into —
+        the number the finance desk is looking at."""
+        try:
+            return str(finance.balance_for(obj.profile, obj.semester.academic_year)['balance'])
+        except Exception:      # a student with no charges yet
+            return '0.00'
+
+
+class StudentDocumentSerializer(serializers.ModelSerializer):
+    reg_no = serializers.CharField(source='profile.nactvet_reg_no', read_only=True)
+    student_name = serializers.CharField(source='profile.name', read_only=True)
+    kind_display = serializers.CharField(source='get_kind_display', read_only=True)
+    display_name = serializers.CharField(read_only=True)
+    size = serializers.IntegerField(read_only=True)
+    is_verified = serializers.BooleanField(read_only=True)
+    uploaded_by_name = serializers.SerializerMethodField()
+    download_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentDocument
+        fields = ['id', 'profile', 'reg_no', 'student_name', 'kind', 'kind_display',
+                  'file', 'display_name', 'size', 'note', 'uploaded_by', 'uploaded_by_name',
+                  'uploaded_by_student', 'uploaded_at', 'is_verified', 'verified_at',
+                  'download_url']
+        read_only_fields = ['id', 'uploaded_by', 'uploaded_by_student', 'uploaded_at',
+                            'verified_at', 'display_name', 'size', 'is_verified']
+        extra_kwargs = {'file': {'write_only': True}}
+
+    def get_uploaded_by_name(self, obj):
+        from .views import full_name_for
+        if obj.uploaded_by_student:
+            return obj.profile.name
+        return full_name_for(obj.uploaded_by) if obj.uploaded_by_id else ''
+
+    def get_download_url(self, obj):
+        return reverse('student-document-download', args=[obj.pk])
+
+    def validate_file(self, value):
+        # A scan from a phone is a couple of megabytes; anything much larger is
+        # a mistake, and nginx refuses it further up anyway.
+        if value.size > 10 * 1024 * 1024:
+            raise serializers.ValidationError('That file is over 10 MB. Scan it smaller or as a PDF.')
+        return value

@@ -765,6 +765,7 @@
     <button class="nav-btn admin-only" data-page="accounts" onclick="showPage('accounts',this)"><span class="icon"><i class="bi bi-people"></i></span> User Accounts</button>
     <button class="nav-btn admin-only" data-page="departments" onclick="showPage('departments',this); loadDepartments()"><span class="icon"><i class="bi bi-diagram-3"></i></span> Departments</button>
     <button class="nav-btn records-only admin-only account-manager-only" data-page="student-records" onclick="showPage('student-records',this)"><span class="icon"><i class="bi bi-person-vcard"></i></span> Student Records</button>
+    <button class="nav-btn admin-only records-only finance-only" data-page="admissions" onclick="showPage('admissions',this); loadAdmissions()"><span class="icon"><i class="bi bi-door-open"></i></span> Admissions</button>
     <button class="nav-btn admin-only" data-page="progression" onclick="showPage('progression',this); loadProgression()"><span class="icon"><i class="bi bi-arrow-up-right-circle"></i></span> Semester Review</button>
     <div class="aside-label estate-only">Inventory</div>
     <button class="nav-btn estate-only inventory-nav-btn active" title="Overview" data-page="inventory" data-inventory-section="overview" onclick="showInventorySection('overview',this)"><span class="icon"><i class="bi bi-grid-1x2"></i></span> Overview</button>
@@ -872,6 +873,11 @@
       <div class="crumb-meta">Active Academic Year: <b id="crumb-year">—</b></div>
     </div>
     <div class="main-inner">
+
+    <div id="password-banner" style="display:none;align-items:center;gap:10px;padding:10px 14px;margin-bottom:14px;border:1px solid var(--border);border-radius:var(--radius);font-size:.84rem;">
+      <span id="password-banner-text"></span>
+      <button class="btn btn-ghost btn-sm" onclick="openProfileModal()">Change it now</button>
+    </div>
 
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
@@ -996,6 +1002,144 @@
         <button class="btn btn-secondary btn-sm" onclick="importCollegeIds(true)">Check the sheet</button>
         <button class="btn btn-primary btn-sm" onclick="importCollegeIds(false)">Record</button>
         <div id="cid-result" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <div class="page" id="page-admissions">
+      <div class="page-title">Admissions</div>
+      <div class="page-sub">Finance, records and the admission office, in that order. A student is registered and enrolled at the last desk, not before.</div>
+
+      <div class="card">
+        <div class="card-title">This semester <span id="adm-window-state" style="font-size:.75rem;font-weight:400;margin-left:6px;"></span></div>
+        <div class="quick-facts" id="adm-queue"></div>
+        <p class="help-note" id="adm-window-note" style="margin-top:12px;"></p>
+      </div>
+
+      <div class="card" id="adm-desk-card">
+        <div class="card-title">On my desk <span id="adm-desk-count" style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;"></span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Reg. No.</th><th>Name</th><th>Kind</th><th>Level</th><th>Owes</th><th>At</th><th></th></tr></thead>
+            <tbody id="adm-desk-tbody"><tr><td colspan="7"><div class="empty"><div class="ei"><i class="bi bi-inbox"></i></div>Nothing waiting on you</div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card admin-only records-only">
+        <div class="card-title">Open an application</div>
+        <p class="help-note">
+          A <strong>first year</strong> is taken on by the admission office: leave the registration
+          number blank and the college holds them under a temporary one until the authority issues
+          theirs at intake. For a <strong>continuing or readmitted</strong> student, type their
+          registration number and their details are found and filled in.
+        </p>
+        <div class="form-grid-3">
+          <div class="field"><label>Kind *</label>
+            <select id="adm-kind" onchange="renderApplicantFields()">
+              <option value="new">First year</option>
+              <option value="continuing">Continuing student</option>
+              <option value="readmission">Readmission</option>
+            </select>
+          </div>
+          <div class="field"><label>Registration number</label>
+            <input id="adm-regno" placeholder="Leave blank for a first year — the authority numbers them at intake" oninput="scheduleApplicantLookup()">
+            <span id="adm-lookup" style="font-size:.72rem;color:var(--muted);margin-top:3px;"></span>
+          </div>
+          <div class="field"><label>Full name *</label><input id="adm-name" placeholder="As on the certificate"></div>
+        </div>
+        <div class="form-grid-3">
+          <div class="field"><label>Programme *</label><select id="adm-programme"></select></div>
+          <div class="field"><label>Level *</label><select id="adm-level"></select></div>
+          <div class="field"><label>Phone</label><input id="adm-phone" placeholder="07…"></div>
+        </div>
+        <div class="form-grid-3">
+          <div class="field"><label>Gender</label>
+            <select id="adm-gender"><option value="">—</option><option value="F">Female</option><option value="M">Male</option></select>
+          </div>
+          <div class="field"><label>Date of birth</label><input type="date" id="adm-dob"></div>
+        </div>
+        <div id="adm-kin-fields">
+          <div class="form-grid-3">
+            <div class="field"><label>Next of kin 1 — name</label><input id="adm-kin1-name"></div>
+            <div class="field"><label>Phone</label><input id="adm-kin1-phone"></div>
+            <div class="field"><label>Relationship</label>
+              <select id="adm-kin1-rel"><option value="parent">Parent</option><option value="guardian">Guardian</option><option value="spouse">Spouse</option><option value="sibling">Sibling</option><option value="relative">Other relative</option><option value="other">Other</option></select>
+            </div>
+          </div>
+          <div class="form-grid-3">
+            <div class="field"><label>Next of kin 2 — name</label><input id="adm-kin2-name"></div>
+            <div class="field"><label>Phone</label><input id="adm-kin2-phone"></div>
+            <div class="field"><label>Relationship</label>
+              <select id="adm-kin2-rel"><option value="parent">Parent</option><option value="guardian">Guardian</option><option value="spouse">Spouse</option><option value="sibling">Sibling</option><option value="relative">Other relative</option><option value="other">Other</option></select>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openApplication(event)"><i class="bi bi-person-plus"></i> Open the application</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Expected back <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— discontinued and postponed students due this semester</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Reg. No.</th><th>Name</th><th>Standing</th><th>Level</th><th>Comes back to</th><th></th></tr></thead>
+            <tbody id="adm-dueback-tbody"><tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-people"></i></div>Nobody outstanding</div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Everything this semester</div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field"><label>Show</label>
+            <select id="adm-filter" onchange="loadApplications()">
+              <option value="open">Still being worked</option>
+              <option value="">Everything</option>
+              <option value="finance">At finance</option>
+              <option value="records">At records</option>
+              <option value="admission">At the admission office</option>
+              <option value="admitted">Admitted</option>
+              <option value="rejected">Refused</option>
+            </select>
+          </div>
+          <div class="field"><label>Find a student</label><input id="adm-search" placeholder="Name, registration or college ID" oninput="scheduleApplicationSearch()"></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Reg. No.</th><th>Name</th><th>Kind</th><th>Level</th><th>Where it is</th><th>Owes</th><th></th></tr></thead>
+            <tbody id="adm-list-tbody"><tr><td colspan="7"><div class="empty"><div class="ei"><i class="bi bi-list-ul"></i></div>No applications yet</div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card admin-only" id="adm-settings-card">
+        <div class="card-title">How admissions run <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— the admission officer's settings</span></div>
+        <div class="form-grid-3">
+          <div class="field"><label>Admissions open on</label><input type="date" id="adm-opens"></div>
+          <div class="field"><label>and close on</label><input type="date" id="adm-closes"></div>
+          <div class="field" style="display:flex;align-items:flex-end;">
+            <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="adm-window-active" checked> Accepting applications</label>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="saveAdmissionWindow()">Save the window</button>
+        <div style="border-top:1px solid var(--border);margin:16px 0 12px;"></div>
+        <div class="card-title" style="font-size:.9rem;">The college ID number</div>
+        <div class="form-grid-3">
+          <div class="field"><label>Pattern *</label><input id="adm-id-pattern" placeholder="{COLLEGE}/{PROG}/{YEAR}/{SEQ}" oninput="previewCollegeId()"></div>
+          <div class="field"><label>College code</label><input id="adm-id-college" oninput="previewCollegeId()"></div>
+          <div class="field"><label>Digits in the number</label><input type="number" id="adm-id-width" min="1" max="8" oninput="previewCollegeId()"></div>
+        </div>
+        <div class="form-grid-3">
+          <div class="field"><label>The year starts at</label><input type="number" id="adm-id-start" min="1"></div>
+          <div class="field"><label>Next number to issue</label><input type="number" id="adm-id-next" min="1" oninput="previewCollegeId()"></div>
+          <div class="field"><label>Looks like</label><input id="adm-id-example" readonly></div>
+        </div>
+        <p class="help-note">
+          The pieces are <strong>{COLLEGE}</strong>, <strong>{PROG}</strong> (the programme code),
+          <strong>{YEAR}</strong>, <strong>{YY}</strong> and <strong>{SEQ}</strong> (the running number).
+          One counter for the whole college per year. A student who already has a number keeps it, so a
+          readmitted student is never given a second one.
+        </p>
+        <button class="btn btn-secondary btn-sm" onclick="saveCollegeIdFormat()">Save the format</button>
       </div>
     </div>
 
@@ -2584,6 +2728,69 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="pin-modal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">
+      <span>Admitted — hand this over</span>
+      <button class="modal-close" onclick="closePinModal()">✕</button>
+    </div>
+    <p class="help-note">
+      This password is shown <strong>once</strong>. The college keeps only a scrambled copy of it,
+      so it cannot be looked up later — write it on the admission slip. The student is asked to
+      change it the first time they sign in, and the office can issue a fresh one if it is lost.
+    </p>
+    <div class="form-grid" style="margin:14px 0;">
+      <div class="field"><label>Registration number</label><input id="pin-modal-regno" readonly></div>
+      <div class="field"><label>College ID</label><input id="pin-modal-collegeid" readonly></div>
+    </div>
+    <div class="field">
+      <label>Portal password</label>
+      <input id="pin-modal-pin" readonly style="font-size:1.4rem;font-weight:600;letter-spacing:.08em;text-align:center;">
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-secondary btn-sm" onclick="copyPortalPin()"><i class="bi bi-clipboard"></i> Copy</button>
+      <button class="btn btn-ghost btn-sm" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+      <button class="btn btn-primary btn-sm" onclick="closePinModal()">Written down</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="application-modal">
+  <div class="modal" style="max-width:760px;">
+    <div class="modal-title">
+      <span id="app-modal-title">Application</span>
+      <button class="modal-close" onclick="closeApplicationModal()">✕</button>
+    </div>
+    <input type="hidden" id="app-modal-id">
+    <div id="app-modal-summary" style="font-size:.85rem;margin-bottom:12px;"></div>
+    <div id="app-modal-number" style="margin-bottom:14px;display:none;">
+      <div class="card-title" style="font-size:.9rem;">The NACTVET number</div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="field" style="flex:1 1 260px;margin-bottom:0;">
+          <label>Issued by the authority</label>
+          <input id="app-modal-regno" placeholder="e.g. NIT/PST/2026/0031">
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="saveNactvetNumber()">Save the number</button>
+      </div>
+      <p class="help-note" style="margin-top:8px;">
+        Held under a temporary number until this is filled in. Saving it moves the student's record
+        and every enrollment onto the new number at once.
+      </p>
+    </div>
+    <div id="app-modal-requirements" style="margin-bottom:14px;"></div>
+    <div id="app-modal-documents" style="margin-bottom:14px;"></div>
+    <div class="field"><label>Note for the record</label><input id="app-modal-note" placeholder="Receipt number, what was seen, why"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;" id="app-modal-actions"></div>
+    <div class="card-title" style="font-size:.9rem;">What has been done</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Desk</th><th>By</th><th>When</th><th>Note</th></tr></thead>
+        <tbody id="app-modal-steps"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="review-modal">
   <div class="modal">
     <div class="modal-title">
@@ -3192,6 +3399,7 @@ async function boot() {
     state.isRecordsOffice = !!(dash.is_records_officer || dash.is_admission_officer);
     state.canEditStudentRecords = !!dash.can_edit_student_records;
     state.canReviewProgression = !!dash.can_review_progression;
+    renderPasswordAge(dash.password);
     if (state.isRecordsOffice && !state.isStaff) {
       document.body.classList.add('is-records');
       document.getElementById('role-badge').textContent =
@@ -8139,6 +8347,544 @@ function updatePeriodLocks() {
   if (sel && sel.disabled) {
     const first = document.querySelector('input[name="att-period"]:not([disabled])');
     if (first) first.checked = true;
+  }
+}
+
+// ── PASSWORD AGE ──────────────────────────────────────────────────────────────
+// Six months, then it must be changed, then only the office can help. Said
+// here before it happens, so nobody is surprised at the door.
+function renderPasswordAge(reading) {
+  const banner = document.getElementById('password-banner');
+  const label = document.getElementById('password-banner-text');
+  if (!banner || !reading) return;
+  state.password = reading;
+  const colours = {
+    expiring: ['#fff7e6', 'var(--orange)'],
+    expired: ['#fdecec', 'var(--red)'],
+    locked: ['#fdecec', 'var(--red)'],
+  };
+  const tone = colours[reading.state];
+  if (!tone) { banner.style.display = 'none'; return; }
+  banner.style.background = tone[0];
+  banner.style.color = tone[1];
+  banner.style.borderColor = tone[1];
+  label.textContent = `${reading.message} (expires ${reading.expires_on})`;
+  banner.style.display = 'flex';
+}
+
+// ── ADMISSIONS ────────────────────────────────────────────────────────────────
+const DESK_LABELS = {
+  intake: 'Admission office — intake', information: 'Records — details and documents',
+  finance: 'Finance', records: 'Records',
+  admission: 'Admission office', admitted: 'Admitted', rejected: 'Refused',
+  cancelled: 'Withdrawn',
+};
+const KIND_LABELS = { new: 'First year', continuing: 'Continuing', readmission: 'Readmission' };
+
+async function loadAdmissions() {
+  renderApplicantFields();
+  await ensureProgrammes();
+  buildProgrammeOptions(document.getElementById('adm-programme'), '— pick a programme —');
+  buildLevelOptions(document.getElementById('adm-level'), false);
+  await Promise.all([loadAdmissionQueue(), loadMyDesk(), loadApplications(), loadDueBack()]);
+  await loadAdmissionSettings();
+}
+
+async function loadAdmissionQueue() {
+  try {
+    const queue = await api('GET', '/applications/queue/');
+    state.admissionQueue = queue;
+    const desks = ['intake', 'information', 'finance', 'records', 'admission', 'admitted'];
+    document.getElementById('adm-queue').innerHTML =
+      desks.map(desk => `<div class="qf-item"><span>${safeText(DESK_LABELS[desk])}</span><strong>${queue.by_desk?.[desk] || 0}</strong></div>`).join('') +
+      `<div class="qf-item"><span>Expected back</span><strong>${queue.due_back || 0}</strong></div>`;
+    const badge = document.getElementById('adm-window-state');
+    badge.textContent = queue.open ? 'open' : 'closed';
+    badge.className = queue.open ? 'badge badge-green' : 'badge badge-red';
+    const note = document.getElementById('adm-window-note');
+    note.textContent = queue.window
+      ? `${queue.semester} · admissions run ${queue.window.opens_on} to ${queue.window.closes_on}.`
+      : `${queue.semester} · no admission window has been set, so no application can be opened yet.`;
+  } catch (e) { /* the cards below still work */ }
+}
+
+function applicationRow(row, { showDesk = true } = {}) {
+  return `<tr>
+    <td>${safeText(row.reg_no)}${row.college_id ? `<div style="font-size:.68rem;color:var(--muted);">${safeText(row.college_id)}</div>` : ''}</td>
+    <td>${safeText(row.student_name)}</td>
+    <td>${safeText(KIND_LABELS[row.kind] || row.kind)}</td>
+    <td>${safeText(row.class_level_name || '—')}</td>
+    ${showDesk ? `<td>${safeText(DESK_LABELS[row.state] || row.state)}</td>` : ''}
+    <td>${safeText(row.balance)}</td>
+    ${showDesk ? '' : `<td>${safeText(DESK_LABELS[row.state] || row.state)}</td>`}
+    <td><button class="btn btn-ghost btn-sm" onclick="openApplicationModal(${row.id})">Open</button></td>
+  </tr>`;
+}
+
+async function loadMyDesk() {
+  try {
+    const rows = await api('GET', '/applications/?mine=1&open=1');
+    const list = rows.results ?? rows;
+    state.myDesk = list;
+    document.getElementById('adm-desk-count').textContent = list.length ? `${list.length} waiting` : '';
+    document.getElementById('adm-desk-tbody').innerHTML = list.length
+      ? list.map(row => `<tr>
+          <td>${safeText(row.reg_no)}</td>
+          <td>${safeText(row.student_name)}</td>
+          <td>${safeText(KIND_LABELS[row.kind] || row.kind)}</td>
+          <td>${safeText(row.class_level_name || '—')}</td>
+          <td>${safeText(row.balance)}</td>
+          <td>${safeText(DESK_LABELS[row.state] || row.state)}</td>
+          <td style="white-space:nowrap;">
+            <button class="btn btn-primary btn-sm" onclick="openApplicationModal(${row.id})">Work it</button>
+          </td>
+        </tr>`).join('')
+      : '<tr><td colspan="7"><div class="empty"><div class="ei"><i class="bi bi-inbox"></i></div>Nothing waiting on you</div></td></tr>';
+  } catch (e) { /* not every office has a desk */ }
+}
+
+let applicationSearchTimer;
+function scheduleApplicationSearch() {
+  clearTimeout(applicationSearchTimer);
+  applicationSearchTimer = setTimeout(loadApplications, 250);
+}
+
+async function loadApplications() {
+  const filter = document.getElementById('adm-filter').value;
+  const search = document.getElementById('adm-search').value.trim();
+  let url = '/applications/?';
+  if (filter === 'open') url += 'open=1&';
+  else if (filter) url += `state=${encodeURIComponent(filter)}&`;
+  if (search) url += `search=${encodeURIComponent(search)}&`;
+  try {
+    const rows = await api('GET', url);
+    const list = rows.results ?? rows;
+    document.getElementById('adm-list-tbody').innerHTML = list.length
+      ? list.map(row => applicationRow(row)).join('')
+      : '<tr><td colspan="7"><div class="empty"><div class="ei"><i class="bi bi-list-ul"></i></div>Nothing here</div></td></tr>';
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not load the applications'), 'var(--red)');
+  }
+}
+
+async function loadDueBack() {
+  try {
+    const rows = await api('GET', '/applications/due-back/');
+    const list = rows.results ?? rows;
+    document.getElementById('adm-dueback-tbody').innerHTML = list.length
+      ? list.map(row => `<tr>
+          <td>${safeText(row.reg_no)}</td>
+          <td>${safeText(row.student_name)}</td>
+          <td>${safeText(STANDING_LABELS[row.status] || row.status)}</td>
+          <td>${safeText(row.class_level_name || '—')}</td>
+          <td>${row.return_semester_number ? `Semester ${row.return_semester_number}` : '—'}</td>
+          <td><button class="btn btn-ghost btn-sm" onclick="startReadmission('${safeText(row.reg_no)}', ${row.class_level || 'null'}, ${row.programme || 'null'}, '${safeText(row.student_name)}')">Start readmission</button></td>
+        </tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-people"></i></div>Nobody outstanding</div></td></tr>';
+  } catch (e) { /* the list is a convenience */ }
+}
+
+function startReadmission(regNo, levelId, programmeId, name) {
+  document.getElementById('adm-kind').value = 'readmission';
+  document.getElementById('adm-regno').value = regNo;
+  document.getElementById('adm-name').value = name;
+  if (levelId) document.getElementById('adm-level').value = levelId;
+  if (programmeId) document.getElementById('adm-programme').value = programmeId;
+  renderApplicantFields();
+  document.getElementById('adm-regno').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  lookupApplicant();
+}
+
+// A first year is being written down for the first time, so their details and
+// next of kin are asked for. Somebody the college already knows is looked up.
+function renderApplicantFields() {
+  const isNew = document.getElementById('adm-kind').value === 'new';
+  document.getElementById('adm-kin-fields').style.display = isNew ? '' : 'none';
+}
+
+let applicantLookupTimer;
+function scheduleApplicantLookup() {
+  clearTimeout(applicantLookupTimer);
+  applicantLookupTimer = setTimeout(lookupApplicant, 350);
+}
+
+async function lookupApplicant() {
+  const regNo = document.getElementById('adm-regno').value.trim();
+  const found = document.getElementById('adm-lookup');
+  if (regNo.length < 2) { found.textContent = ''; return; }
+  try {
+    const rows = await api('GET', `/student-records/search/?search=${encodeURIComponent(regNo)}`);
+    const match = (rows || []).find(row => row.reg_no.toLowerCase() === regNo.toLowerCase());
+    if (!match) { found.textContent = 'Not on file — they will be written down as a new student.'; return; }
+    found.textContent = `On file: ${match.name}${match.college_id ? ' · ' + match.college_id : ''} · ${match.standing_display}`;
+    document.getElementById('adm-name').value = match.name;
+    document.getElementById('adm-phone').value = match.phone || '';
+    if (match.gender) document.getElementById('adm-gender').value = match.gender;
+    if (match.date_of_birth) document.getElementById('adm-dob').value = match.date_of_birth;
+    if (match.class_level_id) document.getElementById('adm-level').value = match.class_level_id;
+    if (match.programme_id) document.getElementById('adm-programme').value = match.programme_id;
+  } catch (e) { found.textContent = ''; }
+}
+
+async function openApplication(event) {
+  const kin = (n) => ({
+    name: document.getElementById(`adm-kin${n}-name`).value.trim(),
+    phone: document.getElementById(`adm-kin${n}-phone`).value.trim(),
+    relationship: document.getElementById(`adm-kin${n}-rel`).value,
+  });
+  const payload = {
+    kind: document.getElementById('adm-kind').value,
+    nactvet_reg_no: document.getElementById('adm-regno').value.trim(),
+    name: document.getElementById('adm-name').value.trim(),
+    phone: document.getElementById('adm-phone').value.trim(),
+    gender: document.getElementById('adm-gender').value,
+    date_of_birth: document.getElementById('adm-dob').value || null,
+    programme_id: document.getElementById('adm-programme').value,
+    class_level_id: document.getElementById('adm-level').value,
+    next_of_kin: [kin(1), kin(2)].filter(entry => entry.name),
+  };
+  if (!payload.name) { toast('A name is needed', 'var(--red)'); return; }
+  if (!payload.nactvet_reg_no && payload.kind !== 'new') {
+    toast('A continuing or readmitted student is found by their registration number', 'var(--red)');
+    return;
+  }
+  const done = working(event?.currentTarget, 'Opening…');
+  try {
+    const application = await api('POST', '/applications/capture/', payload);
+    toast(`${application.student_name} is now with ${DESK_LABELS[application.state]}`, 'var(--green)');
+    ['adm-regno', 'adm-name', 'adm-phone', 'adm-dob', 'adm-kin1-name', 'adm-kin1-phone',
+     'adm-kin2-name', 'adm-kin2-phone'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('adm-lookup').textContent = '';
+    await Promise.all([loadAdmissionQueue(), loadMyDesk(), loadApplications(), loadDueBack()]);
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not open the application'), 'var(--red)');
+  } finally { done(); }
+}
+
+async function openApplicationModal(id) {
+  try {
+    const application = await api('GET', `/applications/${id}/`);
+    state.application = application;
+    document.getElementById('app-modal-id').value = id;
+    document.getElementById('app-modal-title').textContent =
+      `${application.reg_no} — ${application.student_name}`;
+    document.getElementById('app-modal-summary').innerHTML = `
+      ${safeText(KIND_LABELS[application.kind] || application.kind)} ·
+      ${safeText(application.programme_code || '')} ${safeText(application.class_level_name || '')} ·
+      ${safeText(application.semester_label)}<br>
+      <strong>Where it is:</strong> ${safeText(DESK_LABELS[application.state] || application.state)} ·
+      <strong>Owes:</strong> ${safeText(application.balance)}
+      ${application.college_id ? ` · <strong>College ID:</strong> ${safeText(application.college_id)}` : ''}`;
+    document.getElementById('app-modal-steps').innerHTML = (application.steps || []).length
+      ? application.steps.map(step => `<tr>
+          <td>${safeText(DESK_LABELS[step.step] || step.step)}</td>
+          <td>${safeText(step.done_by_name || '—')}</td>
+          <td>${safeText((step.done_at || '').slice(0, 16).replace('T', ' '))}</td>
+          <td>${safeText(step.note || '')}</td></tr>`).join('')
+      : '<tr><td colspan="4" style="color:var(--muted);">Nothing yet</td></tr>';
+    await renderRequirementChecklist(id);
+    await renderStudentDocuments(application);
+    const numberBox = document.getElementById('app-modal-number');
+    const temporary = String(application.reg_no || '').toUpperCase().startsWith('TEMP/');
+    numberBox.style.display = (application.state === 'intake' || temporary) ? '' : 'none';
+    document.getElementById('app-modal-regno').value = temporary ? '' : application.reg_no;
+    renderApplicationActions(application);
+    document.getElementById('app-modal-note').value = '';
+    document.getElementById('application-modal').classList.add('open');
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not open the application'), 'var(--red)');
+  }
+}
+
+async function renderRequirementChecklist(id) {
+  const box = document.getElementById('app-modal-requirements');
+  try {
+    const rows = await api('GET', `/applications/${id}/requirements/`);
+    if (!rows.length) { box.innerHTML = ''; return; }
+    box.innerHTML = `<div class="card-title" style="font-size:.9rem;">What they must have</div>` +
+      rows.map(row => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <span style="min-width:170px;font-size:.82rem;">${safeText(row.name)}${row.mandatory ? '' : ' <span style="color:var(--muted)">(optional)</span>'}</span>
+        <button class="btn ${row.status === 'has_it' ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'has_it')">Has it</button>
+        <button class="btn ${row.status === 'missing' ? 'btn-warning' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'missing')">Missing — charge</button>
+        <button class="btn ${row.status === 'waived' ? 'btn-secondary' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'waived')">Waive</button>
+      </div>`).join('');
+  } catch (e) { box.innerHTML = ''; }
+}
+
+async function saveNactvetNumber() {
+  const id = document.getElementById('app-modal-id').value;
+  const number = document.getElementById('app-modal-regno').value.trim();
+  if (!number) { toast('Type the number the authority issued', 'var(--red)'); return; }
+  try {
+    const application = await api('POST', `/applications/${id}/nactvet-number/`, { nactvet_reg_no: number });
+    toast(`Recorded as ${application.reg_no}`, 'var(--green)');
+    await openApplicationModal(id);
+    await Promise.all([loadMyDesk(), loadApplications()]);
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not record the number'), 'var(--red)');
+  }
+}
+
+// The papers the student handed in — scanned at the counter, or uploaded by
+// the student themselves from the portal and verified here.
+async function renderStudentDocuments(application) {
+  const box = document.getElementById('app-modal-documents');
+  try {
+    const rows = await api('GET', `/student-documents/?profile_id=${application.profile}`);
+    const list = rows.results ?? rows;
+    box.innerHTML = `<div class="card-title" style="font-size:.9rem;">Documents</div>` +
+      (list.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Document</th><th>Kind</th><th>From</th><th>Seen</th><th></th></tr></thead>
+        <tbody>${list.map(doc => `<tr>
+          <td><a href="${doc.download_url}" target="_blank" rel="noopener">${safeText(doc.display_name)}</a></td>
+          <td>${safeText(doc.kind_display)}</td>
+          <td>${safeText(doc.uploaded_by_name || '')}${doc.uploaded_by_student ? ' (student)' : ''}</td>
+          <td>${doc.is_verified ? '<span class="badge badge-green">verified</span>' : '—'}</td>
+          <td>${doc.is_verified ? '' : `<button class="btn btn-ghost btn-sm" onclick="verifyDocument(${doc.id}, ${application.id})">Mark seen</button>`}</td>
+        </tr>`).join('')}</tbody></table></div>`
+        : '<p class="help-note">Nothing handed in yet.</p>') +
+      `<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
+        <div class="field" style="margin-bottom:0;"><label>Add a scan</label>
+          <input type="file" id="app-doc-file" accept=".pdf,.jpg,.jpeg,.png"></div>
+        <div class="field" style="margin-bottom:0;"><label>Kind</label>
+          <select id="app-doc-kind">
+            <option value="certificate">Certificate</option>
+            <option value="result_slip">Result slip</option>
+            <option value="birth_certificate">Birth certificate</option>
+            <option value="identity">Identification</option>
+            <option value="medical">Medical form</option>
+            <option value="other">Other</option>
+          </select></div>
+        <button class="btn btn-secondary btn-sm" onclick="uploadStudentDocument(${application.profile}, ${application.id})">Upload</button>
+      </div>`;
+  } catch (e) { box.innerHTML = ''; }
+}
+
+async function uploadStudentDocument(profileId, applicationId) {
+  const input = document.getElementById('app-doc-file');
+  if (!input?.files?.length) { toast('Choose a file first', 'var(--red)'); return; }
+  const body = new FormData();
+  body.append('profile', profileId);
+  body.append('kind', document.getElementById('app-doc-kind').value);
+  body.append('file', input.files[0]);
+  try {
+    await api('POST', '/student-documents/', body);
+    toast('Kept on the student\'s record', 'var(--green)');
+    await openApplicationModal(applicationId);
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not upload it'), 'var(--red)');
+  }
+}
+
+async function verifyDocument(documentId, applicationId) {
+  try {
+    await api('POST', `/student-documents/${documentId}/verify/`, {});
+    toast('Marked as seen', 'var(--green)');
+    await openApplicationModal(applicationId);
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not verify it'), 'var(--red)');
+  }
+}
+
+async function recordRequirement(id, requirementId, status) {
+  try {
+    const saved = await api('POST', `/applications/${id}/requirements/`, { requirement_id: requirementId, status });
+    toast(saved?.warning || (saved?.charge_amount ? `Recorded — charged ${saved.charge_amount}` : 'Recorded'),
+          saved?.warning ? 'var(--orange)' : 'var(--green)');
+    await renderRequirementChecklist(id);
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not record it'), 'var(--red)');
+  }
+}
+
+function renderApplicationActions(application) {
+  const box = document.getElementById('app-modal-actions');
+  if (!application.state || ['admitted', 'rejected', 'cancelled'].includes(application.state)) {
+    box.innerHTML = '<span style="font-size:.82rem;color:var(--muted);">This application is closed.</span>'
+      + (application.state === 'admitted'
+         ? ' <button class="btn btn-ghost btn-sm" onclick="resetPortalPin()">New portal password</button>'
+         : '');
+    return;
+  }
+  const last = application.state === 'admission';
+  box.innerHTML = `
+    <button class="btn btn-primary btn-sm" onclick="completeApplicationStep(event)">
+      ${last ? 'Admit the student' : 'Clear this desk →'}
+    </button>
+    <button class="btn btn-ghost btn-sm" onclick="sendApplicationBack()">Send back…</button>
+    <button class="btn btn-danger btn-sm" onclick="refuseApplication()">Refuse</button>`;
+}
+
+async function completeApplicationStep(event) {
+  const id = document.getElementById('app-modal-id').value;
+  const note = document.getElementById('app-modal-note').value.trim();
+  const done = working(event?.currentTarget, 'Working…');
+  try {
+    const application = await api('POST', `/applications/${id}/complete/`, { note });
+    toast(application.state === 'admitted'
+      ? `Admitted — college ID ${application.college_id}`
+      : `Now with ${DESK_LABELS[application.state]}`, 'var(--green)');
+    closeApplicationModal();
+    if (application.portal_pin) {
+      showPortalPin(application.portal_pin, application.reg_no, application.college_id);
+    }
+    await Promise.all([loadAdmissionQueue(), loadMyDesk(), loadApplications(), loadDueBack()]);
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not clear the desk'), 'var(--red)');
+  } finally { done(); }
+}
+
+async function sendApplicationBack() {
+  const id = document.getElementById('app-modal-id').value;
+  const to = prompt('Send back to which desk — finance, records or information?');
+  if (!to) return;
+  const reason = prompt('Why is it going back? This is kept on the record.');
+  if (!reason) return;
+  try {
+    await api('POST', `/applications/${id}/send-back/`, { to: to.trim().toLowerCase(), reason });
+    toast('Sent back', 'var(--green)');
+    closeApplicationModal();
+    await Promise.all([loadAdmissionQueue(), loadMyDesk(), loadApplications()]);
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not send it back'), 'var(--red)');
+  }
+}
+
+async function refuseApplication() {
+  const id = document.getElementById('app-modal-id').value;
+  const reason = prompt('Why is the application refused? This is kept on the record.');
+  if (!reason) return;
+  try {
+    await api('POST', `/applications/${id}/refuse/`, { reason });
+    toast('Refused', 'var(--green)');
+    closeApplicationModal();
+    await Promise.all([loadAdmissionQueue(), loadMyDesk(), loadApplications()]);
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not refuse it'), 'var(--red)');
+  }
+}
+
+function closeApplicationModal() {
+  document.getElementById('application-modal').classList.remove('open');
+}
+
+function showPortalPin(pin, regNo, collegeId) {
+  document.getElementById('pin-modal-pin').value = pin;
+  document.getElementById('pin-modal-regno').value = regNo || '';
+  document.getElementById('pin-modal-collegeid').value = collegeId || '';
+  document.getElementById('pin-modal').classList.add('open');
+}
+
+function closePinModal() { document.getElementById('pin-modal').classList.remove('open'); }
+
+async function copyPortalPin() {
+  const pin = document.getElementById('pin-modal-pin').value;
+  try {
+    await navigator.clipboard.writeText(pin);
+    toast('Copied', 'var(--green)');
+  } catch (e) {
+    toast('Copy it by hand — the browser would not let go of the clipboard', 'var(--orange)');
+  }
+}
+
+async function resetPortalPin() {
+  const id = document.getElementById('app-modal-id').value;
+  if (!confirm('Give this student a new portal password? The one they have stops working.')) return;
+  try {
+    const result = await api('POST', `/applications/${id}/reset-pin/`, {});
+    closeApplicationModal();
+    showPortalPin(result.portal_pin, result.reg_no, '');
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not reset the password'), 'var(--red)');
+  }
+}
+
+// ── how admissions run ────────────────────────────────────────────────────────
+
+async function loadAdmissionSettings() {
+  const card = document.getElementById('adm-settings-card');
+  if (!card) return;
+  try {
+    const queue = state.admissionQueue || await api('GET', '/applications/queue/');
+    if (queue.window) {
+      document.getElementById('adm-opens').value = queue.window.opens_on || '';
+      document.getElementById('adm-closes').value = queue.window.closes_on || '';
+      document.getElementById('adm-window-active').checked = !!queue.window.is_active;
+      state.admissionWindowId = queue.window.id;
+    } else {
+      state.admissionWindowId = null;
+    }
+  } catch (e) { /* settings are the admission officer's card */ }
+  try {
+    const fmt = await api('GET', '/college-id-formats/current/');
+    state.collegeIdFormat = fmt;
+    document.getElementById('adm-id-pattern').value = fmt.pattern;
+    document.getElementById('adm-id-college').value = fmt.college_code;
+    document.getElementById('adm-id-width').value = fmt.sequence_width;
+    document.getElementById('adm-id-start').value = fmt.starts_at;
+    document.getElementById('adm-id-next').value = fmt.next_number;
+    document.getElementById('adm-id-example').value = fmt.example;
+  } catch (e) { /* not this account's card */ }
+}
+
+function previewCollegeId() {
+  const fmt = state.collegeIdFormat;
+  if (!fmt) return;
+  const pattern = document.getElementById('adm-id-pattern').value;
+  const college = document.getElementById('adm-id-college').value;
+  const width = Number(document.getElementById('adm-id-width').value) || 1;
+  const next = Number(document.getElementById('adm-id-next').value) || 1;
+  const year = String(fmt.academic_year_name || '').split('/')[0] || '';
+  const programme = (state.programmes || [])[0];
+  document.getElementById('adm-id-example').value = pattern
+    .replace('{COLLEGE}', college)
+    .replace('{PROG}', programme ? programme.code : 'PROG')
+    .replace('{YEAR}', year)
+    .replace('{YY}', year.slice(-2))
+    .replace('{SEQ}', String(next).padStart(width, '0'));
+}
+
+async function saveAdmissionWindow() {
+  const payload = {
+    semester: state.activeSem?.id,
+    opens_on: document.getElementById('adm-opens').value,
+    closes_on: document.getElementById('adm-closes').value,
+    is_active: document.getElementById('adm-window-active').checked,
+  };
+  if (!payload.opens_on || !payload.closes_on) {
+    toast('Both dates are needed', 'var(--red)');
+    return;
+  }
+  try {
+    if (state.admissionWindowId) {
+      await api('PATCH', `/admission-windows/${state.admissionWindowId}/`, payload);
+    } else {
+      const made = await api('POST', '/admission-windows/', payload);
+      state.admissionWindowId = made.id;
+    }
+    toast('Saved', 'var(--green)');
+    await loadAdmissionQueue();
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not save the window'), 'var(--red)');
+  }
+}
+
+async function saveCollegeIdFormat() {
+  const fmt = state.collegeIdFormat;
+  if (!fmt) return;
+  try {
+    const saved = await api('PATCH', `/college-id-formats/${fmt.id}/`, {
+      pattern: document.getElementById('adm-id-pattern').value.trim(),
+      college_code: document.getElementById('adm-id-college').value.trim(),
+      sequence_width: Number(document.getElementById('adm-id-width').value) || 3,
+      starts_at: Number(document.getElementById('adm-id-start').value) || 1,
+      next_number: Number(document.getElementById('adm-id-next').value) || 1,
+    });
+    state.collegeIdFormat = saved;
+    document.getElementById('adm-id-example').value = saved.example;
+    toast(`Saved — the next number is ${saved.example}`, 'var(--green)');
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not save the format'), 'var(--red)');
   }
 }
 

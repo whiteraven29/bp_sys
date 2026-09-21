@@ -36,9 +36,23 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     # After authentication: it decorates request.user.
     'attendance.middleware.TeachingScopeMiddleware',
+    # After it, so request.user is decorated before the password is judged.
+    'attendance.middleware.PasswordExpiryMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# ── PASSWORD POLICY ───────────────────────────────────────────────────────────
+#
+# A password lives six months. After that the holder is made to change it the
+# next time they sign in, and they have a fortnight's grace in which to do it.
+# Miss that and the account stops opening: the office resets it, which is the
+# point — an account nobody has touched in half a year is the one worth
+# checking on before it is handed back.
+PASSWORD_MAX_AGE_DAYS = config('PASSWORD_MAX_AGE_DAYS', default=182, cast=int)
+PASSWORD_GRACE_DAYS = config('PASSWORD_GRACE_DAYS', default=14, cast=int)
+#: How many days before expiry the dashboards start saying so.
+PASSWORD_WARN_DAYS = config('PASSWORD_WARN_DAYS', default=14, cast=int)
 
 ROOT_URLCONF = 'edutrack.urls'
 

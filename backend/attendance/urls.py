@@ -37,6 +37,11 @@ router.register('charge-types', views.ChargeTypeViewSet, basename='charge-type')
 router.register('fee-structures', views.FeeStructureViewSet, basename='fee-structure')
 router.register('student-charges', views.StudentChargeViewSet, basename='student-charge')
 router.register('invoices', views.InvoiceViewSet, basename='invoice')
+router.register('admission-windows', views.AdmissionWindowViewSet, basename='admission-window')
+router.register('college-id-formats', views.CollegeIdFormatViewSet, basename='college-id-format')
+router.register('admission-requirements', views.AdmissionRequirementViewSet, basename='admission-requirement')
+router.register('applications', views.ApplicationViewSet, basename='application')
+router.register('student-documents', views.StudentDocumentViewSet, basename='student-document')
 router.register('semester-reviews', views.SemesterReviewViewSet, basename='semester-review')
 router.register('student-standings', views.StudentStandingViewSet, basename='student-standing')
 router.register('outstanding-repeats', views.OutstandingRepeatViewSet, basename='outstanding-repeat')
@@ -58,6 +63,8 @@ urlpatterns = [
     path('sick-records/<int:pk>/', views.update_sick_record, name='update-sick-record'),
     path('records/<int:pk>/status/', views.update_attendance_status, name='update-attendance-status'),
     path('change-password/', views.change_password, name='change-password'),
+    path('staff-accounts/<int:user_id>/reset-password/', views.reset_staff_password,
+         name='staff-reset-password'),
     path('staff-accounts/', views.create_staff_account, name='staff-accounts'),
     path('staff-accounts/<int:user_id>/set-modules/', views.set_staff_modules, name='staff-set-modules'),
     path('staff-accounts/<int:user_id>/roles/', views.set_staff_roles, name='staff-set-roles'),
@@ -67,6 +74,8 @@ urlpatterns = [
     path('my-notifications/', views.student_notifications, name='my-notifications'),
     # A document the college attached to a service request. Gated: it belongs
     # to the student it names and to the office that answered them.
+    path('student-documents/<int:pk>/file/', views.student_document_download,
+         name='student-document-download'),
     path('request-documents/<int:pk>/', views.request_attachment_download,
          name='request-attachment'),
     path('inventory/template/', views.inventory_template, name='inventory-template'),
@@ -88,6 +97,8 @@ urlpatterns = [
     path('finance/raise-charge/', views.finance_raise_charge, name='finance-raise-charge'),
     path('exam-declarations/', views.exam_declarations, name='exam-declarations'),
     path('student-records/college-ids/', views.import_college_ids, name='import-college-ids'),
+    path('student-records/search/', views.search_student_records, name='search-student-records'),
+    path('my-documents/', views.student_own_documents, name='student-own-documents'),
     path('finance/issue-invoice/', views.finance_issue_invoice, name='finance-issue-invoice'),
     path('finance/collections/', views.finance_collections, name='finance-collections'),
     path('finance/college/', views.college_profile, name='finance-college'),

@@ -1102,12 +1102,51 @@
       <section class="view" id="view-profile">
         <div class="section-title"><p class="eyebrow">Account</p><h2>My Profile</h2><p>Your student identity and current academic context.</p></div>
         <div class="profile-grid"><div class="profile-item"><span>Full name</span><strong>{{ student_name }}</strong></div><div class="profile-item"><span>Registration number</span><strong>{{ registration_number }}</strong></div><div class="profile-item"><span>Academic year</span><strong>{{ academic_year }}</strong></div><div class="profile-item"><span>Current semester</span><strong>{{ active_semester }}</strong></div><div class="profile-item"><span>Enrolled modules</span><strong>{{ module_count }}</strong></div><div class="profile-item"><span>Recorded sessions</span><strong>{{ total_sessions }}</strong></div></div>
+        {% if password %}
+        <div class="notice" style="{% if password.state == 'expired' or password.state == 'locked' %}border-left-color:#dc2626;{% elif password.state == 'expiring' %}border-left-color:#d97706;{% endif %}">
+          <strong>{{ password.message }}</strong>
+          Your password was set on {{ password.changed_on }} and runs out on {{ password.expires_on }}.
+          Every password at the college lasts six months.
+        </div>
+        {% endif %}
         <div class="account-form">
           <div class="account-field"><label>Current password</label><input id="current-pin" type="password" autocomplete="current-password" placeholder="Current portal password"></div>
           <div class="account-field"><label>New password</label><input id="new-pin" type="password" autocomplete="new-password" minlength="8" placeholder="8+ characters with Aa, 1 and symbol"></div>
           <button class="account-button" type="button" id="change-pin-btn">Update password</button>
         </div>
         <div class="notice">For corrections to your name, registration number, modules, attendance, or marks, contact your lecturer or system administrator. Your portal password is securely stored and is never displayed.</div>
+
+        <section class="panel" style="margin-top:18px;">
+          <h3 class="statement-title">My documents</h3>
+          <div style="padding:14px 16px;">
+            <p style="font-size:.84rem;color:var(--muted);margin-bottom:12px;">
+              Your certificates and other papers. Upload a clear photograph or a scan and the records
+              office checks it against the original — it saves you a queue. Only you and the college
+              offices can open these.
+            </p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Document</th><th>Kind</th><th>Uploaded</th><th>Checked</th></tr></thead>
+                <tbody id="my-documents"><tr><td colspan="4" style="color:var(--muted);">Nothing uploaded yet.</td></tr></tbody>
+              </table>
+            </div>
+            <div class="account-form" style="margin-top:14px;">
+              <div class="account-field"><label>Kind</label>
+                <select id="doc-kind">
+                  <option value="certificate">Certificate</option>
+                  <option value="result_slip">Result slip</option>
+                  <option value="birth_certificate">Birth certificate</option>
+                  <option value="identity">Identification</option>
+                  <option value="medical">Medical form</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="account-field"><label>File (PDF, JPG or PNG)</label>
+                <input type="file" id="doc-file" accept=".pdf,.jpg,.jpeg,.png"></div>
+              <button class="account-button" type="button" id="doc-upload-btn">Upload</button>
+            </div>
+          </div>
+        </section>
       </section>
     </main>
   </div>
@@ -1524,6 +1563,54 @@
       toast(error?.detail || 'Could not update portal password.');
     }
   });
+
+  // ── my documents ────────────────────────────────────────────────────────
+  // The student's own certificates. Uploading one before they come in saves
+  // them a queue, and the records office marks it seen against the original.
+  const DOCUMENT_KINDS = {
+    certificate: 'Certificate', result_slip: 'Result slip',
+    birth_certificate: 'Birth certificate', identity: 'Identification',
+    medical: 'Medical form', other: 'Other',
+  };
+
+  async function loadMyDocuments() {
+    const body = document.getElementById('my-documents');
+    if (!body) return;
+    try {
+      const rows = await api('GET', '/my-documents/');
+      body.innerHTML = rows.length ? rows.map(doc => `<tr>
+          <td><a href="${doc.download_url}" target="_blank" rel="noopener">${doc.display_name}</a></td>
+          <td>${DOCUMENT_KINDS[doc.kind] || doc.kind}</td>
+          <td>${(doc.uploaded_at || '').slice(0, 10)}</td>
+          <td>${doc.is_verified ? 'Checked by the college' : 'Waiting to be checked'}</td>
+        </tr>`).join('')
+        : '<tr><td colspan="4" style="color:var(--muted);">Nothing uploaded yet.</td></tr>';
+    } catch (error) { /* the rest of the page still works */ }
+  }
+
+  document.getElementById('doc-upload-btn')?.addEventListener('click', async () => {
+    const input = document.getElementById('doc-file');
+    if (!input.files?.length) { toast('Choose a file first.'); return; }
+    const body = new FormData();
+    body.append('kind', document.getElementById('doc-kind').value);
+    body.append('file', input.files[0]);
+    try {
+      const response = await fetch('/api/my-documents/', {
+        method: 'POST', body,
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        credentials: 'same-origin',
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw data || { detail: 'Upload failed.' };
+      input.value = '';
+      toast('Uploaded. The records office will check it.');
+      loadMyDocuments();
+    } catch (error) {
+      toast(error?.detail || error?.file?.[0] || 'Could not upload that file.');
+    }
+  });
+
+  loadMyDocuments();
 
   applyTheme(currentTheme());
   loadNotifications();

@@ -190,7 +190,7 @@ class Command(BaseCommand):
         )
         if created:
             enrollment.set_portal_pin(self.pin, require_change=False)
-            enrollment.save(update_fields=['portal_pin_hash', 'must_change_portal_password'])
+            enrollment.save(update_fields=['portal_pin_hash', 'must_change_portal_password', 'portal_pin_set_at'])
         if ca is None and end is None:
             return enrollment
         StudentResult.objects.get_or_create(

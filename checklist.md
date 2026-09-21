@@ -12,7 +12,7 @@ thing is half done, say which half.
 - `[!]` blocked — what it is waiting for is written next to it
 
 Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py test attendance --settings=edutrack.test_settings`
-(561 passing; everything since `5aefbc4` is uncommitted).
+(634 passing; everything since `5aefbc4` is uncommitted).
 
 ---
 
@@ -83,6 +83,25 @@ records officer and examination officer against a copy of the college at the end
       with counts and a per-class breakdown, defaults to "still to confirm", is paginated
       and searchable, and the preview lists 25 moves rather than 500
 
+## Password policy
+Built 2026-09-21 (`attendance/passwords.py`, middleware, migration 0049). 17 tests in
+`test_passwords.py`, driven in Chromium for a warning, an expiry, a reset and a lockout.
+
+- [x] Every password lasts **six months**, staff and students alike, measured from the day
+      it was set (`PASSWORD_MAX_AGE_DAYS`, set in the environment)
+- [x] Both dashboards say when it runs out — a strip on the staff pages and a notice on the
+      student's profile — from a fortnight out (`PASSWORD_WARN_DAYS`)
+- [x] Once expired, a member of staff can reach **only** the change-password page until they
+      set a new one; a student is sent to the portal's own change screen at sign-in
+- [x] A fortnight's grace after expiry (`PASSWORD_GRACE_DAYS`); past it the account stops
+      opening and says **"See the administrator for a reset"**
+- [x] The office resets it: `POST /api/staff-accounts/<id>/reset-password/` for staff
+      (Principal or examination officer only), and the admissions screen's
+      "New portal password" for students. What is issued is temporary — the holder picks
+      their own at the next sign-in, and the six months start again from then
+- [x] Existing accounts start their six months from the day the policy arrives, so nobody
+      is locked out by the deployment itself
+
 ## Phase 3b — postponement and finishing
 Not started. Needed soon after the year opens, not on day one.
 
@@ -101,24 +120,53 @@ Not started. Needed soon after the year opens, not on day one.
 - [ ] Standing shown in the student portal ("Repeating PST04202", "Due back: Level 5, Semester 2")
 
 ## Phase 2 — admission workflow
-Not started. **This is the one dated 12 October.** From
-[flows.md](diagrams/flows.md) (`sample admission workflow`, `final sample workflow`).
+**The one dated 12 October.** Engine, API and screen built (`attendance/admissions.py`,
+migration 0047, 36 tests in `test_admissions.py`), driven in Chromium through all four
+desks as records officer, accountant, admission officer and examination officer.
 
-- [ ] Admission request with three types: **first year**, **continuing**, **readmission**
-- [ ] The desks in order, each recording who did it and when:
-  - first year: information → finance → records (verify documents) → admission
-  - continuing: finance clearance → records (check results) → admission
-  - readmission: finance clearance → records (verify the semester) → admission
-- [ ] Admission window, so continuing students verify or update their details inside it
-- [ ] Records and admission officer dashboards (they work as a team)
-- [ ] College ID format and counter defined by the admission officer: one counter per academic
-      year for the whole college, the programme code inside it, issued once and kept for life
-- [ ] NACTVET number becomes optional until the authority issues it (it is required today)
-- [ ] `AdmissionRequirement` + verification: TPH book, insurance, calculator, rim paper —
-      checked at semester 1, **re-checked at semester 2**, and anything missing is charged
-- [ ] Due-back returns: the discontinued and postponed students Phase 3a recorded, readmitted
-      into the exact semester they left, billed as a fresh student
-- [ ] New students entering at level 4, 5 or 6 (all pay the one-time charges)
+- [x] Admission application with three types: **first year**, **continuing**, **readmission**
+- [x] The desks in order, each stamped with who did it, when and what they said:
+  - first year: **intake → records → finance → admission** — they begin and end at the
+    admission office, and their NACTVET number is written in at intake
+  - continuing / readmission: finance → records → admission
+- [x] **Only finance bills.** Intake and records handle no money; charges are raised when
+  the application reaches the finance desk
+- [x] A first year with no NACTVET number yet is held under a temporary one of the
+  college's own; writing in the authority's number moves their record and every
+  enrollment onto it at once, and a number belonging to somebody else is refused
+- [x] **Student documents**: certificates, result slips, birth certificates and the rest,
+  kept against the person. The records desk scans them in at the counter and marks them
+  seen; **a student uploads their own from the portal**. Downloads are gated — a student
+  reaches only their own, and a signed-out stranger reaches none
+- [x] Each desk is its own office — the accountant clears finance, records clears records,
+      the admission officer admits; the Principal and exam officer cover every desk, the
+      HOD none of them
+- [x] Send back to an earlier desk (needs a reason) and refuse (registers nobody)
+- [x] Charges raised on the way **into** finance, so there is something to pay before the
+      desk can be cleared; a first year is billed the one-time charges too
+- [x] Admitting is the one moment: college ID issued, registration created, modules
+      enrolled, standing set to studying — nothing exists before it
+- [x] Admission window per semester, with the screens saying when it is closed
+- [x] College ID format and counter set by the admission officer — pattern, college code,
+      width, where the year starts; numbers in use skipped; next year inherits the shape;
+      **a readmitted student keeps the number they already had**
+- [x] `AdmissionRequirement` + per-application checks: has it / missing (charged at the
+      accountant's rate) / waived, re-checked each semester, and the desk is told when
+      nothing could be charged because no rate is set
+- [x] Due-back list wired to Phase 3a — the discontinued and postponed students due this
+      semester, with "Start readmission"
+- [x] Student record lookup by name, registration or college ID, so a second record is
+      not opened for somebody already on file
+- [x] NACTVET number is optional until the authority issues it — the number is obtained at
+      the intake desk, which is what that desk is for
+- [ ] Records and admission officer **dashboards** (the queue counts exist; the landing
+      pages do not)
+- [ ] Online applications — the college's current online system is not reachable from here
+- [x] **Admitting issues the portal password**: a readable one (no letters that argue with
+      digits), shown to the officer once in its own dialog with the registration and college
+      numbers, copyable and printable. The student must change it at first sign-in, a
+      returning student keeps the password they already know, and records or admission can
+      issue a replacement when one is lost
 
 ## Finance, still to come
 

@@ -6,6 +6,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 
 class AcademicYear(models.Model):
@@ -594,6 +595,9 @@ class Student(models.Model):
     # lists — and nothing they had already done is removed.
     withdrawn_at = models.DateTimeField(null=True, blank=True)
     withdrawn_reason = models.CharField(max_length=300, blank=True)
+    # When the portal password was last set. A password has a life; this is
+    # what it is measured from.
+    portal_pin_set_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     objects = StudentQuerySet.as_manager()
     portal_pin_hash = models.CharField(max_length=128, blank=True, editable=False)
@@ -612,8 +616,13 @@ class Student(models.Model):
         return bool(self.portal_pin_hash)
 
     def set_portal_pin(self, raw_pin, *, require_change=True):
+        from django.utils import timezone as _tz
+
         self.portal_pin_hash = make_password(str(raw_pin))
         self.must_change_portal_password = require_change
+        # Stamped here rather than by each caller, so no path can set a
+        # password and leave the college unable to tell how old it is.
+        self.portal_pin_set_at = _tz.now()
 
     def check_portal_pin(self, raw_pin):
         return bool(self.portal_pin_hash) and check_password(str(raw_pin), self.portal_pin_hash)
@@ -1263,6 +1272,402 @@ class OutstandingRepeat(models.Model):
 
     def __str__(self):
         return f'{self.profile.nactvet_reg_no} · {self.module_code} · {self.get_status_display()}'
+
+
+# ── ADMISSION ─────────────────────────────────────────────────────────────────
+#
+# Admitting a student is three desks in order, not one form: finance says what
+# they owe and whether it has been settled, records says the person and their
+# papers are who and what they claim, and the admission office says yes. The
+# models below are that queue, and the trail of who did which part.
+#
+#     AdmissionWindow     when the college is admitting, and for which semester
+#     CollegeIdFormat     the number the admission officer issues, and its counter
+#     Application         one student's admission, moving desk to desk
+#     ApplicationStep     who cleared which desk, when, and what they said
+#     AdmissionRequirement / RequirementCheck
+#                         the TPH book, insurance, calculator and rim paper —
+#                         checked every semester, charged when missing
+
+
+class AdmissionWindow(models.Model):
+    """When the college is admitting, for one semester.
+
+    Continuing students verify their details inside this window; outside it the
+    office is not taking applications, and the screens say so rather than
+    quietly accepting one.
+    """
+    semester = models.OneToOneField(Semester, on_delete=models.PROTECT, related_name='admission_window')
+    opens_on = models.DateField()
+    closes_on = models.DateField()
+    is_active = models.BooleanField(
+        default=True, help_text='Turn off to close admissions immediately, whatever the dates say.')
+    note = models.CharField(max_length=300, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='admission_windows_opened')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-semester__academic_year__name', '-semester__number']
+
+    def __str__(self):
+        return f'Admissions · {self.semester}'
+
+    def is_open(self, today=None):
+        from datetime import date as _d
+        today = today or _d.today()
+        return bool(self.is_active and self.opens_on <= today <= self.closes_on)
+
+
+class CollegeIdFormat(models.Model):
+    """The college's own student number: how it is written, and where it starts.
+
+    The college issues these itself, so the admission officer says what they
+    look like and which number the year begins at. The pattern is written with
+    the pieces the office already uses:
+
+        {COLLEGE}  the college's short code, e.g. BPH
+        {PROG}     the programme code, e.g. PST
+        {YEAR}     the opening year in full, e.g. 2026
+        {YY}       the opening year in two digits, e.g. 26
+        {SEQ}      the running number, padded to `sequence_width`
+
+    One counter for the whole college per academic year, as the office keeps it.
+    """
+    academic_year = models.OneToOneField(
+        AcademicYear, on_delete=models.CASCADE, related_name='college_id_format')
+    pattern = models.CharField(
+        max_length=120, default='{COLLEGE}/{PROG}/{YEAR}/{SEQ}',
+        help_text='Where each piece goes. {COLLEGE} {PROG} {YEAR} {YY} {SEQ}')
+    college_code = models.CharField(max_length=20, default='BPH')
+    starts_at = models.PositiveIntegerField(
+        default=1, help_text='The first number of the year.')
+    next_number = models.PositiveIntegerField(default=1)
+    sequence_width = models.PositiveSmallIntegerField(
+        default=3, help_text='How many digits the running number is padded to.')
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='college_id_formats_set')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-academic_year__name']
+
+    def __str__(self):
+        return f'College ID · {self.academic_year} · {self.pattern}'
+
+    def render(self, number, programme=None):
+        """One number, written out. Nothing here consumes the counter."""
+        opening = self.academic_year.name.split('/')[0]
+        return (self.pattern
+                .replace('{COLLEGE}', self.college_code)
+                .replace('{PROG}', programme.code if programme else '')
+                .replace('{YEAR}', opening)
+                .replace('{YY}', opening[-2:])
+                .replace('{SEQ}', str(number).zfill(self.sequence_width)))
+
+    @property
+    def example(self):
+        """What the next number will look like, written out with a real
+        programme code so the office can see the whole thing rather than a gap
+        where the programme goes."""
+        from django.apps import apps
+        programme = apps.get_model('attendance', 'Programme').objects.filter(
+            is_active=True).order_by('code').first()
+        return self.render(self.next_number, programme)
+
+
+class Application(models.Model):
+    """One student's admission, on its way through the desks.
+
+    A first year is captured first — the college has no record of them yet —
+    and then goes the same way as everybody else: finance, records, admission.
+    A continuing or readmitted student is already a person the college knows,
+    so their application starts at finance.
+
+    Nothing here registers or enrolls anybody. That happens once, at the end,
+    when the admission officer admits them.
+    """
+    NEW = 'new'
+    CONTINUING = 'continuing'
+    READMISSION = 'readmission'
+    KIND_CHOICES = [
+        (NEW, 'First year'),
+        (CONTINUING, 'Continuing student'),
+        (READMISSION, 'Readmission'),
+    ]
+
+    #: The desks, in the order they are worked.
+    INTAKE = 'intake'
+    INFORMATION = 'information'
+    FINANCE = 'finance'
+    RECORDS = 'records'
+    ADMISSION = 'admission'
+    ADMITTED = 'admitted'
+    REJECTED = 'rejected'
+    CANCELLED = 'cancelled'
+    STATE_CHOICES = [
+        (INTAKE, 'Intake — the admission office takes them on'),
+        (INFORMATION, 'Records — details and documents'),
+        (FINANCE, 'With finance'),
+        (RECORDS, 'With records'),
+        (ADMISSION, 'With the admission officer'),
+        (ADMITTED, 'Admitted'),
+        (REJECTED, 'Refused'),
+        (CANCELLED, 'Withdrawn'),
+    ]
+    #: Which desks each kind of application goes through.
+    #:
+    #: A first year begins and ends at the admission office: intake is where
+    #: the college takes them on and their NACTVET number is obtained, and the
+    #: last desk is where they are admitted. Records sits between the two and
+    #: keeps their details and their documents — no money passes there; that is
+    #: finance's desk, and the only one that bills.
+    ROUTES = {
+        NEW: [INTAKE, INFORMATION, FINANCE, ADMISSION],
+        CONTINUING: [FINANCE, RECORDS, ADMISSION],
+        READMISSION: [FINANCE, RECORDS, ADMISSION],
+    }
+    OPEN_STATES = {INTAKE, INFORMATION, FINANCE, RECORDS, ADMISSION}
+
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    state = models.CharField(max_length=20, choices=STATE_CHOICES)
+    # The person, once there is one. A first year has a profile from the moment
+    # their details are captured — a person the college has written down is not
+    # yet a student, and becomes one only when they are admitted.
+    profile = models.ForeignKey(
+        StudentProfile, on_delete=models.CASCADE, related_name='applications')
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='applications')
+    programme = models.ForeignKey(Programme, on_delete=models.PROTECT, related_name='applications')
+    class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, related_name='applications')
+    # What the student is returning to, for a readmission: the semester they
+    # were discontinued in is the semester they come back to.
+    returning_to = models.ForeignKey(
+        Semester, on_delete=models.SET_NULL, null=True, blank=True, related_name='readmissions')
+    registration = models.OneToOneField(
+        SemesterRegistration, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='application',
+        help_text='Created when the admission officer admits them.')
+    note = models.CharField(max_length=300, blank=True)
+    decided_reason = models.CharField(max_length=300, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='applications_opened')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'semester'],
+                                    name='one_application_per_semester'),
+        ]
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · {self.get_kind_display()} · {self.get_state_display()}'
+
+    @property
+    def route(self):
+        return self.ROUTES[self.kind]
+
+    @property
+    def is_open(self):
+        return self.state in self.OPEN_STATES
+
+    @property
+    def next_state(self):
+        """The desk after this one, or 'admitted' at the end of the route."""
+        route = self.route
+        if self.state not in route:
+            return None
+        position = route.index(self.state)
+        return route[position + 1] if position + 1 < len(route) else self.ADMITTED
+
+
+class ApplicationStep(models.Model):
+    """One desk's part of an admission: who cleared it, when, and what they said."""
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='steps')
+    step = models.CharField(max_length=20, choices=Application.STATE_CHOICES)
+    done_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='application_steps')
+    done_at = models.DateTimeField(auto_now_add=True)
+    note = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ['done_at']
+
+    def __str__(self):
+        return f'{self.application_id} · {self.step}'
+
+
+class AdmissionRequirement(models.Model):
+    """Something a student must have to study: the TPH book, insurance, a
+    calculator, rim paper.
+
+    Checked at admission and again the next semester, because a student who had
+    a book in October may not have one in February. What is missing is charged
+    at the accountant's rate for it, which is why a requirement points at a
+    charge type rather than carrying an amount of its own.
+    """
+    EVERY_SEMESTER = 'each_semester'
+    EVERY_YEAR = 'each_year'
+    ONCE = 'once'
+    FREQUENCY_CHOICES = [
+        (EVERY_SEMESTER, 'Checked every semester'),
+        (EVERY_YEAR, 'Checked once a year'),
+        (ONCE, 'Checked once, when they join'),
+    ]
+
+    name = models.CharField(max_length=120, unique=True)
+    description = models.CharField(max_length=300, blank=True)
+    charge_type = models.ForeignKey(
+        'ChargeType', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='requirements',
+        help_text='What the college charges when the student does not have it.')
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default=EVERY_SEMESTER)
+    applies_to_levels = models.ManyToManyField(
+        ClassLevel, blank=True, related_name='requirements',
+        help_text='Leave empty for every level.')
+    mandatory = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class RequirementCheck(models.Model):
+    """Whether one student had one requirement, on one application."""
+    HAS_IT = 'has_it'
+    MISSING = 'missing'
+    WAIVED = 'waived'
+    STATUS_CHOICES = [
+        (HAS_IT, 'Has it'),
+        (MISSING, 'Missing — charged'),
+        (WAIVED, 'Waived by the college'),
+    ]
+
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='requirement_checks')
+    requirement = models.ForeignKey(AdmissionRequirement, on_delete=models.PROTECT, related_name='checks')
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES)
+    charge = models.ForeignKey(
+        'StudentCharge', on_delete=models.SET_NULL, null=True, blank=True, related_name='requirement_checks')
+    note = models.CharField(max_length=300, blank=True)
+    checked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='requirement_checks')
+    checked_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['requirement__name']
+        constraints = [
+            models.UniqueConstraint(fields=['application', 'requirement'],
+                                    name='one_check_per_requirement_per_application'),
+        ]
+
+    def __str__(self):
+        return f'{self.application_id} · {self.requirement} · {self.status}'
+
+
+class StudentDocument(models.Model):
+    """A paper the student gave the college, kept as a file.
+
+    Certificates, result slips, a birth certificate, a medical form. The
+    records desk scans what comes in over the counter, and a student can upload
+    their own from the portal — most of these are documents they already have
+    on their phone, and a scan that arrives before they do is one fewer queue.
+
+    Downloads are gated the way a request's attachment is: the file carries the
+    student's name and their results, so it belongs to them and to the offices
+    that admit and keep the record.
+    """
+    CERTIFICATE = 'certificate'
+    RESULT_SLIP = 'result_slip'
+    BIRTH = 'birth_certificate'
+    IDENTITY = 'identity'
+    MEDICAL = 'medical'
+    OTHER = 'other'
+    KIND_CHOICES = [
+        (CERTIFICATE, 'Certificate'),
+        (RESULT_SLIP, 'Result slip'),
+        (BIRTH, 'Birth certificate'),
+        (IDENTITY, 'Identification'),
+        (MEDICAL, 'Medical form'),
+        (OTHER, 'Other'),
+    ]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='documents')
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default=OTHER)
+    file = models.FileField(
+        upload_to='student_documents/%Y/%m/',
+        validators=[FileExtensionValidator(['pdf', 'jpg', 'jpeg', 'png'])],
+        help_text='A scan or a photograph — PDF, JPG or PNG.',
+    )
+    original_name = models.CharField(max_length=255, blank=True)
+    note = models.CharField(max_length=200, blank=True)
+    # Who put it there. A student uploading their own certificate is the
+    # ordinary case, and the records desk verifies it afterwards.
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='student_documents_uploaded')
+    uploaded_by_student = models.BooleanField(default=False)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='student_documents_verified')
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · {self.get_kind_display()}'
+
+    @property
+    def display_name(self):
+        return self.original_name or self.file.name.rsplit('/', 1)[-1]
+
+    @property
+    def size(self):
+        try:
+            return self.file.size
+        except (OSError, ValueError):
+            return 0
+
+    @property
+    def is_verified(self):
+        return self.verified_at is not None
+
+
+class PasswordStatus(models.Model):
+    """How old a staff account's password is, and whether it still opens the door.
+
+    Django keeps the password itself but not the day it was set, and a college
+    that cannot say how old a password is cannot have a policy about it. One
+    row per account, stamped whenever the password changes.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='password_status')
+    changed_at = models.DateTimeField(default=timezone.now)
+    #: Set when the office resets a password: whatever they were given is
+    #: temporary, and the holder picks their own at the next sign-in.
+    must_change = models.BooleanField(default=False)
+    reset_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='passwords_reset')
+    reset_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['user__username']
+        verbose_name_plural = 'password statuses'
+
+    def __str__(self):
+        return f'{self.user.username} · set {self.changed_at:%Y-%m-%d}'
 
 
 class CollegeProfile(models.Model):
