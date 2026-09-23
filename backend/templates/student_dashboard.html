@@ -33,6 +33,16 @@
     --shadow: none;
     --radius: 3px;
     --sidebar-width: 250px;
+    --row-hover: #f5f9fd;
+    /* Fills: a colour with white text on it, deep enough to read in both themes. */
+    --blue-fill: #1565c0;
+    --green-fill: #15803d;
+    --amber-fill: #b45309;
+    --red-fill: #b91c1c;
+    --grey-fill: #5b6b7a;
+    --on-fill: #ffffff;
+    --toast-bg: #2b3440;
+    --toast-ink: #ffffff;
   }
   /* The same portal with the ground and the ink swapped. Only the palette
      moves — every rule below reads these. The blue lightens because #1565c0 on
@@ -57,6 +67,15 @@
     --red: #ff6b6b;
     --red-soft: #351b1b;
     --violet: #a78bfa;
+    --row-hover: #202a38;
+    --blue-fill: #2563eb;
+    --green-fill: #15803d;
+    --amber-fill: #a75a0a;
+    --red-fill: #c62828;
+    --grey-fill: #56657a;
+    --on-fill: #ffffff;
+    --toast-bg: #e3e9f0;
+    --toast-ink: #10151b;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
@@ -108,11 +127,11 @@
   }
   .brand {
     display: flex; align-items: center; gap: 11px; min-height: 56px; padding: 0 16px;
-    background: var(--blue); color: #fff; font-weight: 600;
+    background: var(--blue-fill); color: var(--on-fill); font-weight: 600;
   }
   .brand-mark {
     display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius);
-    color: var(--blue); background: #fff; font-size: .9rem; font-weight: 700;
+    color: var(--blue-fill); background: #fff; font-size: .9rem; font-weight: 700;
   }
   .brand small { display: block; margin-top: 1px; color: rgba(255,255,255,.85); font-size: .66rem; font-weight: 400; }
   .student-mini {
@@ -121,7 +140,7 @@
   }
   .avatar {
     display: grid; place-items: center; flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%;
-    color: #fff; background: var(--blue); font-weight: 700;
+    color: var(--on-fill); background: var(--blue-fill); font-weight: 700;
   }
   .student-mini strong { display: block; overflow: hidden; max-width: 150px; white-space: nowrap; text-overflow: ellipsis; font-size: .82rem; font-weight: 600; }
   .student-mini span { display: block; margin-top: 2px; color: var(--muted); font-size: .72rem; }
@@ -146,8 +165,8 @@
   .nav-submenu .nav-item { padding: 9px 16px 9px 42px; font-size: .79rem; background: transparent; }
   .nav-icon { display: grid; place-items: center; width: 19px; color: var(--muted); font-size: .95rem; }
   .nav-item.active .nav-icon { color: var(--blue); }
-  .nav-badge { margin-left: auto; padding: 1px 7px; border-radius: 2px; color: #fff; background: #96a2ae; font-size: .68rem; font-weight: 600; }
-  .nav-item.active .nav-badge { background: var(--blue); }
+  .nav-badge { margin-left: auto; padding: 1px 7px; border-radius: 2px; color: var(--on-fill); background: var(--grey-fill); font-size: .68rem; font-weight: 600; }
+  .nav-item.active .nav-badge { background: var(--blue-fill); }
   /* ── COLLAPSED RAIL (desktop) ──
      Sidebar shrinks to an icon-only rail; labels, badges and carets are
      hidden and submenus are suppressed so nothing overflows the 56px width. */
@@ -176,14 +195,14 @@
   .logout {
     display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px;
     border: 1px solid var(--line); border-radius: var(--radius);
-    color: var(--muted); background: #fff; font-size: .8rem; font-weight: 500;
+    color: var(--muted); background: var(--surface); font-size: .8rem; font-weight: 500;
   }
-  .logout:hover { background: var(--red); border-color: var(--red); color: #fff; }
+  .logout:hover { background: var(--red-fill); border-color: var(--red-fill); color: var(--on-fill); }
   /* Always visible: collapses the rail on desktop, opens the drawer on mobile. */
   .menu-button {
     display: grid; place-items: center; flex: 0 0 auto;
     width: 34px; height: 34px; border: 1px solid var(--line); border-radius: var(--radius);
-    color: var(--text); background: #fff; cursor: pointer; font-size: 1rem;
+    color: var(--text); background: var(--surface); cursor: pointer; font-size: 1rem;
   }
   .menu-button:hover { background: var(--surface-2); }
   .search {
@@ -192,7 +211,7 @@
   .search span { position: absolute; left: 11px; top: 50%; color: var(--muted); transform: translateY(-50%); }
   .search input {
     width: 100%; padding: 7px 12px 7px 32px; border: 1px solid var(--line); border-radius: var(--radius);
-    outline: none; color: var(--text); background: #fff; font-size: .82rem;
+    outline: none; color: var(--text); background: var(--surface); font-size: .82rem;
   }
   .search input:focus { border-color: var(--blue); }
   .top-meta { display: flex; align-items: center; gap: 12px; margin-left: auto; }
@@ -200,7 +219,7 @@
     padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius);
     color: var(--text); background: var(--surface-2); font-size: .78rem; font-weight: 500;
   }
-  .top-avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: #fff; background: var(--blue); font-weight: 700; font-size: .82rem; }
+  .top-avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: var(--on-fill); background: var(--blue-fill); font-weight: 700; font-size: .82rem; }
   /* Context strip under the topbar: where you are, and the active period. */
   .crumb-bar {
     display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
@@ -208,7 +227,7 @@
     font-size: .8rem; color: var(--muted);
   }
   .crumb-bar .crumb-here { color: var(--text); font-weight: 600; }
-  .crumb-bar .crumb-sep { margin: 0 7px; color: #b9c3cd; }
+  .crumb-bar .crumb-sep { margin: 0 7px; color: var(--muted); }
   .crumb-bar .crumb-meta { color: var(--text); }
   .crumb-bar .crumb-meta b { font-weight: 600; }
   .content { width: 100%; margin: 0; padding: 18px 20px 40px; }
@@ -323,7 +342,7 @@
   .top-icon:hover { border-color: var(--blue); color: var(--blue); }
   .bell-wrap { position: relative; }
   .bell-count { position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px;
-    padding: 0 4px; border-radius: 9px; background: var(--red); color: #fff;
+    padding: 0 4px; border-radius: 9px; background: var(--red-fill); color: var(--on-fill);
     font-size: .66rem; font-weight: 700; line-height: 17px; text-align: center; }
   .bell-panel { display: none; position: absolute; right: 0; top: calc(100% + 8px);
     width: min(340px, 90vw); max-height: 60vh; overflow-y: auto; z-index: 60;
@@ -348,7 +367,7 @@
     font-size: .75rem; font-weight: 600; white-space: nowrap; cursor: pointer;
     transition: background .13s, border-color .13s, color .13s;
   }
-  .btn-mini:hover { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .btn-mini:hover { background: var(--blue-fill); border-color: var(--blue-fill); color: var(--on-fill); }
   .btn-mini + .btn-mini { margin-left: 5px; }
   /* Explanatory copy under a panel's table, indented to the panel's own gutter
      rather than running edge to edge. */
@@ -369,15 +388,15 @@
   .meta { color: var(--muted); font-size: .76rem; }
   /* Small square status tags, like the reference's "Important" label. */
   .status { flex: 0 0 auto; padding: 2px 7px; border-radius: 2px; font-size: .7rem; font-weight: 600; color: #fff; }
-  .status.good, .status.pass { background: var(--green); }
-  .status.warning, .status.pending { background: var(--amber); }
-  .status.critical, .status.fail { background: var(--red); }
+  .status.good, .status.pass { background: var(--green-fill); }
+  .status.warning, .status.pending { background: var(--amber-fill); }
+  .status.critical, .status.fail { background: var(--red-fill); }
   .progress-row { display: flex; justify-content: space-between; margin-top: 14px; color: var(--muted); font-size: .76rem; }
   .progress-row strong { color: var(--text); }
   .progress { height: 6px; margin-top: 6px; overflow: hidden; border-radius: 0; background: var(--surface-3); }
   .progress span { display: block; height: 100%; background: var(--blue); }
   .counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 14px; border: 1px solid var(--line); }
-  .count { padding: 8px; background: #fff; text-align: center; border-right: 1px solid var(--line); }
+  .count { padding: 8px; background: var(--surface); text-align: center; border-right: 1px solid var(--line); }
   .count:last-child { border-right: 0; }
   .count strong { display: block; font-size: .95rem; font-weight: 600; }
   .count span { color: var(--muted); font-size: .7rem; }
@@ -392,7 +411,7 @@
   table { width: 100%; border-collapse: collapse; min-width: 720px; }
   th, td { padding: 7px 11px; border: 1px solid var(--line); text-align: left; font-size: .82rem; }
   th { color: var(--text); background: var(--surface-2); font-size: .8rem; font-weight: 600; white-space: nowrap; }
-  tbody tr:hover td { background: #f5f9fd; }
+  tbody tr:hover td { background: var(--row-hover); }
   .empty {
     grid-column: 1 / -1; padding: 34px 20px; border: 1px dashed var(--line); border-radius: var(--radius);
     color: var(--muted); background: var(--surface-2); text-align: center; font-size: .84rem;
@@ -406,13 +425,13 @@
   .account-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; gap: 12px; align-items: end; margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
   .account-field { display: grid; gap: 5px; }
   .account-field label { color: var(--text); font-size: .78rem; font-weight: 500; }
-  .account-field input { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); outline: none; color: var(--text); background: #fff; font-size: .82rem; }
+  .account-field input { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); outline: none; color: var(--text); background: var(--surface); font-size: .82rem; }
   .account-field input:focus { border-color: var(--blue); }
   .password-wrap { position: relative; width: 100%; }
   .password-wrap input { padding-right: 40px; }
   .password-toggle { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius); color: var(--blue); background: transparent; cursor: pointer; }
   .password-toggle:hover, .password-toggle:focus-visible { background: var(--blue-soft); outline: none; }
-  .account-button { height: 34px; padding: 0 14px; border: 0; border-radius: var(--radius); color: #fff; background: var(--blue); cursor: pointer; font-size: .82rem; font-weight: 500; }
+  .account-button { height: 34px; padding: 0 14px; border: 0; border-radius: var(--radius); color: var(--on-fill); background: var(--blue-fill); cursor: pointer; font-size: .82rem; font-weight: 500; }
   .account-button:hover { background: var(--blue-dark); }
   /* The portal had no .btn at all, so every button added for invoices and
      forms fell back to the browser's own chrome. Matches .account-button, and
@@ -420,16 +439,33 @@
   .btn {
     display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
     border: 1px solid var(--blue); border-radius: var(--radius);
-    background: var(--blue); color: #fff; text-decoration: none;
+    background: var(--blue-fill); color: var(--on-fill); text-decoration: none;
     font: inherit; font-size: .82rem; font-weight: 500; cursor: pointer;
     transition: background .15s, border-color .15s, color .15s;
   }
-  .btn:hover { background: var(--blue-dark); border-color: var(--blue-dark); color: #fff; }
+  .btn:hover { background: var(--blue-fill); border-color: var(--blue-fill); color: var(--on-fill); }
   .btn:disabled, .btn[disabled] { opacity: .5; cursor: not-allowed; }
   .btn-quiet { background: var(--surface); color: var(--text); border-color: var(--line); }
   .btn-quiet:hover { background: var(--surface-2); color: var(--text); border-color: var(--muted); }
-  .notice { margin-top: 16px; padding: 12px 15px; border: 1px solid #cfe0f5; border-left: 3px solid var(--violet); border-radius: var(--radius); color: var(--text); background: #f2f7fd; font-size: .8rem; line-height: 1.6; }
-  .toast { position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: calc(100vw - 36px); padding: 11px 14px; border: 0; border-radius: var(--radius); color: #fff; background: var(--text); opacity: 0; transform: translateY(18px); transition: .2s ease; font-size: .82rem; }
+  .tip {
+    position: relative; display: inline-grid; place-items: center;
+    width: 16px; height: 16px; margin-left: 5px; vertical-align: 1px;
+    border: 1px solid var(--line); border-radius: 50%;
+    color: var(--muted); background: var(--surface);
+    font-size: .64rem; font-weight: 700; line-height: 1; cursor: help; user-select: none;
+  }
+  .tip:hover, .tip:focus { color: var(--blue); border-color: var(--blue); outline: none; }
+  .tip::after {
+    content: attr(data-tip);
+    position: absolute; z-index: 600; left: -6px; top: calc(100% + 7px);
+    width: max-content; max-width: 260px; padding: 8px 10px;
+    border-radius: var(--radius); background: var(--toast-bg); color: var(--toast-ink);
+    font-size: .76rem; font-weight: 400; line-height: 1.45; text-align: left; white-space: normal;
+    opacity: 0; visibility: hidden; transition: opacity .12s ease; pointer-events: none;
+  }
+  .tip:hover::after, .tip:focus::after { opacity: 1; visibility: visible; }
+  .notice { margin-top: 16px; padding: 12px 15px; border: 1px solid var(--line); border-left: 3px solid var(--violet); border-radius: var(--radius); color: var(--text); background: var(--blue-soft); font-size: .8rem; line-height: 1.6; }
+  .toast { position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: calc(100vw - 36px); padding: 11px 14px; border: 0; border-radius: var(--radius); color: var(--toast-ink); background: var(--toast-bg); opacity: 0; transform: translateY(18px); transition: .2s ease; font-size: .82rem; }
   .toast.show { opacity: 1; transform: translateY(0); }
   .overlay { position: fixed; inset: 0; z-index: 25; display: none; background: rgba(20,28,38,.5); }
   @media (max-width: 1050px) {
@@ -568,6 +604,9 @@
     </div>
 
     <main class="content">
+      {% if standing_banner %}
+      <div class="notice" style="margin-bottom:14px;border-left-color:var(--{{ standing_banner.tone }});"><strong>{{ standing_banner.text }}</strong></div>
+      {% endif %}
       <section class="view active" id="view-dashboard">
         <div class="page-head"><div><p class="eyebrow">{{ academic_year }} · {{ active_semester }}</p><h1>Welcome, {{ student_name }}</h1><p class="page-copy">Here is your academic progress at a glance.</p></div></div>
         <div class="quick-facts">
@@ -719,6 +758,9 @@
         {% for statement in result_statements %}
         <section class="panel result-statement">
           <h3 class="statement-title">{{ statement.label }}</h3>
+          {% if statement.withheld %}
+          <div class="notice" style="border-left-color:var(--amber);"><strong>Results withheld.</strong> Your results for this semester are being held by the college. Please see the college office.</div>
+          {% else %}
           <div class="table-wrap">
             <table>
               <thead><tr><th>Module</th><th>Grade</th><th>Status</th></tr></thead>
@@ -742,6 +784,7 @@
               </tbody>
             </table>
           </div>
+          {% endif %}
         </section>
         {% endfor %}
         {% else %}<div class="empty">No end-of-semester results have been published yet.</div>{% endif %}
@@ -840,9 +883,12 @@
         </div>
 
         {% for payment in invoice_payments %}
+        {% ifchanged payment.family %}{% if payment.family == 'other' %}
+        <p class="eyebrow" style="margin:22px 0 8px;">Other fees — one invoice for each</p>
+        {% endif %}{% endifchanged %}
         <section class="panel">
           <div class="panel-head">
-            <h2>{{ payment.family_display }}{% if payment.group != payment.family_display %} · {{ payment.group }}{% endif %}</h2>
+            <h2>{% if payment.family == 'other' %}{{ payment.group }}{% else %}{{ payment.family_display }}{% if payment.group != payment.family_display %} · {{ payment.group }}{% endif %}{% endif %}</h2>
             <span>
               {{ payment.installments }} instalment{{ payment.installments|pluralize }}
               {% if payment.bank_account %}· pay into {{ payment.bank_account.bank_name }} {{ payment.bank_account.account_number }}{% endif %}
@@ -957,6 +1003,30 @@
              hostel bed. Fill in the request here and follow it under My Requests; you do
              not need to queue at an office to start one.</p>
         </div>
+
+        <section class="panel" id="postpone-panel">
+          <div class="panel-head"><h2>Postpone my studies <span class="tip" tabindex="0" role="note" aria-label="Help: postponement" data-tip="The Principal decides. Postponing semester 1 is the whole year — you come back to semester 1 next year; semester 2 brings you back to semester 2. Your fees for the period are reversed and what you paid is kept for your return.">?</span></h2><span id="postpone-state"></span></div>
+          <div style="padding:14px 16px;">
+            <div id="postpone-requests" style="font-size:.84rem;margin-bottom:10px;"></div>
+            <div class="account-form" id="postpone-form" style="margin-top:0;" data-can-ask="{% if standing_banner.status == 'postponed' or standing_banner.status == 'discontinued' or standing_banner.status == 'completed' %}no{% else %}yes{% endif %}">
+              <div class="account-field" style="grid-column:span 2;"><label>Why you need to postpone</label>
+                <input id="postpone-reason" maxlength="2000" placeholder="e.g. illness — attach the medical letter at the records office"></div>
+              <button class="account-button" type="button" id="postpone-btn">Ask the Principal</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="hostel-panel">
+          <div class="panel-head"><h2>Hostel <span class="tip" tabindex="0" role="note" aria-label="Help: hostel" data-tip="A day student can ask for a hostel place. If finance grants it, the hostel fee is added to your bill from the semester you applied in.">?</span></h2><span id="hostel-standing">—</span></div>
+          <div style="padding:14px 16px;">
+            <div id="hostel-applications" style="font-size:.84rem;margin-bottom:10px;"></div>
+            <div class="account-form" id="hostel-form" style="display:none;margin-top:0;">
+              <div class="account-field" style="grid-column:span 2;"><label>Why you need a place (optional)</label>
+                <input id="hostel-reason" maxlength="500" placeholder="e.g. home is far from the college"></div>
+              <button class="account-button" type="button" id="hostel-apply-btn">Apply for a place</button>
+            </div>
+          </div>
+        </section>
 
         <section class="panel">
           <div class="panel-head"><h2>What you can ask for</h2><span>Only services open to your level right now</span></div>
@@ -1101,12 +1171,48 @@
 
       <section class="view" id="view-profile">
         <div class="section-title"><p class="eyebrow">Account</p><h2>My Profile</h2><p>Your student identity and current academic context.</p></div>
-        <div class="profile-grid"><div class="profile-item"><span>Full name</span><strong>{{ student_name }}</strong></div><div class="profile-item"><span>Registration number</span><strong>{{ registration_number }}</strong></div><div class="profile-item"><span>Academic year</span><strong>{{ academic_year }}</strong></div><div class="profile-item"><span>Current semester</span><strong>{{ active_semester }}</strong></div><div class="profile-item"><span>Enrolled modules</span><strong>{{ module_count }}</strong></div><div class="profile-item"><span>Recorded sessions</span><strong>{{ total_sessions }}</strong></div></div>
+        <div class="profile-grid">
+          <div class="profile-item"><span>Full name</span><strong>{% if record %}{{ record.name }}{% else %}{{ student_name }}{% endif %}</strong></div>
+          <div class="profile-item"><span>NACTVET number</span><strong>{{ registration_number }}</strong></div>
+          {% if record %}
+          <div class="profile-item"><span>College ID</span><strong>{{ record.college_id|default:"—" }}</strong></div>
+          <div class="profile-item"><span>Gender</span><strong>{{ record.gender|default:"—" }}</strong></div>
+          <div class="profile-item"><span>Date of birth</span><strong>{{ record.date_of_birth|date:"d M Y"|default:"—" }}</strong></div>
+          <div class="profile-item"><span>Phone</span><strong>{{ record.phone|default:"—" }}</strong></div>
+          <div class="profile-item"><span>Programme</span><strong>{{ record.programme|default:"—" }}</strong></div>
+          <div class="profile-item"><span>Level</span><strong>{{ record.class_level|default:"—" }}</strong></div>
+          {% endif %}
+          <div class="profile-item"><span>Academic year</span><strong>{{ academic_year }}</strong></div>
+          <div class="profile-item"><span>Current semester</span><strong>{{ active_semester }}</strong></div>
+          <div class="profile-item"><span>Enrolled modules</span><strong>{{ module_count }}</strong></div>
+          <div class="profile-item"><span>Recorded sessions</span><strong>{{ total_sessions }}</strong></div>
+        </div>
+        {% if record %}
+        <section class="panel" style="margin-top:18px;">
+          <h3 class="statement-title">Next of kin <span class="tip" tabindex="0" role="note" aria-label="Help: who keeps these details" data-tip="The records office keeps these details. If anything is wrong or missing, take it to them and they will correct it.">?</span></h3>
+          <div style="padding:14px 16px;">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Name</th><th>Relationship</th><th>Phone</th></tr></thead>
+                <tbody>
+                  {% for kin in record.next_of_kin %}
+                  <tr><td>{{ kin.name }}</td><td>{{ kin.relationship }}</td><td>{{ kin.phone }}</td></tr>
+                  {% empty %}
+                  <tr><td colspan="3" style="color:var(--muted);">None recorded yet.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+        {% if record.missing %}
+        <div class="notice" style="border-left-color:var(--amber);"><strong>Not recorded yet:</strong> {{ record.missing|join:", " }}. Take these to the records office.</div>
+        {% endif %}
+        {% endif %}
         {% if password %}
-        <div class="notice" style="{% if password.state == 'expired' or password.state == 'locked' %}border-left-color:#dc2626;{% elif password.state == 'expiring' %}border-left-color:#d97706;{% endif %}">
-          <strong>{{ password.message }}</strong>
-          Your password was set on {{ password.changed_on }} and runs out on {{ password.expires_on }}.
-          Every password at the college lasts six months.
+        <div class="notice" style="{% if password.state == 'expired' or password.state == 'locked' %}border-left-color:var(--red);{% elif password.state == 'expiring' %}border-left-color:var(--amber);{% endif %}">
+          <strong>{{ password.message }}</strong> Expires {{ password.expires_on }}.
+          <span class="tip" tabindex="0" role="note" aria-label="Help: passwords last six months" data-tip="Every password lasts six months. After it expires you have two weeks to change it; after that the office resets it.">?</span>
         </div>
         {% endif %}
         <div class="account-form">
@@ -1114,16 +1220,11 @@
           <div class="account-field"><label>New password</label><input id="new-pin" type="password" autocomplete="new-password" minlength="8" placeholder="8+ characters with Aa, 1 and symbol"></div>
           <button class="account-button" type="button" id="change-pin-btn">Update password</button>
         </div>
-        <div class="notice">For corrections to your name, registration number, modules, attendance, or marks, contact your lecturer or system administrator. Your portal password is securely stored and is never displayed.</div>
+        <div class="notice">Something wrong in your details? Contact the records office.</div>
 
         <section class="panel" style="margin-top:18px;">
-          <h3 class="statement-title">My documents</h3>
+          <h3 class="statement-title">My documents <span class="tip" tabindex="0" role="note" aria-label="Help: uploading documents" data-tip="Upload a clear photo or scan. The records office checks it against the original. Only you and the college can open these.">?</span></h3>
           <div style="padding:14px 16px;">
-            <p style="font-size:.84rem;color:var(--muted);margin-bottom:12px;">
-              Your certificates and other papers. Upload a clear photograph or a scan and the records
-              office checks it against the original — it saves you a queue. Only you and the college
-              offices can open these.
-            </p>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Document</th><th>Kind</th><th>Uploaded</th><th>Checked</th></tr></thead>
@@ -1133,7 +1234,9 @@
             <div class="account-form" style="margin-top:14px;">
               <div class="account-field"><label>Kind</label>
                 <select id="doc-kind">
-                  <option value="certificate">Certificate</option>
+                  <option value="o_level">O-level certificate (CSEE)</option>
+                  <option value="a_level">A-level certificate (ACSEE)</option>
+                  <option value="certificate">Other certificate</option>
                   <option value="result_slip">Result slip</option>
                   <option value="birth_certificate">Birth certificate</option>
                   <option value="identity">Identification</option>
@@ -1568,7 +1671,8 @@
   // The student's own certificates. Uploading one before they come in saves
   // them a queue, and the records office marks it seen against the original.
   const DOCUMENT_KINDS = {
-    certificate: 'Certificate', result_slip: 'Result slip',
+    o_level: 'O-level certificate (CSEE)', a_level: 'A-level certificate (ACSEE)',
+    certificate: 'Other certificate', result_slip: 'Result slip',
     birth_certificate: 'Birth certificate', identity: 'Identification',
     medical: 'Medical form', other: 'Other',
   };
@@ -1611,6 +1715,82 @@
   });
 
   loadMyDocuments();
+
+  // The hostel: where the college has the student living this year, and a
+  // request for a place for a day student.
+  const escapeText = value => String(value ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  async function loadHostel() {
+    const standing = document.getElementById('hostel-standing');
+    if (!standing) return;
+    try {
+      const data = await api('GET', '/my-hostel/');
+      standing.textContent = `${data.academic_year}: ${data.residence_display}`;
+      const waiting = data.applications.some(row => row.status === 'pending');
+      document.getElementById('hostel-applications').innerHTML = data.applications.map(row => `
+        <div style="margin-bottom:4px;">Applied ${escapeText(row.created_at.slice(0, 10))} for ${escapeText(row.semester)} —
+          <strong>${row.status === 'pending' ? 'waiting for an answer' : row.status === 'approved' ? 'granted' : 'declined'}</strong>
+          ${row.decision_note ? `<span style="color:var(--muted);">(${escapeText(row.decision_note)})</span>` : ''}</div>`).join('');
+      document.getElementById('hostel-form').style.display =
+        (data.can_apply && data.residence !== 'hostel' && !waiting) ? '' : 'none';
+    } catch (error) { standing.textContent = ''; }
+  }
+
+  document.getElementById('hostel-apply-btn')?.addEventListener('click', async () => {
+    try {
+      await api('POST', '/my-hostel/', { reason: document.getElementById('hostel-reason').value.trim() });
+      document.getElementById('hostel-reason').value = '';
+      toast('Applied. Finance will answer you here.');
+      loadHostel();
+    } catch (error) {
+      toast(error?.detail || 'Could not send the application.');
+    }
+  });
+
+  loadHostel();
+
+  // Postponement: ask the Principal, see the answer, withdraw one still waiting.
+  async function loadPostponements() {
+    const box = document.getElementById('postpone-requests');
+    if (!box) return;
+    try {
+      const rows = await api('GET', '/my-postponement/');
+      const waiting = rows.find(row => row.status === 'pending');
+      box.innerHTML = rows.map(row => `
+        <div style="margin-bottom:6px;">${escapeText(row.semester)} (${escapeText(row.scope.toLowerCase())}) —
+          <strong>${escapeText(row.status_display.toLowerCase())}</strong>
+          ${row.returns ? ` · back ${escapeText(row.returns)}` : ''}
+          ${row.decision_note ? `<span style="color:var(--muted);">(${escapeText(row.decision_note)})</span>` : ''}
+          ${row.status === 'pending' ? `<button class="btn-mini" type="button" data-withdraw="${row.id}">Withdraw</button>` : ''}
+        </div>`).join('');
+      // Only a student who is studying can ask; one request at a time.
+      const form = document.getElementById('postpone-form');
+      form.style.display = (waiting || form.dataset.canAsk !== 'yes') ? 'none' : '';
+      box.querySelectorAll('[data-withdraw]').forEach(button => button.addEventListener('click', async () => {
+        try {
+          await api('POST', '/my-postponement/', { withdraw: button.dataset.withdraw });
+          toast('Withdrawn.');
+          loadPostponements();
+        } catch (error) { toast(error?.detail || 'Could not withdraw it.'); }
+      }));
+    } catch (error) { box.textContent = ''; }
+  }
+
+  document.getElementById('postpone-btn')?.addEventListener('click', async () => {
+    const reason = document.getElementById('postpone-reason').value.trim();
+    if (!reason) { toast('Say why you need to postpone.'); return; }
+    try {
+      await api('POST', '/my-postponement/', { reason });
+      document.getElementById('postpone-reason').value = '';
+      toast('Sent to the Principal. The answer appears here.');
+      loadPostponements();
+    } catch (error) {
+      toast(error?.detail || 'Could not send the request.');
+    }
+  });
+
+  loadPostponements();
 
   applyTheme(currentTheme());
   loadNotifications();

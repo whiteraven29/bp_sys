@@ -178,6 +178,7 @@ class Command(BaseCommand):
                     'bank_account': accounts[account_no],
                     'blocks_registration': reg, 'blocks_cat1': c1, 'blocks_cat2': c2,
                     'blocks_final': fin, 'blocks_results': res, 'is_active': True,
+                    'is_hostel': name == 'Accommodation',
                 },
             )
             created_types += int(made)

@@ -11,6 +11,7 @@ Balances are computed, never stored. At this college's scale the aggregation is
 cheap, and a derived number cannot go stale.
 """
 
+import logging
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -22,8 +23,11 @@ from django.db.models.functions import Coalesce
 from .models import (
     BankAccount, ChargeType, CollegeProfile, FeeInstallment, FeeStructure,
     FinanceAuditLog, FinanceOverride, Invoice, InvoiceLine, Payment,
-    PaymentAllocation, SemesterRegistration, Student, StudentCharge, StudentProfile,
+    PaymentAllocation, PaymentSchedule, SemesterRegistration, Student, StudentCharge,
+    StudentProfile, StudentResidence,
 )
+
+logger = logging.getLogger(__name__)
 
 ZERO = Decimal('0.00')
 CENTS = Decimal('0.01')
@@ -199,19 +203,86 @@ def structures_for(class_level, academic_year, programme=None):
 # ── raising charges ───────────────────────────────────────────────────────────
 
 @transaction.atomic
-def generate_charges(profile, academic_year, *, actor=None, class_level=None, programme=None):
-    """Raise every automatic charge this student owes for the year.
+# ── new or continuing, and when things fall due ──────────────────────────────
+
+def entry_for(profile, academic_year, registration=None):
+    """Whether the college bills this student as new or as continuing this year.
+
+    New: a first year, a new entrant at level 5 or 6, a readmitted student —
+    they pay the one-time charges and follow the new students' instalments.
+    Continuing: everybody else. Read from the registration; failing that, from
+    whether the student studied here in an earlier year — last year's fees were
+    kept outside this system, so earlier charges alone cannot say.
+    """
+    registration = registration or registration_for(profile, academic_year)
+    if registration is not None:
+        return (PaymentSchedule.NEW
+                if registration.kind in (SemesterRegistration.NEW, SemesterRegistration.READMISSION)
+                else PaymentSchedule.CONTINUING)
+    earlier = (
+        profile.registrations.filter(semester__academic_year__name__lt=academic_year.name)
+        .exclude(status=SemesterRegistration.CANCELLED).exists()
+        or profile.enrollments.filter(module__semester__academic_year__name__lt=academic_year.name).exists()
+        or StudentCharge.objects.filter(profile=profile, academic_year__name__lt=academic_year.name).exists()
+    )
+    return PaymentSchedule.CONTINUING if earlier else PaymentSchedule.NEW
+
+
+def schedule_for(academic_year, entry):
+    return (PaymentSchedule.objects.filter(academic_year=academic_year, entry=entry)
+            .prefetch_related('steps__amounts').first())
+
+
+def _instalments(structure, schedule):
+    """The instalments one fee falls due in: [(number, amount, due date,
+    semester number)].
+
+    From the payment schedule when it covers this charge type and adds up to
+    the fee; otherwise the fee structure's own instalments. A schedule that
+    does not add up is not trusted with the bill — the fee is still charged in
+    full, on the structure's dates, and the mismatch is logged.
+    """
+    if schedule is not None:
+        parts = [(step, line.amount) for step in schedule.steps.all() for line in step.amounts.all()
+                 if line.charge_type_id == structure.charge_type_id and line.amount > ZERO]
+        if parts:
+            if money(sum(amount for _, amount in parts)) == money(structure.amount):
+                return [(step.number, money(amount), step.due_date, step.semester_number)
+                        for step, amount in parts]
+            logger.warning('%s: the %s schedule gives %s for %s but the fee is %s; using the fee\'s own dates',
+                           schedule.academic_year, schedule.entry,
+                           money(sum(amount for _, amount in parts)), structure.charge_type, structure.amount)
+    schedule_rows = list(structure.installment_schedule.all())
+    if not schedule_rows:
+        raise ValueError(
+            f'{structure.charge_type} at {structure.class_level} has no due dates set. '
+            f'Set the installment schedule before generating charges.'
+        )
+    return [(row.number, row.amount, row.due_date, 1) for row in schedule_rows]
+
+
+def generate_charges(profile, academic_year, *, actor=None, class_level=None, programme=None,
+                     entry=None, readmitted=None):
+    """Raise every automatic charge this student owes for the year, and the
+    hostel fee when they live in the hostel.
 
     Idempotent: running it twice does not double-bill, because a charge is
-    unique on (profile, charge type, year, semester, installment). Optional
-    charges like hostel are skipped — those are assigned per student.
+    unique on (profile, charge type, year, semester, installment). Other
+    optional charges are assigned per student.
+
+    `entry` — new or continuing — decides the instalment dates and whether the
+    one-time charges are due; an application passes it, since the student has
+    no registration yet.
     """
     level = class_level or class_level_for(profile, academic_year)
     if level is None:
         return []
     programme = programme or programme_for(profile, academic_year)
     registration = registration_for(profile, academic_year)
-    readmitted = bool(registration and registration.kind == registration.READMISSION)
+    if readmitted is None:
+        readmitted = bool(registration and registration.kind == registration.READMISSION)
+    entry = entry or entry_for(profile, academic_year, registration)
+    schedule = schedule_for(academic_year, entry)
 
     # A student whose latest registration is a repeat sits the module(s) they
     # failed and nothing else, and pays the accountant's rate per module
@@ -228,20 +299,19 @@ def generate_charges(profile, academic_year, *, actor=None, class_level=None, pr
         if structure.charge_type.applies == ChargeType.AUTOMATIC
     ]
 
-    created = []
+    # Every fee's instalments are worked out before any is charged: a fee with
+    # no dates stops the whole bill rather than leaving half of it raised.
+    plan = []
     for structure in structures:
-        schedule = list(structure.installment_schedule.all())
-        if not schedule:
-            raise ValueError(
-                f'{structure.charge_type} at {structure.class_level} has no due dates set. '
-                f'Set the installment schedule before generating charges.'
-            )
         # A "once" charge is billed one time for the whole programme — caution
         # money, admission, ID card, uniforms. It is the only thing separating a
-        # first-year's bill from a continuing student's, so skip it the moment
-        # the student has ever been charged it, in any year. A readmitted
-        # student starts afresh and is billed it again — once more, this year.
+        # first-year's bill from a continuing student's: a continuing student
+        # paid it when they joined, whether or not that year's fees were kept
+        # in this system. A new student is billed it unless they already have
+        # been; a readmitted student starts afresh and is billed it again.
         if structure.billing_period == FeeStructure.ONCE:
+            if entry == PaymentSchedule.CONTINUING:
+                continue
             previous = StudentCharge.objects.filter(profile=profile, charge_type=structure.charge_type)
             if readmitted and structure.charge_type.charged_again_on_readmission:
                 previous = previous.filter(academic_year=academic_year)
@@ -251,19 +321,22 @@ def generate_charges(profile, academic_year, *, actor=None, class_level=None, pr
         semesters = [None]
         if structure.billing_period == FeeStructure.SEMESTER:
             semesters = list(academic_year.semesters.all()) or [None]
+        plan.append((structure, semesters, _instalments(structure, schedule)))
 
+    created = []
+    for structure, semesters, instalments in plan:
         for semester in semesters:
-            for installment in schedule:
+            for number, amount, due_date, _semester_number in instalments:
                 charge, made = StudentCharge.objects.get_or_create(
                     profile=profile,
                     charge_type=structure.charge_type,
                     academic_year=academic_year,
                     semester=semester,
-                    installment_number=installment.number,
+                    installment_number=number,
                     defaults={
                         'fee_structure': structure,
-                        'amount': installment.amount,
-                        'due_date': installment.due_date,
+                        'amount': amount,
+                        'due_date': due_date,
                         'source': StudentCharge.STRUCTURE,
                         'created_by': actor,
                     },
@@ -271,10 +344,318 @@ def generate_charges(profile, academic_year, *, actor=None, class_level=None, pr
                 if made:
                     created.append(charge)
 
+    residence = residence_for(profile, academic_year)
+    if residence is not None and residence.residence == StudentResidence.HOSTEL:
+        created += bill_hostel(profile, academic_year, from_semester_number=residence.from_semester_number,
+                               actor=actor, class_level=level, programme=programme, entry=entry)
+
     if created:
         audit('charge.generate', 'StudentCharge', actor=actor, profile=profile,
               summary=f'Raised {len(created)} charge(s) for {academic_year}')
     return created
+
+
+@transaction.atomic
+def save_schedule(academic_year, entry, steps, *, actor=None, note=''):
+    """Write a payment schedule: its instalments, their dates and semesters,
+    and what of each charge type falls due at each. Replaces what was there.
+
+    `steps` is [{'due_date', 'semester_number', 'amounts': {charge_type_id: amount}}],
+    in order. Charges already raised keep the dates they were raised with; the
+    schedule decides the dates of charges raised from now on.
+    """
+    if entry not in dict(PaymentSchedule.ENTRY_CHOICES):
+        raise ValueError(f'{entry!r} is not new or continuing.')
+    from .models import PaymentStep, PaymentStepAmount
+    schedule, _ = PaymentSchedule.objects.get_or_create(academic_year=academic_year, entry=entry)
+    schedule.steps.all().delete()
+    for number, step in enumerate(steps, start=1):
+        if not step.get('due_date'):
+            raise ValueError(f'Instalment {number} has no date.')
+        row = PaymentStep.objects.create(schedule=schedule, number=number, due_date=step['due_date'],
+                                         semester_number=int(step.get('semester_number') or 1))
+        PaymentStepAmount.objects.bulk_create([
+            PaymentStepAmount(step=row, charge_type_id=int(charge_type_id), amount=money(amount))
+            for charge_type_id, amount in (step.get('amounts') or {}).items() if money(amount) > ZERO
+        ])
+    schedule.note = note[:300]
+    schedule.updated_by = actor
+    schedule.save(update_fields=['note', 'updated_by', 'updated_at'])
+    audit('schedule.save', 'PaymentSchedule', actor=actor, entity_id=schedule.id,
+          summary=f'{academic_year} {entry}: {len(steps)} instalment(s)')
+    return schedule
+
+
+def _next_year(day):
+    try:
+        return day.replace(year=day.year + 1)
+    except ValueError:              # 29 February
+        return day.replace(year=day.year + 1, day=28)
+
+
+@transaction.atomic
+def copy_schedules(source_year, target_year, *, actor=None):
+    """Start next year's schedules from this year's: the same instalments and
+    amounts, each date a year on. The accountant then edits what changed."""
+    copied = []
+    for schedule in PaymentSchedule.objects.filter(academic_year=source_year).prefetch_related('steps__amounts'):
+        if PaymentSchedule.objects.filter(academic_year=target_year, entry=schedule.entry).exists():
+            continue
+        copied.append(save_schedule(target_year, schedule.entry, [
+            {'due_date': _next_year(step.due_date), 'semester_number': step.semester_number,
+             'amounts': {line.charge_type_id: line.amount for line in step.amounts.all()}}
+            for step in schedule.steps.all()
+        ], actor=actor, note=f'Copied from {source_year}'))
+    return copied
+
+
+def schedule_mismatches(schedule):
+    """Charge types the schedule covers whose instalments do not add up to the
+    fee at some level — those are charged on the fee's own dates instead."""
+    totals = {}
+    for step in schedule.steps.all():
+        for line in step.amounts.all():
+            totals[line.charge_type_id] = totals.get(line.charge_type_id, ZERO) + line.amount
+    problems = []
+    for structure in (FeeStructure.objects.filter(academic_year=schedule.academic_year, is_active=True,
+                                                  charge_type_id__in=totals)
+                      .select_related('charge_type', 'class_level', 'programme')):
+        if money(totals[structure.charge_type_id]) != money(structure.amount):
+            problems.append({
+                'charge_type': structure.charge_type.name,
+                'class_level': structure.class_level.name,
+                'programme': structure.programme.code if structure.programme_id else '',
+                'scheduled': str(money(totals[structure.charge_type_id])),
+                'fee': str(money(structure.amount)),
+            })
+    return problems
+
+
+# ── resetting a period, and credit ────────────────────────────────────────────
+
+def semester_two_dates(academic_year):
+    """The instalment dates the year's payment schedules put in semester 2."""
+    from .models import PaymentStep
+    return set(PaymentStep.objects.filter(schedule__academic_year=academic_year, semester_number=2)
+               .values_list('due_date', flat=True))
+
+
+def charge_semester_number(charge, sem2_dates):
+    """Which semester a charge is for: its own semester when it has one (the
+    hostel fee, an item, an exam), otherwise the semester of the instalment it
+    falls due at. A charge on the fee structure's own dates counts as
+    semester 1."""
+    if charge.semester_id:
+        return charge.semester.number
+    return 2 if charge.due_date in sem2_dates else 1
+
+
+RESET_MARK = 'Fees reset: '
+
+
+@transaction.atomic
+def reset_fees(profile, academic_year, *, from_semester_number=1, reason, actor=None, charges=None):
+    """Take a period's fees off a student's bill — a postponed year or
+    semester. Never deletes: each charge is waived in full, so what was paid
+    against it stands as credit, carried to the next charges raised.
+
+    One-time charges (admission, caution money, ID card…) are for the whole
+    programme, not the period, and stay. Returns the amount taken off.
+    """
+    sem2 = semester_two_dates(academic_year)
+    pool = charges if charges is not None else (
+        StudentCharge.objects.filter(profile=profile, academic_year=academic_year)
+        .select_related('charge_type', 'semester', 'fee_structure'))
+    total = ZERO
+    for charge in pool:
+        if charge.charge_type.frequency == ChargeType.ONCE or (
+                charge.fee_structure_id and charge.fee_structure.billing_period == FeeStructure.ONCE):
+            continue
+        if charge_semester_number(charge, sem2) < from_semester_number:
+            continue
+        if charge.waived_amount >= charge.amount:
+            continue
+        total += charge.amount - charge.waived_amount
+        waive_charge(charge, charge.amount, (RESET_MARK + reason)[:300], actor=actor)
+    if total:
+        audit('fees.reset', 'StudentProfile', actor=actor, profile=profile,
+              summary=f'{academic_year} from semester {from_semester_number}: {money(total)} reversed — {reason}')
+    return money(total)
+
+
+@transaction.atomic
+def apply_credit(profile, *, actor=None):
+    """Settle outstanding charges with money the student already paid against
+    charges since reversed.
+
+    Written as one "credit carried forward" entry whose allocations take the
+    money off the reversed charges and put it on the outstanding ones — they
+    sum to nothing, so no income is invented and nothing is edited or deleted.
+    Returns the amount carried.
+    """
+    charges = list(with_balances(StudentCharge.objects.filter(profile=profile)
+                                 .select_related('charge_type').order_by('due_date', 'id')))
+    credits = [(charge, -charge_balance(charge)) for charge in charges if charge_balance(charge) < ZERO]
+    owing = [(charge, charge_balance(charge)) for charge in charges if charge_balance(charge) > ZERO]
+    available = sum((amount for _, amount in credits), ZERO)
+    if available <= ZERO or not owing:
+        return ZERO
+
+    moves = []
+    remaining = available
+    for charge, owed in owing:
+        if remaining <= ZERO:
+            break
+        take = min(owed, remaining)
+        moves.append((charge, take))
+        remaining -= take
+    carried = available - remaining
+    taken, left = [], carried
+    for charge, amount in credits:
+        if left <= ZERO:
+            break
+        take = min(amount, left)
+        taken.append((charge, -take))
+        left -= take
+
+    recorder = actor
+    if recorder is None or not getattr(recorder, 'pk', None):
+        from django.contrib.auth import get_user_model
+        recorder = get_user_model().objects.filter(is_superuser=True).order_by('id').first()
+    if recorder is None:
+        logger.warning('Credit of %s for %s not carried: nobody to record it', money(carried),
+                       profile.nactvet_reg_no)
+        return ZERO
+    payment = Payment.objects.create(
+        profile=profile, amount=ZERO, payment_date=date.today(), channel=Payment.CREDIT,
+        note=f'Credit carried forward: {money(carried)}', recorded_by=recorder)
+    _write_allocations(payment, taken + moves)
+    audit('credit.apply', 'Payment', actor=actor, entity_id=payment.id, profile=profile,
+          summary=f'Carried {money(carried)} of credit onto {len(moves)} charge(s)')
+    return money(carried)
+
+
+def full_statement(profile):
+    """Every year the student was billed, every payment since they started —
+    the statement the accountant signs when they finish."""
+    years = []
+    charges = list(with_balances(StudentCharge.objects.filter(profile=profile)
+                                 .select_related('charge_type', 'academic_year')
+                                 .order_by('academic_year__name', 'due_date', 'id')))
+    for charge in charges:
+        charge.owed = charge_balance(charge)
+        charge.paid_amount = money(charge.payable - charge.owed)
+        if not years or years[-1]['year'] != charge.academic_year:
+            years.append({'year': charge.academic_year, 'charges': []})
+        years[-1]['charges'].append(charge)
+    for entry in years:
+        entry['billed'] = money(sum((c.amount for c in entry['charges']), ZERO))
+        entry['waived'] = money(sum((c.waived_amount for c in entry['charges']), ZERO))
+        entry['paid'] = money(sum((c.payable - charge_balance(c) for c in entry['charges']), ZERO))
+        entry['balance'] = money(entry['billed'] - entry['waived'] - entry['paid'])
+    payments = list(Payment.objects.filter(profile=profile).exclude(channel=Payment.CREDIT)
+                    .order_by('payment_date', 'id'))
+    totals = balance_for(profile)
+    return {'years': years, 'payments': payments, 'totals': totals,
+            'received': money(sum((p.amount for p in payments), ZERO))}
+
+
+# ── the hostel ────────────────────────────────────────────────────────────────
+
+def hostel_charge_type():
+    return ChargeType.objects.filter(is_hostel=True, is_active=True).order_by('id').first()
+
+
+def residence_for(profile, academic_year):
+    return StudentResidence.objects.filter(profile=profile, academic_year=academic_year).first()
+
+
+def bill_hostel(profile, academic_year, *, from_semester_number=1, actor=None, class_level=None,
+                programme=None, entry=None):
+    """Charge the hostel fee's instalments from this semester on.
+
+    A place taken up in semester 2 is charged semester 2's instalment only.
+    Each instalment carries its semester, so moving out later can take off the
+    ones not yet lived.
+    """
+    charge_type = hostel_charge_type()
+    if charge_type is None:
+        return []
+    level = class_level or class_level_for(profile, academic_year)
+    programme = programme or programme_for(profile, academic_year)
+    structure = structures_for(level, academic_year, programme).get(charge_type.id) if level else None
+    if structure is None:
+        logger.warning('No hostel fee set for %s at %s; %s not charged',
+                       academic_year, level, profile.nactvet_reg_no)
+        return []
+    entry = entry or entry_for(profile, academic_year)
+    semesters = {semester.number: semester for semester in academic_year.semesters.all()}
+    created = []
+    for number, amount, due_date, semester_number in _instalments(structure, schedule_for(academic_year, entry)):
+        if semester_number < from_semester_number:
+            continue
+        charge, made = StudentCharge.objects.get_or_create(
+            profile=profile, charge_type=charge_type, academic_year=academic_year,
+            semester=semesters.get(semester_number), installment_number=number,
+            defaults={'fee_structure': structure, 'amount': amount, 'due_date': due_date,
+                      'source': StudentCharge.STRUCTURE, 'created_by': actor,
+                      'note': 'Hostel'},
+        )
+        if not made and charge.waived_amount and charge.waived_reason == NOT_IN_HOSTEL:
+            waive_charge(charge, ZERO, '', actor=actor)      # back in the hostel after all
+        if made:
+            created.append(charge)
+    if created:
+        audit('charge.hostel', 'StudentCharge', actor=actor, profile=profile,
+              summary=f'Hostel fee for {academic_year}: {len(created)} instalment(s)')
+    return created
+
+
+NOT_IN_HOSTEL = 'Not living in the hostel'
+
+
+@transaction.atomic
+def set_residence(profile, academic_year, residence, *, actor=None, source=None,
+                  from_semester_number=1, class_level=None, programme=None, entry=None):
+    """Record where the student lives this year, and let the bill follow: the
+    hostel fee is charged from this semester on, or — for a student who turns
+    out to be a day student — what is still unpaid of it is taken off."""
+    if residence not in dict(StudentResidence.RESIDENCE_CHOICES):
+        raise ValueError(f'{residence!r} is not day or hostel.')
+    record, _ = StudentResidence.objects.update_or_create(
+        profile=profile, academic_year=academic_year,
+        defaults={'residence': residence, 'from_semester_number': from_semester_number,
+                  'source': source or StudentResidence.FINANCE_DESK, 'set_by': actor},
+    )
+    if residence == StudentResidence.HOSTEL:
+        bill_hostel(profile, academic_year, from_semester_number=from_semester_number, actor=actor,
+                    class_level=class_level, programme=programme, entry=entry)
+    else:
+        for charge in with_balances(StudentCharge.objects.filter(
+                profile=profile, academic_year=academic_year, charge_type__is_hostel=True)
+                .select_related('semester')):
+            if charge.semester is not None and charge.semester.number < from_semester_number:
+                continue
+            outstanding = charge_balance(charge)
+            if outstanding > ZERO and not (charge.waived_amount and charge.waived_reason != NOT_IN_HOSTEL):
+                waive_charge(charge, charge.waived_amount + outstanding, NOT_IN_HOSTEL, actor=actor)
+    audit('residence.set', 'StudentProfile', actor=actor, profile=profile,
+          summary=f'{academic_year}: {residence} from semester {from_semester_number}')
+    return record
+
+
+def carry_residence(profile, academic_year, *, actor=None, class_level=None, programme=None):
+    """A continuing student lives where they lived last year until they say
+    otherwise."""
+    if residence_for(profile, academic_year) is not None:
+        return residence_for(profile, academic_year)
+    last = (StudentResidence.objects.filter(profile=profile, academic_year__name__lt=academic_year.name)
+            .order_by('-academic_year__name').first())
+    if last is None:
+        return None
+    return set_residence(profile, academic_year, last.residence, actor=actor,
+                         source=StudentResidence.CARRIED, class_level=class_level,
+                         programme=programme, entry=PaymentSchedule.CONTINUING)
 
 
 @transaction.atomic
@@ -333,10 +714,18 @@ def declare_exam_charge(enrollment, kind, *, actor, reason=''):
     Declaring the same student for the same module twice returns the charge
     already raised rather than billing again. Returns (charge, created).
     """
+    return charge_declaration(profile_for_student(enrollment), enrollment.module, kind,
+                              actor=actor, reason=reason)
+
+
+@transaction.atomic
+def charge_declaration(profile, module, kind, *, actor, reason=''):
+    """The same charge as `declare_exam_charge`, for a student who is not yet
+    enrolled in the module — a repeater being billed at the finance desk before
+    admission enrolls them. Enrolling them later finds this charge and does not
+    raise a second one."""
     charge_type = declaration_charge_type(kind)
-    module = enrollment.module
     structure = declaration_rate(charge_type, module)
-    profile = profile_for_student(enrollment)
     year = module.semester.academic_year
 
     existing = StudentCharge.objects.filter(
@@ -1121,6 +1510,19 @@ def _applies_to_semester(charge, semester):
     return semester is None or charge.semester_id in (None, semester.id)
 
 
+def item_charge_type_ids():
+    """The charge types the college's required items bill under — the TPH
+    book, a calculator, rim paper, insurance's medical fee.
+
+    A student short of one of these owes it as a debt; it never holds them from
+    registering, sitting an exam or seeing results, whatever the charge type's
+    own flags say. Every clearance leaves them out.
+    """
+    from .models import AdmissionRequirement
+    return set(AdmissionRequirement.objects.filter(charge_type__isnull=False)
+               .values_list('charge_type_id', flat=True))
+
+
 def exam_clearance(profile, academic_year, period, *, semester=None, today=None):
     """Is this student cleared for this period, and if not, why not?
 
@@ -1142,6 +1544,7 @@ def exam_clearance(profile, academic_year, period, *, semester=None, today=None)
     blocking = with_balances(
         StudentCharge.objects
         .filter(profile=profile, academic_year=academic_year, **{f'charge_type__{field}': True})
+        .exclude(charge_type_id__in=item_charge_type_ids())
         .select_related('charge_type')
     )
     if semester is not None:
@@ -1169,8 +1572,11 @@ def clearance_map(profiles, academic_year, periods, *, semester=None, today=None
         .filter(profile_id__in=profile_ids, academic_year=academic_year)
         .select_related('charge_type')
     ))
+    items = item_charge_type_ids()
     by_profile = {}
     for charge in charges:
+        if charge.charge_type_id in items:
+            continue
         if _applies_to_semester(charge, semester):
             by_profile.setdefault(charge.profile_id, []).append(charge)
 
@@ -1247,4 +1653,9 @@ def _charges_due(charges, semester, period, today):
         met = (paid / billed) * Decimal('100') >= minimum_percent()
         return [] if met else charges
     as_of = period_as_of(semester, period, today)
+    # Registering means paying the first instalment (awamu ya kwanza), even when
+    # the student registers before the date it is due by: admission runs in
+    # the week before it.
+    if period == ChargeType.REGISTRATION and charges:
+        as_of = max(as_of, min(c.due_date for c in charges))
     return [c for c in charges if c.due_date <= as_of]

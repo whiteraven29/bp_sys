@@ -47,6 +47,7 @@ it replaces, and for anything else you run `sudo edutrack-backup` right before
 | Putting new code live | [guides/03-deploying.md](guides/03-deploying.md) |
 | Writing the server down as code with Ansible | [guides/04-ansible.md](guides/04-ansible.md) |
 | **Something went wrong: bad update, lost data, dead server, moving servers** | [guides/05-disaster-recovery.md](guides/05-disaster-recovery.md) |
+| This release: admissions, fees, hostel, postponement (2026/27) | [guides/06-release-2026-27.md](guides/06-release-2026-27.md) |
 
 Do them in order the first time: 01, then 02, 03 and 04. Guide 05 only makes
 sense once 01 is running.

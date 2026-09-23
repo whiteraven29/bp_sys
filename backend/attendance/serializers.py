@@ -1143,7 +1143,10 @@ class RecordPaymentSerializer(serializers.Serializer):
     invoice = serializers.PrimaryKeyRelatedField(
         queryset=Invoice.objects.all(), required=False, allow_null=True,
     )
-    channel = serializers.ChoiceField(choices=Payment.CHANNEL_CHOICES, default=Payment.CRDB)
+    # Credit carried forward is written by the ledger itself, never by hand.
+    channel = serializers.ChoiceField(
+        choices=[choice for choice in Payment.CHANNEL_CHOICES if choice[0] != Payment.CREDIT],
+        default=Payment.CRDB)
     bank_reference = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
     efd_receipt_no = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
     payer_name = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
@@ -1749,6 +1752,13 @@ class ApplicationSerializer(serializers.ModelSerializer):
     steps = ApplicationStepSerializer(many=True, read_only=True)
     requirement_checks = RequirementCheckSerializer(many=True, read_only=True)
     balance = serializers.SerializerMethodField()
+    details = serializers.SerializerMethodField()
+    missing_details = serializers.SerializerMethodField()
+    academic = serializers.SerializerMethodField()
+    payment = serializers.SerializerMethodField()
+    items = serializers.SerializerMethodField()
+    held_by_name = serializers.SerializerMethodField()
+    residence = serializers.SerializerMethodField()
 
     class Meta:
         model = Application
@@ -1757,9 +1767,71 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'college_id', 'student_name', 'phone', 'semester', 'semester_label',
             'programme', 'programme_code', 'class_level', 'class_level_name',
             'returning_to', 'registration', 'note', 'decided_reason', 'steps',
-            'requirement_checks', 'balance', 'created_at', 'updated_at',
+            'requirement_checks', 'balance', 'details', 'missing_details', 'academic', 'payment',
+            'items', 'on_hold', 'hold_reason', 'held_at', 'held_by_name', 'residence',
+            'created_at', 'updated_at',
         ]
         read_only_fields = fields
+
+    def get_details(self, obj):
+        """Who the student is, as records took it down — read by every desk."""
+        profile = obj.profile
+        return {
+            'name': profile.name, 'phone': profile.phone, 'gender': profile.gender,
+            'gender_display': profile.get_gender_display() if profile.gender else '',
+            'date_of_birth': profile.date_of_birth,
+            'next_of_kin': [{'position': kin.position, 'name': kin.name, 'phone': kin.phone,
+                             'relationship': kin.relationship,
+                             'relationship_display': kin.get_relationship_display()}
+                            for kin in profile.next_of_kin.all()],
+        }
+
+    def get_missing_details(self, obj):
+        from .admissions import missing_details
+        return missing_details(obj.profile)
+
+    def get_academic(self, obj):
+        """Results, standing and what the student will study — worked out only
+        when one application is opened, not for every row of a list."""
+        view = self.context.get('view')
+        if view is None or getattr(view, 'action', None) != 'retrieve':
+            return None
+        from .admissions import academic_summary
+        return academic_summary(obj)
+
+    def get_payment(self, obj):
+        """Whether they have paid what registration needs — the one thing that
+        holds a student at finance. Worked out when one application is opened."""
+        view = self.context.get('view')
+        if view is None or getattr(view, 'action', None) != 'retrieve' or not obj.is_open:
+            return None
+        result = finance.exam_clearance(obj.profile, obj.semester.academic_year,
+                                        ChargeType.REGISTRATION, semester=obj.semester)
+        return {'cleared': result['cleared'], 'reason': result['reason'],
+                'balance': str(result['balance']), 'overridden': result['overridden']}
+
+    def get_items(self, obj):
+        """The items this student owes for, and those finance has not marked
+        yet — what the admission desk weighs before admitting. Worked out when
+        one application is opened."""
+        view = self.context.get('view')
+        if view is None or getattr(view, 'action', None) != 'retrieve':
+            return None
+        from .admissions import items_owed, items_unchecked
+        return {'owed': items_owed(obj.profile, obj.semester),
+                'unchecked': items_unchecked(obj) if obj.is_open else []}
+
+    def get_residence(self, obj):
+        """Day or hostel for the year — the finance desk states it."""
+        residence = finance.residence_for(obj.profile, obj.semester.academic_year)
+        if residence is None:
+            return None
+        return {'residence': residence.residence, 'display': residence.get_residence_display(),
+                'source': residence.get_source_display()}
+
+    def get_held_by_name(self, obj):
+        from .views import full_name_for
+        return full_name_for(obj.held_by) if obj.held_by_id else ''
 
     def get_balance(self, obj):
         """What the student owes for the year they are being admitted into —

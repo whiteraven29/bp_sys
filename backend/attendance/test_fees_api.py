@@ -1103,8 +1103,8 @@ class OneInvoicePerPaymentTests(TestCase):
         response = self._generate(family=ChargeType.OTHER)
         self.assertEqual(response.status_code, 201, response.content)
         invoices = {i['invoice_group']: i for i in response.json()}
-        self.assertIn('Examination Charges', invoices)
-        exams = invoices['Examination Charges']
+        self.assertIn('Supplementary Exam', invoices)
+        exams = invoices['Supplementary Exam']
         self.assertEqual(Decimal(exams['total']), Decimal('40000.00'))
         self.assertIn(charge.id, [line['charge'] for line in exams['lines']])
 
@@ -1114,8 +1114,8 @@ class OneInvoicePerPaymentTests(TestCase):
                              date(2027, 5, 30))
         again = {i['invoice_group']: i
                  for i in self._generate(family=ChargeType.OTHER).json()}
-        self.assertEqual(again['Examination Charges']['reference'], exams['reference'])
-        self.assertEqual(Decimal(again['Examination Charges']['total']), Decimal('80000.00'))
+        self.assertEqual(again['Supplementary Exam']['reference'], exams['reference'])
+        self.assertEqual(Decimal(again['Supplementary Exam']['total']), Decimal('80000.00'))
 
     def test_a_student_not_billed_for_a_payment_is_told_so(self):
         response = self._generate(family=ChargeType.OTHER)

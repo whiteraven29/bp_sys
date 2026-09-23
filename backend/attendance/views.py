@@ -10,9 +10,10 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count, Exists, OuterRef, Q, Sum
+from django.db.models import Count, Exists, F, OuterRef, Q, Sum
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, render, redirect
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.utils.dateparse import parse_date
@@ -20,7 +21,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework import mixins, viewsets, status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.decorators import action, api_view
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import BasePermission, IsAuthenticated, SAFE_METHODS
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
@@ -28,7 +29,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import admissions, analytics, evaluations, finance, notifications, passwords, progression
+from . import admissions, analytics, evaluations, finance, lifecycle, notifications, passwords, progression
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
 from .models import (
     AcademicYear, Semester, ClassLevel, Module,
@@ -45,6 +46,7 @@ from .models import (
     Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration,
     OutstandingRepeat, SemesterReview, StudentStanding, StandingChange,
     AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck, Application,
+    PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultWithholding,
     StudentDocument,
     Form, FormSection, FormQuestion, FormAnswer, FormResponse, FormSubmissionReceipt,
 )
@@ -295,11 +297,12 @@ def is_admission_officer(user):
 def can_edit_student_records(user):
     """Keeping the student record — college ID numbers, personal details.
 
-    The records and admission officers' work, with the Principal and the
-    examination officer able to step in. Not the accountant or the Head of
-    Department.
+    The records and admission officers' work, with the Principal able to step
+    in. Not the examination officer: they take a student over once admission
+    has registered them, and the record itself is not theirs to keep. Not the
+    accountant or the Head of Department either.
     """
-    return is_records_officer(user) or is_admission_officer(user) or can_manage_accounts(user)
+    return is_records_officer(user) or is_admission_officer(user) or is_principal(user)
 
 
 def can_handle_requests(user):
@@ -740,9 +743,16 @@ def _result_statements(modules, class_level):
     """
     statements = {}
     for module in modules:
+        key = (module['semester_number'], module['semester'])
+        if module.get('withheld'):
+            # The college is keeping this semester's results from the student:
+            # one line saying so, no grades, no GPA.
+            statements.setdefault(key, {
+                'label': module['semester'], 'number': module['semester_number'], 'modules': [],
+                'points': [], 'supp': [], 'failed': [], 'withheld': True})
+            continue
         if not module['has_final_result'] or not module['result']:
             continue
-        key = (module['semester_number'], module['semester'])
         statement = statements.setdefault(key, {
             'label': module['semester'],
             'number': module['semester_number'],
@@ -750,13 +760,16 @@ def _result_statements(modules, class_level):
             'points': [],
             'supp': [],
             'failed': [],
+            'withheld': False,
         })
         result = module['result']
         status = result.get('result_status') or ''
         statement['modules'].append({
             'code': module['module_code'],
             'name': module['module_name'],
-            'grade': result.get('grade') or '—',
+            # The authority's own markers read as words, not codes.
+            'grade': {'WITHHELD': 'Withheld', 'NULLIFIED': 'Nullified'}.get(status)
+                     or result.get('grade') or '—',
             'status': status or '—',
         })
         if result.get('grade_point') is not None:
@@ -770,6 +783,10 @@ def _result_statements(modules, class_level):
     for key in sorted(statements):
         statement = statements[key]
         points = statement.pop('points')
+        if statement['withheld']:
+            statement.update(gpa=None, remark='WITHHELD', comment='')
+            ordered.append(statement)
+            continue
         semester_gpa = (
             round(sum(float(point) * credits for point, credits in points)
                   / sum(credits for _, credits in points), 2)
@@ -792,6 +809,33 @@ def _result_statements(modules, class_level):
         statement['modules'].sort(key=lambda row: row['code'])
         ordered.append(statement)
     return ordered
+
+
+def _student_record_for_portal(profile):
+    """What the records office holds on the student, for them to read and
+    check. They cannot change it here: a correction goes through records."""
+    if profile is None:
+        return None
+    registration = (SemesterRegistration.objects.filter(profile=profile)
+                    .exclude(status=SemesterRegistration.CANCELLED)
+                    .select_related('programme', 'class_level')
+                    .order_by('-semester__academic_year__name', '-semester__number').first())
+    return {
+        'name': profile.name,
+        'nactvet_reg_no': profile.nactvet_reg_no,
+        'college_id': profile.college_id,
+        'gender': profile.get_gender_display() if profile.gender else '',
+        'date_of_birth': profile.date_of_birth,
+        'phone': profile.phone,
+        'programme': registration.programme.name if registration and registration.programme else '',
+        'class_level': registration.class_level.name if registration and registration.class_level else '',
+        'next_of_kin': [
+            {'name': kin.name, 'phone': kin.phone,
+             'relationship': kin.get_relationship_display()}
+            for kin in profile.next_of_kin.order_by('position')
+        ],
+        'missing': admissions.missing_details(profile),
+    }
 
 
 @student_login_required
@@ -842,6 +886,10 @@ def student_dashboard(request):
     ).order_by(
         'module__semester__number', 'module__name'
     )
+
+    # Semesters whose results the college is keeping from the student for now.
+    withheld_semesters = set(ResultWithholding.objects.filter(
+        profile=profile, released_at__isnull=True).values_list('semester_id', flat=True)) if profile else set()
 
     modules = []
     attendance_sum = 0
@@ -901,6 +949,9 @@ def student_dashboard(request):
                  or result.end_theory is not None or result.end_theory_absent
                  or result.end_practical is not None or result.end_practical_absent)
         )
+        withheld = enrollment.module.semester_id in withheld_semesters
+        if withheld:
+            has_final_result = False
 
         if data['sessions_total']:
             attendance_sum += data['attendance_pct']
@@ -927,6 +978,7 @@ def student_dashboard(request):
             'result': result_data,
             'has_ca_result': bool(ca_approved and result),
             'has_final_result': has_final_result,
+            'withheld': withheld,
         })
 
     published_points = [
@@ -1096,6 +1148,8 @@ def student_dashboard(request):
     return render(request, 'student_dashboard.html', {
         'student_name': student.name,
         'registration_number': student.nactvet_reg_no,
+        'record': _student_record_for_portal(profile),
+        'standing_banner': lifecycle.standing_banner(profile) if profile else None,
         'announcements': announcements,
         'modules': modules,
         'module_count': len(modules),
@@ -1107,7 +1161,7 @@ def student_dashboard(request):
         'has_ca_results': bool(ca_modules),
         'ca_count': len(ca_modules),
         'published_result_count': sum(1 for module in modules if module['has_final_result']),
-        'has_final_results': any(module['has_final_result'] for module in modules),
+        'has_final_results': any(module['has_final_result'] or module['withheld'] for module in modules),
         'service_forms': service_forms,
         'my_requests': my_requests,
         'requests_pending': requests_pending,
@@ -1923,6 +1977,160 @@ def _semester_from_request(request):
     return active_semester()
 
 
+def _record_details_from(request, profile):
+    data = request.data
+    # A field left out is left alone; a field sent empty is cleared.
+    return admissions.record_details(
+        profile,
+        name=data.get('name'),
+        phone=data.get('phone'),
+        gender=data.get('gender'),
+        date_of_birth=data.get('date_of_birth') if 'date_of_birth' in data else None,
+        next_of_kin=data.get('next_of_kin'),
+        actor=request.user,
+    )
+
+
+def _student_record_payload(profile):
+    standing = getattr(profile, 'standing', None)
+    return {
+        'id': profile.id, 'reg_no': profile.nactvet_reg_no, 'college_id': profile.college_id or '',
+        'name': profile.name, 'phone': profile.phone, 'gender': profile.gender,
+        'date_of_birth': profile.date_of_birth,
+        'standing': standing.get_status_display() if standing else 'No standing recorded',
+        'class_level': standing.class_level.name if standing and standing.class_level_id else '',
+        'next_of_kin': [{'position': kin.position, 'name': kin.name, 'phone': kin.phone,
+                         'relationship': kin.relationship} for kin in profile.next_of_kin.all()],
+        'missing': admissions.missing_details(profile),
+        'documents': StudentDocument.objects.filter(profile=profile).count(),
+    }
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def student_record(request, profile_id):
+    """One student's record: read by the admission offices and finance, kept by
+    records."""
+    profile = get_object_or_404(visible_profiles(request.user), pk=profile_id)
+    if request.method == 'GET':
+        if not (can_see_admissions(request.user) or can_edit_student_records(request.user)):
+            raise PermissionDenied('The records, admission or finance office only.')
+        return Response(_student_record_payload(profile))
+    if not (is_records_officer(request.user) or is_principal(request.user)):
+        raise PermissionDenied('Student details are recorded by the records office.')
+    try:
+        _record_details_from(request, profile)
+    except admissions.AdmissionError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    profile.refresh_from_db()
+    return Response(_student_record_payload(profile))
+
+
+def can_check_items(user):
+    """Finance checks the items a student must have; the Principal may too."""
+    return bool(user and user.is_authenticated and (is_accountant(user) or is_principal(user)))
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def item_checks(request):
+    """The items check for a semester's class: who has the TPH book, a
+    calculator, rim paper — the semester 2 recheck, and any student registered
+    without going through the finance desk.
+
+    GET lists the registered students with the items due from each; POST marks
+    one item for one student. A student still going through admissions for the
+    semester is checked on their application at the finance desk instead.
+    """
+    if not can_check_items(request.user):
+        raise PermissionDenied('Finance checks the items.')
+    semester = _semester_from_request(request)
+    if semester is None:
+        return Response({'detail': 'No semester given and none is active.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    registrations = (SemesterRegistration.objects.filter(semester=semester)
+                     .exclude(status=SemesterRegistration.CANCELLED)
+                     .select_related('profile', 'class_level', 'programme'))
+
+    if request.method == 'POST':
+        registration = registrations.filter(profile_id=request.data.get('profile_id')).first()
+        if registration is None:
+            return Response({'detail': 'That student is not registered for this semester.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        requirement = AdmissionRequirement.objects.filter(id=request.data.get('requirement_id')).first()
+        if requirement is None:
+            return Response({'detail': 'No such item.'}, status=status.HTTP_400_BAD_REQUEST)
+        application = Application.objects.filter(profile=registration.profile, semester=semester).first()
+        if application is not None and application.is_open:
+            return Response({'detail': 'This student is still at admissions; check the item on their application.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            check = admissions.record_item(
+                registration.profile, semester, requirement, str(request.data.get('status') or ''),
+                class_level=registration.class_level, programme=registration.programme,
+                application=application, actor=request.user,
+                note=str(request.data.get('note') or ''))
+        except admissions.AdmissionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        data = RequirementCheckSerializer(check).data
+        if check.status == RequirementCheck.MISSING and check.charge_id is None:
+            data['warning'] = (f'Recorded, but nothing was charged: no rate is set for '
+                               f'{requirement.name} at {registration.class_level}.')
+        return Response(data)
+
+    search = (request.query_params.get('search') or '').strip()
+    if search:
+        registrations = registrations.filter(
+            Q(profile__name__icontains=search) | Q(profile__nactvet_reg_no__icontains=search)
+            | Q(profile__college_id__icontains=search))
+    registrations = list(registrations.order_by('class_level__order', 'profile__name'))
+    profile_ids = [registration.profile_id for registration in registrations]
+    requirements = list(AdmissionRequirement.objects.filter(is_active=True)
+                        .prefetch_related('applies_to_levels'))
+    checks = {}
+    history = {}
+    for check in (RequirementCheck.objects.filter(profile_id__in=profile_ids)
+                  .select_related('semester')):
+        if check.semester_id == semester.id:
+            checks[(check.profile_id, check.requirement_id)] = check
+        else:
+            history.setdefault(check.profile_id, []).append(check)
+
+    rows = []
+    for registration in registrations:
+        due = admissions.items_due(registration.profile, semester, registration.class_level,
+                                   requirements=requirements,
+                                   history=history.get(registration.profile_id, []))
+        items = []
+        for requirement in due:
+            check = checks.get((registration.profile_id, requirement.id))
+            items.append({'requirement': requirement.id, 'name': requirement.name,
+                          'status': check.status if check else '',
+                          'charged': bool(check and check.charge_id)})
+        rows.append({'profile_id': registration.profile_id,
+                     'reg_no': registration.profile.nactvet_reg_no,
+                     'name': registration.profile.name,
+                     'class_level': registration.class_level.name if registration.class_level_id else '',
+                     'items': items,
+                     'unchecked': sum(1 for item in items if not item['status'])})
+    if request.query_params.get('unchecked') == '1':
+        rows = [row for row in rows if row['unchecked']]
+
+    try:
+        page = max(1, int(request.query_params.get('page') or 1))
+    except ValueError:
+        page = 1
+    size = 50
+    return Response({
+        'semester': semester.label, 'semester_id': semester.id,
+        'requirements': [{'id': requirement.id, 'name': requirement.name,
+                          'frequency': requirement.get_frequency_display()}
+                         for requirement in requirements],
+        'count': len(rows), 'page': page, 'pages': max(1, -(-len(rows) // size)),
+        'results': rows[(page - 1) * size: page * size],
+    })
+
+
 @api_view(['GET'])
 @login_required
 def search_student_records(request):
@@ -1937,7 +2145,7 @@ def search_student_records(request):
     search = (request.query_params.get('search') or '').strip()
     if len(search) < 2:
         return Response([])
-    profiles = (StudentProfile.objects
+    profiles = (visible_profiles(request.user)
                 .filter(Q(name__icontains=search) | Q(nactvet_reg_no__icontains=search)
                         | Q(college_id__icontains=search))
                 .select_related('standing__class_level', 'standing__programme')
@@ -1978,10 +2186,11 @@ class StudentDocumentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         if not (can_see_admissions(self.request.user)
-                or can_edit_student_records(self.request.user)
-                or can_read_exams(self.request.user)):
+                or can_edit_student_records(self.request.user)):
             return StudentDocument.objects.none()
         qs = StudentDocument.objects.select_related('profile', 'uploaded_by', 'verified_by')
+        if visible_application_states(self.request.user) is not None:
+            qs = qs.filter(profile__in=visible_profiles(self.request.user))
         profile_id = self.request.query_params.get('profile_id')
         if profile_id:
             qs = qs.filter(profile_id=profile_id)
@@ -1994,6 +2203,9 @@ class StudentDocumentViewSet(viewsets.ModelViewSet):
         if not (can_see_admissions(self.request.user)
                 or can_edit_student_records(self.request.user)):
             raise PermissionDenied('The records or admission office keeps student documents.')
+        profile = serializer.validated_data.get('profile')
+        if profile is not None and not visible_profiles(self.request.user).filter(pk=profile.pk).exists():
+            raise PermissionDenied('This student is not at your desk.')
         upload = self.request.data.get('file')
         serializer.save(uploaded_by=self.request.user,
                         original_name=getattr(upload, 'name', '')[:255])
@@ -2026,8 +2238,8 @@ def student_document_download(request, pk):
         if viewer is None or viewer.id != document.profile_id:
             raise Http404('No such document.')
     elif not (request.user.is_authenticated
-              and (can_see_admissions(request.user) or can_edit_student_records(request.user)
-                   or can_read_exams(request.user))):
+              and (can_see_admissions(request.user) or can_edit_student_records(request.user))
+              and visible_profiles(request.user).filter(pk=document.profile_id).exists()):
         raise Http404('No such document.')
     try:
         handle = document.file.open('rb')
@@ -2064,6 +2276,429 @@ def student_own_documents(request):
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+# ── PAYMENT SCHEDULE AND THE HOSTEL ────────────────────────────────────────────
+
+def _schedule_payload(schedule):
+    return {
+        'id': schedule.id, 'entry': schedule.entry, 'entry_display': schedule.get_entry_display(),
+        'note': schedule.note, 'updated_at': schedule.updated_at,
+        'updated_by': full_name_for(schedule.updated_by) if schedule.updated_by_id else '',
+        'steps': [{
+            'number': step.number, 'due_date': step.due_date, 'semester_number': step.semester_number,
+            'amounts': {str(line.charge_type_id): str(line.amount) for line in step.amounts.all()},
+        } for step in schedule.steps.all()],
+        'mismatches': finance.schedule_mismatches(schedule),
+    }
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def payment_schedules(request):
+    """The instalment dates for a year — the accountant's "Fomu ya tarehe za
+    awamu za malipo" — for new and for continuing students.
+
+    GET gives both schedules and the charge types they can place, with the fee
+    each carries this year; POST saves one schedule whole.
+    """
+    if not can_manage_finance(request.user):
+        raise PermissionDenied('Finance access required.')
+    year = (AcademicYear.objects.filter(id=request.data.get('academic_year') or
+                                        request.query_params.get('academic_year')).first()
+            or active_academic_year())
+    if year is None:
+        return Response({'detail': 'No academic year given and none is active.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if request.method == 'POST':
+        steps = []
+        for step in request.data.get('steps') or []:
+            due = parse_date(str(step.get('due_date') or ''))
+            if due is None:
+                return Response({'detail': 'Every instalment needs a date.'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                amounts = {int(k): Decimal(str(v or 0)) for k, v in (step.get('amounts') or {}).items()}
+            except Exception:
+                return Response({'detail': 'Amounts must be numbers.'}, status=status.HTTP_400_BAD_REQUEST)
+            if any(amount < 0 for amount in amounts.values()):
+                return Response({'detail': 'Amounts cannot be negative.'}, status=status.HTTP_400_BAD_REQUEST)
+            steps.append({'due_date': due, 'semester_number': step.get('semester_number') or 1,
+                          'amounts': amounts})
+        try:
+            schedule = finance.save_schedule(year, str(request.data.get('entry') or ''), steps,
+                                             actor=request.user, note=str(request.data.get('note') or ''))
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        schedule = PaymentSchedule.objects.prefetch_related('steps__amounts').get(pk=schedule.pk)
+        return Response(_schedule_payload(schedule))
+
+    schedules = {schedule.entry: schedule for schedule in
+                 PaymentSchedule.objects.filter(academic_year=year).prefetch_related('steps__amounts')}
+    fees = {}
+    for structure in FeeStructure.objects.filter(academic_year=year, is_active=True).select_related('class_level'):
+        fees.setdefault(structure.charge_type_id, set()).add(str(finance.money(structure.amount)))
+    charge_types = (ChargeType.objects.filter(is_active=True)
+                    .filter(Q(applies=ChargeType.AUTOMATIC) | Q(is_hostel=True))
+                    .order_by('sort_order', 'name'))
+    previous = AcademicYear.objects.filter(name__lt=year.name).order_by('-name').first()
+    return Response({
+        'academic_year': year.id, 'academic_year_name': year.name,
+        'can_copy_from': previous.name if previous and not schedules and
+        PaymentSchedule.objects.filter(academic_year=previous).exists() else None,
+        'schedules': {entry: _schedule_payload(schedules[entry]) if entry in schedules else None
+                      for entry, _ in PaymentSchedule.ENTRY_CHOICES},
+        'charge_types': [{
+            'id': charge_type.id, 'name': charge_type.name, 'is_hostel': charge_type.is_hostel,
+            'once': charge_type.frequency == ChargeType.ONCE,
+            'fees': sorted(fees.get(charge_type.id, ()), key=Decimal),
+        } for charge_type in charge_types],
+    })
+
+
+@api_view(['POST'])
+@login_required
+def copy_payment_schedules(request):
+    """Start a year's schedules from the year before, every date a year on."""
+    if not can_manage_finance(request.user):
+        raise PermissionDenied('Finance access required.')
+    year = get_object_or_404(AcademicYear, pk=request.data.get('academic_year'))
+    previous = AcademicYear.objects.filter(name__lt=year.name).order_by('-name').first()
+    if previous is None:
+        return Response({'detail': 'There is no earlier year to copy from.'}, status=status.HTTP_400_BAD_REQUEST)
+    copied = finance.copy_schedules(previous, year, actor=request.user)
+    return Response({'copied': len(copied), 'from': previous.name})
+
+
+def can_decide_hostel(user):
+    """The accountant grants a hostel place — it is a charge — and the
+    Principal may."""
+    return bool(user and user.is_authenticated and (is_accountant(user) or is_principal(user)))
+
+
+def _hostel_application_row(application):
+    return {
+        'id': application.id, 'profile_id': application.profile_id,
+        'reg_no': application.profile.nactvet_reg_no, 'name': application.profile.name,
+        'academic_year': application.academic_year.name, 'semester': application.semester.label,
+        'semester_number': application.semester.number,
+        'reason': application.reason, 'status': application.status,
+        'status_display': application.get_status_display(),
+        'created_at': application.created_at, 'decided_at': application.decided_at,
+        'decided_by': full_name_for(application.decided_by) if application.decided_by_id else '',
+        'decision_note': application.decision_note,
+    }
+
+
+@api_view(['GET', 'POST'])
+def student_hostel(request):
+    """The student's own hostel standing, from the portal: where the college
+    has them living this year, and a request for a place when they are a day
+    student."""
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Sign in to the student portal first.'}, status=status.HTTP_403_FORBIDDEN)
+    semester = active_semester()
+    if semester is None:
+        return Response({'detail': 'No semester is running.'}, status=status.HTTP_400_BAD_REQUEST)
+    year = semester.academic_year
+    residence = finance.residence_for(profile, year)
+    applications = HostelApplication.objects.filter(profile=profile, academic_year=year).select_related(
+        'profile', 'academic_year', 'semester', 'decided_by')
+
+    # A place is for a student studying this semester — not one postponed,
+    # discontinued or finished.
+    studying = SemesterRegistration.objects.filter(profile=profile, semester=semester).exclude(
+        status=SemesterRegistration.CANCELLED).exists()
+    if request.method == 'POST':
+        if not studying:
+            return Response({'detail': f'You are not registered for {semester.label}.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if residence is not None and residence.residence == StudentResidence.HOSTEL:
+            return Response({'detail': 'You already live in the hostel this year.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if applications.filter(status=HostelApplication.PENDING).exists():
+            return Response({'detail': 'Your application is already waiting for an answer.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        HostelApplication.objects.create(profile=profile, academic_year=year, semester=semester,
+                                         reason=str(request.data.get('reason') or '')[:500])
+    return Response({
+        'academic_year': year.name,
+        'residence': residence.residence if residence else '',
+        'residence_display': residence.get_residence_display() if residence else 'Not recorded',
+        'can_apply': studying,
+        'applications': [_hostel_application_row(application) for application in applications],
+    }, status=status.HTTP_201_CREATED if request.method == 'POST' else status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@login_required
+def hostel_applications(request):
+    if not can_decide_hostel(request.user):
+        raise PermissionDenied('The accountant decides hostel applications.')
+    rows = HostelApplication.objects.select_related('profile', 'academic_year', 'semester', 'decided_by')
+    wanted = request.query_params.get('status', HostelApplication.PENDING)
+    if wanted:
+        rows = rows.filter(status=wanted)
+    return Response([_hostel_application_row(application) for application in rows[:200]])
+
+
+@api_view(['POST'])
+@login_required
+def decide_hostel_application(request, pk):
+    """Grant a hostel place — charged from the semester applied in — or decline."""
+    if not can_decide_hostel(request.user):
+        raise PermissionDenied('The accountant decides hostel applications.')
+    application = get_object_or_404(HostelApplication.objects.select_related(
+        'profile', 'academic_year', 'semester'), pk=pk)
+    if application.status != HostelApplication.PENDING:
+        return Response({'detail': f'Already {application.get_status_display().lower()}.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    decision = str(request.data.get('decision') or '')
+    note = str(request.data.get('note') or '')[:300]
+    with transaction.atomic():
+        if decision == 'approve':
+            finance.set_residence(application.profile, application.academic_year, StudentResidence.HOSTEL,
+                                  actor=request.user, source=StudentResidence.APPLICATION,
+                                  from_semester_number=application.semester.number)
+            application.status = HostelApplication.APPROVED
+        elif decision == 'decline':
+            if not note:
+                return Response({'detail': 'Say why it is declined.'}, status=status.HTTP_400_BAD_REQUEST)
+            application.status = HostelApplication.DECLINED
+        else:
+            return Response({'detail': 'Approve or decline.'}, status=status.HTTP_400_BAD_REQUEST)
+        application.decided_by = request.user
+        application.decided_at = timezone.now()
+        application.decision_note = note
+        application.save(update_fields=['status', 'decided_by', 'decided_at', 'decision_note'])
+    return Response(_hostel_application_row(application))
+
+
+# ── RESULTS SUMMARY AND WITHHOLDING ───────────────────────────────────────────
+
+@api_view(['GET'])
+@login_required
+def results_summary(request):
+    """How a class did in a semester: GPAs, pass / supp / repeat counts and
+    each module's pass rate — for the examination office, the Principal and
+    the Head of Department to read."""
+    if not request.user.is_staff:
+        raise PermissionDenied('For the examination office.')
+    semester = Semester.objects.filter(id=request.query_params.get('semester_id')).first()
+    level = ClassLevel.objects.filter(id=request.query_params.get('class_level_id')).first()
+    if semester is None or level is None:
+        return Response({'detail': 'Pick a semester and a class level.'}, status=status.HTTP_400_BAD_REQUEST)
+    programme = Programme.objects.filter(id=request.query_params.get('programme_id')).first()
+    return Response(progression.results_summary(semester, level, programme=programme))
+
+
+@api_view(['POST'])
+@login_required
+def withhold_results(request):
+    """Keep a student's results for a semester from them — shown as
+    "Withheld" on the portal — usually over unpaid fees."""
+    if not can_manage_exams(request.user):
+        raise PermissionDenied('The examination officer withholds results.')
+    profile = StudentProfile.objects.filter(id=request.data.get('profile_id')).first()
+    semester = Semester.objects.filter(id=request.data.get('semester_id')).first()
+    if profile is None or semester is None:
+        return Response({'detail': 'Which student, and which semester?'}, status=status.HTTP_400_BAD_REQUEST)
+    holding, made = ResultWithholding.objects.get_or_create(
+        profile=profile, semester=semester, released_at__isnull=True,
+        defaults={'reason': str(request.data.get('reason') or '')[:300], 'withheld_by': request.user})
+    return Response({'id': holding.id, 'reason': holding.reason},
+                    status=status.HTTP_201_CREATED if made else status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@login_required
+def release_results(request, pk):
+    """Show the student their results again. The record of the withholding stays."""
+    if not can_manage_exams(request.user):
+        raise PermissionDenied('The examination officer releases results.')
+    holding = get_object_or_404(ResultWithholding, pk=pk, released_at__isnull=True)
+    holding.released_by = request.user
+    holding.released_at = timezone.now()
+    holding.save(update_fields=['released_by', 'released_at'])
+    return Response({'id': holding.id, 'released_at': holding.released_at})
+
+
+# ── POSTPONEMENT AND FINISHING ─────────────────────────────────────────────────
+
+def can_enter_postponement(user):
+    """Records writes down a paper request; the Principal may too."""
+    return bool(user and user.is_authenticated and (is_records_officer(user) or is_principal(user)))
+
+
+def can_see_finishing(user):
+    return bool(user and user.is_authenticated and (is_accountant(user) or is_principal(user)))
+
+
+def _postponement_row(postponement):
+    standing = getattr(postponement.profile, 'standing', None)
+    return {
+        'id': postponement.id, 'profile_id': postponement.profile_id,
+        'reg_no': postponement.profile.nactvet_reg_no, 'name': postponement.profile.name,
+        'semester': postponement.semester.label, 'semester_number': postponement.semester.number,
+        'scope': 'The whole year' if postponement.semester.number == Semester.SEM1 else 'Semester 2',
+        'reason': postponement.reason, 'by_student': postponement.by_student,
+        'entered_by': full_name_for(postponement.entered_by) if postponement.entered_by_id else '',
+        'status': postponement.status, 'status_display': postponement.get_status_display(),
+        'decided_by': full_name_for(postponement.decided_by) if postponement.decided_by_id else '',
+        'decided_at': postponement.decided_at, 'decision_note': postponement.decision_note,
+        'returns': (f'Semester {postponement.return_semester_number} of {postponement.return_year.name}'
+                    if postponement.return_year_id else ''),
+        'fees_reversed': str(postponement.fees_reversed),
+        'repeating': bool(standing and standing.status == StudentStanding.REPEATING),
+        'created_at': postponement.created_at,
+    }
+
+
+def _postponements():
+    return Postponement.objects.select_related('profile__standing', 'semester', 'return_year',
+                                               'entered_by', 'decided_by')
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def postponements(request):
+    """The Principal's list of postponement requests; records writes down a
+    paper one."""
+    user = request.user
+    if not (is_principal(user) or can_enter_postponement(user)):
+        raise PermissionDenied('Postponements are for the records office and the Principal.')
+    if request.method == 'POST':
+        reg_no = str(request.data.get('reg_no') or '').strip()
+        profile = StudentProfile.objects.filter(nactvet_reg_no__iexact=reg_no).first() if reg_no else \
+            StudentProfile.objects.filter(id=request.data.get('profile_id')).first()
+        if profile is None:
+            return Response({'detail': 'No student with that registration number.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        semester = _semester_from_request(request)
+        try:
+            postponement = lifecycle.request_postponement(
+                profile, semester, str(request.data.get('reason') or ''), entered_by=user)
+        except lifecycle.LifecycleError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(_postponement_row(postponement), status=status.HTTP_201_CREATED)
+    rows = _postponements()
+    wanted = request.query_params.get('status', Postponement.PENDING)
+    if wanted:
+        rows = rows.filter(status=wanted)
+    return Response([_postponement_row(row) for row in rows[:200]])
+
+
+@api_view(['POST'])
+@login_required
+def decide_postponement(request, pk):
+    """The Principal approves — the student stops and their fees for the
+    period are reversed — or declines, saying why."""
+    if not is_principal(request.user):
+        raise PermissionDenied('The Principal decides a postponement.')
+    postponement = get_object_or_404(_postponements(), pk=pk)
+    decision = str(request.data.get('decision') or '')
+    if decision not in ('approve', 'decline'):
+        return Response({'detail': 'Approve or decline.'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        lifecycle.decide_postponement(postponement, approve=decision == 'approve', actor=request.user,
+                                      note=str(request.data.get('note') or ''))
+    except lifecycle.LifecycleError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(_postponement_row(postponement))
+
+
+@api_view(['GET', 'POST'])
+def student_postponement(request):
+    """The student's own postponement requests, from the portal: ask, see the
+    answer, withdraw one still waiting."""
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Sign in to the student portal first.'}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == 'POST':
+        withdraw = request.data.get('withdraw')
+        try:
+            if withdraw:
+                lifecycle.withdraw_request(get_object_or_404(Postponement, pk=withdraw, profile=profile))
+            else:
+                semester = active_semester()
+                if semester is None:
+                    return Response({'detail': 'No semester is running.'}, status=status.HTTP_400_BAD_REQUEST)
+                lifecycle.request_postponement(profile, semester, str(request.data.get('reason') or ''),
+                                               by_student=True)
+        except lifecycle.LifecycleError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    rows = _postponements().filter(profile=profile)
+    return Response([_postponement_row(row) for row in rows],
+                    status=status.HTTP_201_CREATED if request.method == 'POST' else status.HTTP_200_OK)
+
+
+def _finishing_row(row):
+    standing, clearance = row['standing'], row['clearance']
+    return {
+        'profile_id': standing.profile_id, 'reg_no': standing.profile.nactvet_reg_no,
+        'name': standing.profile.name, 'college_id': standing.profile.college_id,
+        'status': standing.status, 'status_display': standing.get_status_display(),
+        'class_level': standing.class_level.name if standing.class_level_id else '',
+        'balance': str(row['balance']),
+        'finance_cleared_at': clearance.finance_cleared_at if clearance else None,
+        'finance_cleared_by': full_name_for(clearance.finance_cleared_by)
+        if clearance and clearance.finance_cleared_by_id else '',
+        'declared_at': clearance.declared_at if clearance else None,
+        'declared_by': full_name_for(clearance.declared_by) if clearance and clearance.declared_by_id else '',
+        'statement_url': reverse('statement-print', args=[standing.profile_id]),
+    }
+
+
+@api_view(['GET'])
+@login_required
+def finishing(request):
+    """Students who have finished: finance clears them, then the Principal
+    declares them cleared and they are archived."""
+    if not can_see_finishing(request.user):
+        raise PermissionDenied('For the accountant and the Principal.')
+    return Response([_finishing_row(row) for row in lifecycle.finishing_students()])
+
+
+@api_view(['POST'])
+@login_required
+def finishing_action(request, profile_id, step):
+    profile = get_object_or_404(StudentProfile.objects.select_related('standing'), pk=profile_id)
+    try:
+        if step == 'finance-clear':
+            if not is_accountant(request.user):
+                raise PermissionDenied('Finance clears the account.')
+            lifecycle.finance_clear(profile, actor=request.user, note=str(request.data.get('note') or ''))
+        elif step == 'declare':
+            if not is_principal(request.user):
+                raise PermissionDenied('The Principal declares a student cleared.')
+            lifecycle.declare_cleared(profile, actor=request.user, note=str(request.data.get('note') or ''))
+        else:
+            raise Http404('No such step.')
+    except lifecycle.LifecycleError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    row = next(row for row in lifecycle.finishing_students() if row['standing'].profile_id == profile.id)
+    return Response(_finishing_row(row))
+
+
+@login_required
+def statement_print(request, profile_id):
+    """Every charge in every year and every payment since the student started,
+    printed for the accountant and the Principal to sign."""
+    if not can_see_finishing(request.user):
+        # A page, not the API: Django's own refusal, answered with a 403.
+        from django.core.exceptions import PermissionDenied as PageDenied
+        raise PageDenied('For the accountant and the Principal.')
+    profile = get_object_or_404(StudentProfile.objects.select_related('standing'), pk=profile_id)
+    statement = finance.full_statement(profile)
+    standing = getattr(profile, 'standing', None)
+    return render(request, 'statement_print.html', {
+        'profile': profile, 'statement': statement,
+        'standing': standing.get_status_display() if standing else '',
+        'balance_abs': abs(statement['totals']['balance']),
+        'college': CollegeProfile.get(), 'printed_on': timezone.localdate(),
+        'auto_print': request.GET.get('download') in ('1', 'true', 'yes'),
+    })
+
+
 # ── ADMISSION ──────────────────────────────────────────────────────────────────
 
 #: Whose desk each step of an admission is. The Principal and the examination
@@ -2079,21 +2714,55 @@ DESK_ROLES = {
 
 
 def can_work_desk(user, step):
+    """Whether this account may clear a desk. Each office works its own; the
+    Principal covers every desk. The examination officer covers none — they
+    take students over once admission has registered them."""
     if not (user and user.is_authenticated):
         return False
-    if is_principal(user) or (user.is_staff and not is_head_of_department(user)):
+    if is_principal(user):
         return True
     entry = DESK_ROLES.get(step)
     return bool(entry and entry[1](user))
 
 
+def visible_application_states(user):
+    """Which applications an office may see; None for all of them.
+
+    The admission office runs the whole queue and the Principal oversees it, so
+    both see every desk. Records and finance see the desks they work and the
+    students who have been admitted — not who is standing at another office.
+    """
+    if is_principal(user) or is_admission_officer(user):
+        return None
+    states = {step for step, (_, held) in DESK_ROLES.items() if held(user)}
+    states.add(Application.ADMITTED)
+    return states
+
+
+def visible_profiles(user, qs=None):
+    """The people an office may look up. Admission and the Principal see
+    everybody on file; records and finance see the college's students and
+    whoever is standing at one of their own desks — not a first year who is
+    still at intake, or has gone on to finance or the admission office."""
+    qs = StudentProfile.objects.all() if qs is None else qs
+    visible = visible_application_states(user)
+    if visible is None:
+        return qs
+    registered = (SemesterRegistration.objects.exclude(status=SemesterRegistration.CANCELLED)
+                  .values('profile_id'))
+    # Students from the years before registrations were kept are known by
+    # their enrollments.
+    enrolled = Student.objects.filter(profile__isnull=False).values('profile_id')
+    at_desk = Application.objects.filter(state__in=sorted(visible)).values('profile_id')
+    return qs.filter(Q(id__in=registered) | Q(id__in=enrolled) | Q(id__in=at_desk))
+
+
 def can_see_admissions(user):
-    """The three offices that work an admission, plus the Principal and the
-    examination officer who oversee it."""
+    """The three offices that work an admission, and the Principal who
+    oversees it."""
     return bool(user and user.is_authenticated
                 and (is_records_officer(user) or is_admission_officer(user)
-                     or is_accountant(user) or is_principal(user)
-                     or (user.is_staff and not is_head_of_department(user))))
+                     or is_accountant(user) or is_principal(user)))
 
 
 class WorksAdmissions(BasePermission):
@@ -2109,15 +2778,13 @@ class WorksAdmissions(BasePermission):
 
 class SetsAdmissionRules(BasePermission):
     """The admission window, the college ID format and the requirement list are
-    the admission officer's to set, with the Principal and the examination
-    officer."""
+    the admission officer's to set, with the Principal able to step in."""
 
     def has_permission(self, request, view):
         if request.method in SAFE_METHODS:
             return can_see_admissions(request.user)
         return bool(request.user and request.user.is_authenticated
-                    and (is_admission_officer(request.user) or is_principal(request.user)
-                         or (request.user.is_staff and not is_head_of_department(request.user))))
+                    and (is_admission_officer(request.user) or is_principal(request.user)))
 
 
 class AdmissionWindowViewSet(viewsets.ModelViewSet):
@@ -2171,6 +2838,31 @@ class AdmissionRequirementViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_active=True)
         return qs
 
+    def perform_destroy(self, instance):
+        # Students have been checked against it: the checks, and any charge they
+        # raised, are part of their record. Switch it off instead.
+        if instance.checks.exists():
+            raise ValidationError({'detail': f'{instance.name} has already been checked on students. '
+                                             'Switch it off instead of deleting it.'})
+        instance.delete()
+
+    @action(detail=False, methods=['get'], url_path='charge-types')
+    def charge_types(self, request):
+        """The accountant's charge types an item can bill under, with the levels
+        that have a rate this year — read-only, for the admission officer."""
+        year = AcademicYear.objects.filter(is_active=True).first()
+        rated = {}
+        if year is not None:
+            for charge_type_id, level in (FeeStructure.objects
+                                          .filter(academic_year=year, is_active=True)
+                                          .values_list('charge_type_id', 'class_level__name')):
+                rated.setdefault(charge_type_id, set()).add(level)
+        return Response([{
+            'id': charge_type.id, 'name': charge_type.name,
+            'applies': charge_type.applies, 'applies_display': charge_type.get_applies_display(),
+            'rated_levels': sorted(rated.get(charge_type.id, ())),
+        } for charge_type in ChargeType.objects.filter(is_active=True).order_by('name')])
+
 
 class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
     """The admission queue: who is at which desk.
@@ -2187,6 +2879,9 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
                               'registration')
               .prefetch_related('steps__done_by', 'requirement_checks__requirement',
                                 'requirement_checks__charge'))
+        visible = visible_application_states(self.request.user)
+        if visible is not None:
+            qs = qs.filter(state__in=sorted(visible))
         params = self.request.query_params
         semester_id = params.get('semester_id')
         if semester_id:
@@ -2262,7 +2957,7 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         pin = getattr(worked, 'portal_pin', None)
         application.refresh_from_db()
-        data = ApplicationSerializer(application).data
+        data = ApplicationSerializer(application, context={'request': request}).data
         if pin:
             # The one moment this can be read. The officer writes it on the
             # admission slip; after this only the hash is kept.
@@ -2287,8 +2982,7 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['post'], url_path='refuse')
     def refuse(self, request, pk=None):
         application = self.get_object()
-        if not (is_admission_officer(request.user) or is_principal(request.user)
-                or (request.user.is_staff and not is_head_of_department(request.user))):
+        if not (is_admission_officer(request.user) or is_principal(request.user)):
             return Response({'detail': 'The admission officer or the Principal refuses an application.'},
                             status=status.HTTP_403_FORBIDDEN)
         try:
@@ -2305,8 +2999,7 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         they were handed. Shown once, and they must change it at first sign-in."""
         application = self.get_object()
         if not (is_admission_officer(request.user) or is_records_officer(request.user)
-                or is_principal(request.user)
-                or (request.user.is_staff and not is_head_of_department(request.user))):
+                or is_principal(request.user)):
             return Response({'detail': 'The records or admission office resets a password.'},
                             status=status.HTTP_403_FORBIDDEN)
         pin = admissions.issue_portal_pin(application.profile, force=True, actor=request.user)
@@ -2321,7 +3014,8 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         """What this student has to have, and whether they have it."""
         application = self.get_object()
         if request.method == 'GET':
-            checks = {check.requirement_id: check for check in application.requirement_checks.all()}
+            checks = {check.requirement_id: check for check in RequirementCheck.objects.filter(
+                profile=application.profile, semester=application.semester)}
             return Response([{
                 'requirement': requirement.id,
                 'name': requirement.name,
@@ -2331,6 +3025,11 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
                 'charge': checks[requirement.id].charge_id if requirement.id in checks else None,
             } for requirement in admissions.requirements_for(application)])
 
+        # Finance checks the items; the admission desk records one a held
+        # student brings back. Records handles no money, so marks none.
+        if application.state not in admissions.ITEM_DESKS:
+            return Response({'detail': 'Items are checked at the finance desk.'},
+                            status=status.HTTP_400_BAD_REQUEST)
         if not can_work_desk(request.user, application.state):
             return Response({'detail': 'This application is with another desk.'},
                             status=status.HTTP_403_FORBIDDEN)
@@ -2354,6 +3053,44 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
                 f'{requirement.name} at {application.class_level}.')
         return Response(data)
 
+    @action(detail=True, methods=['post'], url_path='residence')
+    def residence(self, request, pk=None):
+        """Day or hostel, stated at the finance desk; the hostel fee follows."""
+        application = self.get_object()
+        if not can_work_desk(request.user, Application.FINANCE):
+            return Response({'detail': 'Finance records where the student will live.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        try:
+            admissions.set_residence(application, str(request.data.get('residence') or ''),
+                                     actor=request.user)
+        except admissions.AdmissionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(ApplicationSerializer(application, context={'request': request, 'view': self}).data)
+
+    @action(detail=True, methods=['post'], url_path='hold')
+    def hold(self, request, pk=None):
+        """Keep a student at the admission desk instead of admitting them now."""
+        application = self.get_object()
+        if not can_work_desk(request.user, Application.ADMISSION):
+            return Response({'detail': 'The admission office decides a hold.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        try:
+            admissions.hold(application, reason=str(request.data.get('reason') or ''),
+                            actor=request.user)
+        except admissions.AdmissionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(ApplicationSerializer(application, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'], url_path='release')
+    def release(self, request, pk=None):
+        """Lift a hold without admitting."""
+        application = self.get_object()
+        if not can_work_desk(request.user, Application.ADMISSION):
+            return Response({'detail': 'The admission office decides a hold.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        admissions.release_hold(application, actor=request.user)
+        return Response(ApplicationSerializer(application, context={'request': request}).data)
+
     @action(detail=True, methods=['post'], url_path='nactvet-number')
     def nactvet_number(self, request, pk=None):
         """Write in the NACTVET number, which the authority issues during the
@@ -2372,6 +3109,20 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         application.refresh_from_db()
         return Response(ApplicationSerializer(application).data)
 
+    @action(detail=True, methods=['post'], url_path='details')
+    def details(self, request, pk=None):
+        """The records desk takes down who the student is."""
+        application = self.get_object()
+        if not (is_records_officer(request.user) or is_principal(request.user)):
+            return Response({'detail': 'Student details are recorded by the records office.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        try:
+            _record_details_from(request, application.profile)
+        except admissions.AdmissionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        application.refresh_from_db()
+        return Response(ApplicationSerializer(application, context={'request': request}).data)
+
     @action(detail=False, methods=['get'], url_path='queue')
     def queue(self, request):
         """How many applications are sitting at each desk, for the dashboards."""
@@ -2379,8 +3130,11 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         if semester is None:
             return Response({'detail': 'No semester given and none is active.'},
                             status=status.HTTP_400_BAD_REQUEST)
-        rows = (Application.objects.filter(semester=semester)
-                .values('state', 'kind').annotate(count=Count('id')))
+        rows = Application.objects.filter(semester=semester)
+        visible = visible_application_states(request.user)
+        if visible is not None:
+            rows = rows.filter(state__in=sorted(visible))
+        rows = rows.values('state', 'kind').annotate(count=Count('id'))
         by_state, by_kind = {}, {}
         for row in rows:
             by_state[row['state']] = by_state.get(row['state'], 0) + row['count']
@@ -2393,12 +3147,35 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
             'window': AdmissionWindowSerializer(window).data if window else None,
             'by_desk': by_state,
             'by_kind': by_kind,
-            'due_back': len(admissions.due_back(semester)),
+            'due_back': len(admissions.due_back(semester)) if visible is None else None,
+            'visible_desks': None if visible is None else sorted(visible),
+            'can_queue_continuing': visible is None and semester.number == Semester.SEM1,
         })
+
+    @action(detail=False, methods=['post'], url_path='queue-continuing')
+    def queue_continuing(self, request):
+        """Send last year's continuing students to the finance desk for this
+        year — for a year the advance did not open."""
+        user = request.user
+        if not (is_admission_officer(user) or is_principal(user)):
+            return Response({'detail': 'The admission office queues the continuing students.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        semester = _semester_from_request(request)
+        if semester is None:
+            return Response({'detail': 'No semester given and none is active.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            summary = admissions.queue_continuing(semester, actor=user)
+        except admissions.AdmissionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(summary)
 
     @action(detail=False, methods=['get'], url_path='due-back')
     def due_back(self, request):
         """The students the year end said would be back this semester."""
+        if visible_application_states(request.user) is not None:
+            return Response({'detail': 'The admission office keeps the list of who is due back.'},
+                            status=status.HTTP_403_FORBIDDEN)
         semester = _semester_from_request(request)
         if semester is None:
             return Response({'detail': 'No semester given and none is active.'},
@@ -4141,30 +4918,44 @@ class ResultViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='authority-grades')
     def authority_grades(self, request):
-        if not request.user.is_staff:
-            raise PermissionDenied('Only the administrator can upload authority grades.')
-        rows = request.data.get('rows', []) if isinstance(request.data, dict) else []
+        """The authority's grades for one semester, from the level template.
+
+        Only the semester named is touched: a module code repeats every year,
+        and a repeating student has an enrollment for each attempt, so matching
+        on the code alone could write a grade onto an old attempt — and an old
+        result is never changed.
+        """
+        if not can_manage_exams(request.user):
+            raise PermissionDenied('The examination officer uploads authority grades.')
+        payload = request.data if isinstance(request.data, dict) else {}
+        rows = payload.get('rows', [])
         if not rows:
             return Response({'detail': 'No grade rows supplied.'}, status=status.HTTP_400_BAD_REQUEST)
+        semester = Semester.objects.filter(id=payload.get('semester_id')).first()
+        if semester is None:
+            return Response({'detail': 'Say which semester these grades are for.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         saved, errors = 0, []
         with transaction.atomic():
-            for index, row in enumerate(rows, start=2):
+            for row in rows:
                 reg_no = str(row.get('reg_no', '')).strip()
                 module_code = str(row.get('module_code', '')).strip()
                 raw = str(row.get('grade', '')).strip().upper()
                 if not reg_no or not module_code or not raw:
                     continue
-                student = Student.objects.filter(
-                    nactvet_reg_no__iexact=reg_no, module__code__iexact=module_code,
-                ).select_related('module').first()
+                student = (Student.objects
+                           .filter(nactvet_reg_no__iexact=reg_no, module__code__iexact=module_code,
+                                   module__semester=semester)
+                           .select_related('module__class_level')
+                           .order_by(F('withdrawn_at').asc(nulls_first=True), '-id').first())
                 if student is None:
-                    errors.append(f'Row {index}: no enrollment for {reg_no} / {module_code}')
+                    errors.append(f'{reg_no} / {module_code}: not enrolled in {semester.label}')
                     continue
                 try:
                     parsed = parse_authority_grade(raw, student.module.class_level)
                 except ValueError as exc:
-                    errors.append(f'Row {index}: {exc} for {reg_no} / {module_code}')
+                    errors.append(f'{reg_no} / {module_code}: {exc}')
                     continue
                 result, _ = StudentResult.objects.get_or_create(student=student)
                 result.authority_grade = parsed['raw']
@@ -6082,6 +6873,15 @@ def _clearance_payload(result):
     }
 
 
+#: What an invoice can be raised for, in the order the college bills them.
+#: Other fees are offered one by one, each under its own name.
+INVOICE_KINDS = [
+    (ChargeType.FEE, 'Tuition fee'),
+    (ChargeType.DIRECT_COST, 'Direct costs'),
+    (ChargeType.OTHER, 'Other fees'),
+]
+
+
 def _statement_payload(profile, year, semester):
     charges = (
         StudentCharge.objects.filter(profile=profile, academic_year=year)
@@ -6099,7 +6899,23 @@ def _statement_payload(profile, year, semester):
         .prefetch_related('lines__charge__charge_type', 'payments')
     )
     totals = finance.balance_for(profile, year)
+    # The payments an invoice can be raised for — tuition fee, direct costs,
+    # and each other fee on its own (supplementary, special exam, a repeat
+    # module, the TPH book…) — each only when the student is billed for it.
+    payment_kinds = []
+    for family, label in INVOICE_KINDS:
+        mine = [charge for charge in charges if charge.charge_type.family == family]
+        groups = sorted({charge.charge_type.group_label for charge in mine}) \
+            if family == ChargeType.OTHER else ([None] if mine else [])
+        for group in groups:
+            these = [c for c in mine if group is None or c.charge_type.group_label == group]
+            payment_kinds.append({
+                'family': family, 'group': group or '', 'label': group or label,
+                'other': family == ChargeType.OTHER,
+                'outstanding': str(finance.money(sum((finance.charge_balance(c) for c in these),
+                                                     Decimal('0'))))})
     return {
+        'payment_kinds': payment_kinds,
         'profile': {
             'id': profile.id,
             'nactvet_reg_no': profile.nactvet_reg_no,
@@ -6374,14 +7190,30 @@ def finance_issue_invoice(request):
         id=request.data.get('academic_year')
     ).first() or active_academic_year()
 
+    family = str(request.data.get('family') or '')
+    if family and family not in dict(ChargeType.FAMILY_CHOICES):
+        return Response({'detail': f'{family} is not a kind of payment.'}, status=status.HTTP_400_BAD_REQUEST)
+    group = str(request.data.get('group') or '')
     charge_ids = request.data.get('charges') or []
     charges = list(StudentCharge.objects.filter(id__in=charge_ids, profile=profile))
+    if group:
+        # One named payment — the supplementary exam, the TPH book…
+        charges = [c for c in finance.year_charges(profile, year) if c.charge_type.group_label == group]
+        if not charges:
+            return Response({'detail': f'{profile.name} is not billed for {group}.'},
+                            status=status.HTTP_400_BAD_REQUEST)
     if not charges:
         charges = finance.outstanding_charges(profile, year)
     try:
-        invoices = finance.issue_invoices(
-            profile, charges, year, source=Invoice.OFFICE, actor=request.user,
-        )
+        # One kind of payment — tuition fee, direct costs or other fees — or
+        # everything outstanding, one invoice per payment.
+        if family:
+            invoices = finance.issue_invoices_for_family(
+                profile, year, family, source=Invoice.OFFICE, actor=request.user)
+        else:
+            invoices = finance.issue_invoices(
+                profile, charges, year, source=Invoice.OFFICE, actor=request.user,
+            )
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     return Response(InvoiceSerializer(invoices, many=True).data, status=status.HTTP_201_CREATED)
@@ -6400,6 +7232,7 @@ def finance_collections(request):
 
     payments = (
         Payment.objects.filter(payment_date__gte=date_from, payment_date__lte=date_to)
+        .exclude(channel=Payment.CREDIT)        # no money arrived; see finance.apply_credit
         .select_related('profile', 'recorded_by')
         .prefetch_related('allocations__charge__charge_type')
         .order_by('-payment_date', '-created_at')

@@ -12,7 +12,53 @@ thing is half done, say which half.
 - `[!]` blocked — what it is waiting for is written next to it
 
 Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py test attendance --settings=edutrack.test_settings`
-(634 passing; everything since `5aefbc4` is uncommitted).
+(728 passing, including `test_end_to_end`; everything after `b5d8556` is uncommitted).
+
+---
+
+## At a glance (23 September 2026)
+
+### Done
+
+| Area | What it gives the college | Committed? |
+|---|---|---|
+| Phase 1 | Departments, programmes, fees by programme, college ID import | yes — `e1ec004` |
+| Phase 3a | Semester review (propose → confirm), repeats, discontinuation, supplementary rules, year-end advance, module carry-forward, 500-student scale | yes — `f491501`, `0b86e96` |
+| Password policy | Six-month passwords, expiry shown on every dashboard, forced change, admin reset | yes — `b5d8556` |
+| Phase 2 — admissions | First year: intake → records → finance → admission; continuing: finance → records → admission; NACTVET number, college ID, portal PIN, holds | partly — the base in `b5d8556`, the rest below uncommitted |
+| Offices | Each office sees only its own desks and menus; the exam officer is kept out of admissions and records; the Principal sees everything | no |
+| Student record | Records keeps all details and next of kin; students see them in My Profile; O-level / A-level certificate uploads | no |
+| Required items | TPH book, calculator, rim paper, insurance: defined by admission, checked by finance, a debt and never a hold; semester 2 recheck; the admission desk holds or admits | no |
+| Payment schedule | The awamu form as an editable template per year (new / continuing, day / hostel), `seed_payment_schedule`, copy to next year; registering needs the first instalment | no |
+| Hostel | Day or hostel stated at the finance desk; students apply from the portal; finance grants or declines | no |
+| Phase 3b | Postponement (portal or paper request, the Principal decides, fees reset, credit carried to the return); finishing (statement of every year, finance clears, the Principal declares, archived); standing banner on the portal | no |
+| Invoices | Tuition fee, direct costs, and one invoice for each other fee (supplementary, special, repeat module, TPH…) | no |
+| Authority results | Upload fixed: D and F are fails, only the chosen semester is written, only the exam office uploads. Results Summary (GPAs, pass / supp / repeat / disco counts, module pass rates). Manual **Withhold** button: the portal shows "Withheld" instead of grades; `*W*` / `*N*` read as words | no |
+| Testing and release | End-to-end test of a student's whole year; release guide `ops/guides/06-release-2026-27.md` | no |
+
+### Waiting list, in order
+
+1. **Finance expenses** — the next piece of work: categories, a yearly budget, spending,
+   and an income and expense summary. Needs your answer: who approves spending, and up to
+   what amount?
+2. **Commit and deploy** (you) — follow `ops/guides/06-release-2026-27.md`. Add the new
+   untracked files; migrations 0050–0054 aren't committed yet.
+3. **Before 12 October, in the app** (no code):
+   - the accountant confirms which charges make up the new students' 350,000 second
+     instalment;
+   - the accountant creates the TPH Book / Calculator / Rim Paper charge types and
+     rates; the admission officer adds them, and Insurance, as required items;
+   - the admission window, and the admission and records officer accounts;
+   - continuing students queued at finance, and existing hostel students marked Hostel.
+4. **Later (you said):** withholding results automatically for students with unpaid fees —
+   for now it is the manual Withhold button in Results Summary.
+5. **Later, not asked for yet:** moving out of the hostel mid-year; a library;
+   a read-only fee summary on the Departments page; online applications (the college's
+   current system can't be reached from here).
+6. **Blocked:** removing the old finance tables needs the production row counts.
+7. **Server:** a restore drill on the real server; a fresh Ansible `--check` run.
+8. **Open question:** your certificate message stopped at "…ordinary level or advance
+   level and". What was the rest?
 
 ---
 
@@ -32,7 +78,7 @@ through in Chromium as exam officer, accountant, HOD and records officer.
 - [x] `link_existing_records` command — links old modules and enrollments to a programme, adds only
 
 ## Phase 3a — year-end progression
-Commits `f86bf22`, `5aefbc4`. 52 tests (`test_progression.py`), driven in Chromium as
+Committed in `f491501` and `0b86e96`. 52 tests (`test_progression.py`), driven in Chromium as
 records officer and examination officer against a copy of the college at the end of
 2025/26, and again mid-semester-2 with a failed supplementary.
 
@@ -103,21 +149,51 @@ Built 2026-09-21 (`attendance/passwords.py`, middleware, migration 0049). 17 tes
       is locked out by the deployment itself
 
 ## Phase 3b — postponement and finishing
-Not started. Needed soon after the year opens, not on day one.
 
-- [ ] **Student requests postponement from the Services page** (your idea) — through the
-      existing request workflow, so the secretary forwards and only the **Principal** decides
-- [ ] Records officer can enter a paper postponement request for the Principal to approve
-- [ ] `Postponement` record: semester postponed, scope (semester 1 = the whole year,
-      semester 2 = returns for semester 2), reason, approver, return year and semester
-- [ ] A repeating student may postpone too
-- [ ] **Fees reset**: charges for the postponed period reversed (audit-logged, never deleted);
-      money already paid stays on the ledger as credit for the return
-- [ ] Completion clearance: accountant checks the balance and prints the statement, then the
-      Principal declares cleared, which archives the student
-- [~] The statement for clearance — `finance_statement` exists but covers **one academic year**;
-      clearance needs **every payment since the student started**
-- [ ] Standing shown in the student portal ("Repeating PST04202", "Due back: Level 5, Semester 2")
+- [x] **Postponement requests**: the student asks from the portal (Request a Service ▸
+      Postpone my studies), or records writes down a paper request (Postpone & Finish);
+      one waiting at a time; the student can withdraw it
+- [x] **The Principal decides**; declining needs a reason the student reads
+- [x] Semester 1 postpones the whole year (back to semester 1 next year); semester 2 only
+      semester 2; a repeating student may postpone and still owes the repeat
+- [x] Approval cancels the registration(s) with a reason, withdraws the enrollments (a date,
+      never a delete — marks kept), cancels a waiting application, sets the standing to
+      Postponed with the return year and semester
+- [x] **Fees reset**: the period's charges waived in full (one-time charges stay), audit
+      logged; what was paid becomes credit, carried onto the bill on their return by a
+      zero-sum "credit carried forward" entry (never counted as income)
+- [x] Expected back → "Start their return" opens a continuing application; a semester 2
+      return (or readmission) is billed semester 2 only
+- [x] **Completion clearance**: Postpone & Finish ▸ Finishing students — the accountant
+      prints the statement of every year and every payment, clears when nothing is owed;
+      the Principal then declares cleared → archived (portal closed, records kept)
+- [x] Standing banner on the portal ("Repeating PST04202", "Postponed — due back: …",
+      "Discontinued — readmission to …", "Finished — awaiting …")
+
+## Invoices for any fee
+
+- [x] **Tuition fee** and **Direct costs** invoices, and under **Other fees** one invoice for
+      each fee on its own — supplementary exam, special exam, repeat module, TPH book,
+      anything raised on request — each offered only to a student billed for it
+- [x] Portal Generate Invoice and the accountant's statement both offer them
+
+## Authority results, summary and withholding
+
+- [x] Authority grades: `D` / `F` without stars are fails (a repeat, or a discontinuation below
+      GPA 2.0); with stars a supplementary; the upload writes only to the semester chosen, and
+      only the examination officer or the Principal uploads (the Head of Department reads)
+- [x] Results ▸ Results Summary: per semester and level — each student's GPA and remark,
+      counts of pass / supp / repeat / discontinued / waiting, average GPA, each module's
+      pass rate
+- [x] Withhold / Release per student and semester: the portal says "Results withheld"
+      instead of grades and GPA; the results stand; the record of who and why is kept
+- [ ] Automatic withholding for unpaid fees (later)
+
+## Deployment
+
+- [x] `ops/guides/06-release-2026-27.md`: tests, commit (with the new files), rehearsal on
+      a copy, deploy, the two seed commands, setup in the app, live checks
+- [ ] Deploy (you)
 
 ## Phase 2 — admission workflow
 **The one dated 12 October.** Engine, API and screen built (`attendance/admissions.py`,
@@ -159,14 +235,102 @@ desks as records officer, accountant, admission officer and examination officer.
       not opened for somebody already on file
 - [x] NACTVET number is optional until the authority issues it — the number is obtained at
       the intake desk, which is what that desk is for
-- [ ] Records and admission officer **dashboards** (the queue counts exist; the landing
-      pages do not)
+- [x] **Who works admissions**: the admission, records and finance offices and the
+      Principal. The examination officer sees neither Admissions nor Student Records — they
+      take students over once admission has registered them. Windows, the college ID format
+      and the requirement list are the admission officer's (and the Principal's)
+- [x] **Records keeps the details**: admission takes a student on with a name, programme and
+      level; records takes down phone, gender, date of birth and two next of kin, and cannot
+      clear its desk until that is complete. Finance and admission read the details
+- [x] **Finance sees the results**: every application shows what the confirmed semester review
+      said, the student's standing, the modules they will sit and the bill that follows —
+      a year's fees, or the repeat rate per module. A repeater is billed per module at the
+      finance desk and admitted onto a repeat registration (failed modules only)
+- [x] **Continuing students go through admissions each new year**: the year-end advance no
+      longer registers anyone into a new academic year — it opens an application at finance
+      at the level the results earned. They pay, records double-checks them, admission
+      confirms they are here and registers them. Semester 1 → 2 within a year still carries
+      on automatically (they were admitted for the year)
+- [x] **Not paying is the only hold**: the finance desk cannot be cleared while charges marked
+      "blocks registration" are unpaid, by the college's clearance rule — an accountant's
+      override lets a student through. Missing details and missing items never hold a
+      continuing student (items are charged instead); a first year still needs their
+      details recorded before records can pass them on
+- [x] A late supplementary failure also withdraws an application still waiting at admissions
+- [x] **Send continuing students to finance** (Admissions ▸ My desk, admission officer or
+      Principal): for a year that was opened without the advance, it queues everyone last
+      year's confirmed semester 2 review sent on, at the level it gave them. Students
+      without a confirmed review are listed, not guessed at; anyone already applied or
+      registered is left alone; safe to press twice
+- [x] **Each office sees only its own**: records sees the records desks (first-year details,
+      continuing double-check) and the admitted; finance sees its desk and the admitted;
+      only admission and the Principal see intake, the admission desk and who is due back.
+      Enforced by the server (list, detail, desk counts, Find a student, documents)
+- [x] Records can still find and update any **existing** student in Student Records ▸ Find a
+      student — continuing students included, while they are still at finance
+- [x] Student portal ▸ My Profile shows what records keeps: college ID, gender, date of
+      birth, phone, programme, level, next of kin, and what is still missing
+- [x] Document kinds: **O-level certificate (CSEE)**, **A-level certificate (ACSEE)**, other
+      certificate, result slip, birth certificate, identification, medical form, other
+- [x] Records and admission **menus**: Admissions ▸ My desk / New application /
+      All applications / Expected back / Window & ID numbers; Student Records ▸ Find a
+      student / College ID import — each office sees only its own items, and both offices
+      land on My desk
+- [x] **Items are finance's to check** (TPH book, calculator, rim paper, insurance): at the
+      finance desk for first years and continuing students alike; records marks none.
+      Missing → added to the bill at the accountant's rate. **Never a hold**: the charge
+      types items bill under are left out of every clearance (registration, CATs, finals,
+      results), whatever their own flags say
+- [x] **Insurance**: the medical fee stays on everybody's published bill; a student with
+      their own insurance has it waived when finance marks "has it" (only what is unpaid;
+      the accountant's own waivers are left alone). Link the Insurance item to the medical
+      fee charge type, checked once a year
+- [x] **Admission desk sees what is owed** for items (paid or not, and anything finance
+      has not checked) and chooses: admit, or **put on hold** with a reason; "Lift the
+      hold" or admitting ends it; held students are marked on the desk list. A student who
+      brings the item while held is marked "has it" there, which takes it off the bill
+- [x] **Semester 2 items check** (Admissions ▸ Items check, accountant/Principal): the
+      registered class with the items due — every-semester items each semester, yearly
+      items once a year, once-only items once. Missing is billed to that semester
+- [x] **Required items screen**: Admissions ▸ Window & ID numbers ▸ Required items
+      (admission officer or Principal) — add, edit, switch off; pick the accountant's charge
+      type (shows which levels have a rate this year), how often it is checked, and levels.
+      An item already checked on students cannot be deleted, only switched off
+- [ ] Items setup to do in the system before 12 Oct: the accountant creates TPH Book /
+      Calculator / Rim Paper charge types with rates per level; the admission officer then
+      adds the items, with Insurance billed under the medical fee, once a year
 - [ ] Online applications — the college's current online system is not reachable from here
 - [x] **Admitting issues the portal password**: a readable one (no letters that argue with
       digits), shown to the officer once in its own dialog with the registration and college
       numbers, copyable and printable. The student must change it at first sign-in, a
       returning student keeps the password they already know, and records or admission can
       issue a replacement when one is lost
+
+## Payment schedule and hostel (from the 2026/27 instalment form)
+
+- [x] **Payment schedule** per year for new and for continuing students (Fee Setup ▸
+      Payment Schedule): instalments (awamu) with due dates and semesters, the part of each
+      fee due at each, day and hostel subtotals, row check against the fee; a fee not
+      covered or not adding up falls due on the Fee Structure's own dates
+- [x] `seed_payment_schedule --year 2026/2027` loads the form and refuses to save unless
+      all 18 subtotals (new/continuing × day/hostel) match
+- [ ] **Confirm with the accountant**: which other charges make up the new students'
+      second instalment of 350,000 — seeded as research/field fees, the semester II
+      national examination and graduation fees (the only later-in-year set that adds up)
+- [x] "Start from last year" copies both schedules to the next year, every date a year on
+- [x] A continuing student is never billed the one-time charges again (they were being
+      billed them whenever last year's fees were not in the system)
+- [x] Registration needs the first instalment's registration-blocking charges paid, even
+      before its due date (admission runs the week before 19/10)
+- [x] **Day or hostel** stated at the finance desk; a first year cannot pass finance without
+      it; a continuing student keeps last year's until changed; hostel adds the hostel
+      fee's instalments, day takes the unpaid ones off
+- [ ] Continuing students already in the hostel have no 2025/26 residence on record, so
+      finance must mark them Hostel at the desk this year (next year it carries over)
+- [x] **Hostel applications** from the portal (Request a Service ▸ Hostel); finance grants
+      or declines (Students ▸ Hostel); a place granted in semester 2 is charged semester 2's
+      instalment only
+- [ ] Moving out of the hostel mid-year (not asked for yet)
 
 ## Finance, still to come
 
@@ -223,3 +387,4 @@ Phase 3a:
 - [ ] Library: what has to be tracked beyond issuing, returning and charging for losses?
 - [ ] Expenses: who approves what, and up to what amount?
 - [ ] Production row counts for the four old finance tables, so they can be dropped safely.
+- [ ] Certificates: the message about O-level / A-level was cut off after "and" — what else was meant?

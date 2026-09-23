@@ -15,6 +15,7 @@ urlpatterns = [
     path('password/change/', att_views.password_change_page, name='password-change'),
     path('announcements/<int:pk>/download/', att_views.announcement_download, name='announcement-download'),
     path('invoice/<str:reference>/', att_views.invoice_print, name='invoice-print'),
+    path('statement/<int:profile_id>/', att_views.statement_print, name='statement-print'),
     # An approved service request, as the college's own paper form.
     path('request/<int:pk>/', att_views.request_print, name='request-print'),
     path('', login_required(TemplateView.as_view(template_name='index.html')), name='frontend'),

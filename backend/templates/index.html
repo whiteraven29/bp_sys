@@ -21,6 +21,13 @@
     --radius: 3px; --sidebar-w: 250px; --header-h: 56px;
     --shadow: rgba(0,0,0,.08); --row-hover: #f5f9fd;
     --accent-soft: #e8f1fb; --green-soft: #f1faf4;
+    --yellow-soft: #fdf3e7; --red-soft: #fdeded;
+    /* Fills: a colour with white text on it. Kept deep enough in both themes
+       for the text to read (4.5:1 or better). */
+    --accent-fill: #1565c0; --accent2-fill: #1d4ed8; --green-fill: #15803d;
+    --red-fill: #b91c1c; --yellow-fill: #b45309; --orange-fill: #c2410c;
+    --grey-fill: #5b6b7a; --on-fill: #ffffff;
+    --toast-bg: #2b3440; --toast-ink: #ffffff;
   }
   /* Dark is the same layout with the ground and the ink swapped. Only the
      palette moves: every rule below reads these, so nothing else needs a
@@ -33,6 +40,12 @@
     --yellow: #e0a03a; --orange: #f0894c; --text: #e3e9f0; --muted: #93a2b5;
     --shadow: rgba(0,0,0,.5); --row-hover: #202a38;
     --accent-soft: #1b2a3d; --green-soft: #16301f;
+    --yellow-soft: #33270f; --red-soft: #351b1b;
+    --accent-fill: #2563eb; --accent2-fill: #3b5bdb; --green-fill: #15803d;
+    --red-fill: #c62828; --yellow-fill: #a75a0a; --orange-fill: #b4470f;
+    --grey-fill: #56657a; --on-fill: #ffffff;
+    /* A toast is the opposite of the page, so it stands out on either. */
+    --toast-bg: #e3e9f0; --toast-ink: #10151b;
     color-scheme: dark;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -41,7 +54,7 @@
   /* ── HEADER ── */
   header {
     position: fixed; top: 0; left: 0; right: 0; z-index: 200;
-    background: var(--accent);
+    background: var(--accent-fill);
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 20px; height: var(--header-h); gap: 12px;
   }
@@ -63,25 +76,25 @@
     background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.3);
     padding: 3px 9px; border-radius: var(--radius); white-space: nowrap;
   }
-  .sem-badge.active { color: var(--accent); border-color: #fff; background: #fff; font-weight: 600; }
+  .sem-badge.active { color: var(--accent-fill); border-color: #fff; background: #fff; font-weight: 600; }
   .header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .user-chip {
     display: flex; align-items: center; gap: 8px; font-size: .8rem;
     padding: 4px 10px; border-radius: var(--radius);
-    background: transparent; border: 1px solid rgba(255,255,255,.3); color: #fff;
+    background: transparent; border: 1px solid rgba(255,255,255,.3); color: var(--on-fill);
     cursor: pointer; transition: all .15s;
   }
   .user-chip:hover { border-color: #fff; background: rgba(255,255,255,.14); }
   .user-avatar {
-    width: 24px; height: 24px; border-radius: 50%; background: #fff; color: var(--accent);
+    width: 24px; height: 24px; border-radius: 50%; background: #fff; color: var(--accent-fill);
     display: flex; align-items: center; justify-content: center; font-size: .72rem; font-weight: 700;
   }
   .logout-btn {
     padding: 4px 10px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,.3);
-    background: transparent; color: #fff; font-size: .8rem;
+    background: transparent; color: var(--on-fill); font-size: .8rem;
     cursor: pointer; transition: all .15s; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
   }
-  .logout-btn:hover { background: var(--red); border-color: var(--red); color: #fff; }
+  .logout-btn:hover { background: var(--red-fill); border-color: var(--red-fill); color: var(--on-fill); }
 
   /* ── BREADCRUMB / CONTEXT BAR ── */
   .crumb-bar {
@@ -90,7 +103,7 @@
     font-size: .8rem; color: var(--muted);
   }
   .crumb-bar .crumb-here { color: var(--text); font-weight: 600; }
-  .crumb-bar .crumb-sep { margin: 0 7px; color: #b9c3cd; }
+  .crumb-bar .crumb-sep { margin: 0 7px; color: var(--muted); }
   .crumb-bar .crumb-meta { color: var(--text); }
   .crumb-bar .crumb-meta b { font-weight: 600; }
 
@@ -218,7 +231,7 @@
   .icon-btn:hover { background: rgba(255,255,255,.24); }
   .bell-wrap { position: relative; }
   .bell-count { position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px;
-    padding: 0 4px; border-radius: 9px; background: var(--red); color: #fff;
+    padding: 0 4px; border-radius: 9px; background: var(--red-fill); color: var(--on-fill);
     font-size: .66rem; font-weight: 700; line-height: 17px; text-align: center; }
   .bell-panel { display: none; position: absolute; right: 0; top: calc(100% + 8px); width: 340px;
     max-height: 60vh; overflow-y: auto; z-index: 60;
@@ -246,6 +259,28 @@
 
   .help-note { font-size: .76rem; line-height: 1.55; color: var(--muted); margin: 10px 0; }
   .help-note strong { color: var(--text); font-weight: 600; }
+  /* The "?" beside a heading. Explanations live here, one sentence, shown on
+     hover or on focus — tapping it on a phone focuses it — instead of a
+     paragraph under every heading that nobody reads twice. */
+  .tip {
+    position: relative; display: inline-grid; place-items: center;
+    width: 16px; height: 16px; margin-left: 5px; vertical-align: 1px;
+    border: 1px solid var(--border); border-radius: 50%;
+    color: var(--muted); background: var(--surface);
+    font-size: .64rem; font-weight: 700; font-style: normal; line-height: 1;
+    cursor: help; user-select: none;
+  }
+  .tip:hover, .tip:focus-visible, .tip:focus { color: var(--accent); border-color: var(--accent); outline: none; }
+  .tip::after {
+    content: attr(data-tip);
+    position: absolute; z-index: 600; left: -6px; top: calc(100% + 7px);
+    width: max-content; max-width: 280px; padding: 8px 10px;
+    border-radius: var(--radius); background: var(--toast-bg); color: var(--toast-ink);
+    font-size: .76rem; font-weight: 400; line-height: 1.45; text-align: left;
+    letter-spacing: normal; text-transform: none; white-space: normal;
+    opacity: 0; visibility: hidden; transition: opacity .12s ease; pointer-events: none;
+  }
+  .tip:hover::after, .tip:focus::after { opacity: 1; visibility: visible; }
 
   .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px 14px; margin-bottom: 14px; }
   .form-grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px 14px; margin-bottom: 14px; }
@@ -376,27 +411,27 @@
   .type-toggle label:first-child { margin-left: 0; border-radius: var(--radius) 0 0 var(--radius); }
   .type-toggle label:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
   .type-toggle input[type=radio] { display: none; }
-  .type-toggle label:has(input:checked) { border-color: var(--accent); background: var(--accent); color: #fff; position: relative; z-index: 1; }
-  .type-toggle label.practical:has(input:checked) { border-color: var(--accent2); background: var(--accent2); color: #fff; }
+  .type-toggle label:has(input:checked) { border-color: var(--accent-fill); background: var(--accent-fill); color: var(--on-fill); position: relative; z-index: 1; }
+  .type-toggle label.practical:has(input:checked) { border-color: var(--accent2-fill); background: var(--accent2-fill); color: var(--on-fill); }
 
   /* Flat buttons — solid fill, square, no lift or glow on hover. */
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius); border: 1px solid transparent; font-family: var(--font-sans); font-size: .83rem; font-weight: 500; cursor: pointer; transition: background .13s, border-color .13s, color .13s; }
-  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-fill); }
   .btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
   .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
   .btn-secondary:hover { background: var(--surface2); border-color: #b3bec9; }
   .btn-danger { background: var(--surface); color: var(--red); border-color: var(--border); }
-  .btn-danger:hover { background: var(--red); border-color: var(--red); color: #fff; }
+  .btn-danger:hover { background: var(--red-fill); border-color: var(--red-fill); color: var(--on-fill); }
   .btn-green { background: var(--surface); color: var(--green); border-color: var(--border); }
-  .btn-green:hover { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn-green:hover { background: var(--green-fill); border-color: var(--green-fill); color: var(--on-fill); }
   .btn-warning { background: var(--surface); color: var(--yellow); border-color: var(--border); }
-  .btn-warning:hover { background: var(--yellow); border-color: var(--yellow); color: #fff; }
+  .btn-warning:hover { background: var(--yellow-fill); border-color: var(--yellow-fill); color: var(--on-fill); }
   /* Used 35 times across the panel — charge types, the forms builder, inventory
      — but never defined, so every one of them rendered as bare text with
      padding. A quiet tertiary action: no chrome until you point at it. */
   .btn-ghost { background: transparent; color: var(--muted); border-color: transparent; }
   .btn-ghost:hover { background: var(--surface2); color: var(--text); border-color: var(--border); }
-  .btn-success { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn-success { background: var(--green-fill); border-color: var(--green-fill); color: var(--on-fill); }
   .btn-success:hover { background: #15803d; border-color: #15803d; }
   .btn:disabled, .btn[disabled] { opacity: .5; cursor: not-allowed; }
   .btn-sm { padding: 4px 9px; font-size: .76rem; }
@@ -412,11 +447,11 @@
 
   /* Small square tags, like the reference's blue "Important" label. */
   .badge { display: inline-block; padding: 2px 7px; border-radius: 2px; font-size: .72rem; font-weight: 600; white-space: nowrap; color: #fff; }
-  .badge-green { background: var(--green); }
-  .badge-red { background: var(--red); }
-  .badge-yellow { background: var(--yellow); }
-  .badge-orange { background: var(--orange); }
-  .badge-blue { background: var(--accent2); }
+  .badge-green { background: var(--green-fill); }
+  .badge-red { background: var(--red-fill); }
+  .badge-yellow { background: var(--yellow-fill); }
+  .badge-orange { background: var(--orange-fill); }
+  .badge-blue { background: var(--accent2-fill); }
   .badge-purple { background: #6d28d9; }
 
   .progress-bar { height: 5px; background: #dfe4ea; border-radius: 0; overflow: hidden; width: 100%; min-width: 60px; }
@@ -425,9 +460,9 @@
   /* 3-state attendance toggle */
   .att-toggle { display: inline-flex; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
   .att-toggle button { border: none; background: var(--surface); color: var(--muted); padding: 4px 9px; font-size: .76rem; font-weight: 600; cursor: pointer; transition: all .1s; }
-  .att-toggle button.st-p { background: var(--green); color: #fff; }
-  .att-toggle button.st-s { background: var(--orange); color: #fff; }
-  .att-toggle button.st-a { background: var(--red); color: #fff; }
+  .att-toggle button.st-p { background: var(--green-fill); color: var(--on-fill); }
+  .att-toggle button.st-s { background: var(--orange-fill); color: var(--on-fill); }
+  .att-toggle button.st-a { background: var(--red-fill); color: var(--on-fill); }
 
   .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 30px 20px; text-align: center; cursor: pointer; transition: all .2s; }
   .upload-zone:hover { border-color: var(--accent); background: rgba(21,101,192,.04); }
@@ -435,7 +470,7 @@
   .upload-zone .uz-title { font-weight: 600; margin-bottom: 4px; font-size: .9rem; }
   .upload-zone .uz-sub { font-size: .77rem; color: var(--muted); }
 
-  #toast { position: fixed; bottom: 24px; right: 20px; z-index: 9999; background: var(--text); border: 0; border-radius: var(--radius); padding: 11px 18px; font-size: .83rem; color: #fff; transform: translateY(80px); opacity: 0; transition: all .2s ease; pointer-events: none; max-width: calc(100vw - 40px); }
+  #toast { position: fixed; bottom: 24px; right: 20px; z-index: 9999; background: var(--toast-bg); border: 0; border-radius: var(--radius); padding: 11px 18px; font-size: .83rem; color: var(--toast-ink); transform: translateY(80px); opacity: 0; transition: all .2s ease; pointer-events: none; max-width: calc(100vw - 40px); }
   #toast.show { transform: translateY(0); opacity: 1; }
 
   .modal-overlay { position: fixed; inset: 0; z-index: 500; background: rgba(20,28,38,.5); display: none; align-items: center; justify-content: center; padding: 20px; }
@@ -455,6 +490,18 @@
   .level-tab { padding: 7px 14px; border-radius: var(--radius) var(--radius) 0 0; border: 1px solid transparent; border-bottom: 0; background: transparent; color: var(--muted); font-size: .82rem; font-weight: 500; cursor: pointer; transition: all .13s; margin-bottom: -1px; }
   .level-tab:hover { color: var(--text); background: var(--surface2); }
   .level-tab.active { background: var(--surface); color: var(--accent-dark); border-color: var(--border); font-weight: 600; }
+  /* Blocks inside the application window. */
+  .app-block { margin-bottom: 14px; }
+  .app-block:empty { display: none; }
+  .app-block .block-title { font-size: .86rem; font-weight: 600; margin-bottom: 8px; }
+  .facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: .82rem; }
+  .facts dt { color: var(--muted); }
+  .facts dd { margin: 0; }
+  .missing-note { padding: 7px 10px; border-left: 3px solid var(--orange); background: var(--yellow-soft);
+    color: var(--text); font-size: .8rem; margin-bottom: 10px; }
+  .app-trail summary { cursor: pointer; font-size: .86rem; font-weight: 600; padding: 6px 0; }
+  #page-admissions [data-adm-section], #page-student-records [data-rec-section] { display: none; }
+  #page-admissions [data-adm-section].sec-on, #page-student-records [data-rec-section].sec-on { display: block; }
   .student-subview, .module-subview { display: none; }
   .student-subview.active, .module-subview.active { display: block; }
   .row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
@@ -596,9 +643,9 @@
   }
 
   /* ── PERIOD BADGES ── */
-  .badge-cat1 { background: var(--green); }
-  .badge-cat2 { background: var(--accent2); }
-  .badge-gen  { background: #8b98a5; }
+  .badge-cat1 { background: var(--green-fill); }
+  .badge-cat2 { background: var(--accent2-fill); }
+  .badge-gen  { background: var(--grey-fill); }
 
   /* ── SICK INLINE INPUT ── */
   .sick-input {
@@ -764,8 +811,27 @@
     <button class="nav-btn active academic-only" data-page="dashboard" onclick="showPage('dashboard',this)"><span class="icon"><i class="bi bi-speedometer2"></i></span> Dashboard</button>
     <button class="nav-btn admin-only" data-page="accounts" onclick="showPage('accounts',this)"><span class="icon"><i class="bi bi-people"></i></span> User Accounts</button>
     <button class="nav-btn admin-only" data-page="departments" onclick="showPage('departments',this); loadDepartments()"><span class="icon"><i class="bi bi-diagram-3"></i></span> Departments</button>
-    <button class="nav-btn records-only admin-only account-manager-only" data-page="student-records" onclick="showPage('student-records',this)"><span class="icon"><i class="bi bi-person-vcard"></i></span> Student Records</button>
-    <button class="nav-btn admin-only records-only finance-only" data-page="admissions" onclick="showPage('admissions',this); loadAdmissions()"><span class="icon"><i class="bi bi-door-open"></i></span> Admissions</button>
+    <!-- Admissions and the student record belong to their offices and the
+         Principal. data-roles says who sees each item; boot hides the rest. -->
+    <div class="nav-group" id="admissions-nav-group" data-roles="principal admission records finance">
+      <button class="nav-btn" data-page="admissions" onclick="toggleAdmissionsMenu(event)"><span class="icon"><i class="bi bi-door-open"></i></span> Admissions <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-adm-section="desk" onclick="showAdmissionSection('desk', this)">My desk</button>
+        <button class="nav-sub-btn" data-adm-section="new" data-roles="principal admission" onclick="showAdmissionSection('new', this)">New application</button>
+        <button class="nav-sub-btn" data-adm-section="all" onclick="showAdmissionSection('all', this)">All applications</button>
+        <button class="nav-sub-btn" data-adm-section="dueback" data-roles="principal admission" onclick="showAdmissionSection('dueback', this)">Expected back</button>
+        <button class="nav-sub-btn" data-adm-section="items" data-roles="principal finance" onclick="showAdmissionSection('items', this)">Items check</button>
+        <button class="nav-sub-btn" data-adm-section="settings" data-roles="principal admission" onclick="showAdmissionSection('settings', this)">Window &amp; ID numbers</button>
+      </div>
+    </div>
+    <div class="nav-group" id="records-nav-group" data-roles="principal records admission">
+      <button class="nav-btn" data-page="student-records" onclick="toggleRecordsMenu(event)"><span class="icon"><i class="bi bi-person-vcard"></i></span> Student Records <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-rec-section="find" data-roles="principal records" onclick="showRecordsSection('find', this)">Find a student</button>
+        <button class="nav-sub-btn" data-rec-section="ids" onclick="showRecordsSection('ids', this)">College ID import</button>
+      </div>
+    </div>
+    <button class="nav-btn" data-page="status" data-roles="principal records finance" onclick="showPage('status',this); loadStatusPage()"><span class="icon"><i class="bi bi-hourglass-split"></i></span> Postpone &amp; Finish</button>
     <button class="nav-btn admin-only" data-page="progression" onclick="showPage('progression',this); loadProgression()"><span class="icon"><i class="bi bi-arrow-up-right-circle"></i></span> Semester Review</button>
     <div class="aside-label estate-only">Inventory</div>
     <button class="nav-btn estate-only inventory-nav-btn active" title="Overview" data-page="inventory" data-inventory-section="overview" onclick="showInventorySection('overview',this)"><span class="icon"><i class="bi bi-grid-1x2"></i></span> Overview</button>
@@ -807,6 +873,7 @@
         <button class="nav-sub-btn" data-results-section="final" onclick="showResultsSection('final', this)">End of Semester</button>
         <button class="nav-sub-btn" data-results-section="field" onclick="showResultsSection('field', this)">Field Results</button>
         <button class="nav-sub-btn" data-results-section="analysis" onclick="showResultsSection('analysis', this)">CAT Analysis</button>
+        <button class="nav-sub-btn admin-only" data-results-section="summary" onclick="showResultsSection('summary', this)">Results Summary</button>
       </div>
     </div>
     <div class="nav-group admin-only exam-only" id="declarations-nav-group">
@@ -834,6 +901,7 @@
         <button class="nav-sub-btn" data-finance-section="accounts" onclick="showFinanceSection('accounts', this)">Bank Accounts</button>
         <button class="nav-sub-btn" data-finance-section="charge-types" onclick="showFinanceSection('charge-types', this)">Charge Types</button>
         <button class="nav-sub-btn" data-finance-section="fee-structure" onclick="showFinanceSection('fee-structure', this)">Fee Structure</button>
+        <button class="nav-sub-btn" data-finance-section="payment-schedule" onclick="showFinanceSection('payment-schedule', this)">Payment Schedule</button>
       </div>
     </div>
     <div class="nav-group finance-only" id="finance-payments-nav-group">
@@ -850,6 +918,7 @@
         <button class="nav-sub-btn" data-finance-section="students" onclick="showFinanceSection('students', this)">Balances &amp; Clearance</button>
         <button class="nav-sub-btn" data-finance-section="extra-charge" onclick="showFinanceSection('extra-charge', this)">Extra Charges</button>
         <button class="nav-sub-btn" data-finance-section="overrides" onclick="showFinanceSection('overrides', this)">Waivers &amp; Overrides</button>
+        <button class="nav-sub-btn" data-finance-section="hostel" onclick="showFinanceSection('hostel', this)">Hostel</button>
       </div>
     </div>
     <button class="nav-btn finance-only" data-page="finance" data-finance-section="audit" onclick="showFinanceSection('audit', this)"><span class="icon"><i class="bi bi-shield-check"></i></span> Audit Trail</button>
@@ -962,10 +1031,10 @@
     <!-- USER ACCOUNTS -->
     <div class="page" id="page-departments">
       <div class="page-title">Departments</div>
-      <div class="page-sub">Each department's programmes, head and staff. Fees differ by programme and are set by the accountant.</div>
+      <div class="page-sub">Programmes, heads and staff.</div>
 
       <div class="card admin-only account-manager-only">
-        <div class="card-title" id="dept-form-title">Register a department</div>
+        <div class="card-title"><span id="dept-form-title">Register a department</span> <span class="tip" tabindex="0" role="note" aria-label="Help: The head must already hold the Head of Department role (User Accounts). Add programmes after saving." data-tip="The head must already hold the Head of Department role (User Accounts). Add programmes after saving.">?</span></div>
         <input type="hidden" id="dept-id">
         <div class="form-grid-3">
           <div class="field"><label>Department name *</label><input id="dept-name" placeholder="e.g. Pharmaceutical Sciences" /></div>
@@ -973,10 +1042,6 @@
           <div class="field"><label>Head of department</label><select id="dept-hod"></select></div>
         </div>
         <div class="field"><label>Staff</label><div id="dept-staff" class="check-grid"></div></div>
-        <p class="help-note">
-          The head is chosen from accounts that already hold the Head of Department role — give the role
-          under User Accounts first. Add the department's programmes once it is saved.
-        </p>
         <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input type="checkbox" id="dept-active" checked> Active</label>
         <button class="btn btn-primary btn-sm" onclick="saveDepartment()" id="dept-save">Save department</button>
         <button class="btn btn-ghost btn-sm" onclick="resetDepartmentForm()" id="dept-cancel" style="display:none">Cancel</button>
@@ -986,16 +1051,34 @@
     </div>
 
     <div class="page" id="page-student-records">
-      <div class="page-title">Student Records</div>
-      <div class="page-sub">College ID numbers and the student record.</div>
+      <div class="page-title" id="rec-page-title">Find a student</div>
+      <div class="page-sub" id="rec-page-sub">Look a student up, and keep their details.</div>
 
-      <div class="card records-only admin-only account-manager-only">
-        <div class="card-title">Record the college ID numbers students already carry</div>
-        <p class="help-note">
-          Upload an Excel sheet with two columns: the NACTVET registration number, then the college ID number
-          (a header row is fine). <strong>Check the sheet</strong> first — nothing is saved until you choose
-          <strong>Record</strong>. A student who already has a different college ID keeps it; the report says so.
-        </p>
+      <div class="card" data-rec-section="find">
+        <div class="field" style="max-width:420px;">
+          <label>Name, registration or college ID</label>
+          <input id="rec-search" placeholder="Type at least two letters" oninput="scheduleRecordSearch()">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Reg. No.</th><th>College ID</th><th>Name</th><th>Standing</th><th>Record</th><th></th></tr></thead>
+            <tbody id="rec-results"><tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-search"></i></div>Search for a student</div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" data-rec-section="find" id="rec-editor" style="display:none;">
+        <div class="card-title"><span id="rec-editor-title">Student</span></div>
+        <input type="hidden" id="rec-profile-id">
+        <div id="rec-editor-missing"></div>
+        <div id="rec-editor-form"></div>
+        <button class="btn btn-primary btn-sm" onclick="saveRecord(event)">Save details</button>
+        <div class="block-title" style="margin-top:18px;">Documents</div>
+        <div id="rec-editor-docs"></div>
+      </div>
+
+      <div class="card" data-rec-section="ids">
+        <div class="card-title">Record the college ID numbers students already carry <span class="tip" tabindex="0" role="note" aria-label="Help: Excel with two columns: registration number, then college ID. Check first — nothing saves until Record. Existing IDs are kept." data-tip="Excel with two columns: registration number, then college ID. Check first — nothing saves until Record. Existing IDs are kept.">?</span></div>
         <div class="form-grid-3">
           <div class="field"><label>Excel file (.xlsx)</label><input type="file" id="cid-file" accept=".xlsx" /></div>
         </div>
@@ -1005,17 +1088,64 @@
       </div>
     </div>
 
-    <div class="page" id="page-admissions">
-      <div class="page-title">Admissions</div>
-      <div class="page-sub">Finance, records and the admission office, in that order. A student is registered and enrolled at the last desk, not before.</div>
+    <div class="page" id="page-status">
+      <div class="page-title">Postponement &amp; finishing</div>
+      <div class="page-sub">Students stopping for a while, and students leaving at the end.</div>
 
-      <div class="card">
+      <div class="card" data-roles="principal records">
+        <div class="card-title">Postponement requests <span class="tip" tabindex="0" role="note" aria-label="Help: postponement" data-tip="The Principal decides. Semester 1 postpones the whole year; semester 2 brings them back to semester 2. Approving takes them off the semester, reverses the period's fees and keeps what they paid as credit for the return.">?</span></div>
+        <div class="form-grid-3">
+          <div class="field"><label>Show</label>
+            <select id="pp-filter" onchange="loadPostponements()">
+              <option value="pending">Waiting for the Principal</option>
+              <option value="approved">Approved</option>
+              <option value="declined">Declined</option>
+              <option value="">All</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Reg. No.</th><th>Name</th><th>Stops in</th><th>Reason</th><th>From</th><th>Status</th><th></th></tr></thead>
+            <tbody id="pp-tbody"><tr><td colspan="7" style="color:var(--muted);">Nothing waiting</td></tr></tbody>
+          </table>
+        </div>
+        <div style="border-top:1px solid var(--border);margin:16px 0 12px;"></div>
+        <div class="card-title" style="font-size:.9rem;">Write down a paper request</div>
+        <div class="form-grid-3">
+          <div class="field"><label>Registration number *</label><input id="pp-regno" placeholder="NIT/PST/…"></div>
+          <div class="field" style="grid-column:span 2;"><label>Reason *</label><input id="pp-reason" placeholder="As written on the request"></div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="enterPostponement(event)">Send to the Principal</button>
+      </div>
+
+      <div class="card" data-roles="principal finance">
+        <div class="card-title">Finishing students <span class="tip" tabindex="0" role="note" aria-label="Help: finishing" data-tip="Students who finished level 6. Finance prints the statement of every year and clears them when nothing is owed; the Principal then declares them cleared, which archives them — the portal closes, the record stays.">?</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Reg. No.</th><th>Name</th><th>Owes</th><th>Finance</th><th>Principal</th><th></th></tr></thead>
+            <tbody id="fin-tbody"><tr><td colspan="6" style="color:var(--muted);">Nobody has finished yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" id="page-admissions">
+      <div class="page-title" id="adm-page-title">My desk</div>
+      <div class="page-sub" id="adm-page-sub">What is waiting on you.</div>
+
+      <div class="card" data-adm-section="desk">
         <div class="card-title">This semester <span id="adm-window-state" style="font-size:.75rem;font-weight:400;margin-left:6px;"></span></div>
         <div class="quick-facts" id="adm-queue"></div>
         <p class="help-note" id="adm-window-note" style="margin-top:12px;"></p>
+        <div id="adm-continuing-box" style="display:none;margin-top:10px;">
+          <button class="btn btn-secondary btn-sm" onclick="queueContinuing(event)"><i class="bi bi-arrow-right-circle"></i> Send continuing students to finance</button>
+          <span class="tip" tabindex="0" role="note" aria-label="Help: continuing students" data-tip="Puts every student last year's review sent on into the finance queue for this year, at the level the review gave them. Anyone already applied or registered is left alone. The year-end advance does this by itself.">?</span>
+          <p class="help-note" id="adm-continuing-result" style="margin-top:8px;"></p>
+        </div>
       </div>
 
-      <div class="card" id="adm-desk-card">
+      <div class="card" id="adm-desk-card" data-adm-section="desk">
         <div class="card-title">On my desk <span id="adm-desk-count" style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;"></span></div>
         <div class="table-wrap">
           <table>
@@ -1025,24 +1155,18 @@
         </div>
       </div>
 
-      <div class="card admin-only records-only">
-        <div class="card-title">Open an application</div>
-        <p class="help-note">
-          A <strong>first year</strong> is taken on by the admission office: leave the registration
-          number blank and the college holds them under a temporary one until the authority issues
-          theirs at intake. For a <strong>continuing or readmitted</strong> student, type their
-          registration number and their details are found and filled in.
-        </p>
+      <div class="card" data-adm-section="new">
+        <div class="card-title">Open an application <span class="tip" tabindex="0" role="note" aria-label="Help: who fills what" data-tip="Admission takes them on here. The records office then takes down their details and next of kin. A first year may have no number yet — it is written in at intake.">?</span></div>
         <div class="form-grid-3">
           <div class="field"><label>Kind *</label>
-            <select id="adm-kind" onchange="renderApplicantFields()">
+            <select id="adm-kind">
               <option value="new">First year</option>
               <option value="continuing">Continuing student</option>
               <option value="readmission">Readmission</option>
             </select>
           </div>
           <div class="field"><label>Registration number</label>
-            <input id="adm-regno" placeholder="Leave blank for a first year — the authority numbers them at intake" oninput="scheduleApplicantLookup()">
+            <input id="adm-regno" placeholder="Blank for a first year" oninput="scheduleApplicantLookup()">
             <span id="adm-lookup" style="font-size:.72rem;color:var(--muted);margin-top:3px;"></span>
           </div>
           <div class="field"><label>Full name *</label><input id="adm-name" placeholder="As on the certificate"></div>
@@ -1050,34 +1174,11 @@
         <div class="form-grid-3">
           <div class="field"><label>Programme *</label><select id="adm-programme"></select></div>
           <div class="field"><label>Level *</label><select id="adm-level"></select></div>
-          <div class="field"><label>Phone</label><input id="adm-phone" placeholder="07…"></div>
-        </div>
-        <div class="form-grid-3">
-          <div class="field"><label>Gender</label>
-            <select id="adm-gender"><option value="">—</option><option value="F">Female</option><option value="M">Male</option></select>
-          </div>
-          <div class="field"><label>Date of birth</label><input type="date" id="adm-dob"></div>
-        </div>
-        <div id="adm-kin-fields">
-          <div class="form-grid-3">
-            <div class="field"><label>Next of kin 1 — name</label><input id="adm-kin1-name"></div>
-            <div class="field"><label>Phone</label><input id="adm-kin1-phone"></div>
-            <div class="field"><label>Relationship</label>
-              <select id="adm-kin1-rel"><option value="parent">Parent</option><option value="guardian">Guardian</option><option value="spouse">Spouse</option><option value="sibling">Sibling</option><option value="relative">Other relative</option><option value="other">Other</option></select>
-            </div>
-          </div>
-          <div class="form-grid-3">
-            <div class="field"><label>Next of kin 2 — name</label><input id="adm-kin2-name"></div>
-            <div class="field"><label>Phone</label><input id="adm-kin2-phone"></div>
-            <div class="field"><label>Relationship</label>
-              <select id="adm-kin2-rel"><option value="parent">Parent</option><option value="guardian">Guardian</option><option value="spouse">Spouse</option><option value="sibling">Sibling</option><option value="relative">Other relative</option><option value="other">Other</option></select>
-            </div>
-          </div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="openApplication(event)"><i class="bi bi-person-plus"></i> Open the application</button>
       </div>
 
-      <div class="card">
+      <div class="card" data-adm-section="dueback">
         <div class="card-title">Expected back <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— discontinued and postponed students due this semester</span></div>
         <div class="table-wrap">
           <table>
@@ -1087,7 +1188,32 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" data-adm-section="items">
+        <div class="card-title">Items check <span class="tip" tabindex="0" role="note" aria-label="Help: items check" data-tip="Semester 2 asks again for the items checked every semester. Missing adds the item to the student's bill — a debt, never a hold. Students still going through admissions are checked on their application.">?</span></div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field"><label>Semester</label><select id="items-semester" onchange="loadItemChecks(1)"></select></div>
+          <div class="field"><label>Find a student</label><input id="items-search" placeholder="Name or registration" oninput="scheduleItemSearch()"></div>
+          <div class="field"><label>Show</label>
+            <select id="items-filter" onchange="loadItemChecks(1)">
+              <option value="1">Not fully checked</option>
+              <option value="">Everyone</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Reg. No.</th><th>Name</th><th>Level</th><th>Items</th></tr></thead>
+            <tbody id="items-tbody"><tr><td colspan="4"><div class="empty"><div class="ei"><i class="bi bi-bag-check"></i></div>Nobody to check</div></td></tr></tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:12px;">
+          <button class="btn btn-ghost btn-sm" onclick="loadItemChecks((state.itemsPage || 1) - 1)">← Previous</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadItemChecks((state.itemsPage || 1) + 1)">Next →</button>
+          <span id="items-page" style="font-size:.78rem;color:var(--muted);"></span>
+        </div>
+      </div>
+
+      <div class="card" data-adm-section="all">
         <div class="card-title">Everything this semester</div>
         <div class="form-grid-3" style="margin-bottom:12px;">
           <div class="field"><label>Show</label>
@@ -1111,7 +1237,7 @@
         </div>
       </div>
 
-      <div class="card admin-only" id="adm-settings-card">
+      <div class="card" id="adm-settings-card" data-adm-section="settings">
         <div class="card-title">How admissions run <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— the admission officer's settings</span></div>
         <div class="form-grid-3">
           <div class="field"><label>Admissions open on</label><input type="date" id="adm-opens"></div>
@@ -1122,7 +1248,7 @@
         </div>
         <button class="btn btn-secondary btn-sm" onclick="saveAdmissionWindow()">Save the window</button>
         <div style="border-top:1px solid var(--border);margin:16px 0 12px;"></div>
-        <div class="card-title" style="font-size:.9rem;">The college ID number</div>
+        <div class="card-title" style="font-size:.9rem;">The college ID number <span class="tip" tabindex="0" role="note" aria-label="Help: Pieces: {COLLEGE} {PROG} {YEAR} {YY} {SEQ}. One counter per year; a student keeps their number for life." data-tip="Pieces: {COLLEGE} {PROG} {YEAR} {YY} {SEQ}. One counter per year; a student keeps their number for life.">?</span></div>
         <div class="form-grid-3">
           <div class="field"><label>Pattern *</label><input id="adm-id-pattern" placeholder="{COLLEGE}/{PROG}/{YEAR}/{SEQ}" oninput="previewCollegeId()"></div>
           <div class="field"><label>College code</label><input id="adm-id-college" oninput="previewCollegeId()"></div>
@@ -1133,22 +1259,49 @@
           <div class="field"><label>Next number to issue</label><input type="number" id="adm-id-next" min="1" oninput="previewCollegeId()"></div>
           <div class="field"><label>Looks like</label><input id="adm-id-example" readonly></div>
         </div>
-        <p class="help-note">
-          The pieces are <strong>{COLLEGE}</strong>, <strong>{PROG}</strong> (the programme code),
-          <strong>{YEAR}</strong>, <strong>{YY}</strong> and <strong>{SEQ}</strong> (the running number).
-          One counter for the whole college per year. A student who already has a number keeps it, so a
-          readmitted student is never given a second one.
-        </p>
         <button class="btn btn-secondary btn-sm" onclick="saveCollegeIdFormat()">Save the format</button>
+        <div style="border-top:1px solid var(--border);margin:16px 0 12px;"></div>
+        <div class="card-title" style="font-size:.9rem;">Required items <span class="tip" tabindex="0" role="note" aria-label="Help: required items" data-tip="What a student must have — TPH book, calculator, rim paper, insurance. Finance checks them; one missing is added to the bill at the rate the accountant set for its charge type. Never a hold.">?</span></div>
+        <div class="table-wrap" style="margin-bottom:12px;">
+          <table>
+            <thead><tr><th>Item</th><th>Bills under</th><th>Checked</th><th>Levels</th><th>Status</th><th></th></tr></thead>
+            <tbody id="req-tbody"><tr><td colspan="6" style="color:var(--muted);">No items yet</td></tr></tbody>
+          </table>
+        </div>
+        <input type="hidden" id="req-id">
+        <div class="form-grid-3">
+          <div class="field"><label>Item *</label><input id="req-name" placeholder="e.g. TPH Book"></div>
+          <div class="field"><label>Bills under <span class="tip" tabindex="0" role="note" aria-label="Help: bills under" data-tip="The accountant's charge type, whose rate is charged when the item is missing. Insurance: the medical fee, which is waived for a student with their own.">?</span></label>
+            <select id="req-charge" onchange="showRequirementRates()"></select>
+            <span id="req-rates" style="font-size:.72rem;color:var(--muted);margin-top:3px;"></span>
+          </div>
+          <div class="field"><label>Checked</label>
+            <select id="req-frequency">
+              <option value="each_semester">Every semester</option>
+              <option value="each_year">Once a year</option>
+              <option value="once">Once, when they join</option>
+            </select>
+          </div>
+        </div>
+        <div class="field"><label>Levels <span style="font-weight:400;color:var(--muted);">— none ticked means every level</span></label>
+          <div id="req-levels" style="display:flex;gap:14px;flex-wrap:wrap;font-size:.84rem;"></div>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:.84rem;">
+          <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="req-active" checked style="width:auto;"> In use</label>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-secondary btn-sm" onclick="saveRequirement(event)" id="req-save">Add the item</button>
+          <button class="btn btn-ghost btn-sm" onclick="resetRequirementForm()">Clear</button>
+        </div>
       </div>
     </div>
 
     <div class="page" id="page-progression">
       <div class="page-title">Semester Review</div>
-      <div class="page-sub">What each student's results mean for the semester ahead. The semester cannot be advanced until every student here has been confirmed.</div>
+      <div class="page-sub">What each student's results mean for next semester.</div>
 
       <div class="card">
-        <div class="card-title">The semester being closed</div>
+        <div class="card-title">The semester being closed <span class="tip" tabindex="0" role="note" aria-label="Help: Waiting on a supplementary? Confirm as “continues while results are awaited”, then decide when the marks arrive. Overrides need a reason." data-tip="Waiting on a supplementary? Confirm as “continues while results are awaited”, then decide when the marks arrive. Overrides need a reason.">?</span></div>
         <div class="form-grid-3" style="margin-bottom:12px;">
           <div class="field"><label>Semester</label><select id="rev-semester" onchange="loadProgression()"></select></div>
           <div class="field"><label>Show</label>
@@ -1170,16 +1323,7 @@
           <button class="btn btn-secondary btn-sm" onclick="buildReviews(event)"><i class="bi bi-arrow-repeat"></i> Read the results again</button>
           <button class="btn btn-primary btn-sm" onclick="confirmProposed(event)"><i class="bi bi-check2-all"></i> Confirm everyone not in doubt</button>
         </div>
-        <p class="help-note" id="rev-readonly" style="display:none;">
-          You are reading this. The Principal and the examination officer decide it.
-        </p>
-        <p class="help-note" style="margin-top:12px;">
-          Semester 1 supplementaries are marked well into semester 2, so a student waiting for one stays
-          <strong>waiting for results</strong> and carries on paying as normal. Confirm them as
-          <strong>continues while results are awaited</strong> to let the semester advance, and decide them
-          once the marks arrive — read the results again to pick them up. Overruling what the results say
-          always needs a reason, and both are kept.
-        </p>
+        <p class="help-note" id="rev-readonly" style="display:none;">Read only — the Principal and the examination officer decide.</p>
         <div class="quick-facts" id="rev-counts" style="margin-top:12px;"></div>
       </div>
 
@@ -1221,7 +1365,7 @@
 
     <div class="page" id="page-accounts">
       <div class="page-title">User Accounts</div>
-      <div class="page-sub">Create tutor and accountant login credentials</div>
+      <div class="page-sub">Staff logins and roles.</div>
 
       <div class="card admin-only">
         <div class="card-title">Create Staff Account</div>
@@ -1265,7 +1409,7 @@
     <!-- MODULES -->
     <div class="page" id="page-modules">
       <div class="page-title">Modules</div>
-      <div class="page-sub">Manage the modules you teach — each module can hold both Theory and Practical sessions</div>
+      <div class="page-sub">Modules and who teaches them.</div>
       <div class="module-subview active" id="module-section-register">
       <div class="card">
         <div class="card-title">➕ Register New Module</div>
@@ -1380,7 +1524,7 @@
     <!-- ATTENDANCE -->
     <div class="page" id="page-attendance">
       <div class="page-title">Take Attendance</div>
-      <div class="page-sub">Record attendance for a session — select whether it is Theory or Practical</div>
+      <div class="page-sub">Record a Theory or Practical session.</div>
       <div class="card">
         <div class="card-title">📋 Session Details</div>
         <div class="form-grid-3">
@@ -1466,24 +1610,14 @@
           Entering and approving marks belongs to the examination officer.</div>
       </div>
       <div class="page-title">Results — Continuous Assessment</div>
-      <div class="page-sub">Enter raw marks out of 100 per student — weighted totals &amp; eligibility calculated automatically</div>
+      <div class="page-sub">Raw marks out of 100 — totals are calculated.</div>
 
       <div id="rw-banner"></div>
 
       <div class="card admin-only exam-write" id="result-window-card">
-        <div class="card-title">Mark entry windows
+        <div class="card-title">Mark entry windows <span class="tip" tabindex="0" role="note" aria-label="Help: Outside an open window only the exam office can change marks. The CA window governs tutors; the end-of-semester one is the office deadline." data-tip="Outside an open window only the exam office can change marks. The CA window governs tutors; the end-of-semester one is the office deadline.">?</span>
           <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px">— when tutors may enter marks</span>
         </div>
-        <p class="help-note">
-          Marks used to be enterable whenever anyone happened to open the page, so a mark could
-          be revised weeks after results were published and nobody would know. Say when the books
-          are open; outside that only you can write, and a tutor is told the dates rather than
-          left guessing.<br><br>
-          The <strong>continuous assessment</strong> window is the one that governs tutors — the
-          CATs and assignments they set and marked. <strong>End of semester</strong> marks are
-          entered by you whatever the calendar says, so that window is the deadline the college
-          publishes to itself; everyone sees it on the banner above.
-        </p>
         <div class="form-grid-3">
           <div class="field">
             <label>Semester</label>
@@ -1536,6 +1670,30 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" onclick="downloadAuthorityGradeTemplate()">⬇ Download Level Template</button>
           <button class="btn btn-primary btn-sm exam-write" onclick="uploadAuthorityGrades()">⬆ Upload Authority Grades</button>
+        </div>
+      </div>
+
+      <div class="card admin-only" id="results-summary-card" style="display:none;">
+        <div class="card-title">Results summary <span class="tip" tabindex="0" role="note" aria-label="Help: results summary" data-tip="GPA = sum of (grade points × module credits) ÷ total credits of the graded modules. Points: A 4 (A 5 at level 6), B+ 4, B 3, C 2, D 1, F 0. An authority grade counts as the result whether or not marks were entered. Withhold hides a student's results for the semester on the portal; the results themselves stand.">?</span></div>
+        <div class="form-grid-3">
+          <div class="field"><label>Semester *</label><select id="sum-semester" onchange="loadResultsSummary()"></select></div>
+          <div class="field"><label>Class level *</label><select id="sum-level" onchange="loadResultsSummary()"></select></div>
+          <div class="field"><label>Find a student</label><input id="sum-search" placeholder="Name or registration" oninput="renderSummaryStudents()"></div>
+        </div>
+        <div class="stats-grid" id="sum-stats"></div>
+        <div class="card-title" style="font-size:.9rem;margin-top:14px;">Modules</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Module</th><th>Students</th><th>Results in</th><th>Passed</th><th>Supp</th><th>Failed</th><th>Waiting</th><th>Pass rate</th></tr></thead>
+            <tbody id="sum-modules"><tr><td colspan="8" style="color:var(--muted);">Pick a semester and level</td></tr></tbody>
+          </table>
+        </div>
+        <div class="card-title" style="font-size:.9rem;margin-top:14px;">Students <span id="sum-count" style="font-size:.75rem;font-weight:400;color:var(--muted);"></span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Reg. No.</th><th>Name</th><th>GPA</th><th>Remark</th><th>Modules</th><th>Portal</th></tr></thead>
+            <tbody id="sum-students"></tbody>
+          </table>
         </div>
       </div>
 
@@ -1652,7 +1810,7 @@
     <!-- EXAM DECLARATIONS -->
     <div class="page exam-only" id="page-declarations">
       <div class="page-title">Exam Declarations</div>
-      <div class="page-sub">Declare students for special, supplementary, repeat-module, or discontinuation review; finance will price and clear payments separately.</div>
+      <div class="page-sub">Special, supplementary and repeat exams.</div>
       <div class="card admin-only">
         <div class="card-title">Filters</div>
         <div class="form-grid-3">
@@ -1690,7 +1848,7 @@
     <!-- ELIGIBILITY -->
     <div class="page" id="page-eligibility">
       <div class="page-title">Exam Eligibility</div>
-      <div class="page-sub">Check who can sit for CATs and end-of-semester exams using attendance, finance clearance, and CA readiness.</div>
+      <div class="page-sub">Who may sit CATs and end-of-semester exams.</div>
       <div class="card">
         <div class="card-title">Filters</div>
         <div class="form-grid-3">
@@ -1806,7 +1964,7 @@
               </select>
             </div>
             <div class="field">
-              <label>Invoice group</label>
+              <label>Invoice group <span class="tip" tabindex="0" role="note" aria-label="Help: Same group and account = one invoice. Mark one-time charges (caution, admission, ID card, uniform) as Once." data-tip="Same group and account = one invoice. Mark one-time charges (caution, admission, ID card, uniform) as Once.">?</span></label>
               <input id="fin-ct-group" placeholder="e.g. Direct Costs" />
             </div>
             <div class="field">
@@ -1823,12 +1981,6 @@
                      title="Position in the published fee table. The invoice lists items in this order." />
             </div>
           </div>
-          <div class="help-note">
-            Charges sharing an invoice group and account are billed on one invoice.
-            Tuition and other charges go to different CRDB accounts, so they can never share one.
-            Mark caution money, admission, ID card, coat, uniforms and graduation as
-            <strong>Once</strong> — that is what makes a continuing student's bill smaller.
-          </div>
           <div class="field" style="margin-top:6px">
             <label>Not paying this blocks</label>
             <div style="display:flex;flex-wrap:wrap;gap:14px;padding:8px 0">
@@ -1842,7 +1994,7 @@
           </div>
           <div class="form-grid-3" style="margin-top:6px">
             <div class="field">
-              <label>Raised when the exam office declares</label>
+              <label>Raised when the exam office declares <span class="tip" tabindex="0" role="note" aria-label="Help: Priced per module — set the rate for each programme and level in the fee structure." data-tip="Priced per module — set the rate for each programme and level in the fee structure.">?</span></label>
               <select id="fin-ct-declaration">
                 <option value="">— not a declaration —</option>
                 <option value="supp_exam">Supplementary exam</option>
@@ -1856,10 +2008,6 @@
             <span>Bill it again when a discontinued student is readmitted
               <span style="color:var(--muted);font-size:.78rem;">(only matters for a charge billed Once)</span></span>
           </label>
-          <div class="help-note">
-            A declaration charge is priced per module: set its rate in the fee structure, for each programme and level.
-            A student declared for two modules is charged twice.
-          </div>
           <button class="btn btn-primary btn-sm" onclick="saveChargeType()" id="fin-ct-save">💾 Save charge type</button>
           <button class="btn btn-ghost btn-sm" onclick="cancelChargeTypeEdit()" id="fin-ct-cancel"
                   style="display:none">Cancel</button>
@@ -1931,15 +2079,10 @@
       <!-- FEE STRUCTURE GRID -->
       <div class="finance-section" id="finance-section-fee-structure">
         <div class="card finance-only">
-          <div class="card-title">Fee structure</div>
+          <div class="card-title">Fee structure <span class="tip" tabindex="0" role="note" aria-label="Help: “Every programme” is the default. Pick a programme to set what differs; faded amounts are inherited." data-tip="“Every programme” is the default. Pick a programme to set what differs; faded amounts are inherited.">?</span></div>
           <div class="form-grid-3">
             <div class="field"><label>Academic year</label><select id="fin-fs-year" onchange="loadFeeGrid()"></select></div>
             <div class="field"><label>Programme</label><select id="fin-fs-programme" onchange="loadFeeGrid()"><option value="">Every programme</option></select></div>
-          </div>
-          <div class="help-note">
-            <strong>Every programme</strong> holds the amounts all programmes pay. Choose a programme to set the
-            amounts that differ for it — where a programme sets nothing, its students pay the every-programme amount,
-            shown faded.
           </div>
           <div class="table-wrap">
             <table id="fin-fee-grid">
@@ -2123,6 +2266,52 @@
       </div>
 
       <!-- OVERRIDES -->
+      <div class="finance-section" id="finance-section-payment-schedule">
+        <div class="card finance-only">
+          <div class="card-title">Payment schedule <span class="tip" tabindex="0" role="note" aria-label="Help: payment schedule" data-tip="Each column is an instalment (awamu) with the date it is due by. Put each fee's parts under the instalments they fall due in; a row must add up to the fee. A fee left out, or not adding up, falls due on the Fee Structure's own dates. The hostel row is charged only to hostel students.">?</span></div>
+          <div class="form-grid-3">
+            <div class="field"><label>Academic year</label><select id="fin-ps-year" onchange="loadPaymentSchedule()"></select></div>
+            <div class="field"><label>Students</label>
+              <select id="fin-ps-entry" onchange="renderPaymentSchedule()">
+                <option value="new">New students (level 4, new entrants at 5 and 6)</option>
+                <option value="continuing">Continuing students</option>
+              </select>
+            </div>
+            <div class="field" style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-ghost btn-sm" id="fin-ps-copy" style="display:none;" onclick="copyPaymentSchedules()">Start from last year</button>
+              <button class="btn btn-ghost btn-sm" onclick="addPaymentStep()">+ Instalment</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="fin-ps-table"><thead id="fin-ps-head"></thead><tbody id="fin-ps-body"></tbody><tfoot id="fin-ps-foot"></tfoot></table>
+          </div>
+          <p class="help-note" id="fin-ps-status" style="margin-top:8px;"></p>
+          <button class="btn btn-primary btn-sm" onclick="savePaymentSchedule(event)">Save the schedule</button>
+        </div>
+      </div>
+
+      <div class="finance-section" id="finance-section-hostel">
+        <div class="card finance-only">
+          <div class="card-title">Hostel applications <span class="tip" tabindex="0" role="note" aria-label="Help: hostel applications" data-tip="Day students asking for a place, from the portal. Granting one charges the hostel fee's instalments from the semester they applied in.">?</span></div>
+          <div class="form-grid-3">
+            <div class="field"><label>Show</label>
+              <select id="fin-hostel-status" onchange="loadHostelApplications()">
+                <option value="pending">Waiting</option>
+                <option value="approved">Granted</option>
+                <option value="declined">Declined</option>
+                <option value="">All</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Reg. No.</th><th>Name</th><th>Applied</th><th>For</th><th>Reason</th><th>Status</th><th></th></tr></thead>
+              <tbody id="fin-hostel-tbody"><tr><td colspan="7" style="color:var(--muted);">Nobody waiting</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <div class="finance-section" id="finance-section-overrides">
         <div class="card finance-only">
           <div class="card-title">Clear or hold a student by hand</div>
@@ -2180,7 +2369,7 @@
     <!-- SICK RECORDS -->
     <div class="page" id="page-performance">
       <div class="page-title">Performance &amp; Trends</div>
-      <div class="page-sub" id="pf-scope">How students are doing — by year, semester, level, module and assessment, and how that has moved</div>
+      <div class="page-sub" id="pf-scope">Results by year, level, module and assessment.</div>
 
       <div class="card">
         <div class="card-title">What to look at</div>
@@ -2243,7 +2432,7 @@
 
     <div class="page" id="page-forms">
       <div class="page-title" id="forms-page-title">Services</div>
-      <div class="page-sub" id="forms-page-sub">What students ask the College for, and what the College asks students</div>
+      <div class="page-sub" id="forms-page-sub">Requests and forms.</div>
 
       <div class="card admin-only" data-forms-section="evaluations services">
         <div class="card-title" id="form-editor-title">Create a form</div>
@@ -2281,7 +2470,7 @@
             </select>
           </div>
           <div class="field">
-            <label>Compulsory</label>
+            <label>Compulsory <span class="tip" tabindex="0" role="note" aria-label="Help: Students must answer before they can use the portal. Make staff evaluations anonymous." data-tip="Students must answer before they can use the portal. Make staff evaluations anonymous.">?</span></label>
             <select id="fm-mandatory">
               <option value="false">Optional — students fill it if they choose</option>
               <option value="true">Required — block the portal until they do</option>
@@ -2309,25 +2498,12 @@
           compulsory: the student has to be told the answer, and nobody should be made to ask
           for a sick sheet they do not need.
         </div>
-        <div class="help-note">
-          A <strong>compulsory</strong> form meets students at sign-in and holds the portal
-          until they answer it — use it when you need every student, not a self-selecting few.
-          It works alongside anonymity: the college learns that everyone has answered without
-          learning who said what.<br><br>
-          Make anything that evaluates a member of staff <strong>anonymous</strong> — students
-          will not say a tutor was unprepared with their name attached. An anonymous form still
-          records <em>that</em> a student answered, so nobody is asked twice.
-        </div>
         <button class="btn btn-primary btn-sm" id="fm-save" onclick="saveForm()">💾 Save form</button>
         <button class="btn btn-ghost btn-sm" id="fm-cancel" onclick="cancelFormEdit()" style="display:none">Cancel</button>
       </div>
 
       <div class="card non-secretary-only" data-forms-section="evaluations">
-        <div class="card-title">Evaluation forms</div>
-        <p class="help-note">
-          Feedback you tally and report on. Students fill these in under
-          <strong>Services → Forms</strong>.
-        </p>
+        <div class="card-title">Evaluation forms <span class="tip" tabindex="0" role="note" aria-label="Help: Feedback forms students fill in under Services → Forms." data-tip="Feedback forms students fill in under Services → Forms.">?</span></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Title</th><th>Year</th><th>Window</th><th>Questions</th><th>Responses</th><th>Anonymous</th><th>Status</th><th>Live</th><th></th></tr></thead>
@@ -2337,12 +2513,7 @@
       </div>
 
       <div class="card non-secretary-only" data-forms-section="services">
-        <div class="card-title">Services students can request</div>
-        <p class="help-note">
-          Things a student asks the College for — a sick sheet, a letter, a hostel bed. These
-          appear under <strong>Services → Request a Service</strong> on the portal, and every
-          submission lands in the queue below to be approved or declined.
-        </p>
+        <div class="card-title">Services students can request <span class="tip" tabindex="0" role="note" aria-label="Help: Sick sheets, letters, hostel beds. Requested under Services; each one lands in the queue below." data-tip="Sick sheets, letters, hostel beds. Requested under Services; each one lands in the queue below.">?</span></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Title</th><th>Year</th><th>Window</th><th>Questions</th><th>Requests</th><th>Anonymous</th><th>Status</th><th>Live</th><th></th></tr></thead>
@@ -2352,12 +2523,7 @@
       </div>
 
       <div class="card" data-forms-section="requests">
-        <div class="card-title">Service requests</div>
-        <p class="help-note">
-          What students have asked the College for. A request is the one thing on the portal
-          the College owes an answer to — the student sees the decision and your note on their
-          My Requests page, so write the note for them: where to collect it, or why not.
-        </p>
+        <div class="card-title">Service requests <span class="tip" tabindex="0" role="note" aria-label="Help: The student sees your decision and note under My Requests — write the note for them." data-tip="The student sees your decision and note under My Requests — write the note for them.">?</span></div>
         <div class="form-grid-3">
           <div class="field">
             <label>Show</label>
@@ -2440,7 +2606,7 @@
 
     <div class="page" id="page-sick">
       <div class="page-title">Sick Management</div>
-      <div class="page-sub">View all sick records, add notes, and track medical certificate submissions</div>
+      <div class="page-sub">Sick records and medical certificates.</div>
       <div class="card">
         <div class="card-title">Filters</div>
         <div class="form-grid-3">
@@ -2471,7 +2637,7 @@
     <!-- REPORTS -->
     <div class="page" id="page-reports">
       <div class="page-title">Reports</div>
-      <div class="page-sub">Attendance analysis — percentage based on sessions conducted vs attended</div>
+      <div class="page-sub">Attendance: sessions held vs attended.</div>
       <div class="card">
         <div class="card-title">Filters</div>
         <div class="form-grid-3">
@@ -2712,7 +2878,7 @@
 <div class="modal-overlay" id="programme-modal">
   <div class="modal">
     <div class="modal-title">
-      <span id="prog-modal-title">Add a programme</span>
+      <span id="prog-modal-title">Add a programme</span> <span class="tip" tabindex="0" role="note" aria-label="Help: The code appears in college ID numbers, so it must be unique." data-tip="The code appears in college ID numbers, so it must be unique.">?</span>
       <button class="modal-close" onclick="closeProgrammeModal()">✕</button>
     </div>
     <input type="hidden" id="prog-id">
@@ -2722,7 +2888,6 @@
       <div class="field"><label>Course code *</label><input id="prog-code" placeholder="e.g. PST" /></div>
     </div>
     <div class="field"><label>Taught at</label><div id="prog-levels" class="check-grid"></div></div>
-    <p class="help-note">The course code is printed in college ID numbers, so no two programmes may share one.</p>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input type="checkbox" id="prog-active" checked> Active</label>
     <button class="btn btn-primary btn-sm" onclick="saveProgramme()">Save programme</button>
   </div>
@@ -2734,11 +2899,7 @@
       <span>Admitted — hand this over</span>
       <button class="modal-close" onclick="closePinModal()">✕</button>
     </div>
-    <p class="help-note">
-      This password is shown <strong>once</strong>. The college keeps only a scrambled copy of it,
-      so it cannot be looked up later — write it on the admission slip. The student is asked to
-      change it the first time they sign in, and the office can issue a fresh one if it is lost.
-    </p>
+    <p class="help-note">Shown <strong>once</strong> — write it on the admission slip. The student changes it at first sign-in.</p>
     <div class="form-grid" style="margin:14px 0;">
       <div class="field"><label>Registration number</label><input id="pin-modal-regno" readonly></div>
       <div class="field"><label>College ID</label><input id="pin-modal-collegeid" readonly></div>
@@ -2763,8 +2924,10 @@
     </div>
     <input type="hidden" id="app-modal-id">
     <div id="app-modal-summary" style="font-size:.85rem;margin-bottom:12px;"></div>
+    <div id="app-modal-academic" class="app-block"></div>
+    <div id="app-modal-details" class="app-block"></div>
     <div id="app-modal-number" style="margin-bottom:14px;display:none;">
-      <div class="card-title" style="font-size:.9rem;">The NACTVET number</div>
+      <div class="card-title" style="font-size:.9rem;">The NACTVET number <span class="tip" tabindex="0" role="note" aria-label="Help: Replaces the temporary number on the record and on every enrollment." data-tip="Replaces the temporary number on the record and on every enrollment.">?</span></div>
       <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
         <div class="field" style="flex:1 1 260px;margin-bottom:0;">
           <label>Issued by the authority</label>
@@ -2772,29 +2935,29 @@
         </div>
         <button class="btn btn-secondary btn-sm" onclick="saveNactvetNumber()">Save the number</button>
       </div>
-      <p class="help-note" style="margin-top:8px;">
-        Held under a temporary number until this is filled in. Saving it moves the student's record
-        and every enrollment onto the new number at once.
-      </p>
     </div>
-    <div id="app-modal-requirements" style="margin-bottom:14px;"></div>
+    <div id="app-modal-residence" class="app-block"></div>
+    <div id="app-modal-owed" class="app-block"></div>
+    <div id="app-modal-requirements" style="margin:12px 0 14px;"></div>
     <div id="app-modal-documents" style="margin-bottom:14px;"></div>
     <div class="field"><label>Note for the record</label><input id="app-modal-note" placeholder="Receipt number, what was seen, why"></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;" id="app-modal-actions"></div>
-    <div class="card-title" style="font-size:.9rem;">What has been done</div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Desk</th><th>By</th><th>When</th><th>Note</th></tr></thead>
-        <tbody id="app-modal-steps"></tbody>
-      </table>
-    </div>
+    <details class="app-trail">
+      <summary>What has been done</summary>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Desk</th><th>By</th><th>When</th><th>Note</th></tr></thead>
+          <tbody id="app-modal-steps"></tbody>
+        </table>
+      </div>
+    </details>
   </div>
 </div>
 
 <div class="modal-overlay" id="review-modal">
   <div class="modal">
     <div class="modal-title">
-      <span id="review-modal-title">Decide</span>
+      <span id="review-modal-title">Decide</span> <span class="tip" tabindex="0" role="note" aria-label="Help: Confirming raises repeats, records discontinuations and stops a student who failed semester 1. Marks never change." data-tip="Confirming raises repeats, records discontinuations and stops a student who failed semester 1. Marks never change.">?</span>
       <button class="modal-close" onclick="closeReviewModal()">✕</button>
     </div>
     <input type="hidden" id="review-id">
@@ -2810,11 +2973,6 @@
       </select>
     </div>
     <div class="field"><label>Reason</label><input id="review-reason" placeholder="Needed when this differs from what the results say" /></div>
-    <p class="help-note">
-      Confirming acts: a repeat is held against the student until they pass it, a discontinued student is
-      recorded with the semester they return to, and a student who failed a semester 1 module after the
-      supplementary is taken off semester 2. Their marks are never changed.
-    </p>
     <button class="btn btn-primary btn-sm" onclick="saveReviewDecision()">Confirm</button>
   </div>
 </div>
@@ -2836,15 +2994,10 @@
 <div class="modal-overlay" id="roles-modal">
   <div class="modal">
     <div class="modal-title">
-      Change roles — <span id="roles-user-name"></span>
+      Change roles <span class="tip" tabindex="0" role="note" aria-label="Help: Tick every office they hold — the modules they teach are kept. Takes effect at their next sign-in." data-tip="Tick every office they hold — the modules they teach are kept. Takes effect at their next sign-in.">?</span> — <span id="roles-user-name"></span>
       <button class="modal-close" onclick="closeRolesModal()">✕</button>
     </div>
     <input type="hidden" id="roles-user-id">
-    <p class="help-note">
-      Tick every office this person holds. Moving a tutor to Head of Department or Principal
-      does not need a second account — tick the new office, and the modules they teach stay
-      with them either way. Changes take effect at their next sign-in.
-    </p>
     <div id="roles-list" class="check-grid" style="margin-bottom:14px;"></div>
     <button class="btn btn-primary btn-sm" onclick="saveUserRoles()">Save roles</button>
   </div>
@@ -3297,7 +3450,18 @@ function showResultsSection(section, btn) {
   if (legend) legend.style.display = section === 'ca' || showField ? 'block' : 'none';
   if (endCard) endCard.style.display = section === 'final' && resModuleInfo && !resModuleInfo.is_field_module && state.isStaff ? 'block' : 'none';
   if (authorityCard) authorityCard.style.display = section === 'final' ? 'block' : 'none';
+  const summaryCard = document.getElementById('results-summary-card');
+  if (summaryCard) summaryCard.style.display = section === 'summary' ? 'block' : 'none';
   if (section === 'analysis') loadCatAnalysis();
+  if (section === 'summary') {
+    const sem = document.getElementById('sum-semester');
+    if (!sem.options.length) {
+      buildSemOptions(sem);
+      buildLevelOptions(document.getElementById('sum-level'));
+      if (state.activeSem) sem.value = state.activeSem.id;
+    }
+    loadResultsSummary();
+  }
   requestAnimationFrame(() => {
     const target = section === 'analysis'
       ? analysisCard
@@ -3456,7 +3620,7 @@ async function boot() {
     }
     // Likewise the records and admission offices, whose work is the student record.
     if (state.isRecordsOffice && !state.isStaff && !state.isSecretary) {
-      showPage('student-records', document.querySelector('[data-page="student-records"]'));
+      showAdmissionSection('desk', document.querySelector('[data-adm-section="desk"].nav-sub-btn'));
     }
     updatePeriodLocks();
     loadAnnouncements();
@@ -3711,10 +3875,10 @@ const ROLE_NOTES = {
   hod: 'Runs the department and reads examinations, but does not decide them.',
   tutor: 'Takes attendance and enters CA marks for their own modules.',
   secretary: 'Answers what students have asked the College for.',
-  accountant: 'The fees ledger, payments and clearance.',
+  accountant: 'The fees ledger, payments, clearance and the items check.',
   estate_officer: 'The asset register and college property.',
   records_officer: 'Keeps the student record: personal details, college ID numbers, admissions.',
-  admission_officer: 'Admits students: requirements, college ID numbers, final admission.',
+  admission_officer: 'Admits students: windows, college ID numbers, holds, final admission.',
 };
 
 // Roles are a set, not a single label. Promoting somebody is a tick, not a
@@ -4951,11 +5115,88 @@ async function uploadAuthorityGrades() {
     });
     if (!rows.length) { toast('No grades were found in the selected file', 'var(--red)'); return; }
     if (!confirm(`Import ${rows.length} authority grade(s)? Uploaded grades become the approved final result.`)) return;
-    const result = await api('POST', '/results/authority-grades/', { rows });
+    const result = await api('POST', '/results/authority-grades/', {
+      rows, semester_id: document.getElementById('auth-grade-semester').value,
+    });
     toast(`Imported ${result.saved} authority grade(s)${result.errors.length ? `; ${result.errors.length} error(s)` : ''}`, result.errors.length ? 'var(--yellow)' : 'var(--green)');
     if (result.errors.length) alert(`Imported ${result.saved} grade(s).\n\nNot imported:\n${result.errors.slice(0, 20).join('\n')}${result.errors.length > 20 ? '\n…' : ''}`);
     if (document.getElementById('res-flt-module').value) loadResultsModule();
   } catch(e) { toast(e?.detail || 'Authority grade upload failed', 'var(--red)'); }
+}
+
+// ── results summary ───────────────────────────────────────────────────────────
+
+const REMARK_BADGES = { PASS: 'badge-green', SUPP: 'badge-yellow', REPEAT: 'badge-red', DISCO: 'badge-red', INCOMPLETE: 'badge-gen' };
+
+async function loadResultsSummary() {
+  const semester = document.getElementById('sum-semester').value;
+  const level = document.getElementById('sum-level').value;
+  if (!semester || !level) return;
+  try {
+    const data = await api('GET', `/results-summary/?semester_id=${semester}&class_level_id=${level}`);
+    state.resultsSummary = data;
+    const c = data.counts;
+    const tile = (label, value, colour, note = '') =>
+      `<div class="stat-card" style="--c:var(${colour})"><div class="label">${label}</div><div class="value">${value}</div>${note ? `<div class="sublabel">${note}</div>` : ''}</div>`;
+    const pct = n => c.total ? `${Math.round(100 * n / c.total)}%` : '';
+    document.getElementById('sum-stats').innerHTML =
+      tile('Students', c.total, '--accent', data.average_gpa != null ? `average GPA ${data.average_gpa.toFixed(2)}` : '') +
+      tile('Passed', c.PASS, '--green', pct(c.PASS)) +
+      tile('Supplementary', c.SUPP, '--yellow', pct(c.SUPP)) +
+      tile('Repeat', c.REPEAT, '--orange', pct(c.REPEAT)) +
+      tile('Discontinued', c.DISCO, '--red', pct(c.DISCO)) +
+      tile('Waiting for results', c.INCOMPLETE, '--muted', c.withheld ? `${c.withheld} withheld on the portal` : '');
+    document.getElementById('sum-modules').innerHTML = data.modules.length ? data.modules.map(m => `<tr>
+        <td><strong>${safeText(m.code)}</strong> <span style="color:var(--muted);font-size:.78rem;">${safeText(m.name)}</span></td>
+        <td>${m.students}</td><td>${m.results}</td><td>${m.passed}</td><td>${m.supp}</td><td>${m.failed}</td><td>${m.waiting}</td>
+        <td>${m.pass_rate == null ? '—' : `<strong>${m.pass_rate}%</strong>`}</td></tr>`).join('')
+      : '<tr><td colspan="8" style="color:var(--muted);">No modules for this level and semester</td></tr>';
+    renderSummaryStudents();
+  } catch (e) { toast(apiErrorText(e, 'Could not load the summary'), 'var(--red)'); }
+}
+
+function renderSummaryStudents() {
+  const data = state.resultsSummary;
+  if (!data) return;
+  const term = (document.getElementById('sum-search').value || '').trim().toLowerCase();
+  const rows = data.students.filter(s => !term || s.name.toLowerCase().includes(term) || s.reg_no.toLowerCase().includes(term));
+  document.getElementById('sum-count').textContent = `${rows.length} of ${data.students.length}`;
+  document.getElementById('sum-students').innerHTML = rows.map(s => {
+    const detail = s.remark === 'PASS' ? safeText(s.classification)
+      : s.remark === 'SUPP' ? safeText(s.supp.join(', '))
+      : s.remark === 'INCOMPLETE' ? `waiting: ${safeText(s.waiting.join(', '))}`
+      : safeText(s.failed.join(', '));
+    const grades = Object.entries(s.grades).map(([code, grade]) => `${safeText(code)} <strong>${safeText(grade || '—')}</strong>`).join(' · ');
+    const portal = s.withheld_id
+      ? `<span class="badge badge-yellow">withheld</span> <button class="btn btn-ghost btn-sm exam-write" onclick="releaseResults(${s.withheld_id})">Release</button>`
+      : (s.profile_id ? `<button class="btn btn-ghost btn-sm exam-write" onclick="withholdResults(${s.profile_id})">Withhold</button>` : '');
+    return `<tr>
+      <td>${safeText(s.reg_no)}</td><td>${safeText(s.name)}</td>
+      <td><strong>${s.gpa == null ? '—' : s.gpa.toFixed(2)}</strong></td>
+      <td><span class="badge ${REMARK_BADGES[s.remark] || 'badge-gen'}">${s.remark}</span> <span style="font-size:.75rem;">${detail}</span></td>
+      <td style="font-size:.75rem;">${grades}</td>
+      <td style="white-space:nowrap;">${portal}</td></tr>`;
+  }).join('') || '<tr><td colspan="6" style="color:var(--muted);">No students</td></tr>';
+}
+
+async function withholdResults(profileId) {
+  const reason = prompt('Why are the results withheld? (for the office — the student sees only "Withheld")', 'Fees not paid');
+  if (reason === null) return;
+  try {
+    await api('POST', '/result-withholdings/', {
+      profile_id: profileId, semester_id: document.getElementById('sum-semester').value, reason });
+    toast('Withheld — the student sees "Withheld" on the portal', 'var(--orange)');
+    await loadResultsSummary();
+  } catch (e) { toast(apiErrorText(e, 'Could not withhold'), 'var(--red)'); }
+}
+
+async function releaseResults(id) {
+  if (!confirm('Release the results? The student sees them on the portal again.')) return;
+  try {
+    await api('POST', `/result-withholdings/${id}/release/`, {});
+    toast('Released', 'var(--green)');
+    await loadResultsSummary();
+  } catch (e) { toast(apiErrorText(e, 'Could not release'), 'var(--red)'); }
 }
 
 async function loadCatAnalysis() {
@@ -5180,6 +5421,7 @@ function renderResultsPage() {
   document.getElementById('res-weight-legend').style.display = state.resultsSection === 'ca' || (state.resultsSection === 'field' && fieldModule) ? 'block' : 'none';
   document.getElementById('end-exam-card').style.display = !fieldModule && state.resultsSection === 'final' && state.isStaff ? 'block' : 'none';
   document.getElementById('authority-grade-card').style.display = state.resultsSection === 'final' ? 'block' : 'none';
+  document.getElementById('results-summary-card').style.display = state.resultsSection === 'summary' ? 'block' : 'none';
 }
 
 function mkInput(resultId, field, value, absent=false) {
@@ -6048,9 +6290,9 @@ function blockedList(clearance) {
 }
 
 function financeNavGroupFor(section = state.financeSection || 'overview') {
-  if (['accounts', 'charge-types', 'fee-structure'].includes(section)) return document.getElementById('finance-setup-nav-group');
+  if (['accounts', 'charge-types', 'fee-structure', 'payment-schedule'].includes(section)) return document.getElementById('finance-setup-nav-group');
   if (['record', 'history', 'collections'].includes(section)) return document.getElementById('finance-payments-nav-group');
-  if (['students', 'extra-charge', 'overrides'].includes(section)) return document.getElementById('finance-students-nav-group');
+  if (['students', 'extra-charge', 'overrides', 'hostel'].includes(section)) return document.getElementById('finance-students-nav-group');
   return null;
 }
 
@@ -6065,6 +6307,8 @@ const FINANCE_COPY = {
   accounts:        ['Bank Accounts', 'Where each kind of fee is banked, and the college details that print on an invoice.'],
   'charge-types':  ['Charge Types', 'What the college charges for, how often, and what each one blocks when unpaid.'],
   'fee-structure': ['Fee Structure', 'How much each level pays, over how many installments, and when each falls due.'],
+  'payment-schedule': ['Payment Schedule', 'When each fee falls due — awamu za malipo — for new and continuing students.'],
+  hostel:          ['Hostel', 'Students asking for a hostel place, and who lives where.'],
   record:          ['Record a Payment', 'Look up the reference on the slip, then record what arrived.'],
   history:         ['Payment History', 'Every payment recorded, and the reversals that corrected them.'],
   collections:     ['Collections & EFD', 'What came in over a period, to reconcile against the EFD machine.'],
@@ -6116,7 +6360,7 @@ async function ensureFinanceLookups() {
     || state.academicYears.find(y => y.is_active)?.id
     || state.academicYears[0]?.id;
 
-  ['fin-fs-year', 'fin-gen-year', 'fin-stu-year'].forEach(id => {
+  ['fin-fs-year', 'fin-gen-year', 'fin-stu-year', 'fin-ps-year'].forEach(id => {
     const el = document.getElementById(id);
     if (!el || el.dataset.filled) return;
     el.innerHTML = state.academicYears.map(y =>
@@ -6156,6 +6400,8 @@ async function loadFinanceSection() {
       case 'accounts':       await loadBankAccounts(); break;
       case 'charge-types':   await loadChargeTypes(); break;
       case 'fee-structure':  await loadFeeGrid(); break;
+      case 'payment-schedule': await loadPaymentSchedule(); break;
+      case 'hostel':         await loadHostelApplications(); break;
       case 'record':         await loadOutstandingForPayment(); break;
       case 'history':        await loadPaymentHistory(); break;
       case 'collections':    await loadCollections(); break;
@@ -6170,6 +6416,278 @@ async function loadFinanceSection() {
 }
 
 // ── overview ──────────────────────────────────────────────────────────────────
+
+// ── postponement and finishing ────────────────────────────────────────────────
+
+async function loadStatusPage() {
+  const me = state.offices || {};
+  await Promise.all([
+    (me.principal || me.records) ? loadPostponements() : null,
+    (me.principal || me.finance) ? loadFinishing() : null,
+  ]);
+}
+
+async function loadPostponements() {
+  const me = state.offices || {};
+  try {
+    const rows = await api('GET', `/postponements/?status=${document.getElementById('pp-filter').value}`);
+    document.getElementById('pp-tbody').innerHTML = rows.length ? rows.map(row => `<tr>
+        <td>${safeText(row.reg_no)}</td>
+        <td>${safeText(row.name)}${row.repeating ? ' <span class="badge badge-yellow">repeating</span>' : ''}</td>
+        <td>${safeText(row.semester)}<div style="font-size:.72rem;color:var(--muted);">${safeText(row.scope)}</div></td>
+        <td style="max-width:280px;">${safeText(row.reason)}</td>
+        <td>${row.by_student ? 'Portal' : `Paper — ${safeText(row.entered_by)}`}</td>
+        <td>${row.status === 'pending' ? '<span class="badge badge-yellow">Waiting</span>'
+             : row.status === 'approved' ? `<span class="badge badge-green">Approved</span><div style="font-size:.72rem;">back ${safeText(row.returns)} · ${money(row.fees_reversed)} reversed</div>`
+             : `<span class="badge badge-gen">${safeText(row.status_display)}</span><div style="font-size:.72rem;color:var(--muted);">${safeText(row.decision_note)}</div>`}</td>
+        <td style="white-space:nowrap;">${row.status === 'pending' && me.principal ? `
+          <button class="btn btn-primary btn-sm" onclick="decidePostponement(${row.id}, 'approve')">Approve</button>
+          <button class="btn btn-ghost btn-sm" onclick="decidePostponement(${row.id}, 'decline')">Decline…</button>` : ''}</td>
+      </tr>`).join('') : '<tr><td colspan="7" style="color:var(--muted);">Nothing here</td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load the requests'), 'var(--red)'); }
+}
+
+async function decidePostponement(id, decision) {
+  let note = '';
+  if (decision === 'decline') {
+    note = prompt('Why is it declined? The student reads this.');
+    if (note === null) return;
+  } else if (!confirm('Approve? The student stops, their registration for the period is cancelled and its fees are reversed; what they paid stays as credit.')) {
+    return;
+  }
+  try {
+    await api('POST', `/postponements/${id}/decide/`, { decision, note });
+    toast(decision === 'approve' ? 'Postponed' : 'Declined', 'var(--green)');
+    await loadPostponements();
+  } catch (e) { toast(apiErrorText(e, 'Could not record the decision'), 'var(--red)'); }
+}
+
+async function enterPostponement(event) {
+  const reg_no = document.getElementById('pp-regno').value.trim();
+  const reason = document.getElementById('pp-reason').value.trim();
+  if (!reg_no || !reason) { toast('Registration number and reason, please', 'var(--red)'); return; }
+  const done = working(event?.currentTarget, 'Sending…');
+  try {
+    await api('POST', '/postponements/', { reg_no, reason });
+    toast('Sent to the Principal', 'var(--green)');
+    document.getElementById('pp-regno').value = '';
+    document.getElementById('pp-reason').value = '';
+    await loadPostponements();
+  } catch (e) { toast(apiErrorText(e, 'Could not send it'), 'var(--red)'); } finally { done(); }
+}
+
+async function loadFinishing() {
+  const me = state.offices || {};
+  try {
+    const rows = await api('GET', '/finishing/');
+    document.getElementById('fin-tbody').innerHTML = rows.length ? rows.map(row => {
+      const owes = Number(row.balance);
+      const financeDone = row.finance_cleared_at
+        ? `<span class="badge badge-green">cleared</span><div style="font-size:.72rem;color:var(--muted);">${safeText(row.finance_cleared_by)} ${safeText(String(row.finance_cleared_at).slice(0, 10))}</div>`
+        : '<span class="badge badge-yellow">waiting</span>';
+      const principalDone = row.declared_at
+        ? `<span class="badge badge-green">archived</span><div style="font-size:.72rem;color:var(--muted);">${safeText(row.declared_by)} ${safeText(String(row.declared_at).slice(0, 10))}</div>`
+        : '<span class="badge badge-yellow">waiting</span>';
+      const actions = [
+        `<a class="btn btn-ghost btn-sm" href="${row.statement_url}" target="_blank" rel="noopener">Statement</a>`,
+        me.finance && !row.finance_cleared_at && row.status === 'completed'
+          ? `<button class="btn btn-primary btn-sm" onclick="finishingStep(${row.profile_id}, 'finance-clear')">Finance cleared</button>` : '',
+        me.principal && row.finance_cleared_at && !row.declared_at
+          ? `<button class="btn btn-primary btn-sm" onclick="finishingStep(${row.profile_id}, 'declare')">Declare cleared</button>` : '',
+      ].join(' ');
+      return `<tr>
+        <td>${safeText(row.reg_no)}</td><td>${safeText(row.name)}</td>
+        <td>${owes > 0 ? `<span class="badge badge-red">${money(row.balance)}</span>` : owes < 0 ? `in credit ${money(-owes)}` : '<span class="badge badge-green">nothing</span>'}</td>
+        <td>${financeDone}</td><td>${principalDone}</td>
+        <td style="white-space:nowrap;">${actions}</td></tr>`;
+    }).join('') : '<tr><td colspan="6" style="color:var(--muted);">Nobody has finished yet</td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load finishing students'), 'var(--red)'); }
+}
+
+async function finishingStep(profileId, step) {
+  const ask = step === 'declare'
+    ? 'Declare them cleared? They are archived: the portal closes, every record stays.'
+    : 'Clear them for finance? Print and sign the statement first.';
+  if (!confirm(ask)) return;
+  try {
+    await api('POST', `/finishing/${profileId}/${step}/`, {});
+    toast(step === 'declare' ? 'Cleared and archived' : 'Finance cleared', 'var(--green)');
+    await loadFinishing();
+  } catch (e) { toast(apiErrorText(e, 'Could not do that'), 'var(--red)'); }
+}
+
+// ── payment schedule ──────────────────────────────────────────────────────────
+
+const money0 = value => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+async function loadPaymentSchedule() {
+  const yearId = document.getElementById('fin-ps-year').value;
+  if (!yearId) return;
+  const data = await api('GET', `/finance/payment-schedules/?academic_year=${yearId}`);
+  state.paymentSchedules = data;
+  // Edit a copy; nothing changes until "Save".
+  state.psDraft = {};
+  for (const entry of ['new', 'continuing']) {
+    const saved = data.schedules[entry];
+    state.psDraft[entry] = saved ? saved.steps.map(step => ({
+      due_date: step.due_date, semester_number: step.semester_number, amounts: { ...step.amounts },
+    })) : [];
+  }
+  const copy = document.getElementById('fin-ps-copy');
+  copy.style.display = data.can_copy_from ? '' : 'none';
+  copy.textContent = data.can_copy_from ? `Start from ${data.can_copy_from}` : '';
+  renderPaymentSchedule();
+}
+
+function psRows(entry) {
+  // A continuing student is never charged the one-time fees.
+  return (state.paymentSchedules?.charge_types || []).filter(type => !(entry === 'continuing' && type.once));
+}
+
+function renderPaymentSchedule() {
+  const entry = document.getElementById('fin-ps-entry').value;
+  const steps = state.psDraft?.[entry] || [];
+  const rows = psRows(entry);
+  document.getElementById('fin-ps-head').innerHTML = `<tr><th>Fee</th>${steps.map((step, i) => `
+      <th style="min-width:150px;vertical-align:top;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">Awamu ${i + 1}
+          <button class="btn btn-ghost btn-sm" title="Remove this instalment" onclick="removePaymentStep(${i})">✕</button></div>
+        <input type="date" value="${step.due_date || ''}" onchange="psSet(${i}, 'due_date', this.value)" style="display:block;width:140px;margin-top:4px;">
+        <select onchange="psSet(${i}, 'semester_number', Number(this.value))" style="display:block;width:140px;margin-top:4px;">
+          <option value="1" ${step.semester_number == 1 ? 'selected' : ''}>Semester 1</option>
+          <option value="2" ${step.semester_number == 2 ? 'selected' : ''}>Semester 2</option>
+        </select>
+      </th>`).join('')}<th>Adds up to</th></tr>`;
+  document.getElementById('fin-ps-body').innerHTML = rows.map(type => {
+    const cells = steps.map((step, i) => `<td><input type="number" min="0" step="1000" value="${step.amounts[type.id] != null ? Number(step.amounts[type.id]) : ''}"
+        onchange="psAmount(${i}, ${type.id}, this.value)" style="width:120px;"></td>`).join('');
+    return `<tr data-ps-row="${type.id}"><td>${safeText(type.name)}${type.is_hostel ? ' <span class="badge badge-blue">hostel only</span>' : ''}
+        <div style="font-size:.7rem;color:var(--muted);">fee ${type.fees.map(money0).join(' / ') || 'not set this year'}</div></td>
+      ${cells}<td class="ps-row-total"></td></tr>`;
+  }).join('') || '<tr><td style="color:var(--muted);">No automatic fees set for this year.</td></tr>';
+  renderPaymentTotals();
+}
+
+function renderPaymentTotals() {
+  const entry = document.getElementById('fin-ps-entry').value;
+  const steps = state.psDraft?.[entry] || [];
+  const rows = psRows(entry);
+  const hostelIds = new Set(rows.filter(type => type.is_hostel).map(type => String(type.id)));
+  rows.forEach(type => {
+    const total = steps.reduce((sum, step) => sum + Number(step.amounts[type.id] || 0), 0);
+    const cell = document.querySelector(`[data-ps-row="${type.id}"] .ps-row-total`);
+    if (!cell) return;
+    const fits = type.fees.length === 1 && total === Number(type.fees[0]);
+    cell.innerHTML = !total ? '<span style="color:var(--muted);">fee\'s own dates</span>'
+      : `${money0(total)} ${fits ? '<span class="badge badge-green">✓</span>' : '<span class="badge badge-red">≠ fee</span>'}`;
+  });
+  const sum = (step, hostel) => Object.entries(step.amounts)
+    .filter(([id]) => rows.some(type => String(type.id) === id))
+    .filter(([id]) => hostel || !hostelIds.has(id))
+    .reduce((total, [, amount]) => total + Number(amount || 0), 0);
+  document.getElementById('fin-ps-foot').innerHTML = steps.length ? `
+    <tr><th>Day student</th>${steps.map(step => `<th>${money0(sum(step, false))}</th>`).join('')}<th></th></tr>
+    <tr><th>Hostel student</th>${steps.map(step => `<th>${money0(sum(step, true))}</th>`).join('')}<th></th></tr>` : '';
+  const saved = state.paymentSchedules?.schedules?.[entry];
+  const mismatches = saved?.mismatches || [];
+  document.getElementById('fin-ps-status').textContent = !saved
+    ? 'Not set yet — fees fall due on the Fee Structure\'s own dates.'
+    : `Saved ${String(saved.updated_at || '').slice(0, 16).replace('T', ' ')}${saved.updated_by ? ' by ' + saved.updated_by : ''}.`
+      + (mismatches.length ? ` Does not add up: ${mismatches.map(m => `${m.charge_type} at ${m.class_level} (${money0(m.scheduled)} vs ${money0(m.fee)})`).join('; ')}.` : '');
+}
+
+function psSet(index, field, value) {
+  const entry = document.getElementById('fin-ps-entry').value;
+  state.psDraft[entry][index][field] = value;
+}
+
+function psAmount(index, typeId, value) {
+  const entry = document.getElementById('fin-ps-entry').value;
+  const amounts = state.psDraft[entry][index].amounts;
+  if (value === '' || Number(value) === 0) delete amounts[typeId]; else amounts[typeId] = value;
+  renderPaymentTotals();
+}
+
+function addPaymentStep() {
+  const entry = document.getElementById('fin-ps-entry').value;
+  const steps = state.psDraft[entry];
+  steps.push({ due_date: '', semester_number: steps.length ? steps[steps.length - 1].semester_number : 1, amounts: {} });
+  renderPaymentSchedule();
+}
+
+function removePaymentStep(index) {
+  const entry = document.getElementById('fin-ps-entry').value;
+  state.psDraft[entry].splice(index, 1);
+  renderPaymentSchedule();
+}
+
+async function savePaymentSchedule(event) {
+  const entry = document.getElementById('fin-ps-entry').value;
+  const steps = state.psDraft[entry];
+  if (steps.some(step => !step.due_date)) { toast('Every instalment needs a date', 'var(--red)'); return; }
+  const done = working(event?.currentTarget, 'Saving…');
+  try {
+    await api('POST', '/finance/payment-schedules/', {
+      academic_year: Number(document.getElementById('fin-ps-year').value), entry, steps,
+    });
+    toast('Schedule saved', 'var(--green)');
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not save the schedule'), 'var(--red)');
+  } finally { done(); }
+  await loadPaymentSchedule();
+  document.getElementById('fin-ps-entry').value = entry;
+  renderPaymentSchedule();
+}
+
+async function copyPaymentSchedules() {
+  const from = state.paymentSchedules?.can_copy_from;
+  if (!from || !confirm(`Copy ${from}'s schedules here, every date a year on?`)) return;
+  try {
+    const result = await api('POST', '/finance/payment-schedules/copy/',
+                             { academic_year: Number(document.getElementById('fin-ps-year').value) });
+    toast(`Copied ${result.copied} schedule(s) from ${result.from} — check the dates`, 'var(--green)');
+    await loadPaymentSchedule();
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not copy'), 'var(--red)');
+  }
+}
+
+// ── hostel applications ───────────────────────────────────────────────────────
+
+async function loadHostelApplications() {
+  const status = document.getElementById('fin-hostel-status').value;
+  const rows = await api('GET', `/hostel-applications/?status=${status}`);
+  document.getElementById('fin-hostel-tbody').innerHTML = rows.length ? rows.map(row => `<tr>
+      <td>${safeText(row.reg_no)}</td>
+      <td>${safeText(row.name)}</td>
+      <td>${safeText(String(row.created_at || '').slice(0, 10))}</td>
+      <td>${safeText(row.semester)}</td>
+      <td>${safeText(row.reason || '—')}</td>
+      <td>${row.status === 'pending' ? '<span class="badge badge-yellow">Waiting</span>'
+           : row.status === 'approved' ? '<span class="badge badge-green">Granted</span>'
+           : `<span class="badge badge-red">Declined</span> <span style="font-size:.75rem;color:var(--muted);">${safeText(row.decision_note)}</span>`}</td>
+      <td style="white-space:nowrap;">${row.status === 'pending' ? `
+        <button class="btn btn-primary btn-sm" onclick="decideHostel(${row.id}, 'approve')">Grant</button>
+        <button class="btn btn-ghost btn-sm" onclick="decideHostel(${row.id}, 'decline')">Decline…</button>` : ''}</td>
+    </tr>`).join('') : '<tr><td colspan="7" style="color:var(--muted);">Nobody here</td></tr>';
+}
+
+async function decideHostel(id, decision) {
+  let note = '';
+  if (decision === 'decline') {
+    note = prompt('Why is it declined? The student sees this.');
+    if (note === null) return;
+  } else if (!confirm('Grant the place? The hostel fee is charged from the semester they applied in.')) {
+    return;
+  }
+  try {
+    await api('POST', `/hostel-applications/${id}/decide/`, { decision, note });
+    toast(decision === 'approve' ? 'Place granted — hostel fee charged' : 'Declined', 'var(--green)');
+    await loadHostelApplications();
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not record it'), 'var(--red)');
+  }
+}
 
 async function loadFinanceOverview() {
   const data = await api('GET', '/finance/students/');
@@ -6466,6 +6984,31 @@ function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
   const icon = document.querySelector('#theme-btn i');
   if (icon) icon.className = theme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+  retintCharts();
+}
+
+// A chart draws its text on a canvas, where the page's colours never reach.
+// These read the current theme, and retintCharts repaints any chart already
+// on screen when the theme is switched.
+function chartInk() {
+  const css = getComputedStyle(document.documentElement);
+  const read = (name, fallback) => (css.getPropertyValue(name) || '').trim() || fallback;
+  return { text: read('--text', '#2b3440'), muted: read('--muted', '#71808f'),
+           grid: read('--border', '#ccd4dc') };
+}
+
+function retintCharts() {
+  if (typeof Chart === 'undefined' || !Chart.instances) return;
+  const ink = chartInk();
+  Object.values(Chart.instances).forEach(chart => {
+    const opts = chart.options || {};
+    if (opts.plugins?.legend?.labels) opts.plugins.legend.labels.color = ink.text;
+    Object.values(opts.scales || {}).forEach(scale => {
+      if (scale.ticks) scale.ticks.color = ink.muted;
+      if (scale.grid) scale.grid.color = ink.grid;
+    });
+    chart.update('none');
+  });
 }
 
 function toggleTheme() {
@@ -6559,12 +7102,9 @@ async function setModuleScope(scope) {
 // builder, so those cards belong to two sections rather than being duplicated.
 
 const FORMS_SECTIONS = {
-  requests: ['Service Requests',
-             'What students have asked the College for — approve or decline, and they see your answer'],
-  services: ['Services Offered',
-             'What a student may ask the College for — a sick sheet, a letter, a hostel bed'],
-  evaluations: ['Evaluation Forms',
-                'Feedback the College collects — publish them, read the results, export them for reporting'],
+  requests: ['Service Requests', 'Approve or decline what students asked for.'],
+  services: ['Services Offered', 'What students may request.'],
+  evaluations: ['Evaluation Forms', 'Feedback forms and their results.'],
 };
 
 function showFormsSection(section, btn) {
@@ -6816,7 +7356,7 @@ async function loadPerformance() {
   if (scope) {
     scope.textContent = data.scope === 'my-modules'
       ? 'How your students are doing — your modules, by year, semester and assessment, and how that has moved'
-      : 'How students are doing — by year, semester, level, module and assessment, and how that has moved';
+      : 'Results by year, level, module and assessment.';
   }
   renderPerformance(data);
 }
@@ -6847,8 +7387,9 @@ function renderPerformance(data) {
     : '<tr><td colspan="8"><div class="empty"><div class="ei">📊</div>No marks have been recorded for this selection yet</div></td></tr>';
 
   destroyPerformanceCharts();
-  const grid = { color: 'rgba(31,41,55,.08)' };
-  const axis = { color: '#6b7280' };
+  const ink = chartInk();
+  const grid = { color: ink.grid };
+  const axis = { color: ink.muted };
   const base = { responsive: true, maintainAspectRatio: false,
                  plugins: { legend: { display: false } } };
 
@@ -6866,7 +7407,7 @@ function renderPerformance(data) {
             borderColor: '#16a34a', borderDash: [5, 4], fill: false, tension: .3, pointRadius: 3 },
         ],
       },
-      options: { ...base, plugins: { legend: { display: true, labels: { color: '#1f2937' } } },
+      options: { ...base, plugins: { legend: { display: true, labels: { color: ink.text } } },
                  scales: { x: { ticks: axis, grid }, y: { beginAtZero: true, max: 100, ticks: axis, grid } } },
     }));
   }
@@ -6978,11 +7519,7 @@ function openServiceRequest(id) {
         <button class="btn btn-secondary btn-sm" onclick="attachToRequest(${id})">⬆ Send it</button>
       </div>
     </div>
-    <p class="help-note handler-only" style="display:block">
-      The signed letter itself — a PDF, a Word file or a scan, up to 10 MB. The student
-      downloads it from My Requests instead of walking to an office to collect a piece of
-      paper you have already produced.
-    </p>
+    <p class="help-note handler-only" style="display:block">PDF, Word or a scan, up to 10 MB. The student downloads it from My Requests.</p>
     ${attachments}
     <div class="handler-only" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
       <button class="btn btn-primary btn-sm" onclick="forwardRequest(${id})"
@@ -8046,9 +8583,20 @@ async function openStatement(profileId) {
           : '<tr><td colspan="7">None issued.</td></tr>'}</tbody>
       </table></div>
 
-      <button class="btn btn-primary btn-sm" style="margin-top:16px" onclick="issueInvoiceFor(${profileId})">
-        Raise invoices for everything outstanding
-      </button>`;
+      <div class="card-title" style="margin-top:16px">Raise an invoice <span class="tip" tabindex="0" role="note" aria-label="Help: invoices" data-tip="One invoice per payment for the year, reused for every instalment of it. Each other fee — supplementary, special exam, repeat module, the TPH book — has its own.">?</span></div>
+      ${(() => {
+        const kinds = s.payment_kinds || [];
+        const button = kind => `<button class="btn btn-secondary btn-sm" data-family="${kind.family}" data-group="${safeText(kind.group)}"
+            onclick="issueInvoiceFor(${profileId}, this.dataset.family, this.dataset.group)">
+            ${safeText(kind.label)} <span style="opacity:.75;">· owes ${money(kind.outstanding)}</span></button>`;
+        const main = kinds.filter(kind => !kind.other).map(button).join('');
+        const other = kinds.filter(kind => kind.other).map(button).join('');
+        return `<div style="display:flex;gap:8px;flex-wrap:wrap;">${main || ''}
+            <button class="btn btn-primary btn-sm" onclick="issueInvoiceFor(${profileId})">Everything outstanding</button></div>
+          ${other ? `<div style="font-size:.78rem;color:var(--muted);margin:10px 0 6px;">Other fees — one invoice for each</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">${other}</div>` : ''}
+          ${kinds.length ? '' : '<span style="font-size:.8rem;color:var(--muted);">Nothing billed this year.</span>'}`;
+      })()}`;
     document.getElementById('statement-modal').classList.add('open');
   } catch (e) { toast(e?.detail || 'Failed to load statement', 'var(--red)'); }
 }
@@ -8057,11 +8605,13 @@ function closeStatementModal() {
   document.getElementById('statement-modal').classList.remove('open');
 }
 
-async function issueInvoiceFor(profileId) {
+async function issueInvoiceFor(profileId, family, group) {
   try {
-    // One invoice per group — tuition and other charges are banked separately,
-    // so the student makes a separate deposit for each.
-    const invoices = await api('POST', '/finance/issue-invoice/', { profile: profileId });
+    // One invoice per payment — tuition, direct costs, and each other fee on
+    // its own — so the student makes a separate deposit for each.
+    const body = { profile: profileId };
+    if (group) body.group = group; else if (family) body.family = family;
+    const invoices = await api('POST', '/finance/issue-invoice/', body);
     const list = Array.isArray(invoices) ? invoices : [invoices];
     toast(list.length === 1
       ? `Invoice ${list[0].reference} raised`
@@ -8359,9 +8909,9 @@ function renderPasswordAge(reading) {
   if (!banner || !reading) return;
   state.password = reading;
   const colours = {
-    expiring: ['#fff7e6', 'var(--orange)'],
-    expired: ['#fdecec', 'var(--red)'],
-    locked: ['#fdecec', 'var(--red)'],
+    expiring: ['var(--yellow-soft)', 'var(--orange)'],
+    expired: ['var(--red-soft)', 'var(--red)'],
+    locked: ['var(--red-soft)', 'var(--red)'],
   };
   const tone = colours[reading.state];
   if (!tone) { banner.style.display = 'none'; return; }
@@ -8370,6 +8920,159 @@ function renderPasswordAge(reading) {
   banner.style.borderColor = tone[1];
   label.textContent = `${reading.message} (expires ${reading.expires_on})`;
   banner.style.display = 'flex';
+}
+
+// ── STUDENT RECORDS ───────────────────────────────────────────────────────────
+const RECORD_SECTIONS = {
+  find: ['Find a student', 'Look a student up, and keep their details.'],
+  ids: ['College ID import', 'Record the college ID numbers students already carry.'],
+};
+
+function toggleRecordsMenu(event) {
+  const group = document.getElementById('records-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-student-records').classList.contains('active')) {
+    const me = state.offices || {};
+    const first = (me.records || me.principal) ? 'find' : 'ids';
+    showRecordsSection(first, group.querySelector(`[data-rec-section="${first}"]`));
+  }
+  event.stopPropagation();
+}
+
+function showRecordsSection(section, btn) {
+  if (!RECORD_SECTIONS[section]) section = 'find';
+  document.querySelectorAll('#page-student-records [data-rec-section]').forEach(card =>
+    card.classList.toggle('sec-on', card.dataset.recSection === section));
+  document.querySelectorAll('[data-rec-section].nav-sub-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.recSection === section));
+  const [title, sub] = RECORD_SECTIONS[section];
+  document.getElementById('rec-page-title').textContent = title;
+  document.getElementById('rec-page-sub').textContent = sub;
+  showPage('student-records', document.querySelector('#records-nav-group .nav-btn'));
+  document.getElementById('records-nav-group').classList.add('open');
+  if (btn) btn.classList.add('active');
+}
+
+let recordSearchTimer;
+function scheduleRecordSearch() {
+  clearTimeout(recordSearchTimer);
+  recordSearchTimer = setTimeout(searchRecords, 300);
+}
+
+async function searchRecords() {
+  const term = document.getElementById('rec-search').value.trim();
+  const body = document.getElementById('rec-results');
+  if (term.length < 2) return;
+  try {
+    const rows = await api('GET', `/student-records/search/?search=${encodeURIComponent(term)}`);
+    body.innerHTML = rows.length ? rows.map(row => `<tr>
+        <td>${safeText(row.reg_no)}</td>
+        <td>${safeText(row.college_id || '—')}</td>
+        <td>${safeText(row.name)}</td>
+        <td>${safeText(row.standing_display)}${row.class_level ? ' · ' + safeText(row.class_level) : ''}</td>
+        <td>${row.gender && row.phone && row.next_of_kin.length >= 2 && row.date_of_birth
+              ? '<span class="badge badge-green">complete</span>' : '<span class="badge badge-yellow">incomplete</span>'}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="openRecord(${row.id})">Open</button></td>
+      </tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty">Nobody by that name or number</div></td></tr>';
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not search'), 'var(--red)');
+  }
+}
+
+async function openRecord(profileId) {
+  try {
+    const record = await api('GET', `/student-records/${profileId}/`);
+    document.getElementById('rec-profile-id').value = profileId;
+    document.getElementById('rec-editor-title').textContent =
+      `${record.name} — ${record.reg_no}${record.college_id ? ' · ' + record.college_id : ''}`;
+    document.getElementById('rec-editor-missing').innerHTML = record.missing.length
+      ? `<div class="missing-note">Still to record: ${safeText(record.missing.join(', '))}</div>` : '';
+    document.getElementById('rec-editor-form').innerHTML = detailsFormHtml('rec-det', record);
+    await renderRecordDocuments(profileId);
+    const editor = document.getElementById('rec-editor');
+    editor.style.display = '';
+    editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not open the record'), 'var(--red)');
+  }
+}
+
+async function saveRecord(event) {
+  const id = document.getElementById('rec-profile-id').value;
+  const done = working(event?.currentTarget, 'Saving…');
+  try {
+    const saved = await api('POST', `/student-records/${id}/`, readDetailsForm('rec-det'));
+    toast(saved.missing.length ? `Saved — still to record: ${saved.missing.join(', ')}` : 'Record complete',
+          'var(--green)');
+    await openRecord(id);
+    await searchRecords();
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not save'), 'var(--red)');
+  } finally { done(); }
+}
+
+async function renderRecordDocuments(profileId) {
+  const box = document.getElementById('rec-editor-docs');
+  try {
+    const rows = await api('GET', `/student-documents/?profile_id=${profileId}`);
+    const list = rows.results ?? rows;
+    box.innerHTML = (list.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Document</th><th>Kind</th><th>From</th><th>Seen</th><th></th></tr></thead>
+        <tbody>${list.map(doc => `<tr>
+          <td><a href="${doc.download_url}" target="_blank" rel="noopener">${safeText(doc.display_name)}</a></td>
+          <td>${safeText(doc.kind_display)}</td>
+          <td>${safeText(doc.uploaded_by_name || '')}${doc.uploaded_by_student ? ' (student)' : ''}</td>
+          <td>${doc.is_verified ? '<span class="badge badge-green">verified</span>' : '—'}</td>
+          <td>${doc.is_verified ? '' : `<button class="btn btn-ghost btn-sm" onclick="verifyRecordDocument(${doc.id}, ${profileId})">Mark seen</button>`}</td>
+        </tr>`).join('')}</tbody></table></div>` : '<p class="help-note">Nothing handed in yet.</p>') +
+      `<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
+        <div class="field" style="margin-bottom:0;"><label>Add a scan</label>
+          <input type="file" id="rec-doc-file" accept=".pdf,.jpg,.jpeg,.png"></div>
+        <div class="field" style="margin-bottom:0;"><label>Kind</label>
+          <select id="rec-doc-kind">
+            ${documentKindOptions()}
+          </select></div>
+        <button class="btn btn-secondary btn-sm" onclick="uploadRecordDocument(${profileId})">Upload</button>
+      </div>`;
+  } catch (e) { box.innerHTML = ''; }
+}
+
+// What a scan can be. A student may bring an O-level certificate, an A-level
+// one, or both, so each is filed under its own kind.
+const DOCUMENT_KINDS = [
+  ['o_level', 'O-level certificate (CSEE)'],
+  ['a_level', 'A-level certificate (ACSEE)'],
+  ['certificate', 'Other certificate'],
+  ['result_slip', 'Result slip'],
+  ['birth_certificate', 'Birth certificate'],
+  ['identity', 'Identification'],
+  ['medical', 'Medical form'],
+  ['other', 'Other'],
+];
+function documentKindOptions() {
+  return DOCUMENT_KINDS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+}
+
+async function uploadRecordDocument(profileId) {
+  const input = document.getElementById('rec-doc-file');
+  if (!input?.files?.length) { toast('Choose a file first', 'var(--red)'); return; }
+  const body = new FormData();
+  body.append('profile', profileId);
+  body.append('kind', document.getElementById('rec-doc-kind').value);
+  body.append('file', input.files[0]);
+  try {
+    await api('POST', '/student-documents/', body);
+    toast('Kept on the student\'s record', 'var(--green)');
+    await renderRecordDocuments(profileId);
+  } catch (e) { toast(apiErrorText(e, 'Could not upload it'), 'var(--red)'); }
+}
+
+async function verifyRecordDocument(documentId, profileId) {
+  try {
+    await api('POST', `/student-documents/${documentId}/verify/`, {});
+    await renderRecordDocuments(profileId);
+  } catch (e) { toast(apiErrorText(e, 'Could not verify it'), 'var(--red)'); }
 }
 
 // ── ADMISSIONS ────────────────────────────────────────────────────────────────
@@ -8381,23 +9084,90 @@ const DESK_LABELS = {
 };
 const KIND_LABELS = { new: 'First year', continuing: 'Continuing', readmission: 'Readmission' };
 
-async function loadAdmissions() {
-  renderApplicantFields();
-  await ensureProgrammes();
-  buildProgrammeOptions(document.getElementById('adm-programme'), '— pick a programme —');
-  buildLevelOptions(document.getElementById('adm-level'), false);
-  await Promise.all([loadAdmissionQueue(), loadMyDesk(), loadApplications(), loadDueBack()]);
-  await loadAdmissionSettings();
+// One screen per menu item. Each section loads only what it shows.
+const ADMISSION_SECTIONS = {
+  desk: ['My desk', 'What is waiting on you.'],
+  new: ['New application', 'Take a student on.'],
+  all: ['All applications', 'Every application this semester.'],
+  dueback: ['Expected back', 'Discontinued and postponed students due this semester.'],
+  settings: ['Window & ID numbers', 'When admissions run, and the college ID format.'],
+  items: ['Items check', 'TPH book, calculator, rim paper — checked again each semester.'],
+};
+
+function toggleAdmissionsMenu(event) {
+  const group = document.getElementById('admissions-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-admissions').classList.contains('active')) {
+    showAdmissionSection('desk', group.querySelector('[data-adm-section="desk"]'));
+  }
+  event.stopPropagation();
 }
+
+async function showAdmissionSection(section, btn) {
+  if (!ADMISSION_SECTIONS[section]) section = 'desk';
+  state.admissionSection = section;
+  document.querySelectorAll('#page-admissions [data-adm-section]').forEach(card =>
+    card.classList.toggle('sec-on', card.dataset.admSection === section));
+  document.querySelectorAll('[data-adm-section].nav-sub-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.admSection === section));
+  const [title, sub] = ADMISSION_SECTIONS[section];
+  document.getElementById('adm-page-title').textContent = title;
+  document.getElementById('adm-page-sub').textContent = sub;
+  showPage('admissions', document.querySelector('#admissions-nav-group .nav-btn'));
+  document.getElementById('admissions-nav-group').classList.add('open');
+  if (btn) btn.classList.add('active');
+
+  if (section === 'desk') await Promise.all([loadAdmissionQueue(), loadMyDesk()]);
+  if (section === 'new') {
+    await ensureProgrammes();
+    buildProgrammeOptions(document.getElementById('adm-programme'), '— pick a programme —');
+    buildLevelOptions(document.getElementById('adm-level'), false);
+  }
+  if (section === 'all') {
+    // The queue says which desks this office sees, which trims the filter.
+    if (!state.admissionQueue) await loadAdmissionQueue();
+    await loadApplications();
+  }
+  if (section === 'dueback') await loadDueBack();
+  if (section === 'items') {
+    const picker = document.getElementById('items-semester');
+    if (!picker.options.length) {
+      picker.innerHTML = (state.semesters || []).map(sem =>
+        `<option value="${sem.id}">${safeText(sem.label)}</option>`).join('');
+      if (state.activeSem) picker.value = state.activeSem.id;
+    }
+    await loadItemChecks(1);
+  }
+  if (section === 'settings') await loadAdmissionSettings();
+}
+
+// After something changes, refresh whatever is on screen.
+function refreshAdmissions() {
+  return showAdmissionSection(state.admissionSection || 'desk');
+}
+
+// Kept for the places that still open "Admissions" as a whole.
+function loadAdmissions() { return showAdmissionSection('desk'); }
 
 async function loadAdmissionQueue() {
   try {
     const queue = await api('GET', '/applications/queue/');
     state.admissionQueue = queue;
-    const desks = ['intake', 'information', 'finance', 'records', 'admission', 'admitted'];
+    // Records and finance see their own desks and who has been admitted; the
+    // admission office and the Principal see the whole queue.
+    const visible = queue.visible_desks;
+    const desks = ['intake', 'information', 'finance', 'records', 'admission', 'admitted']
+      .filter(desk => !visible || visible.includes(desk));
     document.getElementById('adm-queue').innerHTML =
       desks.map(desk => `<div class="qf-item"><span>${safeText(DESK_LABELS[desk])}</span><strong>${queue.by_desk?.[desk] || 0}</strong></div>`).join('') +
-      `<div class="qf-item"><span>Expected back</span><strong>${queue.due_back || 0}</strong></div>`;
+      (queue.due_back === null ? '' : `<div class="qf-item"><span>Expected back</span><strong>${queue.due_back || 0}</strong></div>`);
+    if (visible) {
+      document.querySelectorAll('#adm-filter option').forEach(option => {
+        const desk = option.value;
+        if (desk && desk !== 'open' && !visible.includes(desk)) option.remove();
+      });
+    }
+    document.getElementById('adm-continuing-box').style.display = queue.can_queue_continuing ? '' : 'none';
     const badge = document.getElementById('adm-window-state');
     badge.textContent = queue.open ? 'open' : 'closed';
     badge.className = queue.open ? 'badge badge-green' : 'badge badge-red';
@@ -8408,15 +9178,48 @@ async function loadAdmissionQueue() {
   } catch (e) { /* the cards below still work */ }
 }
 
+async function queueContinuing(event) {
+  if (!confirm('Send every continuing student from last year\'s review to the finance desk?')) return;
+  const button = event.currentTarget;
+  const out = document.getElementById('adm-continuing-result');
+  button.disabled = true;
+  try {
+    const result = await api('POST', '/applications/queue-continuing/', {});
+    const parts = [`${result.queued} sent to finance (from ${result.from})`];
+    if (result.already_applied) parts.push(`${result.already_applied} already applied`);
+    if (result.already_registered) parts.push(`${result.already_registered} already registered`);
+    let text = parts.join(' · ') + '.';
+    if (result.blocked.length) {
+      text += ` ${result.blocked.length} not sent — their review is not confirmed: `
+        + result.blocked.slice(0, 10).map(row => row.reg_no).join(', ')
+        + (result.blocked.length > 10 ? '…' : '') + '.';
+    }
+    if (result.unplaced.length) {
+      text += ` ${result.unplaced.length} not sent — no programme or level on the review.`;
+    }
+    out.textContent = text;
+    toast(`${result.queued} continuing student(s) sent to finance`);
+    await loadAdmissionQueue();
+  } catch (e) {
+    out.textContent = e.detail || 'Could not send them.';
+    toast(e.detail || 'Could not send them', 'var(--red)');
+  } finally { button.disabled = false; }
+}
+
+function deskLabel(row) {
+  return safeText(DESK_LABELS[row.state] || row.state)
+    + (row.on_hold ? ' <span class="badge badge-yellow">On hold</span>' : '');
+}
+
 function applicationRow(row, { showDesk = true } = {}) {
   return `<tr>
     <td>${safeText(row.reg_no)}${row.college_id ? `<div style="font-size:.68rem;color:var(--muted);">${safeText(row.college_id)}</div>` : ''}</td>
     <td>${safeText(row.student_name)}</td>
     <td>${safeText(KIND_LABELS[row.kind] || row.kind)}</td>
     <td>${safeText(row.class_level_name || '—')}</td>
-    ${showDesk ? `<td>${safeText(DESK_LABELS[row.state] || row.state)}</td>` : ''}
+    ${showDesk ? `<td>${deskLabel(row)}</td>` : ''}
     <td>${safeText(row.balance)}</td>
-    ${showDesk ? '' : `<td>${safeText(DESK_LABELS[row.state] || row.state)}</td>`}
+    ${showDesk ? '' : `<td>${deskLabel(row)}</td>`}
     <td><button class="btn btn-ghost btn-sm" onclick="openApplicationModal(${row.id})">Open</button></td>
   </tr>`;
 }
@@ -8434,7 +9237,7 @@ async function loadMyDesk() {
           <td>${safeText(KIND_LABELS[row.kind] || row.kind)}</td>
           <td>${safeText(row.class_level_name || '—')}</td>
           <td>${safeText(row.balance)}</td>
-          <td>${safeText(DESK_LABELS[row.state] || row.state)}</td>
+          <td>${deskLabel(row)}</td>
           <td style="white-space:nowrap;">
             <button class="btn btn-primary btn-sm" onclick="openApplicationModal(${row.id})">Work it</button>
           </td>
@@ -8467,6 +9270,62 @@ async function loadApplications() {
   }
 }
 
+const ITEM_STATUS = { '': 'Not checked', has_it: 'Has it', missing: 'Missing — on the bill', waived: 'Waived' };
+
+let itemSearchTimer;
+function scheduleItemSearch() {
+  clearTimeout(itemSearchTimer);
+  itemSearchTimer = setTimeout(() => loadItemChecks(1), 350);
+}
+
+async function loadItemChecks(page) {
+  const tbody = document.getElementById('items-tbody');
+  const params = new URLSearchParams({
+    semester_id: document.getElementById('items-semester').value,
+    search: document.getElementById('items-search').value.trim(),
+    unchecked: document.getElementById('items-filter').value,
+    page: Math.max(1, page || 1),
+  });
+  try {
+    const data = await api('GET', `/item-checks/?${params}`);
+    state.itemsPage = Math.min(data.page, data.pages);
+    document.getElementById('items-page').textContent =
+      `${data.count} student(s) · page ${data.page} of ${data.pages}`;
+    tbody.innerHTML = data.results.length
+      ? data.results.map(row => `<tr>
+          <td>${safeText(row.reg_no)}</td>
+          <td>${safeText(row.name)}</td>
+          <td>${safeText(row.class_level || '—')}</td>
+          <td>${row.items.length ? row.items.map(item => `
+            <label style="display:inline-flex;align-items:center;gap:6px;margin:0 12px 4px 0;font-size:.8rem;">
+              ${safeText(item.name)}
+              <select onchange="saveItemCheck(${row.profile_id}, ${item.requirement}, this)">
+                ${Object.entries(ITEM_STATUS).map(([value, label]) =>
+                  `<option value="${value}" ${value === item.status ? 'selected' : ''} ${value === '' ? 'disabled' : ''}>${label}</option>`).join('')}
+              </select>
+            </label>`).join('') : '<span style="color:var(--muted);font-size:.8rem;">Nothing due this semester</span>'}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="4"><div class="empty"><div class="ei"><i class="bi bi-bag-check"></i></div>Nobody to check</div></td></tr>';
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="4">${safeText(apiErrorText(e, 'Could not load the list'))}</td></tr>`;
+  }
+}
+
+async function saveItemCheck(profileId, requirementId, select) {
+  try {
+    const saved = await api('POST', '/item-checks/', {
+      semester_id: document.getElementById('items-semester').value,
+      profile_id: profileId, requirement_id: requirementId, status: select.value,
+    });
+    toast(saved?.warning || (select.value === 'missing' && saved?.charge_amount
+      ? `Added to the bill: ${saved.charge_amount}` : 'Recorded'),
+      saved?.warning ? 'var(--orange)' : 'var(--green)');
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not record it'), 'var(--red)');
+    await loadItemChecks(state.itemsPage || 1);
+  }
+}
+
 async function loadDueBack() {
   try {
     const rows = await api('GET', '/applications/due-back/');
@@ -8478,28 +9337,22 @@ async function loadDueBack() {
           <td>${safeText(STANDING_LABELS[row.status] || row.status)}</td>
           <td>${safeText(row.class_level_name || '—')}</td>
           <td>${row.return_semester_number ? `Semester ${row.return_semester_number}` : '—'}</td>
-          <td><button class="btn btn-ghost btn-sm" onclick="startReadmission('${safeText(row.reg_no)}', ${row.class_level || 'null'}, ${row.programme || 'null'}, '${safeText(row.student_name)}')">Start readmission</button></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="startReadmission('${safeText(row.reg_no)}', ${row.class_level || 'null'}, ${row.programme || 'null'}, '${safeText(row.student_name)}', '${row.status}')">${row.status === 'postponed' ? 'Start their return' : 'Start readmission'}</button></td>
         </tr>`).join('')
       : '<tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-people"></i></div>Nobody outstanding</div></td></tr>';
   } catch (e) { /* the list is a convenience */ }
 }
 
-function startReadmission(regNo, levelId, programmeId, name) {
-  document.getElementById('adm-kind').value = 'readmission';
+async function startReadmission(regNo, levelId, programmeId, name, status) {
+  await showAdmissionSection('new', document.querySelector('[data-adm-section="new"].nav-sub-btn'));
+  // A postponed student comes back as the student they were; a discontinued
+  // one is readmitted, and pays as a new student.
+  document.getElementById('adm-kind').value = status === 'postponed' ? 'continuing' : 'readmission';
   document.getElementById('adm-regno').value = regNo;
   document.getElementById('adm-name').value = name;
   if (levelId) document.getElementById('adm-level').value = levelId;
   if (programmeId) document.getElementById('adm-programme').value = programmeId;
-  renderApplicantFields();
-  document.getElementById('adm-regno').scrollIntoView({ behavior: 'smooth', block: 'center' });
   lookupApplicant();
-}
-
-// A first year is being written down for the first time, so their details and
-// next of kin are asked for. Somebody the college already knows is looked up.
-function renderApplicantFields() {
-  const isNew = document.getElementById('adm-kind').value === 'new';
-  document.getElementById('adm-kin-fields').style.display = isNew ? '' : 'none';
 }
 
 let applicantLookupTimer;
@@ -8518,30 +9371,18 @@ async function lookupApplicant() {
     if (!match) { found.textContent = 'Not on file — they will be written down as a new student.'; return; }
     found.textContent = `On file: ${match.name}${match.college_id ? ' · ' + match.college_id : ''} · ${match.standing_display}`;
     document.getElementById('adm-name').value = match.name;
-    document.getElementById('adm-phone').value = match.phone || '';
-    if (match.gender) document.getElementById('adm-gender').value = match.gender;
-    if (match.date_of_birth) document.getElementById('adm-dob').value = match.date_of_birth;
     if (match.class_level_id) document.getElementById('adm-level').value = match.class_level_id;
     if (match.programme_id) document.getElementById('adm-programme').value = match.programme_id;
   } catch (e) { found.textContent = ''; }
 }
 
 async function openApplication(event) {
-  const kin = (n) => ({
-    name: document.getElementById(`adm-kin${n}-name`).value.trim(),
-    phone: document.getElementById(`adm-kin${n}-phone`).value.trim(),
-    relationship: document.getElementById(`adm-kin${n}-rel`).value,
-  });
   const payload = {
     kind: document.getElementById('adm-kind').value,
     nactvet_reg_no: document.getElementById('adm-regno').value.trim(),
     name: document.getElementById('adm-name').value.trim(),
-    phone: document.getElementById('adm-phone').value.trim(),
-    gender: document.getElementById('adm-gender').value,
-    date_of_birth: document.getElementById('adm-dob').value || null,
     programme_id: document.getElementById('adm-programme').value,
     class_level_id: document.getElementById('adm-level').value,
-    next_of_kin: [kin(1), kin(2)].filter(entry => entry.name),
   };
   if (!payload.name) { toast('A name is needed', 'var(--red)'); return; }
   if (!payload.nactvet_reg_no && payload.kind !== 'new') {
@@ -8552,10 +9393,9 @@ async function openApplication(event) {
   try {
     const application = await api('POST', '/applications/capture/', payload);
     toast(`${application.student_name} is now with ${DESK_LABELS[application.state]}`, 'var(--green)');
-    ['adm-regno', 'adm-name', 'adm-phone', 'adm-dob', 'adm-kin1-name', 'adm-kin1-phone',
-     'adm-kin2-name', 'adm-kin2-phone'].forEach(id => { document.getElementById(id).value = ''; });
+    ['adm-regno', 'adm-name'].forEach(id => { document.getElementById(id).value = ''; });
     document.getElementById('adm-lookup').textContent = '';
-    await Promise.all([loadAdmissionQueue(), loadMyDesk(), loadApplications(), loadDueBack()]);
+    await refreshAdmissions();
   } catch (e) {
     toast(apiErrorText(e, 'Could not open the application'), 'var(--red)');
   } finally { done(); }
@@ -8574,6 +9414,9 @@ async function openApplicationModal(id) {
       ${safeText(application.semester_label)}<br>
       <strong>Where it is:</strong> ${safeText(DESK_LABELS[application.state] || application.state)} ·
       <strong>Owes:</strong> ${safeText(application.balance)}
+      ${application.payment ? `<br><strong>To register:</strong> ${application.payment.cleared
+          ? '<span class="badge badge-green">paid</span>'
+          : `<span class="badge badge-red">not paid</span> ${safeText(application.payment.reason)}`}` : ''}
       ${application.college_id ? ` · <strong>College ID:</strong> ${safeText(application.college_id)}` : ''}`;
     document.getElementById('app-modal-steps').innerHTML = (application.steps || []).length
       ? application.steps.map(step => `<tr>
@@ -8582,11 +9425,17 @@ async function openApplicationModal(id) {
           <td>${safeText((step.done_at || '').slice(0, 16).replace('T', ' '))}</td>
           <td>${safeText(step.note || '')}</td></tr>`).join('')
       : '<tr><td colspan="4" style="color:var(--muted);">Nothing yet</td></tr>';
+    renderAcademicBlock(application.academic);
+    renderDetailsBlock(application);
+    renderResidence(application);
+    renderItemsOwed(application);
     await renderRequirementChecklist(id);
     await renderStudentDocuments(application);
     const numberBox = document.getElementById('app-modal-number');
     const temporary = String(application.reg_no || '').toUpperCase().startsWith('TEMP/');
-    numberBox.style.display = (application.state === 'intake' || temporary) ? '' : 'none';
+    const me = state.offices || {};
+    numberBox.style.display = ((application.state === 'intake' || temporary)
+                               && (me.admission || me.principal)) ? '' : 'none';
     document.getElementById('app-modal-regno').value = temporary ? '' : application.reg_no;
     renderApplicationActions(application);
     document.getElementById('app-modal-note').value = '';
@@ -8598,17 +9447,126 @@ async function openApplicationModal(id) {
 
 async function renderRequirementChecklist(id) {
   const box = document.getElementById('app-modal-requirements');
+  const me = state.offices || {};
+  // Finance checks the items at its desk; the admission desk records one a
+  // held student brings back. Records handles no money, so marks none.
+  const at = state.application?.state;
+  const checker = me.principal && ['finance', 'admission'].includes(at)
+    || (at === 'finance' && me.finance) || (at === 'admission' && me.admission);
   try {
     const rows = await api('GET', `/applications/${id}/requirements/`);
     if (!rows.length) { box.innerHTML = ''; return; }
-    box.innerHTML = `<div class="card-title" style="font-size:.9rem;">What they must have</div>` +
-      rows.map(row => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-        <span style="min-width:170px;font-size:.82rem;">${safeText(row.name)}${row.mandatory ? '' : ' <span style="color:var(--muted)">(optional)</span>'}</span>
+    box.innerHTML = `<div class="card-title" style="font-size:.9rem;">What they must have <span class="tip" tabindex="0" role="note" aria-label="Help: items" data-tip="Missing adds the item to their bill at the accountant's rate — a debt, never a hold. Has it, or waived: nothing owed for it; insurance of their own takes the medical fee off.">?</span></div>` +
+      rows.map(row => {
+        const name = `<span style="min-width:170px;font-size:.82rem;">${safeText(row.name)}${row.mandatory ? '' : ' <span style="color:var(--muted)">(optional)</span>'}</span>`;
+        // Finance checks them; every other desk reads what was found.
+        if (!checker) {
+          const said = { has_it: 'Has it', missing: 'Missing — charged', waived: 'Waived' }[row.status] || 'Not checked yet';
+          return `<div style="display:flex;gap:10px;margin-bottom:4px;">${name}<span style="font-size:.82rem;">${said}</span></div>`;
+        }
+        return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">${name}
         <button class="btn ${row.status === 'has_it' ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'has_it')">Has it</button>
-        <button class="btn ${row.status === 'missing' ? 'btn-warning' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'missing')">Missing — charge</button>
+        <button class="btn ${row.status === 'missing' ? 'btn-warning' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'missing')">Missing — add to bill</button>
         <button class="btn ${row.status === 'waived' ? 'btn-secondary' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'waived')">Waive</button>
-      </div>`).join('');
+      </div>`;
+      }).join('');
   } catch (e) { box.innerHTML = ''; }
+}
+
+// ── what the results say, for the desks that are not the exam office ─────────
+function renderAcademicBlock(academic) {
+  const box = document.getElementById('app-modal-academic');
+  if (!academic) { box.innerHTML = ''; return; }
+  const modules = (academic.modules || []).map(m =>
+    `<span class="badge ${m.repeat ? 'badge-yellow' : 'badge-gen'}" title="${safeText(m.name)}">${safeText(m.code)}${m.repeat ? ' · repeat' : ''}</span>`).join(' ');
+  box.innerHTML = `
+    <div class="block-title">Results and what they pay for
+      <span class="tip" tabindex="0" role="note" aria-label="Help: results" data-tip="From the semester review the examination office confirmed. It decides the bill: a year's fees for a student moving on, the repeat rate per module for a repeater.">?</span>
+    </div>
+    <dl class="facts">
+      <dt>Results</dt><dd>${academic.results_confirmed ? '' : '<span class="badge badge-red">not confirmed</span> '}${safeText(academic.results)}</dd>
+      <dt>Standing</dt><dd>${safeText(academic.standing)}</dd>
+      <dt>Bill</dt><dd><strong>${safeText(academic.billing)}</strong></dd>
+      <dt>Modules (${academic.module_count})</dt><dd>${modules || '<span style="color:var(--muted)">none offered yet this semester</span>'}</dd>
+    </dl>`;
+}
+
+// ── who the student is: kept by records, read by every desk ─────────────────
+const RELATIONSHIPS = [['parent', 'Parent'], ['guardian', 'Guardian'], ['spouse', 'Spouse'],
+                       ['sibling', 'Sibling'], ['relative', 'Other relative'], ['other', 'Other']];
+
+function detailsFormHtml(prefix, details) {
+  const kin = (n) => (details.next_of_kin || []).find(k => k.position === n) || {};
+  const rel = (n) => RELATIONSHIPS.map(([v, l]) =>
+    `<option value="${v}" ${kin(n).relationship === v ? 'selected' : ''}>${l}</option>`).join('');
+  return `
+    <div class="form-grid-3">
+      <div class="field"><label>Full name</label><input id="${prefix}-name" value="${safeText(details.name || '')}"></div>
+      <div class="field"><label>Phone</label><input id="${prefix}-phone" value="${safeText(details.phone || '')}"></div>
+      <div class="field"><label>Gender</label>
+        <select id="${prefix}-gender"><option value="">—</option>
+          <option value="F" ${details.gender === 'F' ? 'selected' : ''}>Female</option>
+          <option value="M" ${details.gender === 'M' ? 'selected' : ''}>Male</option></select></div>
+    </div>
+    <div class="form-grid-3">
+      <div class="field"><label>Date of birth</label><input type="date" id="${prefix}-dob" value="${safeText(details.date_of_birth || '')}"></div>
+    </div>
+    ${[1, 2].map(n => `<div class="form-grid-3">
+      <div class="field"><label>Next of kin ${n}</label><input id="${prefix}-kin${n}-name" value="${safeText(kin(n).name || '')}"></div>
+      <div class="field"><label>Phone</label><input id="${prefix}-kin${n}-phone" value="${safeText(kin(n).phone || '')}"></div>
+      <div class="field"><label>Relationship</label><select id="${prefix}-kin${n}-rel">${rel(n)}</select></div>
+    </div>`).join('')}`;
+}
+
+function readDetailsForm(prefix) {
+  const value = (suffix) => document.getElementById(`${prefix}-${suffix}`).value.trim();
+  return {
+    name: value('name'), phone: value('phone'), gender: value('gender'),
+    date_of_birth: value('dob'),
+    next_of_kin: [1, 2].map(n => ({ name: value(`kin${n}-name`), phone: value(`kin${n}-phone`),
+                                    relationship: value(`kin${n}-rel`) })),
+  };
+}
+
+function detailsReadOnlyHtml(details) {
+  const kin = (details.next_of_kin || []).map(k =>
+    `${safeText(k.name)} (${safeText(k.relationship_display || k.relationship)}) · ${safeText(k.phone || '—')}`).join('<br>');
+  return `<dl class="facts">
+    <dt>Gender</dt><dd>${safeText(details.gender_display || details.gender || '—')}</dd>
+    <dt>Date of birth</dt><dd>${safeText(details.date_of_birth || '—')}</dd>
+    <dt>Phone</dt><dd>${safeText(details.phone || '—')}</dd>
+    <dt>Next of kin</dt><dd>${kin || '—'}</dd>
+  </dl>`;
+}
+
+function renderDetailsBlock(application) {
+  const box = document.getElementById('app-modal-details');
+  const me = state.offices || {};
+  const keeper = me.records || me.principal;
+  const open = !['admitted', 'rejected', 'cancelled'].includes(application.state);
+  const missing = application.missing_details || [];
+  box.innerHTML = `
+    <div class="block-title">Student details
+      <span class="tip" tabindex="0" role="note" aria-label="Help: details" data-tip="Taken down by the records office. Finance and admission read them here. Records cannot clear its desk until they are complete.">?</span>
+    </div>
+    ${missing.length ? `<div class="missing-note">Still to record: ${safeText(missing.join(', '))}</div>` : ''}
+    ${keeper && open
+      ? detailsFormHtml('app-det', application.details || {}) +
+        '<button class="btn btn-secondary btn-sm" onclick="saveApplicationDetails(event)">Save details</button>'
+      : detailsReadOnlyHtml(application.details || {})}`;
+}
+
+async function saveApplicationDetails(event) {
+  const id = document.getElementById('app-modal-id').value;
+  const done = working(event?.currentTarget, 'Saving…');
+  try {
+    const saved = await api('POST', `/applications/${id}/details/`, readDetailsForm('app-det'));
+    toast(saved.missing_details?.length ? `Saved — still to record: ${saved.missing_details.join(', ')}`
+                                        : 'Details recorded', 'var(--green)');
+    await openApplicationModal(id);
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not save the details'), 'var(--red)');
+  } finally { done(); }
 }
 
 async function saveNactvetNumber() {
@@ -8619,7 +9577,7 @@ async function saveNactvetNumber() {
     const application = await api('POST', `/applications/${id}/nactvet-number/`, { nactvet_reg_no: number });
     toast(`Recorded as ${application.reg_no}`, 'var(--green)');
     await openApplicationModal(id);
-    await Promise.all([loadMyDesk(), loadApplications()]);
+    await refreshAdmissions();
   } catch (e) {
     toast(apiErrorText(e, 'Could not record the number'), 'var(--red)');
   }
@@ -8629,6 +9587,8 @@ async function saveNactvetNumber() {
 // the student themselves from the portal and verified here.
 async function renderStudentDocuments(application) {
   const box = document.getElementById('app-modal-documents');
+  const me = state.offices || {};
+  const keeper = me.records || me.principal;   // records scans and verifies; others read
   try {
     const rows = await api('GET', `/student-documents/?profile_id=${application.profile}`);
     const list = rows.results ?? rows;
@@ -8640,23 +9600,18 @@ async function renderStudentDocuments(application) {
           <td>${safeText(doc.kind_display)}</td>
           <td>${safeText(doc.uploaded_by_name || '')}${doc.uploaded_by_student ? ' (student)' : ''}</td>
           <td>${doc.is_verified ? '<span class="badge badge-green">verified</span>' : '—'}</td>
-          <td>${doc.is_verified ? '' : `<button class="btn btn-ghost btn-sm" onclick="verifyDocument(${doc.id}, ${application.id})">Mark seen</button>`}</td>
+          <td>${doc.is_verified || !keeper ? '' : `<button class="btn btn-ghost btn-sm" onclick="verifyDocument(${doc.id}, ${application.id})">Mark seen</button>`}</td>
         </tr>`).join('')}</tbody></table></div>`
         : '<p class="help-note">Nothing handed in yet.</p>') +
-      `<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
+      (!keeper ? '' : `<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
         <div class="field" style="margin-bottom:0;"><label>Add a scan</label>
           <input type="file" id="app-doc-file" accept=".pdf,.jpg,.jpeg,.png"></div>
         <div class="field" style="margin-bottom:0;"><label>Kind</label>
           <select id="app-doc-kind">
-            <option value="certificate">Certificate</option>
-            <option value="result_slip">Result slip</option>
-            <option value="birth_certificate">Birth certificate</option>
-            <option value="identity">Identification</option>
-            <option value="medical">Medical form</option>
-            <option value="other">Other</option>
+            ${documentKindOptions()}
           </select></div>
         <button class="btn btn-secondary btn-sm" onclick="uploadStudentDocument(${application.profile}, ${application.id})">Upload</button>
-      </div>`;
+      </div>`);
   } catch (e) { box.innerHTML = ''; }
 }
 
@@ -8689,11 +9644,88 @@ async function verifyDocument(documentId, applicationId) {
 async function recordRequirement(id, requirementId, status) {
   try {
     const saved = await api('POST', `/applications/${id}/requirements/`, { requirement_id: requirementId, status });
-    toast(saved?.warning || (saved?.charge_amount ? `Recorded — charged ${saved.charge_amount}` : 'Recorded'),
+    toast(saved?.warning || (saved?.charge_amount && status === 'missing' ? `Recorded — added to the bill: ${saved.charge_amount}` : 'Recorded'),
           saved?.warning ? 'var(--orange)' : 'var(--green)');
-    await renderRequirementChecklist(id);
+    await openApplicationModal(id);
   } catch (e) {
     toast(apiErrorText(e, 'Could not record it'), 'var(--red)');
+  }
+}
+
+function renderResidence(application) {
+  const box = document.getElementById('app-modal-residence');
+  const me = state.offices || {};
+  const current = application.residence;
+  const atFinance = application.state === 'finance';
+  const canSet = atFinance && (me.finance || me.principal);
+  if (!canSet && !current) { box.innerHTML = ''; return; }
+  const said = current ? `${safeText(current.display)} <span style="color:var(--muted);font-size:.78rem;">— ${safeText(current.source)}</span>`
+                       : '<span class="badge badge-yellow">not stated yet</span>';
+  box.innerHTML = `<div class="block-title">Where they will live
+      <span class="tip" tabindex="0" role="note" aria-label="Help: day or hostel" data-tip="Decides the bill: hostel adds the hostel fee's instalments. A first year must say before finance passes them on; a continuing student keeps last year's until changed here.">?</span></div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.84rem;">
+      <span>${said}</span>
+      ${canSet ? `
+        <button class="btn ${current?.residence === 'day' ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="setResidence('day')">Day</button>
+        <button class="btn ${current?.residence === 'hostel' ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="setResidence('hostel')">Hostel</button>` : ''}
+    </div>`;
+}
+
+async function setResidence(residence) {
+  const id = document.getElementById('app-modal-id').value;
+  try {
+    await api('POST', `/applications/${id}/residence/`, { residence });
+    toast(residence === 'hostel' ? 'Hostel — the hostel fee is on the bill' : 'Day student', 'var(--green)');
+    await openApplicationModal(id);
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not record it'), 'var(--red)');
+  }
+}
+
+function renderItemsOwed(application) {
+  const box = document.getElementById('app-modal-owed');
+  const items = application.items;
+  const hold = application.on_hold
+    ? `<p style="font-size:.82rem;margin:0 0 6px;"><span class="badge badge-yellow">On hold</span> ${safeText(application.hold_reason)}
+        <span style="color:var(--muted);">— ${safeText(application.held_by_name || '')} ${safeText((application.held_at || '').slice(0, 10))}</span></p>`
+    : '';
+  if (!items || (!items.owed.length && !items.unchecked.length && !hold)) { box.innerHTML = ''; return; }
+  const owed = items.owed.map(row => `<tr>
+      <td>${safeText(row.name)}</td>
+      <td>${row.charged ? safeText(row.amount) : '<span style="color:var(--muted);">no rate set</span>'}</td>
+      <td>${row.paid ? '<span class="badge badge-green">paid</span>' : row.charged ? `<span class="badge badge-red">owes ${safeText(row.balance)}</span>` : '—'}</td>
+    </tr>`).join('');
+  box.innerHTML = `<div class="block-title">Items owed
+      <span class="tip" tabindex="0" role="note" aria-label="Help: items owed" data-tip="What finance found missing, and whether it is paid. It never stops registration: admit them, or put them on hold until they bring the item or pay.">?</span></div>
+    ${hold}
+    ${owed ? `<div class="table-wrap"><table><thead><tr><th>Item</th><th>Charged</th><th>Paid?</th></tr></thead><tbody>${owed}</tbody></table></div>`
+           : '<p style="font-size:.82rem;color:var(--muted);margin:0;">Nothing owed for items.</p>'}
+    ${items.unchecked.length ? `<p style="font-size:.78rem;color:var(--muted);margin:6px 0 0;">Not checked by finance: ${items.unchecked.map(safeText).join(', ')}</p>` : ''}`;
+}
+
+async function holdApplication() {
+  const id = document.getElementById('app-modal-id').value;
+  const reason = prompt('What are they being held for? (e.g. bring the TPH book, pay for the calculator)');
+  if (reason === null) return;
+  try {
+    await api('POST', `/applications/${id}/hold/`, { reason });
+    toast('On hold at the admission desk', 'var(--orange)');
+    await openApplicationModal(id);
+    await refreshAdmissions();
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not hold them'), 'var(--red)');
+  }
+}
+
+async function releaseApplication() {
+  const id = document.getElementById('app-modal-id').value;
+  try {
+    await api('POST', `/applications/${id}/release/`, {});
+    toast('Hold lifted', 'var(--green)');
+    await openApplicationModal(id);
+    await refreshAdmissions();
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not lift the hold'), 'var(--red)');
   }
 }
 
@@ -8707,12 +9739,20 @@ function renderApplicationActions(application) {
     return;
   }
   const last = application.state === 'admission';
+  const me = state.offices || {};
+  // Refusing is the admission office's decision; the other desks send back.
   box.innerHTML = `
     <button class="btn btn-primary btn-sm" onclick="completeApplicationStep(event)">
       ${last ? 'Admit the student' : 'Clear this desk →'}
     </button>
+    ${last && (me.admission || me.principal)
+      ? (application.on_hold
+         ? '<button class="btn btn-secondary btn-sm" onclick="releaseApplication()">Lift the hold</button>'
+         : '<button class="btn btn-warning btn-sm" onclick="holdApplication()">Put on hold…</button>')
+      : ''}
     <button class="btn btn-ghost btn-sm" onclick="sendApplicationBack()">Send back…</button>
-    <button class="btn btn-danger btn-sm" onclick="refuseApplication()">Refuse</button>`;
+    ${me.admission || me.principal
+      ? '<button class="btn btn-danger btn-sm" onclick="refuseApplication()">Refuse</button>' : ''}`;
 }
 
 async function completeApplicationStep(event) {
@@ -8728,7 +9768,7 @@ async function completeApplicationStep(event) {
     if (application.portal_pin) {
       showPortalPin(application.portal_pin, application.reg_no, application.college_id);
     }
-    await Promise.all([loadAdmissionQueue(), loadMyDesk(), loadApplications(), loadDueBack()]);
+    await refreshAdmissions();
   } catch (e) {
     toast(apiErrorText(e, 'Could not clear the desk'), 'var(--red)');
   } finally { done(); }
@@ -8744,7 +9784,7 @@ async function sendApplicationBack() {
     await api('POST', `/applications/${id}/send-back/`, { to: to.trim().toLowerCase(), reason });
     toast('Sent back', 'var(--green)');
     closeApplicationModal();
-    await Promise.all([loadAdmissionQueue(), loadMyDesk(), loadApplications()]);
+    await refreshAdmissions();
   } catch (e) {
     toast(apiErrorText(e, 'Could not send it back'), 'var(--red)');
   }
@@ -8758,7 +9798,7 @@ async function refuseApplication() {
     await api('POST', `/applications/${id}/refuse/`, { reason });
     toast('Refused', 'var(--green)');
     closeApplicationModal();
-    await Promise.all([loadAdmissionQueue(), loadMyDesk(), loadApplications()]);
+    await refreshAdmissions();
   } catch (e) {
     toast(apiErrorText(e, 'Could not refuse it'), 'var(--red)');
   }
@@ -8825,6 +9865,116 @@ async function loadAdmissionSettings() {
     document.getElementById('adm-id-next').value = fmt.next_number;
     document.getElementById('adm-id-example').value = fmt.example;
   } catch (e) { /* not this account's card */ }
+  await loadRequirements();
+}
+
+const FREQUENCY_LABELS = { each_semester: 'Every semester', each_year: 'Once a year', once: 'Once, when they join' };
+
+async function loadRequirements() {
+  try {
+    const [items, chargeTypes] = await Promise.all([
+      api('GET', '/admission-requirements/'),
+      api('GET', '/admission-requirements/charge-types/'),
+    ]);
+    state.requirements = items.results ?? items;
+    state.requirementChargeTypes = chargeTypes;
+  } catch (e) { return; }
+  const picker = document.getElementById('req-charge');
+  const chosen = picker.value;
+  picker.innerHTML = '<option value="">— nothing charged —</option>' + state.requirementChargeTypes.map(type =>
+    `<option value="${type.id}">${safeText(type.name)}${type.applies === 'automatic' ? ' (on every bill)' : ''}</option>`).join('');
+  picker.value = chosen;
+  const levels = document.getElementById('req-levels');
+  if (!levels.children.length) {
+    levels.innerHTML = (state.levels || []).map(level =>
+      `<label style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><input type="checkbox" value="${level.id}" style="width:auto;"> ${safeText(level.name)}</label>`).join('');
+  }
+  document.getElementById('req-tbody').innerHTML = state.requirements.length
+    ? state.requirements.map(item => `<tr>
+        <td>${safeText(item.name)}</td>
+        <td>${item.charge_type_name ? safeText(item.charge_type_name) : '<span style="color:var(--muted);">nothing charged</span>'}</td>
+        <td>${safeText(FREQUENCY_LABELS[item.frequency] || item.frequency)}</td>
+        <td>${safeText((item.level_names || []).join(', '))}</td>
+        <td>${item.is_active ? '<span class="badge badge-green">in use</span>' : '<span class="badge badge-gen">off</span>'}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-ghost btn-sm" onclick="editRequirement(${item.id})">Edit</button>
+          <button class="btn btn-ghost btn-sm" onclick="deleteRequirement(${item.id})">Delete</button>
+        </td>
+      </tr>`).join('')
+    : '<tr><td colspan="6" style="color:var(--muted);">No items yet</td></tr>';
+  showRequirementRates();
+}
+
+function showRequirementRates() {
+  const type = (state.requirementChargeTypes || []).find(t => String(t.id) === document.getElementById('req-charge').value);
+  document.getElementById('req-rates').textContent = !type ? ''
+    : type.rated_levels.length ? `Rate set this year for ${type.rated_levels.join(', ')}`
+    : 'No rate set this year — ask the accountant, or nothing will be charged';
+}
+
+function resetRequirementForm() {
+  document.getElementById('req-id').value = '';
+  document.getElementById('req-name').value = '';
+  document.getElementById('req-charge').value = '';
+  document.getElementById('req-frequency').value = 'each_semester';
+  document.getElementById('req-active').checked = true;
+  document.querySelectorAll('#req-levels input').forEach(box => { box.checked = false; });
+  document.getElementById('req-save').textContent = 'Add the item';
+  showRequirementRates();
+}
+
+function editRequirement(id) {
+  const item = (state.requirements || []).find(row => row.id === id);
+  if (!item) return;
+  document.getElementById('req-id').value = item.id;
+  document.getElementById('req-name').value = item.name;
+  document.getElementById('req-charge').value = item.charge_type || '';
+  document.getElementById('req-frequency').value = item.frequency;
+  document.getElementById('req-active').checked = item.is_active;
+  document.querySelectorAll('#req-levels input').forEach(box => {
+    box.checked = (item.applies_to_levels || []).includes(Number(box.value));
+  });
+  document.getElementById('req-save').textContent = 'Save changes';
+  showRequirementRates();
+  document.getElementById('req-name').focus();
+}
+
+async function saveRequirement(event) {
+  const id = document.getElementById('req-id').value;
+  const payload = {
+    name: document.getElementById('req-name').value.trim(),
+    charge_type: document.getElementById('req-charge').value || null,
+    frequency: document.getElementById('req-frequency').value,
+    applies_to_levels: [...document.querySelectorAll('#req-levels input:checked')].map(box => Number(box.value)),
+    is_active: document.getElementById('req-active').checked,
+  };
+  if (!payload.name) { toast('Give the item a name', 'var(--red)'); return; }
+  const done = working(event?.currentTarget, 'Saving…');
+  let saved = false;
+  try {
+    await api(id ? 'PATCH' : 'POST', id ? `/admission-requirements/${id}/` : '/admission-requirements/', payload);
+    toast(id ? 'Item saved' : `${payload.name} added`, 'var(--green)');
+    saved = true;
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not save the item'), 'var(--red)');
+  } finally { done(); }
+  // After done(), which puts the button's old label back.
+  if (saved) {
+    resetRequirementForm();
+    await loadRequirements();
+  }
+}
+
+async function deleteRequirement(id) {
+  const item = (state.requirements || []).find(row => row.id === id);
+  if (!item || !confirm(`Delete ${item.name}?`)) return;
+  try {
+    await api('DELETE', `/admission-requirements/${id}/`);
+    toast(`${item.name} deleted`, 'var(--green)');
+    await loadRequirements();
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not delete it'), 'var(--red)');
+  }
 }
 
 function previewCollegeId() {
@@ -9160,7 +10310,7 @@ async function advanceSemester() {
     const blocked = (plan.blocked || []).length
       ? `<div class="card" style="border-color:var(--red);margin-top:12px;">
            <div class="card-title" style="color:var(--red)">${plan.blocked.length} student(s) not yet confirmed</div>
-           <p class="help-note">Finish the semester review first — open <strong>Semester Review</strong>, read the results and confirm each of them.</p>
+           <p class="help-note">Confirm every student in Semester Review first.</p>
            <div style="font-size:.78rem;max-height:160px;overflow:auto;">${plan.blocked.map(row =>
              `${safeText(row.reg_no)} — ${safeText(row.name)} (${safeText(row.reason)})`).join('<br>')}</div>
          </div>`
@@ -9189,10 +10339,7 @@ async function advanceSemester() {
         <table><thead><tr><th>Reg. No.</th><th>Name</th><th>Outcome</th><th>What happens</th></tr></thead>
         <tbody>${moves || '<tr><td colspan="4">Nobody registered for this semester</td></tr>'}</tbody></table>
       </div>
-      <p class="help-note" style="margin-top:10px;">
-        Nothing is deleted. Results, enrollments and payments stay exactly as they are, and every student who
-        is not coming back keeps a record of the semester they return to.
-      </p>`;
+      <p class="help-note" style="margin-top:10px;">Nothing is deleted — results, enrollments and payments stay as they are.</p>`;
     go.disabled = !plan.can_advance;
   } catch (e) {
     body.innerHTML = `<p style="color:var(--red)">${safeText(apiErrorText(e, 'Could not read the plan'))}</p>`;
@@ -9207,7 +10354,10 @@ async function doAdvance() {
   try {
     const result = await api('POST', '/academic-years/advance/');
     const moved = result.students || {};
-    toast(`Advanced to ${result.label} — ${moved.registered || 0} registered, ${moved.enrolled || 0} enrollment(s)`, 'var(--green)');
+    toast(moved.applications
+      ? `Advanced to ${result.label} — ${moved.applications} student(s) waiting at admissions`
+      : `Advanced to ${result.label} — ${moved.registered || 0} registered, ${moved.enrolled || 0} enrollment(s)`,
+      'var(--green)');
     const sems = await api('GET', '/semesters/');
     state.semesters = sems.results ?? sems;
     state.activeSem = { label: result.label, number: result.semester };
@@ -9459,8 +10609,9 @@ function renderInventoryCharts() {
   const locationTotals = {};
   state.inventoryAssets.forEach(a => locationTotals[a.location_name] = (locationTotals[a.location_name] || 0) + Number(a.quantity));
   inventoryConditionChart?.destroy(); inventoryLocationChart?.destroy();
-  const common = {responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#1f2937'}}},scales:{x:{ticks:{color:'#6b7280'},grid:{color:'rgba(31,41,55,.08)'}},y:{ticks:{color:'#6b7280',precision:0},grid:{color:'rgba(31,41,55,.08)'}}}};
-  inventoryConditionChart = new Chart(document.getElementById('inventory-condition-chart'), {type:'doughnut',data:{labels:conditionLabels,datasets:[{data:conditionValues,backgroundColor:['#1565c0','#16a34a','#b45309','#c2410c','#dc2626'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#1f2937'}}}}});
+  const ink = chartInk();
+  const common = {responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:ink.text}}},scales:{x:{ticks:{color:ink.muted},grid:{color:ink.grid}},y:{ticks:{color:ink.muted,precision:0},grid:{color:ink.grid}}}};
+  inventoryConditionChart = new Chart(document.getElementById('inventory-condition-chart'), {type:'doughnut',data:{labels:conditionLabels,datasets:[{data:conditionValues,backgroundColor:['#1565c0','#16a34a','#b45309','#c2410c','#dc2626'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:ink.text}}}}});
   inventoryLocationChart = new Chart(document.getElementById('inventory-location-chart'), {type:'bar',data:{labels:Object.keys(locationTotals),datasets:[{label:'Items',data:Object.values(locationTotals),backgroundColor:'#1565c0',borderRadius:6}]},options:common});
 }
 
@@ -9712,6 +10863,21 @@ installWebIconReplacements();
   // Department never sees the examination menus flash up before they are hidden.
   const isPrincipal = {% if request.user.principal_profile.is_active %}true{% else %}false{% endif %};
   const isHod = {% if request.user.hod_profile.is_active %}true{% else %}false{% endif %};
+  const offices = {
+    principal: isPrincipal,
+    records: {% if request.user.records_officer_profile.is_active %}true{% else %}false{% endif %},
+    admission: {% if request.user.admission_officer_profile.is_active %}true{% else %}false{% endif %},
+    finance: {% if request.user.accountant_profile.is_active %}true{% else %}false{% endif %},
+  };
+  state.offices = offices;
+  // Anything marked data-roles is for those offices only. Hidden rather than
+  // removed, so scripts that look an element up still find it.
+  document.querySelectorAll('[data-roles]').forEach(el => {
+    const allowed = el.dataset.roles.split(/\s+/).some(role => offices[role]);
+    if (!allowed) el.style.setProperty('display', 'none', 'important');
+  });
+  if (offices.records) document.body.classList.add('is-records-officer');
+  if (offices.admission) document.body.classList.add('is-admission-officer');
   const initials = username.slice(0, 2).toUpperCase();
   // Before anything paints, so a dark-mode user never sees a white flash.
   applyTheme(currentTheme());

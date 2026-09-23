@@ -88,11 +88,19 @@ def parse_authority_grade(value, class_level):
         'A': 5 if is_level_six(class_level) else 4,
         'B+': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0,
     }
+    if failed_components:
+        status, description = 'SUPP', 'Supplementary required by authority'
+    elif grade in ('D', 'F'):
+        # Below C is a fail, as it is for marks entered here: the module is
+        # repeated. With stars it is a supplementary instead (above).
+        status, description = 'FAIL', 'Failed'
+    else:
+        status, description = 'PASS', 'Official authority grade'
     return {
         'raw': raw, 'grade': raw,
-        'status': 'SUPP' if failed_components else 'PASS',
+        'status': status,
         'points': points_by_grade[grade],
-        'description': 'Supplementary required by authority' if failed_components else 'Official authority grade',
+        'description': description,
         'failed_components': failed_components,
     }
 

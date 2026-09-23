@@ -169,6 +169,97 @@ def module_row(enrollment, serializer=None):
     return row
 
 
+def results_summary(semester, class_level, *, programme=None):
+    """How a class did in a semester, once the results are in — for the
+    examination office: each student's GPA and where they stand, and each
+    module's pass rate.
+
+    Read from the same per-module outcome the semester review uses, so the two
+    never disagree. An authority grade counts as the result whether or not
+    marks were entered.
+    """
+    from .grading import gpa_classification
+    from .models import ResultWithholding
+
+    enrollments = (Student.objects.studying()
+                   .filter(module__semester=semester, module__class_level=class_level)
+                   .select_related('module__class_level', 'module__programme', 'result', 'profile')
+                   .order_by('name', 'module__code'))
+    if programme is not None:
+        enrollments = enrollments.filter(module__programme=programme)
+    serializer = _result_serializer()
+    withheld = {row.profile_id: row for row in ResultWithholding.objects.filter(
+        semester=semester, released_at__isnull=True)}
+
+    people, modules = {}, {}
+    for enrollment in enrollments:
+        key = enrollment.profile_id or enrollment.nactvet_reg_no.upper()
+        people.setdefault(key, []).append(enrollment)
+
+    students = []
+    for key, rows_for_person in people.items():
+        first = rows_for_person[0]
+        rows = [module_row(enrollment, serializer) for enrollment in rows_for_person]
+        graded = [(row['points'], row['credits']) for row in rows if row['points'] is not None]
+        gpa = (round(sum(float(points) * credits for points, credits in graded)
+                     / sum(credits for _, credits in graded), 2) if graded else None)
+        supp = [row['code'] for row in rows if row['status'] == 'SUPP']
+        failed = [row['code'] for row in rows if row['status'] in FAILED_STATUSES]
+        waiting = [row['code'] for row in rows if row['status'] in {'INCOMPLETE', 'WITHHELD', 'NULLIFIED'}]
+        if any(row['status'] == 'DISCONTINUED' for row in rows):
+            remark = 'DISCO'
+        elif waiting:
+            remark = 'INCOMPLETE'
+        elif supp:
+            remark = 'SUPP'
+        elif gpa is not None and gpa < PASS_GPA:
+            remark = 'DISCO'
+        elif failed:
+            remark = 'REPEAT'
+        else:
+            remark = 'PASS'
+        holding = withheld.get(first.profile_id) if first.profile_id else None
+        students.append({
+            'profile_id': first.profile_id, 'reg_no': first.nactvet_reg_no, 'name': first.name,
+            'gpa': gpa, 'remark': remark,
+            'classification': gpa_classification(gpa, class_level) if remark == 'PASS' else '',
+            'supp': supp, 'failed': failed, 'waiting': waiting,
+            'grades': {row['code']: row['grade'] for row in rows},
+            'withheld_id': holding.id if holding else None,
+            'withheld_reason': holding.reason if holding else '',
+        })
+        for row in rows:
+            stats = modules.setdefault(row['code'], {
+                'code': row['code'], 'name': row['name'], 'students': 0, 'results': 0,
+                'passed': 0, 'supp': 0, 'failed': 0, 'waiting': 0})
+            stats['students'] += 1
+            if row['status'] in {'INCOMPLETE', 'WITHHELD', 'NULLIFIED', 'NA'}:
+                stats['waiting'] += 1
+                continue
+            stats['results'] += 1
+            if row['status'] == 'PASS':
+                stats['passed'] += 1
+            elif row['status'] == 'SUPP':
+                stats['supp'] += 1
+            else:
+                stats['failed'] += 1
+
+    for stats in modules.values():
+        stats['pass_rate'] = round(100 * stats['passed'] / stats['results'], 1) if stats['results'] else None
+    counts = {remark: sum(1 for student in students if student['remark'] == remark)
+              for remark in ('PASS', 'SUPP', 'REPEAT', 'DISCO', 'INCOMPLETE')}
+    counts['total'] = len(students)
+    counts['withheld'] = sum(1 for student in students if student['withheld_id'])
+    gpas = [student['gpa'] for student in students if student['gpa'] is not None]
+    return {
+        'semester': semester.label, 'class_level': class_level.name,
+        'counts': counts,
+        'average_gpa': round(sum(gpas) / len(gpas), 2) if gpas else None,
+        'modules': sorted(modules.values(), key=lambda row: row['code']),
+        'students': sorted(students, key=lambda row: (row['gpa'] is None, -(row['gpa'] or 0), row['name'])),
+    }
+
+
 def evaluate(profile, semester, *, registration=None, enrollments=None,
              repeats=None, serializer=None):
     """What this semester's results say about this student.
@@ -546,6 +637,25 @@ def defer_later_registrations(review, *, actor=None):
         cancelled.append(registration)
         logger.info('Took %s off %s after a late result',
                     review.profile.nactvet_reg_no, registration.semester)
+
+    # The same student may not have reached registration yet: the year end
+    # handed them to admissions, and they are waiting at a desk for the level
+    # this result has just taken away. That application is withdrawn too.
+    from .models import Application, ApplicationStep
+    waiting = Application.objects.filter(
+        profile=review.profile, state__in=sorted(Application.OPEN_STATES)).filter(
+        Q(semester__academic_year__name__gt=review.semester.academic_year.name)
+        | Q(semester__academic_year=review.semester.academic_year,
+            semester__number__gt=review.semester.number))
+    for application in waiting:
+        ApplicationStep.objects.create(application=application, step=application.state,
+                                       done_by=actor, note=f'Withdrawn: {reason}'[:300])
+        application.state = Application.CANCELLED
+        application.decided_reason = reason
+        application.save(update_fields=['state', 'decided_reason', 'updated_at'])
+        cancelled.append(application)
+        logger.info('Withdrew %s\'s application for %s after a late result',
+                    review.profile.nactvet_reg_no, application.semester)
     return cancelled
 
 
@@ -916,6 +1026,7 @@ def plan_advance(semester):
             'profile_id': profile.id, 'reg_no': profile.nactvet_reg_no, 'name': profile.name,
             'outcome': outcome, 'from_level': level.name if level else None,
             'programme': programme.code if programme else None,
+            'programme_id': programme.id if programme else None,
         }
 
         if standing.status == StudentStanding.POSTPONED:
@@ -932,7 +1043,7 @@ def plan_advance(semester):
                             detail='No semester 2 until the failed module is passed')
             else:
                 move.update(action='continues', registers=True, to_level=level.name if level else None,
-                            to_semester=target_number, kind=SemesterRegistration.CONTINUING,
+                            to_level_id=level.id if level else None, to_semester=target_number, kind=SemesterRegistration.CONTINUING,
                             detail='Continues into semester 2')
         else:
             owed = repeats.get(profile.id, [])
@@ -943,10 +1054,11 @@ def plan_advance(semester):
                     action='repeats',
                     registers=bool(sem1_repeats),
                     to_level=level.name if level else None,
+                    to_level_id=level.id if level else None,
                     to_semester=Semester.SEM1 if sem1_repeats else Semester.SEM2,
                     kind=SemesterRegistration.REPEATING,
                     detail=('Repeats ' + ', '.join(sorted(r.module_code for r in owed))
-                            + ('' if sem1_repeats else ' — registers in semester 2')))
+                            + (' — to admissions' if sem1_repeats else ' — to admissions in semester 2')))
             else:
                 up = _next_level_cached(programme, level, levels_of)
                 if up is None:
@@ -954,8 +1066,8 @@ def plan_advance(semester):
                                 detail='Finished — awaiting clearance')
                 else:
                     move.update(action='promoted', registers=True, to_level=up.name,
-                                to_semester=Semester.SEM1, kind=SemesterRegistration.CONTINUING,
-                                detail=f'{level.name} → {up.name}')
+                                to_level_id=up.id, to_semester=Semester.SEM1, kind=SemesterRegistration.CONTINUING,
+                                detail=f'{level.name} → {up.name} — to admissions')
         moves.append(move)
 
     return {'moves': moves, 'blocked': blocked}
@@ -971,7 +1083,7 @@ def apply_advance(semester, target, *, actor=None):
     """
     summary = {'registered': 0, 'promoted': 0, 'repeating': 0, 'discontinued': 0,
                'completed': 0, 'deferred': 0, 'away': 0, 'returned': 0, 'enrolled': 0,
-               'students': []}
+               'applications': 0, 'students': []}
 
     people = students_of(semester)
     profiles = [profile for profile, _ in people]
@@ -1041,6 +1153,27 @@ def apply_advance(semester, target, *, actor=None):
                 f'{profile.nactvet_reg_no} has no programme or level recorded; '
                 'set it on the review before advancing.')
 
+        if semester.number == Semester.SEM2:
+            # A new academic year. The student is not registered here: they go
+            # to admissions — pay, records double-checks them, admission
+            # confirms they are here — and admission registers them.
+            from . import admissions
+            set_standing(profile,
+                         StudentStanding.REPEATING if kind == SemesterRegistration.REPEATING
+                         else StudentStanding.ACTIVE,
+                         actor=actor, semester=semester, class_level=to_level, programme=programme,
+                         return_year=target.academic_year if kind == SemesterRegistration.REPEATING else None,
+                         return_semester_number=target.number if kind == SemesterRegistration.REPEATING else None,
+                         reason=f'Handed to admissions for {target}.', known=standings)
+            if admissions.open_continuing(profile, target, programme=programme,
+                                          class_level=to_level, actor=actor):
+                summary['applications'] += 1
+            summary['students'].append({
+                'reg_no': profile.nactvet_reg_no, 'name': profile.name,
+                'kind': kind, 'level': to_level.name, 'modules': 0, 'awaiting_admission': True,
+            })
+            continue
+
         if profile.id in registered_already:
             registration = SemesterRegistration.objects.get(profile=profile, semester=target)
         else:
@@ -1093,6 +1226,9 @@ def returning_repeats(target):
                 profile=standing.profile, semester=target).exclude(
                 status=SemesterRegistration.CANCELLED).exists():
             continue
+        if standing.profile.applications.filter(semester=target).exclude(
+                state__in=['rejected', 'cancelled']).exists():
+            continue
         waiting.append((standing, repeats))
     return waiting
 
@@ -1107,6 +1243,24 @@ def register_returning_repeats(target, *, actor=None, summary=None):
         if programme is None or level is None:
             logger.warning('Cannot register %s for their repeat: no programme or level',
                            standing.profile.nactvet_reg_no)
+            continue
+        admitted_this_year = SemesterRegistration.objects.filter(
+            profile=standing.profile, semester__academic_year=target.academic_year).exclude(
+            status=SemesterRegistration.CANCELLED).exists()
+        if not admitted_this_year:
+            # Not yet admitted for this academic year: admissions registers them.
+            from . import admissions
+            application = admissions.open_continuing(
+                standing.profile, target, programme=programme, class_level=level, actor=actor)
+            if application is not None:
+                brought_back.append(application)
+                if summary is not None:
+                    summary['applications'] = summary.get('applications', 0) + 1
+                    summary['students'].append({
+                        'reg_no': standing.profile.nactvet_reg_no, 'name': standing.profile.name,
+                        'kind': SemesterRegistration.REPEATING, 'level': level.name,
+                        'modules': 0, 'awaiting_admission': True,
+                    })
             continue
         registration = SemesterRegistration.objects.create(
             profile=standing.profile, semester=target, programme=programme,

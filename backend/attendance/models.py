@@ -1451,6 +1451,15 @@ class Application(models.Model):
         help_text='Created when the admission officer admits them.')
     note = models.CharField(max_length=300, blank=True)
     decided_reason = models.CharField(max_length=300, blank=True)
+    # The admission office may keep a student waiting at its desk — for the
+    # items they still owe, say — rather than admit them now. Admitting them
+    # later lifts it.
+    on_hold = models.BooleanField(default=False)
+    hold_reason = models.CharField(max_length=300, blank=True)
+    held_at = models.DateTimeField(null=True, blank=True)
+    held_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='applications_held')
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='applications_opened')
@@ -1542,7 +1551,13 @@ class AdmissionRequirement(models.Model):
 
 
 class RequirementCheck(models.Model):
-    """Whether one student had one requirement, on one application."""
+    """Whether one student had one requirement, in one semester.
+
+    Checked by finance: at the finance desk when they are admitted, and again
+    in semester 2 for what is checked every semester — which has no
+    application, so a check belongs to the student and the semester, and to the
+    application only when there is one.
+    """
     HAS_IT = 'has_it'
     MISSING = 'missing'
     WAIVED = 'waived'
@@ -1552,7 +1567,10 @@ class RequirementCheck(models.Model):
         (WAIVED, 'Waived by the college'),
     ]
 
-    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='requirement_checks')
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='requirement_checks')
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='requirement_checks')
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, null=True, blank=True,
+                                    related_name='requirement_checks')
     requirement = models.ForeignKey(AdmissionRequirement, on_delete=models.PROTECT, related_name='checks')
     status = models.CharField(max_length=12, choices=STATUS_CHOICES)
     charge = models.ForeignKey(
@@ -1566,12 +1584,12 @@ class RequirementCheck(models.Model):
     class Meta:
         ordering = ['requirement__name']
         constraints = [
-            models.UniqueConstraint(fields=['application', 'requirement'],
-                                    name='one_check_per_requirement_per_application'),
+            models.UniqueConstraint(fields=['profile', 'semester', 'requirement'],
+                                    name='one_check_per_requirement_per_semester'),
         ]
 
     def __str__(self):
-        return f'{self.application_id} · {self.requirement} · {self.status}'
+        return f'{self.profile_id} · {self.semester_id} · {self.requirement} · {self.status}'
 
 
 class StudentDocument(models.Model):
@@ -1586,6 +1604,8 @@ class StudentDocument(models.Model):
     student's name and their results, so it belongs to them and to the offices
     that admit and keep the record.
     """
+    O_LEVEL = 'o_level'
+    A_LEVEL = 'a_level'
     CERTIFICATE = 'certificate'
     RESULT_SLIP = 'result_slip'
     BIRTH = 'birth_certificate'
@@ -1593,7 +1613,11 @@ class StudentDocument(models.Model):
     MEDICAL = 'medical'
     OTHER = 'other'
     KIND_CHOICES = [
-        (CERTIFICATE, 'Certificate'),
+        (O_LEVEL, 'O-level certificate (CSEE)'),
+        (A_LEVEL, 'A-level certificate (ACSEE)'),
+        # Kept under its old value so documents already filed keep their kind:
+        # an NTA level certificate, a diploma, anything else awarded.
+        (CERTIFICATE, 'Other certificate'),
         (RESULT_SLIP, 'Result slip'),
         (BIRTH, 'Birth certificate'),
         (IDENTITY, 'Identification'),
@@ -1826,6 +1850,13 @@ class ChargeType(models.Model):
         default=True,
         help_text='For a charge billed once, bill it again when a discontinued student is readmitted.',
     )
+    # The hostel fee. Charged to a student the college records as living in the
+    # hostel for the year — chosen at the finance desk, or granted on a hostel
+    # application — and to nobody else.
+    is_hostel = models.BooleanField(
+        default=False, verbose_name='Hostel fee',
+        help_text='Charged to students living in the hostel, and only to them.',
+    )
 
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1871,6 +1902,12 @@ class ChargeType(models.Model):
 
     @property
     def group_label(self):
+        # Each other fee is its own payment with its own invoice — the
+        # supplementary exam, the special exam, a repeat module, the TPH book —
+        # offered only to a student billed for it. Tuition and the direct costs
+        # are invoiced by their group.
+        if self.family == self.OTHER:
+            return self.name
         return self.invoice_group.strip() or self.get_family_display()
 
 
@@ -1954,6 +1991,242 @@ class FeeInstallment(models.Model):
 
     def __str__(self):
         return f'{self.fee_structure.charge_type} inst. {self.number} due {self.due_date}'
+
+
+class ResultWithholding(models.Model):
+    """The college keeping a student's results for a semester from them —
+    usually over unpaid fees — while the results themselves stand.
+
+    The portal shows "Withheld" for the semester instead of grades and GPA; the
+    semester review, the transcript and the offices read the results as usual.
+    Releasing it keeps the row, so who withheld what, when and why stays on
+    record. (The authority's own "*W*" is different: that is the authority
+    withholding, and it holds the review.)
+    """
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='result_withholdings')
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='result_withholdings')
+    reason = models.CharField(max_length=300, blank=True)
+    withheld_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='results_withheld')
+    withheld_at = models.DateTimeField(auto_now_add=True)
+    released_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='results_released')
+    released_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-withheld_at']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'semester'], condition=models.Q(released_at__isnull=True),
+                                    name='one_open_withholding_per_semester'),
+        ]
+
+    def __str__(self):
+        return f'{self.profile_id} · {self.semester_id} · {"released" if self.released_at else "withheld"}'
+
+
+class Postponement(models.Model):
+    """A student stopping for a while, with the Principal's leave.
+
+    Asked for from the portal, or written down by the records office from a
+    paper request. Postponing semester 1 is the whole year — they come back to
+    semester 1 next year; postponing semester 2 brings them back to semester 2.
+    Approval takes them off the semester(s), reverses the fees for the period
+    (never deleting a charge) and keeps what they paid as credit for the
+    return.
+    """
+    PENDING = 'pending'
+    APPROVED = 'approved'
+    DECLINED = 'declined'
+    WITHDRAWN = 'withdrawn'
+    STATUS_CHOICES = [(PENDING, 'Waiting for the Principal'), (APPROVED, 'Approved'),
+                      (DECLINED, 'Declined'), (WITHDRAWN, 'Withdrawn')]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='postponements')
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='postponements',
+                                 help_text='The semester they stop in.')
+    reason = models.TextField()
+    by_student = models.BooleanField(default=False)
+    entered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='postponements_entered')
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=PENDING)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='postponements_decided')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=300, blank=True)
+    return_year = models.ForeignKey(
+        AcademicYear, on_delete=models.SET_NULL, null=True, blank=True, related_name='postponed_returns')
+    return_semester_number = models.PositiveSmallIntegerField(null=True, blank=True)
+    fees_reversed = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.profile_id} · {self.semester} · {self.status}'
+
+
+class CompletionClearance(models.Model):
+    """The end of a student's time here: finance says their account is
+    settled and prints the statement, then the Principal declares them cleared
+    and they are archived — their portal closes, their record stays."""
+    profile = models.OneToOneField(StudentProfile, on_delete=models.CASCADE, related_name='completion')
+    finance_cleared_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='completions_finance_cleared')
+    finance_cleared_at = models.DateTimeField(null=True, blank=True)
+    balance_at_clearance = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    finance_note = models.CharField(max_length=300, blank=True)
+    declared_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='completions_declared')
+    declared_at = models.DateTimeField(null=True, blank=True)
+    note = models.CharField(max_length=300, blank=True)
+
+    def __str__(self):
+        return f'{self.profile_id} · finance {"yes" if self.finance_cleared_at else "no"} · ' \
+               f'declared {"yes" if self.declared_at else "no"}'
+
+
+class PaymentSchedule(models.Model):
+    """When a year's charges fall due — the college's "Fomu ya tarehe za awamu
+    za malipo", for new students or for continuing ones.
+
+    Each instalment (awamu) has a due date and, for every charge type, what
+    part of it falls due then: tuition 400,000 at the first, other charges
+    545,000 at the first and 350,000 at the second, the hostel fee 200,000 at
+    the first and at the fourth. New and continuing students pay the same fees
+    on different dates, so each has its own schedule. A charge type with no
+    amounts here keeps its fee structure's own instalments.
+    """
+    NEW = 'new'
+    CONTINUING = 'continuing'
+    ENTRY_CHOICES = [
+        (NEW, 'New students (level 4, and new entrants at levels 5 and 6)'),
+        (CONTINUING, 'Continuing students'),
+    ]
+
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.CASCADE, related_name='payment_schedules')
+    entry = models.CharField(max_length=20, choices=ENTRY_CHOICES)
+    note = models.CharField(max_length=300, blank=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='payment_schedules_updated')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['academic_year__name', 'entry']
+        constraints = [
+            models.UniqueConstraint(fields=['academic_year', 'entry'], name='one_payment_schedule_per_entry'),
+        ]
+
+    def __str__(self):
+        return f'{self.academic_year} · {self.get_entry_display()}'
+
+
+class PaymentStep(models.Model):
+    """One instalment — awamu — of a payment schedule."""
+    schedule = models.ForeignKey(PaymentSchedule, on_delete=models.CASCADE, related_name='steps')
+    number = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
+    due_date = models.DateField()
+    semester_number = models.PositiveSmallIntegerField(
+        default=1, validators=[MinValueValidator(1)],
+        help_text='The semester this instalment belongs to (muhula wa kwanza / wa pili).')
+
+    class Meta:
+        ordering = ['number']
+        constraints = [
+            models.UniqueConstraint(fields=['schedule', 'number'], name='one_payment_step_number'),
+        ]
+
+    def __str__(self):
+        return f'{self.schedule} · awamu {self.number} by {self.due_date}'
+
+
+class PaymentStepAmount(models.Model):
+    """What part of one charge type falls due at one instalment."""
+    step = models.ForeignKey(PaymentStep, on_delete=models.CASCADE, related_name='amounts')
+    charge_type = models.ForeignKey(ChargeType, on_delete=models.CASCADE, related_name='payment_step_amounts')
+    amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))])
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['step', 'charge_type'], name='one_amount_per_step_and_charge'),
+        ]
+
+    def __str__(self):
+        return f'{self.step} · {self.charge_type} {self.amount}'
+
+
+class StudentResidence(models.Model):
+    """Where a student lives for an academic year: at home (day) or in the
+    hostel. Decides whether the hostel fee is charged.
+
+    Stated at the finance desk when a student is admitted — a first year must
+    say — and carried into the next year for a continuing student. A day
+    student who wants a hostel place applies for one from the portal.
+    """
+    DAY = 'day'
+    HOSTEL = 'hostel'
+    RESIDENCE_CHOICES = [(DAY, 'Day'), (HOSTEL, 'Hostel')]
+
+    FINANCE_DESK = 'finance_desk'
+    CARRIED = 'carried'
+    APPLICATION = 'application'
+    SOURCE_CHOICES = [
+        (FINANCE_DESK, 'Stated at the finance desk'),
+        (CARRIED, 'Carried from last year'),
+        (APPLICATION, 'Hostel application granted'),
+    ]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='residences')
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='residences')
+    residence = models.CharField(max_length=10, choices=RESIDENCE_CHOICES)
+    from_semester_number = models.PositiveSmallIntegerField(default=1)
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default=FINANCE_DESK)
+    set_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='residences_set')
+    set_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-academic_year__name']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'academic_year'], name='one_residence_per_year'),
+        ]
+
+    def __str__(self):
+        return f'{self.profile_id} · {self.academic_year} · {self.residence}'
+
+
+class HostelApplication(models.Model):
+    """A day student asking for a hostel place, from the portal."""
+    PENDING = 'pending'
+    APPROVED = 'approved'
+    DECLINED = 'declined'
+    STATUS_CHOICES = [(PENDING, 'Waiting'), (APPROVED, 'Granted'), (DECLINED, 'Declined')]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='hostel_applications')
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='hostel_applications')
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='hostel_applications')
+    reason = models.CharField(max_length=500, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='hostel_applications_decided')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.profile_id} · {self.academic_year} · {self.status}'
 
 
 class StudentCharge(models.Model):
@@ -2146,10 +2419,16 @@ class Payment(models.Model):
     CRDB = 'crdb'
     MOBILE = 'mobile'
     CASH = 'cash'
+    # Not money arriving: money already paid, moved from charges the college
+    # reversed (a postponed year) onto the charges that replace them. Its
+    # allocations sum to nothing, so it adds no income — it only says which
+    # bill the money now settles.
+    CREDIT = 'credit'
     CHANNEL_CHOICES = [
         (CRDB, 'CRDB bank deposit'),
         (MOBILE, 'Mobile money'),
         (CASH, 'Cash at the office'),
+        (CREDIT, 'Credit carried forward'),
     ]
 
     SELF = 'self'
@@ -2203,9 +2482,13 @@ class Payment(models.Model):
         indexes = [models.Index(fields=['profile', '-payment_date'])]
         constraints = [
             # A payment credits, a reversal debits. Nothing may be zero, and a
-            # negative row must say which payment it undoes.
+            # negative row must say which payment it undoes — except a credit
+            # carried forward, which moves money already received and so adds
+            # nothing: it is zero by construction.
             models.CheckConstraint(
-                check=Q(reverses__isnull=True, amount__gt=0) | Q(reverses__isnull=False, amount__lt=0),
+                check=(Q(reverses__isnull=True, amount__gt=0)
+                       | Q(reverses__isnull=False, amount__lt=0)
+                       | Q(reverses__isnull=True, channel='credit', amount=0)),
                 name='payment_sign_matches_reversal',
             ),
         ]

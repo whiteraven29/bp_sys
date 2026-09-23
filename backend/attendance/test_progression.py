@@ -85,6 +85,16 @@ class ProgressionBase(TestCase):
             cat1_theory=ca, cat2_theory=ca, end_theory=end,
             supplementary_mark=supp, final_approved=approved, ca_approved=approved)
 
+    def admit_waiting(self, profile, semester):
+        """The application the year end opened goes finance → records →
+        admission, which is what registers the student."""
+        from . import admissions
+        from .models import Application
+        application = Application.objects.get(profile=profile, semester=semester)
+        while application.is_open:
+            admissions.complete_step(application, actor=self.officer)
+        return application
+
     def repeat_fee(self, year, level, amount='30000'):
         charge_type = ChargeType.objects.create(
             name='Repeat Module Fee', family=ChargeType.FEE,
@@ -362,11 +372,24 @@ class AdvanceTests(ProgressionBase):
         for review in progression.build_reviews(semester):
             progression.confirm_review(review, review.proposed, actor=self.officer)
 
-    def test_a_clear_student_moves_up_a_level_and_is_enrolled(self):
+    def test_a_clear_student_moves_up_a_level_through_admissions(self):
+        from .models import Application
         profile = self.clear_student('REG/020', self.level4)
         self.confirm_all(self.sem2)
 
         summary = self.advance()
+
+        # The new year is admission's to register: the student waits at finance
+        # at the level their results earned, and is not registered yet.
+        application = Application.objects.get(profile=profile, semester=self.next_sem1)
+        self.assertEqual(application.state, Application.FINANCE)
+        self.assertEqual(application.kind, Application.CONTINUING)
+        self.assertEqual(application.class_level, self.level5)
+        self.assertEqual(summary['applications'], 1)
+        self.assertFalse(SemesterRegistration.objects.filter(
+            profile=profile, semester=self.next_sem1).exists())
+
+        self.admit_waiting(profile, self.next_sem1)
 
         registration = SemesterRegistration.objects.get(profile=profile, semester=self.next_sem1)
         self.assertEqual(registration.class_level, self.level5)
@@ -390,6 +413,7 @@ class AdvanceTests(ProgressionBase):
         self.repeat_fee(self.next_year, self.level4)
 
         summary = self.advance()
+        self.admit_waiting(profile, self.next_sem1)
 
         registration = SemesterRegistration.objects.get(profile=profile, semester=self.next_sem1)
         self.assertEqual(registration.kind, SemesterRegistration.REPEATING)
@@ -470,22 +494,22 @@ class AdvanceTests(ProgressionBase):
         self.assertEqual(move['action'], 'promoted')
         self.assertEqual(move['to_level'], 'NTA Level 5')
 
-    def test_advancing_twice_does_not_enroll_anybody_twice(self):
+    def test_advancing_twice_opens_one_application(self):
+        from .models import Application
         profile = self.clear_student('REG/027', self.level4)
         self.confirm_all(self.sem2)
         self.advance()
 
         self.advance()
 
-        self.assertEqual(Student.objects.filter(
-            profile=profile, module__semester=self.next_sem1).count(), 1)
-        self.assertEqual(SemesterRegistration.objects.filter(
+        self.assertEqual(Application.objects.filter(
             profile=profile, semester=self.next_sem1).count(), 1)
 
     def test_a_module_added_after_registration_enrolls_the_class(self):
         profile = self.clear_student('REG/028', self.level4)
         self.confirm_all(self.sem2)
         self.advance()
+        self.admit_waiting(profile, self.next_sem1)
 
         late = self.module('PST05102', self.level5, self.next_sem1)
         progression.enroll_module(late)
@@ -622,7 +646,13 @@ class ProgressionApiTests(ProgressionBase):
         self.assertEqual(advanced.data['year'], '2026/2027')
         self.assertEqual(advanced.data['students']['promoted'], 1)
         self.assertEqual(advanced.data['modules_carried'], 1)
-        self.assertTrue(SemesterRegistration.objects.filter(
+        # Handed to admissions rather than registered by the advance.
+        self.assertEqual(advanced.data['students']['applications'], 1)
+        from .models import Application
+        self.assertTrue(Application.objects.filter(
+            profile=self.profile, semester__academic_year=self.next_year,
+            state=Application.FINANCE).exists())
+        self.assertFalse(SemesterRegistration.objects.filter(
             profile=self.profile, semester__academic_year=self.next_year).exists())
 
     def test_a_pending_student_is_left_for_the_officer_rather_than_confirmed_in_bulk(self):
@@ -774,6 +804,7 @@ class LateSupplementaryTests(ProgressionBase):
         progression.confirm_review(review, SemesterReview.PROVISIONAL, actor=self.officer,
                                    reason='Supplementary sat, marks not back.')
         progression.apply_advance(self.sem2, self.next_sem1, actor=self.officer)
+        self.admit_waiting(profile, self.next_sem1)
         promoted = SemesterRegistration.objects.get(profile=profile, semester=self.next_sem1)
         self.assertEqual(promoted.class_level, self.level5)
 
@@ -793,6 +824,29 @@ class LateSupplementaryTests(ProgressionBase):
         # Nothing they had done was deleted.
         self.assertTrue(Student.objects.filter(pk=passed.pk).exists())
         self.assertTrue(Student.objects.filter(profile=profile, module__semester=self.next_sem1).exists())
+
+    def test_a_late_failure_withdraws_an_application_still_waiting_at_admissions(self):
+        from .models import Application
+        profile = self.student('REG/044')
+        self.register(profile, self.sem2, self.level4)
+        self.grade(self.enrol(profile, self.module('PST04201', self.level4, self.sem2)), 85)
+        pending = self.grade(self.enrol(profile, self.module('PST04202', self.level4, self.sem2)), 40)
+        review = progression.build_reviews(self.sem2)[0]
+        progression.confirm_review(review, SemesterReview.PROVISIONAL, actor=self.officer,
+                                   reason='Marks not back.')
+        progression.apply_advance(self.sem2, self.next_sem1, actor=self.officer)
+        waiting = Application.objects.get(profile=profile, semester=self.next_sem1)
+        self.assertEqual(waiting.class_level, self.level5)
+
+        pending.supplementary_mark = 30
+        pending.save(update_fields=['supplementary_mark'])
+        progression.confirm_review(review, SemesterReview.REPEAT, actor=self.officer,
+                                   reason='Failed the supplementary.')
+
+        waiting.refresh_from_db()
+        self.assertEqual(waiting.state, Application.CANCELLED)
+        self.assertIn('supplementary', waiting.decided_reason)
+        self.assertEqual(review.deferred, [self.next_sem1.label])
 
     def test_a_confirmed_provisional_student_is_re_read_when_the_marks_arrive(self):
         profile = self.student('REG/041')
@@ -1071,7 +1125,9 @@ class AuthorityRepeatRuleTests(ProgressionBase):
 
         summary = progression.apply_advance(self.sem2, self.next_sem1, actor=self.officer)
 
+        # Back through admissions for the new year, billed the repeat rate at finance.
         self.assertEqual(summary['returned'], 1)
+        self.admit_waiting(profile, self.next_sem1)
         registration = SemesterRegistration.objects.get(profile=profile, semester=self.next_sem1)
         self.assertEqual(registration.kind, SemesterRegistration.REPEATING)
         self.assertEqual(registration.class_level, self.level4)
@@ -1096,7 +1152,9 @@ class AuthorityRepeatRuleTests(ProgressionBase):
 
         brought_back = progression.register_returning_repeats(self.next_sem2, actor=self.officer)
 
+        # Not admitted this year yet, so admissions registers them.
         self.assertEqual(len(brought_back), 1)
+        self.admit_waiting(profile, self.next_sem2)
         sitting = Student.objects.get(profile=profile, module__semester=self.next_sem2)
         self.assertEqual(sitting.module.code, 'PST04202')
         self.assertEqual(sitting.attempt, Student.REPEAT)
@@ -1117,10 +1175,9 @@ class AuthorityRepeatRuleTests(ProgressionBase):
         again = progression.register_returning_repeats(self.next_sem1, actor=self.officer)
 
         self.assertEqual(again, [])
-        self.assertEqual(SemesterRegistration.objects.filter(
+        from .models import Application
+        self.assertEqual(Application.objects.filter(
             profile=profile, semester=self.next_sem1).count(), 1)
-        self.assertEqual(Student.objects.filter(
-            profile=profile, module__semester=self.next_sem1).count(), 1)
 
 
 # ── what a student is shown of their results ─────────────────────────────────

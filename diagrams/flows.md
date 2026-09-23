@@ -705,3 +705,5 @@ Admission
 >[!note]
 >the college also expects to add new courses with different departments so make sure in your design currently this ias athered
 >
+
+
