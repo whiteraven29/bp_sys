@@ -230,3 +230,58 @@ class WithholdingTests(AuthorityBase):
         grades = {row['code']: row['grade'] for row in self.statements()[0]['modules']}
 
         self.assertEqual(grades['PST04102'], 'Withheld')
+
+
+class SupplementaryCountsAsCTests(AuthorityBase):
+    """A supplementary still to be sat counts as C in the GPA, whatever the
+    first sitting was: passing it earns a C, failing it is a repeat. So nobody
+    shows as discontinued before sitting the paper that may pass them."""
+
+    def gpa(self, profile):
+        return progression.evaluate(profile, self.sem1)['gpa']
+
+    def test_any_starred_grade_counts_as_c(self):
+        level6 = ClassLevel.objects.create(name='NTA Level 6', order=6)
+
+        points = {grade: parse_authority_grade(grade, self.level4)['points'] for grade in ['B*', 'C*', 'D*', 'F***']}
+
+        self.assertEqual(points, {'B*': 2, 'C*': 2, 'D*': 2, 'F***': 2})
+        self.assertEqual(parse_authority_grade('A*', level6)['points'], 2)
+
+    def test_a_pending_supplementary_does_not_make_a_student_discontinued(self):
+        profile, _ = self.student('NIT/30', 'Gift')
+        # Two D*s would be a GPA of 1.0 at face value — a discontinuation.
+        self.upload(self.exam, [('NIT/30', 'PST04101', 'D*'), ('NIT/30', 'PST04102', 'D*')])
+
+        outcome = progression.evaluate(profile, self.sem1)
+
+        self.assertEqual(outcome['gpa'], 2.0)
+        self.assertEqual(outcome['proposed'], SemesterReview.PENDING)
+        summary = self.exam.get(f'/api/results-summary/?semester_id={self.sem1.id}'
+                                f'&class_level_id={self.level4.id}').data
+        self.assertEqual(summary['students'][0]['remark'], 'SUPP')
+
+    def test_passing_the_supplementary_keeps_the_c_and_failing_it_is_a_repeat(self):
+        passed, _ = self.student('NIT/31', 'Hope')
+        failed, _ = self.student('NIT/32', 'Imani')
+        self.upload(self.exam, [('NIT/31', 'PST04101', 'A'), ('NIT/31', 'PST04102', 'F*'),
+                                ('NIT/32', 'PST04101', 'A'), ('NIT/32', 'PST04102', 'F*')])
+        self.assertEqual((self.gpa(passed), self.gpa(failed)), (3.0, 3.0))       # (4 + 2) / 2 meanwhile
+
+        # The authority's result after the supplementary.
+        self.upload(self.exam, [('NIT/31', 'PST04102', 'C'), ('NIT/32', 'PST04102', 'F')])
+
+        self.assertEqual(self.gpa(passed), 3.0)
+        self.assertEqual(progression.evaluate(failed, self.sem1)['proposed'], SemesterReview.REPEAT)
+
+    def test_marks_entered_here_follow_the_same_rule(self):
+        profile, (anatomy, maths) = self.student('NIT/33', 'Jabiri')
+        StudentResult.objects.create(student=anatomy, assign1=16, assign2=16, cat1_theory=16, cat2_theory=16,
+                                     end_theory=80, ca_approved=True, final_approved=True)
+        # A failed end exam: supplementary, not yet sat.
+        StudentResult.objects.create(student=maths, assign1=16, assign2=16, cat1_theory=16, cat2_theory=16,
+                                     end_theory=30, ca_approved=True, final_approved=True)
+
+        rows = {row['code']: row for row in progression.evaluate(profile, self.sem1)['modules']}
+
+        self.assertEqual((rows['PST04102']['status'], rows['PST04102']['points']), ('SUPP', 2))

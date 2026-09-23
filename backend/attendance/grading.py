@@ -50,6 +50,13 @@ def gpa_classification(gpa, class_level):
     return 'Pass'
 
 
+#: A supplementary still to be sat counts as C in the GPA: passing it earns a C
+#: whatever the first sitting was, and failing it is a repeat, not a lower
+#: grade. Counting it lower would show a student as discontinued before they
+#: have sat the paper that may pass them.
+SUPP_POINTS = 2
+
+
 def parse_authority_grade(value, class_level):
     """Translate the NACTE grade-key notation into the system outcome fields."""
     raw = str(value or '').strip().upper()
@@ -88,8 +95,10 @@ def parse_authority_grade(value, class_level):
         'A': 5 if is_level_six(class_level) else 4,
         'B+': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0,
     }
+    points = points_by_grade[grade]
     if failed_components:
         status, description = 'SUPP', 'Supplementary required by authority'
+        points = SUPP_POINTS
     elif grade in ('D', 'F'):
         # Below C is a fail, as it is for marks entered here: the module is
         # repeated. With stars it is a supplementary instead (above).
@@ -99,7 +108,7 @@ def parse_authority_grade(value, class_level):
     return {
         'raw': raw, 'grade': raw,
         'status': status,
-        'points': points_by_grade[grade],
+        'points': points,
         'description': description,
         'failed_components': failed_components,
     }
@@ -140,7 +149,7 @@ def result_outcome(result, serializer):
         if result.supplementary_mark is None:
             return {
                 'end_exam_mark': end_exam_mark, 'supplementary_required': True,
-                'status': 'SUPP', 'grade': None, 'grade_point': None,
+                'status': 'SUPP', 'grade': None, 'grade_point': SUPP_POINTS,
                 'grade_description': 'Supplementary required',
                 'official_total': final_total,
                 'failed_end_components': failed_components,

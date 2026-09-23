@@ -5793,7 +5793,9 @@ def download_final_results(request):
             nz(etw), nz(epw) if hp else 'N/A',
             nz(end_exam_total),
             nz(final), fmt(res.supplementary_mark), outcome['grade'] or '',
-            outcome['grade_point'] if outcome['grade_point'] is not None else '',
+            # A supplementary still to be sat has no grade yet; its C is only
+            # what the GPA counts meanwhile, not a result to print.
+            outcome['grade_point'] if outcome['grade_point'] is not None and pass_fail != 'SUPP' else '',
             pass_fail,
         ]
         ws.append(row)

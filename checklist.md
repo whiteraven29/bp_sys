@@ -12,7 +12,7 @@ thing is half done, say which half.
 - `[!]` blocked — what it is waiting for is written next to it
 
 Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py test attendance --settings=edutrack.test_settings`
-(728 passing, including `test_end_to_end`; everything after `b5d8556` is uncommitted).
+(732 passing, including `test_end_to_end`; everything after `b5d8556` is uncommitted).
 
 ---
 
@@ -187,6 +187,10 @@ Built 2026-09-21 (`attendance/passwords.py`, middleware, migration 0049). 17 tes
       pass rate
 - [x] Withhold / Release per student and semester: the portal says "Results withheld"
       instead of grades and GPA; the results stand; the record of who and why is kept
+- [x] **GPA while a supplementary is pending counts it as C** (2 points), whatever the first
+      sitting was (B*, C*, D*, F*…), in both marks and authority grades — so nobody shows as
+      discontinued before sitting a supplementary they may pass. After it: pass → C, fail →
+      repeat (F, 0). The results export leaves the grade point blank until then
 - [ ] Automatic withholding for unpaid fees (later)
 
 ## Deployment
