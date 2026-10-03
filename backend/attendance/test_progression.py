@@ -126,6 +126,10 @@ class EvaluateTests(ProgressionBase):
         # failed after its supplementary is zero.
         self.grade(self.enrol(profile, self.module('PST04201', self.level4, self.sem2)), ca=25, end=50)
         self.grade(self.enrol(profile, self.module('PST04202', self.level4, self.sem2)), 40, supp=30)
+        # Two passes at C as well: two of four failed is not more than half, so
+        # the GPA decides (more than half failed is a repeat whatever the GPA).
+        self.grade(self.enrol(profile, self.module('PST04291', self.level4, self.sem2)), 55)
+        self.grade(self.enrol(profile, self.module('PST04292', self.level4, self.sem2)), 55)
 
         outcome = progression.evaluate(profile, self.sem2)
 
@@ -239,6 +243,10 @@ class ConfirmTests(ProgressionBase):
         self.register(profile, self.sem2, self.level4)
         self.grade(self.enrol(profile, self.module('PST04201', self.level4, self.sem2)), ca=25, end=50)
         self.grade(self.enrol(profile, self.module('PST04202', self.level4, self.sem2)), 40, supp=30)
+        # Two passes at C as well: two of four failed is not more than half, so
+        # the GPA decides (more than half failed is a repeat whatever the GPA).
+        self.grade(self.enrol(profile, self.module('PST04291', self.level4, self.sem2)), 55)
+        self.grade(self.enrol(profile, self.module('PST04292', self.level4, self.sem2)), 55)
         next_year = AcademicYear.objects.create(name='2026/2027')
         review = progression.build_reviews(self.sem2)[0]
 
@@ -279,6 +287,10 @@ class ConfirmTests(ProgressionBase):
         self.register(profile, self.sem2, self.level4)
         self.grade(self.enrol(profile, self.module('PST04201', self.level4, self.sem2)), ca=25, end=50)
         self.grade(self.enrol(profile, self.module('PST04202', self.level4, self.sem2)), 40, supp=30)
+        # Two passes at C as well: two of four failed is not more than half, so
+        # the GPA decides (more than half failed is a repeat whatever the GPA).
+        self.grade(self.enrol(profile, self.module('PST04291', self.level4, self.sem2)), 55)
+        self.grade(self.enrol(profile, self.module('PST04292', self.level4, self.sem2)), 55)
         review = progression.build_reviews(self.sem2)[0]
 
         progression.confirm_review(review, review.proposed, actor=self.officer,
@@ -432,6 +444,8 @@ class AdvanceTests(ProgressionBase):
         self.register(profile, self.sem2, self.level4)
         failed = self.enrol(profile, self.module('PST04201', self.level4, self.sem2))
         result = self.grade(failed, 40, supp=30)
+        # One pass at C: one of two failed is not more than half; GPA 1.0.
+        self.grade(self.enrol(profile, self.module('PST04291', self.level4, self.sem2)), 55)
         self.confirm_all(self.sem2)
 
         summary = self.advance()
@@ -549,27 +563,91 @@ class RepeatSittingTests(ProgressionBase):
         self.assertEqual(old.supplementary_mark, 30)
         self.assertEqual(old.student, failed)
 
-    def test_failing_the_repeat_again_keeps_it_open(self):
-        profile = self.student('REG/031')
+    def repeat_sitting(self, reg_no, *, supp, others=()):
+        """A student who failed PST04101 last year, sitting it again this year
+        (beside any other modules given as (code, mark))."""
+        profile = self.student(reg_no)
         self.register(profile, self.sem1, self.level4)
         failed = self.enrol(profile, self.module('PST04101', self.level4, self.sem1))
         self.grade(failed, 40, supp=30)
         progression.confirm_review(
-            progression.build_reviews(self.sem1)[0], SemesterReview.REPEAT, actor=self.officer)
+            [r for r in progression.build_reviews(self.sem1) if r.profile_id == profile.id][0],
+            SemesterReview.REPEAT, actor=self.officer)
 
-        next_year = AcademicYear.objects.create(name='2026/2027')
-        next_sem1 = Semester.objects.create(academic_year=next_year, number=1)
-        sitting = self.enrol(profile, self.module('PST04101', self.level4, next_sem1),
-                             attempt=Student.REPEAT, repeat_of=failed)
-        self.grade(sitting, 40, supp=35)
+        next_year = AcademicYear.objects.get_or_create(name='2026/2027')[0]
+        next_sem1 = Semester.objects.get_or_create(academic_year=next_year, number=1)[0]
+        sitting = self.enrol(profile, Module.objects.get_or_create(
+            code='PST04101', semester=next_sem1,
+            defaults={'name': 'PST04101', 'teacher': 'T', 'class_level': self.level4,
+                      'programme': self.pst, 'credits': 1})[0],
+            attempt=Student.REPEAT, repeat_of=failed)
+        self.grade(sitting, 40, supp=supp)
+        for code, mark in others:
+            self.grade(self.enrol(profile, self.module(code, self.level4, next_sem1)), mark)
         self.register(profile, next_sem1, self.level4, kind=SemesterRegistration.REPEATING)
+        return profile, next_sem1, sitting
+
+    def test_failing_the_repeat_again_is_a_discontinuation(self):
+        """The college's rule (3 October 2026): a failed repeat sitting is a
+        discontinuation, not another repeat. Nothing is deleted."""
+        profile, next_sem1, sitting = self.repeat_sitting('REG/031', supp=35)
 
         review = [r for r in progression.build_reviews(next_sem1) if r.profile_id == profile.id][0]
+        self.assertEqual(review.proposed, SemesterReview.DISCONTINUED)
+        self.assertIn('repeat', review.proposed_reason)
         progression.confirm_review(review, review.proposed, actor=self.officer)
 
-        repeat = OutstandingRepeat.objects.get(profile=profile)
-        self.assertEqual(repeat.status, OutstandingRepeat.OPEN)
-        self.assertEqual(repeat.attempt_enrollment, sitting)
+        profile.refresh_from_db()
+        self.assertEqual(profile.standing.status, StudentStanding.DISCONTINUED)
+        self.assertTrue(StudentResult.objects.filter(student=sitting, supplementary_mark=35).exists())
+
+    def test_whatever_the_gpa(self):
+        profile, next_sem1, _ = self.repeat_sitting(
+            'REG/032', supp=35, others=(('PST04191', 85), ('PST04192', 85)))
+
+        outcome = progression.evaluate(profile, next_sem1)
+
+        self.assertGreaterEqual(outcome['gpa'], progression.PASS_GPA)
+        self.assertEqual(outcome['proposed'], SemesterReview.DISCONTINUED)
+        # The exam office's summary says the same.
+        summary = progression.results_summary(next_sem1, self.level4)
+        self.assertEqual([row['remark'] for row in summary['students']], ['DISCO'])
+
+    def test_a_supplementary_still_to_sit_at_the_repeat_is_waited_for(self):
+        profile, next_sem1, _ = self.repeat_sitting('REG/033', supp=None)
+
+        self.assertEqual(progression.evaluate(profile, next_sem1)['proposed'], SemesterReview.PENDING)
+
+    def test_a_readmitted_semester_is_sat_afresh_as_first_sittings(self):
+        """Discontinued, then readmitted: the semester is sat again from the
+        start, every module a first sitting under first-sitting rules — the
+        repeat owed for it is closed, not carried into the readmission."""
+        profile, next_sem1, _ = self.repeat_sitting('REG/035', supp=35)
+        review = [r for r in progression.build_reviews(next_sem1) if r.profile_id == profile.id][0]
+        progression.confirm_review(review, review.proposed, actor=self.officer)
+        self.assertFalse(progression.open_repeats(profile).exists())
+
+        again_year = AcademicYear.objects.create(name='2027/2028')
+        again_sem1 = Semester.objects.create(academic_year=again_year, number=1)
+        for code in ('PST04101', 'PST04102', 'PST04103'):
+            Module.objects.create(code=code, name=code, teacher='T', class_level=self.level4,
+                                  semester=again_sem1, programme=self.pst, credits=1)
+        readmitted = self.register(profile, again_sem1, self.level4, kind=SemesterRegistration.READMISSION)
+        progression.enroll_registration(readmitted)
+
+        sittings = {e.module.code: e for e in Student.objects.filter(profile=profile, module__semester=again_sem1)}
+        self.assertEqual({e.attempt for e in sittings.values()}, {Student.NORMAL})
+        # Failing it again is a first-sitting failure — one of three, so a
+        # supplementary — not the discontinuation a failed repeat would be.
+        self.grade(sittings['PST04101'], 40)
+        self.grade(sittings['PST04102'], 80)
+        self.grade(sittings['PST04103'], 80)
+        self.assertEqual(progression.evaluate(profile, again_sem1)['proposed'], SemesterReview.PENDING)
+
+    def test_passing_the_repeat_settles_it(self):
+        profile, next_sem1, sitting = self.repeat_sitting('REG/034', supp=55)
+        review = [r for r in progression.build_reviews(next_sem1) if r.profile_id == profile.id][0]
+        self.assertNotEqual(review.proposed, SemesterReview.DISCONTINUED)
 
 
 # ── the API around it ─────────────────────────────────────────────────────────
@@ -659,6 +737,8 @@ class ProgressionApiTests(ProgressionBase):
         waiting = self.student('REG/101')
         self.register(waiting, self.sem2, self.level4)
         self.grade(self.enrol(waiting, self.module('PST04202', self.level4, self.sem2)), 40)
+        # A pass beside it: one supplementary of two is not more than half.
+        self.grade(self.enrol(waiting, self.module('PST04291', self.level4, self.sem2)), 80)
         self.exam.post('/api/semester-reviews/build/', {}, format='json')
 
         response = self.exam.post('/api/semester-reviews/confirm-proposed/', {}, format='json')
@@ -1021,6 +1101,30 @@ class AuthorityRepeatRuleTests(ProgressionBase):
         # The whole year's fees used to be raised on top of the repeat rate.
         self.assertNotIn(tuition.id, charges)
 
+    def test_a_repeat_semester_also_bills_the_repeaters_direct_cost(self):
+        profile = self.student('REG/063')
+        failed = self.enrol(profile, self.module('PST04101', self.level4, self.sem1))
+        OutstandingRepeat.objects.create(
+            profile=profile, module_code='PST04101', module_name='PST04101',
+            class_level=self.level4, semester_number=1,
+            origin_semester=self.sem1, origin_enrollment=failed)
+        self.module('PST04101', self.level4, self.next_sem1)
+        self.repeat_fee(self.next_year, self.level4, amount='200000')
+        direct = ChargeType.objects.create(name='Repeat direct costs', family=ChargeType.DIRECT_COST,
+                                           applies=ChargeType.ON_REQUEST, for_repeaters=True)
+        structure = FeeStructure.objects.create(
+            charge_type=direct, class_level=self.level4, academic_year=self.next_year,
+            amount=Decimal('280000'), billing_period=FeeStructure.ACADEMIC_YEAR, installments=1)
+        finance.set_installment_schedule(structure, [date(2026, 11, 30)])
+        registration = self.register(profile, self.next_sem1, self.level4,
+                                     kind=SemesterRegistration.REPEATING)
+
+        progression.enroll_registration(registration, actor=self.officer)
+
+        billed = sorted(StudentCharge.objects.filter(profile=profile, academic_year=self.next_year)
+                        .values_list('amount', flat=True))
+        self.assertEqual(billed, [Decimal('200000.00'), Decimal('280000.00')])
+
     def test_the_repeat_sitting_starts_with_new_marks(self):
         profile = self.student('REG/054')
         failed = self.enrol(profile, self.module('PST04101', self.level4, self.sem1))
@@ -1241,6 +1345,9 @@ class ResultStatementTests(ProgressionBase):
         # both of these are failures and both are named.
         self.sit('PST04201', self.level4, self.sem2, ca=25, end=50)
         self.sit('PST04202', self.level4, self.sem2, 40, supp=30)
+        # Two of four failed — not more than half — so the GPA (1.25) decides.
+        self.sit('PST04291', self.level4, self.sem2, 55)
+        self.sit('PST04292', self.level4, self.sem2, 55)
 
         statement = self.statements().context['result_statements'][0]
 
@@ -1260,12 +1367,28 @@ class ResultStatementTests(ProgressionBase):
     def test_each_semester_is_its_own_statement(self):
         self.sit('PST04101', self.level4, self.sem1, 80)
         self.sit('PST04201', self.level4, self.sem2, 40)
+        self.sit('PST04291', self.level4, self.sem2, 80)     # one supplementary of two
 
         statements = self.statements().context['result_statements']
 
         self.assertEqual([s['label'] for s in statements], [self.sem1.label, self.sem2.label])
         self.assertEqual(statements[0]['remark'], 'First Class')
         self.assertEqual(statements[1]['remark'], 'SUPP')
+
+    def test_more_than_half_failed_reads_as_repeat(self):
+        """The same rule as the review: more than half of the semester failed
+        reads REPEAT, naming every failed module, with no supplementary."""
+        self.sit('PST04201', self.level4, self.sem2, 40)              # supplementary
+        self.sit('PST04202', self.level4, self.sem2, 40)              # supplementary
+        self.sit('PST04203', self.level4, self.sem2, 80)
+
+        statement = self.statements().context['result_statements'][0]
+
+        self.assertEqual(statement['remark'], 'REPEAT')
+        self.assertEqual(statement['comment'], 'PST04201, PST04202')
+        # Straight to repeat: the failed modules count as they are (D, 1
+        # point), not as the C a supplementary candidate is given.
+        self.assertEqual(statement['gpa'], 2.0)                      # (1 + 1 + 4) / 3
 
     def test_no_mark_is_sent_to_the_student_with_a_final_result(self):
         self.sit('PST04201', self.level4, self.sem2, 84)
@@ -1437,3 +1560,4 @@ class AfterTheAdvanceTests(ProgressionBase):
         found = client.get(f'/api/semester-reviews/?semester_id={self.sem2.id}&search=zawadi')
 
         self.assertEqual([row['reg_no'] for row in found.data['results']], ['REG/700'])
+

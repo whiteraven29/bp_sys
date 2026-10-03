@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Course — EduTrack</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+  /* The same tokens as the student portal, so both read as one system. */
+  :root {
+    --bg: #eceff3; --surface: #ffffff; --surface-2: #f3f5f7; --line: #ccd4dc;
+    --text: #2b3440; --muted: #71808f; --blue: #1565c0; --green: #16a34a;
+    --green-soft: #eaf7ef; --amber: #b45309; --amber-soft: #fdf3e7; --red: #dc2626;
+    --red-soft: #fdeded; --radius: 3px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10151b; --surface: #171d26; --surface-2: #1e2632; --line: #303b4a;
+      --text: #e3e9f0; --muted: #93a2b5; --blue: #4a9eff; --green: #35c46a;
+      --green-soft: #16301f; --amber: #e0a03a; --amber-soft: #33270f; --red: #ff6b6b;
+      --red-soft: #351b1b; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10151b; --surface: #171d26; --surface-2: #1e2632; --line: #303b4a;
+    --text: #e3e9f0; --muted: #93a2b5; --blue: #4a9eff; --green: #35c46a;
+    --green-soft: #16301f; --amber: #e0a03a; --amber-soft: #33270f; --red: #ff6b6b;
+    --red-soft: #351b1b; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+         font-size: 15px; color: var(--text); background: var(--bg); }
+  header { background: var(--blue); color: #fff; padding: 14px 16px; display: flex;
+           align-items: center; justify-content: space-between; gap: 12px; }
+  header strong { font-size: 1.05rem; }
+  header a { color: #fff; text-decoration: none; border: 1px solid rgba(255,255,255,.5);
+             padding: 6px 12px; border-radius: var(--radius); font-size: .85rem; }
+  main { max-width: 960px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 18px; font-size: .9rem; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+           padding: 16px; margin-bottom: 16px; }
+  .panel h2 { font-size: 1rem; margin: 0 0 12px; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0;
+           border: 1px solid var(--line); }
+  .facts div { padding: 10px 12px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .facts span { display: block; font-size: .75rem; color: var(--muted); }
+  .facts strong { font-size: 1rem; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { background: var(--surface-2); font-weight: 600; }
+  .ok { color: var(--green); } .owe { color: var(--red); }
+  .notice { padding: 10px 12px; border-radius: var(--radius); margin-bottom: 12px; font-size: .9rem; }
+  .notice.ok { background: var(--green-soft); } .notice.err { background: var(--red-soft); color: var(--red); }
+  .notice.warn { background: var(--amber-soft); color: var(--amber); }
+  form .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; max-width: 360px; }
+  input { padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius);
+          background: var(--surface); color: var(--text); font: inherit; }
+  button { background: var(--blue); color: #fff; border: 0; padding: 8px 14px;
+           border-radius: var(--radius); font: inherit; cursor: pointer; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <strong><i class="bi bi-mortarboard"></i> EduTrack · My Course</strong>
+  <a href="{% url 'student-logout' %}">Sign out</a>
+</header>
+<main>
+  <h1>{{ profile.name }}</h1>
+  <p class="sub">Registration No. {{ profile.college_id|default:profile.nactvet_reg_no }}{% if profile.nva_number %} · NVA No. {{ profile.nva_number }}{% endif %}</p>
+
+  {% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
+  {% if error %}<div class="notice err">{{ error }}</div>{% endif %}
+
+  {% if must_change %}
+  <section class="panel">
+    <h2>Choose your own password</h2>
+    <div class="notice warn">The password you were given at admission is temporary. Choose your own before going on.</div>
+    <form method="post">{% csrf_token %}
+      <div class="field"><label for="cp">Current password</label><input id="cp" type="password" name="current_password" required autocomplete="current-password"></div>
+      <div class="field"><label for="np">New password</label><input id="np" type="password" name="new_password" required autocomplete="new-password"></div>
+      <p class="muted" style="font-size:.82rem;">At least 8 characters, with a capital letter, a small letter, a number and a symbol.</p>
+      <button type="submit">Save password</button>
+    </form>
+  </section>
+  {% else %}
+
+  <section class="panel">
+    <h2>My course</h2>
+    {% if enrollment %}
+    <div class="facts">
+      <div><span>Course</span><strong>{{ enrollment.intake.programme.name }}</strong></div>
+      <div><span>Intake</span><strong>{{ enrollment.intake }}</strong></div>
+      <div><span>Runs</span><strong>{{ enrollment.intake.starts_on|date:"j M Y" }} – {{ enrollment.intake.ends_on|date:"j M Y" }}</strong></div>
+      <div><span>Status</span><strong>{{ enrollment.get_status_display }}</strong></div>
+      {% if enrollment.nva_level %}<div><span>NVA level</span><strong>Level {{ enrollment.nva_level }}</strong></div>{% endif %}
+      <div><span>Living</span><strong>{{ enrollment.get_residence_display }}</strong></div>
+    </div>
+    {% else %}<p class="muted">No course on record yet.</p>{% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>What I owe</h2>
+    <div class="facts" style="margin-bottom:12px;">
+      <div><span>Billed</span><strong>{{ billed|floatformat:"2g" }}</strong></div>
+      <div><span>Still owing</span><strong class="{% if owing > 0 %}owe{% else %}ok{% endif %}">{{ owing|floatformat:"2g" }}</strong></div>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fee</th><th>Due</th><th>Amount</th><th>Still owing</th><th>Pay into</th></tr></thead>
+      <tbody>
+      {% for row in charges %}
+        <tr><td>{{ row.name }}</td><td>{{ row.due|date:"j M Y" }}</td><td>{{ row.amount|floatformat:"2g" }}</td>
+            <td class="{% if row.balance > 0 %}owe{% else %}ok{% endif %}">{{ row.balance|floatformat:"2g" }}</td>
+            <td>{{ row.account|default:"—" }}</td></tr>
+      {% empty %}<tr><td colspan="5" class="muted">Nothing billed yet.</td></tr>{% endfor %}
+      </tbody>
+    </table></div>
+    <p class="muted" style="font-size:.82rem;margin:10px 0 0;">Pay at the bank, then bring the slip to the Accounts Office.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Modules</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Code</th><th>Module</th>{% if enrollment.nva_level %}<th>Level</th>{% endif %}</tr></thead>
+      <tbody>
+      {% for m in modules %}<tr><td>{{ m.code }}</td><td>{{ m.name }}</td>{% if enrollment.nva_level %}<td>{{ m.nva_level|default:"—" }}</td>{% endif %}</tr>
+      {% empty %}<tr><td colspan="3" class="muted">The course coordinator has not listed the modules yet.</td></tr>{% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="panel">
+    <h2>My details</h2>
+    <div class="facts">
+      <div><span>Phone</span><strong>{{ profile.phone|default:"—" }}</strong></div>
+      <div><span>Gender</span><strong>{{ profile.get_gender_display|default:"—" }}</strong></div>
+      <div><span>Date of birth</span><strong>{{ profile.date_of_birth|date:"j M Y"|default:"—" }}</strong></div>
+      {% for kin in next_of_kin %}<div><span>Next of kin</span><strong>{{ kin.name }}</strong> <span>{{ kin.get_relationship_display }} · {{ kin.phone }}</span></div>{% endfor %}
+    </div>
+    <p class="muted" style="font-size:.82rem;margin:10px 0 0;">The records office keeps these details. If something is wrong, take it to them.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Change my password</h2>
+    <form method="post">{% csrf_token %}
+      <div class="field"><label for="cp2">Current password</label><input id="cp2" type="password" name="current_password" required autocomplete="current-password"></div>
+      <div class="field"><label for="np2">New password</label><input id="np2" type="password" name="new_password" required autocomplete="new-password"></div>
+      <button type="submit">Save password</button>
+    </form>
+  </section>
+  {% endif %}
+</main>
+</body>
+</html>

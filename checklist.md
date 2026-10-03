@@ -12,52 +12,75 @@ thing is half done, say which half.
 - `[!]` blocked — what it is waiting for is written next to it
 
 Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py test attendance --settings=edutrack.test_settings`
-(732 passing, including `test_end_to_end`; everything after `b5d8556` is uncommitted).
+(864 passing, including `test_end_to_end`, `test_offices` and `test_records_health`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
 
 ---
 
-## At a glance (23 September 2026)
+## At a glance (2 October 2026)
 
 ### Done
 
-| Area | What it gives the college | Committed? |
+| Area | What it gives the college | Committed / live? |
 |---|---|---|
 | Phase 1 | Departments, programmes, fees by programme, college ID import | yes — `e1ec004` |
 | Phase 3a | Semester review (propose → confirm), repeats, discontinuation, supplementary rules, year-end advance, module carry-forward, 500-student scale | yes — `f491501`, `0b86e96` |
 | Password policy | Six-month passwords, expiry shown on every dashboard, forced change, admin reset | yes — `b5d8556` |
-| Phase 2 — admissions | First year: intake → records → finance → admission; continuing: finance → records → admission; NACTVET number, college ID, portal PIN, holds | partly — the base in `b5d8556`, the rest below uncommitted |
-| Offices | Each office sees only its own desks and menus; the exam officer is kept out of admissions and records; the Principal sees everything | no |
-| Student record | Records keeps all details and next of kin; students see them in My Profile; O-level / A-level certificate uploads | no |
-| Required items | TPH book, calculator, rim paper, insurance: defined by admission, checked by finance, a debt and never a hold; semester 2 recheck; the admission desk holds or admits | no |
-| Payment schedule | The awamu form as an editable template per year (new / continuing, day / hostel), `seed_payment_schedule`, copy to next year; registering needs the first instalment | no |
-| Hostel | Day or hostel stated at the finance desk; students apply from the portal; finance grants or declines | no |
-| Phase 3b | Postponement (portal or paper request, the Principal decides, fees reset, credit carried to the return); finishing (statement of every year, finance clears, the Principal declares, archived); standing banner on the portal | no |
-| Invoices | Tuition fee, direct costs, and one invoice for each other fee (supplementary, special, repeat module, TPH…) | no |
-| Authority results | Upload fixed: D and F are fails, only the chosen semester is written, only the exam office uploads. Results Summary (GPAs, pass / supp / repeat / disco counts, module pass rates). Manual **Withhold** button: the portal shows "Withheld" instead of grades; `*W*` / `*N*` read as words | no |
-| Testing and release | End-to-end test of a student's whole year; release guide `ops/guides/06-release-2026-27.md` | no |
+| Phase 2 — admissions | First year: intake → records → finance → admission; continuing: finance → records → admission; NACTVET number, college ID, portal PIN, holds | committed (`b5d8556`, `2b737db`, `75cd214`) · not live |
+| Offices | Each office sees only its own desks and menus; the exam officer is kept out of admissions and records; the Principal sees everything | committed · not live |
+| Student record | Records keeps all details and next of kin; students see them in My Profile; O-level / A-level certificate uploads | committed · not live |
+| Required items | TPH book, calculator, rim paper, insurance: defined by admission, checked by finance, a debt and never a hold; semester 2 recheck; the admission desk holds or admits | committed · not live |
+| Payment schedule | The awamu form as an editable template per year (new / continuing, day / hostel), `seed_payment_schedule`, copy to next year; registering needs the first instalment | committed · not live |
+| Hostel | Day or hostel stated at the finance desk; students apply from the portal; finance grants or declines | committed · not live |
+| Phase 3b | Postponement (portal or paper request, the Principal decides, fees reset, credit carried to the return); finishing (statement of every year, finance clears, the Principal declares, archived); standing banner on the portal | committed · not live |
+| Invoices | Tuition fee, direct costs, and one invoice for each other fee (supplementary, special, repeat module, TPH…) | committed · not live |
+| Authority results | Upload fixed: D and F are fails, only the chosen semester is written, only the exam office uploads. Results Summary (GPAs, pass / supp / repeat / disco counts, module pass rates). Manual **Withhold** button: the portal shows "Withheld" instead of grades; `*W*` / `*N*` read as words | committed · not live |
+| Testing and release | End-to-end test of a student's whole year; release guide `ops/guides/06-release-2026-27.md` | committed · not live |
+| College offices | From the org chart: DPARC (all academic, confirms reviews, advances the year, told of postponements), DPFPA (executive finance summary, college property), ICT officer (accounts, passwords, open roles; Django admin with every table), the exam officer as an office of its own (no accounts, no advance; examinations only — modules, enrollments, staff, services and sick records are the HOD's, DPARC's and the Principal's). Senior roles only from the Principal, every change logged. Marks go by module: whoever teaches it enters its CA. Migration 0055 keeps today's exam officer working. Checked: 39 new tests, every office signed in and its menus, landing page and buttons checked in a browser | **not committed** · not live |
 
 ### Waiting list, in order
 
-1. **Finance expenses** — the next piece of work: categories, a yearly budget, spending,
-   and an income and expense summary. Needs your answer: who approves spending, and up to
-   what amount?
-2. **Commit and deploy** (you) — follow `ops/guides/06-release-2026-27.md`. Add the new
-   untracked files; migrations 0050–0054 aren't committed yet.
-3. **Before 12 October, in the app** (no code):
+1. **VETA courses — skeleton built 3 Oct (not committed).** Define a course (short, or NVA
+   Level I–III), its fees and instalments, the VETA ID pattern, intakes; admit through the
+   four desks; bill; the student's own portal; the course coordinator's modules. Next: test
+   marks and attendance (before the first tests, ~mid-November), completion and certificate
+   numbers (before ~19 January). Still open in `diagrams/questions.md`: Q8 what must be paid
+   before starting (admission sees what is owed but is not blocked), QV9 CRDB or GePG.
+2. **Finance expenses — built 3 Oct (not committed).** Categories and yearly budgets;
+   the accountant requests, the Principal or DPFPA approves (one is enough) or queries it
+   and the accountant answers, the accountant pays; office funds or petty cash (a float
+   with top-ups, paid in cash, never beyond it); reasons for rejections, cancellations and
+   over-budget approvals; receipts; audit trail; Executive Summary ▸ Spending.
+2a. **Student record and repeaters — built 3 Oct (not committed).** Form Four index
+   number (required for a PST first year), gender required at the VETA desk too, health
+   records on verified medical certificates read by the new Dean of Students role; a
+   repeater pays 280,000 once a year plus 200,000 per module (set by hand on a server
+   that already has its fees: release guide C4a). Open: `diagrams/questions.md` Q25–Q29.
+3. **Appointment letters** — waiting on `diagrams/questions.md` Q21–Q22 (which roles, and
+   how the letters are handled). Until then the Principal gives senior roles in User
+   Accounts.
+4. **Deploy** (you, when the remaining adjustments are done) — follow
+   `ops/guides/06-release-2026-27.md`, including C1–C2: the Principal gives you the ICT
+   Officer role (Django admin comes with it) and creates DPARC and DPFPA; untick
+   superuser on any old shared account. Committed up to `75cd214`; the
+   offices change is still to commit.
+5. **Before 12 October, in the app** (no code):
    - the accountant confirms which charges make up the new students' 350,000 second
      instalment;
    - the accountant creates the TPH Book / Calculator / Rim Paper charge types and
      rates; the admission officer adds them, and Insurance, as required items;
    - the admission window, and the admission and records officer accounts;
+   - the exam officer opens the CA mark-entry window before tutors enter CA (the sheet's
+     Save now keeps to it);
    - continuing students queued at finance, and existing hostel students marked Hostel.
-4. **Later (you said):** withholding results automatically for students with unpaid fees —
+6. **Later (you said):** withholding results automatically for students with unpaid fees —
    for now it is the manual Withhold button in Results Summary.
-5. **Later, not asked for yet:** moving out of the hostel mid-year; a library;
+7. **Later, not asked for yet:** moving out of the hostel mid-year; a library;
    a read-only fee summary on the Departments page; online applications (the college's
    current system can't be reached from here).
-6. **Blocked:** removing the old finance tables needs the production row counts.
-7. **Server:** a restore drill on the real server; a fresh Ansible `--check` run.
-8. **Open question:** your certificate message stopped at "…ordinary level or advance
+8. **Blocked:** removing the old finance tables needs the production row counts.
+9. **Server:** a restore drill on the real server; a fresh Ansible `--check` run.
+10. **Open questions:** `diagrams/questions.md` (short courses Q1–Q19, offices Q20–Q24,
+   records, repeaters and petty cash Q25–Q29). And: your certificate message stopped at "…ordinary level or advance
    level and". What was the rest?
 
 ---

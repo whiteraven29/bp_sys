@@ -440,6 +440,8 @@
      reference's results tables — not a rounded card with hairline rows. */
   .table-wrap { overflow-x: auto; border-radius: 0; border: 0; -webkit-overflow-scrolling: touch; }
   table { width: 100%; border-collapse: collapse; font-size: .82rem; min-width: 520px; }
+  /* A two- or three-column summary fits its column instead of scrolling. */
+  table.compact { min-width: 0; }
   thead tr { background: var(--surface2); }
   th { padding: 8px 11px; text-align: left; font-size: .8rem; font-weight: 600; color: var(--text); border: 1px solid var(--border); white-space: nowrap; }
   td { padding: 7px 11px; border: 1px solid var(--border); vertical-align: middle; }
@@ -542,6 +544,8 @@
      show the secretary a form editor they have no business in, so the section
      switch takes cards away and leaves showing them to whoever owns them. */
   #page-forms [data-forms-section]:not(.sec-on) { display: none !important; }
+  #page-status [data-status-section]:not(.sec-on) { display: none !important; }
+  #page-executive [data-exec-section]:not(.sec-on) { display: none !important; }
 
   /* The secretary answers what students have asked the college for and prints
      the approved document. Nothing else on this screen is their work. */
@@ -549,8 +553,7 @@
      watching how its students are doing — but does not decide them. Marks,
      approvals and exam declarations stay with the examination officer, the way
      money and college property already stay outside every admin account. */
-  body.is-hod .exam-only,
-  body.is-hod .exam-write { display: none !important; }
+  body.is-hod .exam-only { display: none !important; }
   body:not(.is-hod) .hod-notice { display: none !important; }
   .hod-notice { display: flex; align-items: flex-start; gap: 10px; padding: 11px 16px; margin-bottom: 14px;
     border: 1px solid #cfe0f5; border-left: 3px solid var(--accent); border-radius: 4px;
@@ -583,8 +586,14 @@
   body.is-records:not(.is-admin) .academic-only { display: none !important; }
   /* Departments are changed by the people who hand out roles — the Principal
      and the examination officer — not by a Head of Department. */
-  body.is-hod .account-manager-only,
-  body.is-hod .account-manager-only.card { display: none !important; }
+  /* Each office's own controls. Hidden unless the office is held; the API
+     refuses the same actions (roles.py). */
+  body:not(.can-manage-accounts) .account-manager-only { display: none !important; }
+  body:not(.can-manage-departments) .dept-manager-only { display: none !important; }
+  body:not(.is-exam-office) .exam-office-only { display: none !important; }
+  body.is-ict:not(.is-admin) .academic-only,
+  body.is-coordinator-only .academic-only,
+  body.is-dpfpa:not(.is-admin) .academic-only { display: none !important; }
 
   body.is-estate .estate-only { display: flex !important; }
   body.is-estate .estate-only.card { display: block !important; }
@@ -809,29 +818,47 @@
   <aside id="sidebar">
     <div class="aside-label non-estate-only">Navigation</div>
     <button class="nav-btn active academic-only" data-page="dashboard" onclick="showPage('dashboard',this)"><span class="icon"><i class="bi bi-speedometer2"></i></span> Dashboard</button>
-    <button class="nav-btn admin-only" data-page="accounts" onclick="showPage('accounts',this)"><span class="icon"><i class="bi bi-people"></i></span> User Accounts</button>
-    <button class="nav-btn admin-only" data-page="departments" onclick="showPage('departments',this); loadDepartments()"><span class="icon"><i class="bi bi-diagram-3"></i></span> Departments</button>
+    <button class="nav-btn" data-page="accounts" data-roles="runs accounts" onclick="showPage('accounts',this); loadStaffAccounts()"><span class="icon"><i class="bi bi-people"></i></span> User Accounts</button>
+    <a class="nav-btn" href="/admin/" target="_blank" rel="noopener" data-roles="ict" style="text-decoration:none;"><span class="icon"><i class="bi bi-hdd-stack"></i></span> Django Admin <i class="bi bi-box-arrow-up-right" style="font-size:.7rem;margin-left:auto;"></i></a>
+    <button class="nav-btn admin-only" data-roles="runs" data-page="departments" onclick="showPage('departments',this); loadDepartments()"><span class="icon"><i class="bi bi-diagram-3"></i></span> Departments</button>
     <!-- Admissions and the student record belong to their offices and the
          Principal. data-roles says who sees each item; boot hides the rest. -->
-    <div class="nav-group" id="admissions-nav-group" data-roles="principal admission records finance">
+    <div class="nav-group" id="admissions-nav-group" data-roles="principal dparc admission records finance">
       <button class="nav-btn" data-page="admissions" onclick="toggleAdmissionsMenu(event)"><span class="icon"><i class="bi bi-door-open"></i></span> Admissions <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
-        <button class="nav-sub-btn" data-adm-section="desk" onclick="showAdmissionSection('desk', this)">My desk</button>
+        <button class="nav-sub-btn" data-adm-section="desk" data-roles="principal admission records finance" onclick="showAdmissionSection('desk', this)">My desk</button>
         <button class="nav-sub-btn" data-adm-section="new" data-roles="principal admission" onclick="showAdmissionSection('new', this)">New application</button>
         <button class="nav-sub-btn" data-adm-section="all" onclick="showAdmissionSection('all', this)">All applications</button>
         <button class="nav-sub-btn" data-adm-section="dueback" data-roles="principal admission" onclick="showAdmissionSection('dueback', this)">Expected back</button>
         <button class="nav-sub-btn" data-adm-section="items" data-roles="principal finance" onclick="showAdmissionSection('items', this)">Items check</button>
+        <button class="nav-sub-btn" data-adm-section="veta" data-roles="principal dparc admission records finance" onclick="showAdmissionSection('veta', this)">VETA courses</button>
         <button class="nav-sub-btn" data-adm-section="settings" data-roles="principal admission" onclick="showAdmissionSection('settings', this)">Window &amp; ID numbers</button>
       </div>
     </div>
-    <div class="nav-group" id="records-nav-group" data-roles="principal records admission">
+    <div class="nav-group" id="records-nav-group" data-roles="principal dparc records admission">
       <button class="nav-btn" data-page="student-records" onclick="toggleRecordsMenu(event)"><span class="icon"><i class="bi bi-person-vcard"></i></span> Student Records <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
-        <button class="nav-sub-btn" data-rec-section="find" data-roles="principal records" onclick="showRecordsSection('find', this)">Find a student</button>
-        <button class="nav-sub-btn" data-rec-section="ids" onclick="showRecordsSection('ids', this)">College ID import</button>
+        <button class="nav-sub-btn" data-rec-section="find" data-roles="principal dparc records" onclick="showRecordsSection('find', this)">Find a student</button>
+        <button class="nav-sub-btn" data-rec-section="ids" data-roles="principal records admission" onclick="showRecordsSection('ids', this)">College ID import</button>
       </div>
     </div>
-    <button class="nav-btn" data-page="status" data-roles="principal records finance" onclick="showPage('status',this); loadStatusPage()"><span class="icon"><i class="bi bi-hourglass-split"></i></span> Postpone &amp; Finish</button>
+    <div class="nav-group" id="status-nav-group" data-roles="principal dparc records finance">
+      <button class="nav-btn" data-page="status" onclick="toggleStatusMenu(event)"><span class="icon"><i class="bi bi-hourglass-split"></i></span> Postpone &amp; Finish <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-status-section="postpone" data-roles="principal dparc records" onclick="showStatusSection('postpone', this)">Postponements</button>
+        <button class="nav-sub-btn" data-status-section="finish" data-roles="principal finance" onclick="showStatusSection('finish', this)">Finishing</button>
+      </div>
+    </div>
+    <button class="nav-btn" data-page="veta-courses" data-roles="coordinator principal dparc" onclick="showPage('veta-courses',this); loadVetaCourses()"><span class="icon"><i class="bi bi-scissors"></i></span> VETA Courses</button>
+    <button class="nav-btn" data-page="health" data-roles="dean principal records" onclick="showPage('health',this); loadHealthRecords()"><span class="icon"><i class="bi bi-heart-pulse"></i></span> Student Health</button>
+    <div class="nav-group" id="exec-nav-group" data-roles="principal dpfpa finance">
+      <button class="nav-btn" data-page="executive" onclick="toggleExecMenu(event)"><span class="icon"><i class="bi bi-bar-chart-line"></i></span> Executive Summary <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-exec-section="finance" onclick="showExecSection('finance', this)">Finance</button>
+        <button class="nav-sub-btn" data-exec-section="spending" onclick="showExecSection('spending', this)">Spending</button>
+        <button class="nav-sub-btn" data-exec-section="inventory" data-roles="principal dpfpa" onclick="showExecSection('inventory', this)">Inventory</button>
+      </div>
+    </div>
     <button class="nav-btn admin-only" data-page="progression" onclick="showPage('progression',this); loadProgression()"><span class="icon"><i class="bi bi-arrow-up-right-circle"></i></span> Semester Review</button>
     <div class="aside-label estate-only">Inventory</div>
     <button class="nav-btn estate-only inventory-nav-btn active" title="Overview" data-page="inventory" data-inventory-section="overview" onclick="showInventorySection('overview',this)"><span class="icon"><i class="bi bi-grid-1x2"></i></span> Overview</button>
@@ -848,11 +875,11 @@
     <div class="nav-group admin-only" id="modules-nav-group">
       <button class="nav-btn" data-page="modules" onclick="toggleModulesMenu(event)"><span class="icon"><i class="bi bi-journal-bookmark"></i></span> Modules <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
-        <button class="nav-sub-btn active" data-module-section="register" onclick="showModuleSection('register', this)">Register Module</button>
+        <button class="nav-sub-btn active" data-module-section="register" data-roles="runs" onclick="showModuleSection('register', this)">Register Module</button>
         <button class="nav-sub-btn" data-module-section="manage" onclick="showModuleSection('manage', this)">Manage Modules</button>
       </div>
     </div>
-    <div class="nav-group admin-only" id="students-nav-group">
+    <div class="nav-group admin-only" data-roles="runs" id="students-nav-group">
       <button class="nav-btn" data-page="students" onclick="toggleStudentsMenu(event)"><span class="icon"><i class="bi bi-mortarboard"></i></span> Students <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn active" data-student-section="register" onclick="showStudentSection('register', this)">Upload / Register</button>
@@ -876,7 +903,7 @@
         <button class="nav-sub-btn admin-only" data-results-section="summary" onclick="showResultsSection('summary', this)">Results Summary</button>
       </div>
     </div>
-    <div class="nav-group admin-only exam-only" id="declarations-nav-group">
+    <div class="nav-group admin-only exam-only" data-roles="principal dparc exam superuser" id="declarations-nav-group">
       <button class="nav-btn" data-page="declarations" onclick="toggleDeclarationsMenu(event)"><span class="icon"><i class="bi bi-pin-angle"></i></span> Exam Declarations <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn active" data-declaration-type="special_exam" onclick="showDeclarationType('special_exam', this)">Special</button>
@@ -902,6 +929,7 @@
         <button class="nav-sub-btn" data-finance-section="charge-types" onclick="showFinanceSection('charge-types', this)">Charge Types</button>
         <button class="nav-sub-btn" data-finance-section="fee-structure" onclick="showFinanceSection('fee-structure', this)">Fee Structure</button>
         <button class="nav-sub-btn" data-finance-section="payment-schedule" onclick="showFinanceSection('payment-schedule', this)">Payment Schedule</button>
+        <button class="nav-sub-btn" data-finance-section="course-fees" onclick="showFinanceSection('course-fees', this)">Course Fees (VETA)</button>
       </div>
     </div>
     <div class="nav-group finance-only" id="finance-payments-nav-group">
@@ -921,9 +949,16 @@
         <button class="nav-sub-btn" data-finance-section="hostel" onclick="showFinanceSection('hostel', this)">Hostel</button>
       </div>
     </div>
+    <div class="nav-group finance-only" id="finance-expenses-nav-group">
+      <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'expenses')"><span class="icon"><i class="bi bi-receipt"></i></span> Expenses <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-finance-section="expenses" onclick="showFinanceSection('expenses', this)">Expense Register</button>
+        <button class="nav-sub-btn" data-finance-section="expense-budget" onclick="showFinanceSection('expense-budget', this)">Categories &amp; Budget</button>
+      </div>
+    </div>
     <button class="nav-btn finance-only" data-page="finance" data-finance-section="audit" onclick="showFinanceSection('audit', this)"><span class="icon"><i class="bi bi-shield-check"></i></span> Audit Trail</button>
     <button class="nav-btn academic-only" data-page="performance" onclick="showPage('performance',this)"><span class="icon"><i class="bi bi-graph-up"></i></span> Performance</button>
-    <div class="nav-group admin-only secretary-only" id="services-nav-group">
+    <div class="nav-group admin-only secretary-only" data-roles="runs secretary" id="services-nav-group">
       <button class="nav-btn" data-page="forms" onclick="toggleServicesMenu(event)"><span class="icon"><i class="bi bi-life-preserver"></i></span> Services <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-forms-nav="requests" onclick="showFormsSection('requests', this)">Service Requests</button>
@@ -931,7 +966,7 @@
         <button class="nav-sub-btn non-secretary-only" data-forms-nav="evaluations" onclick="showFormsSection('evaluations', this)">Evaluation Forms</button>
       </div>
     </div>
-    <button class="nav-btn admin-only" data-page="sick" onclick="showPage('sick',this)"><span class="icon"><i class="bi bi-bandaid"></i></span> Sick Records</button>
+    <button class="nav-btn admin-only" data-roles="runs" data-page="sick" onclick="showPage('sick',this)"><span class="icon"><i class="bi bi-bandaid"></i></span> Sick Records</button>
     <div class="aside-label academic-only" style="margin-top:10px;">My Modules</div>
     <div class="academic-only" id="sidebar-levels"></div>
   </aside>
@@ -994,10 +1029,10 @@
           </div>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--border);">
-          <button class="btn btn-primary btn-sm" onclick="saveCutoffDates()"><i class="bi bi-save"></i> Save Cutoff Dates</button>
+          <button class="btn btn-primary btn-sm exam-office-only" onclick="saveCutoffDates()"><i class="bi bi-save"></i> Save Cutoff Dates</button>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
             <div id="advance-sem-info" style="font-size:.82rem;color:var(--muted);">—</div>
-            <button class="btn btn-warning btn-sm" onclick="advanceSemester()">Advance Semester →</button>
+            <button class="btn btn-warning btn-sm" id="advance-sem-btn" onclick="advanceSemester()">Advance Semester →</button>
           </div>
         </div>
       </div>
@@ -1033,7 +1068,7 @@
       <div class="page-title">Departments</div>
       <div class="page-sub">Programmes, heads and staff.</div>
 
-      <div class="card admin-only account-manager-only">
+      <div class="card admin-only dept-manager-only">
         <div class="card-title"><span id="dept-form-title">Register a department</span> <span class="tip" tabindex="0" role="note" aria-label="Help: The head must already hold the Head of Department role (User Accounts). Add programmes after saving." data-tip="The head must already hold the Head of Department role (User Accounts). Add programmes after saving.">?</span></div>
         <input type="hidden" id="dept-id">
         <div class="form-grid-3">
@@ -1061,8 +1096,8 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Reg. No.</th><th>College ID</th><th>Name</th><th>Standing</th><th>Record</th><th></th></tr></thead>
-            <tbody id="rec-results"><tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-search"></i></div>Search for a student</div></td></tr></tbody>
+            <thead><tr><th>Reg. No.</th><th>College ID</th><th>Name</th><th>Standing</th><th>Gender</th><th>Record</th><th></th></tr></thead>
+            <tbody id="rec-results"><tr><td colspan="7"><div class="empty"><div class="ei"><i class="bi bi-search"></i></div>Search for a student</div></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1075,6 +1110,10 @@
         <button class="btn btn-primary btn-sm" onclick="saveRecord(event)">Save details</button>
         <div class="block-title" style="margin-top:18px;">Documents</div>
         <div id="rec-editor-docs"></div>
+        <div class="block-title" style="margin-top:18px;">Health
+          <span class="tip" tabindex="0" role="note" aria-label="Help: health records" data-tip="A health problem is written down only against a medical certificate: upload it above as a Medical form and mark it seen, then record the condition here. The Dean of Students is told and reads it for reference. Finance and tutors never see it.">?</span>
+        </div>
+        <div id="rec-editor-health"></div>
       </div>
 
       <div class="card" data-rec-section="ids">
@@ -1088,11 +1127,28 @@
       </div>
     </div>
 
-    <div class="page" id="page-status">
-      <div class="page-title">Postponement &amp; finishing</div>
-      <div class="page-sub">Students stopping for a while, and students leaving at the end.</div>
+    <div class="page" id="page-health">
+      <div class="page-title">Student Health</div>
+      <div class="page-sub">Health problems recorded on verified medical certificates. Kept by the records office; read by the Dean of Students for reference.</div>
+      <div class="card">
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+          <div class="field" style="max-width:320px;margin:0;"><label>Student or condition</label>
+            <input id="hr-search" placeholder="Name, number or condition" oninput="scheduleHealthSearch()"></div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;">
+            <input type="checkbox" id="hr-current" checked onchange="loadHealthRecords()"> Current only</label>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Student</th><th>Gender</th><th>Condition</th><th>What to allow for</th><th>Certificate</th><th>Recorded</th></tr></thead>
+          <tbody id="hr-tbody"></tbody>
+        </table></div>
+      </div>
+    </div>
 
-      <div class="card" data-roles="principal records">
+    <div class="page" id="page-status">
+      <div class="page-title" id="status-page-title">Postponements</div>
+      <div class="page-sub" id="status-page-sub">Students asking to stop for a while. The Principal decides.</div>
+
+      <div class="card" data-status-section="postpone" data-roles="principal dparc records">
         <div class="card-title">Postponement requests <span class="tip" tabindex="0" role="note" aria-label="Help: postponement" data-tip="The Principal decides. Semester 1 postpones the whole year; semester 2 brings them back to semester 2. Approving takes them off the semester, reverses the period's fees and keeps what they paid as credit for the return.">?</span></div>
         <div class="form-grid-3">
           <div class="field"><label>Show</label>
@@ -1110,6 +1166,7 @@
             <tbody id="pp-tbody"><tr><td colspan="7" style="color:var(--muted);">Nothing waiting</td></tr></tbody>
           </table>
         </div>
+        <div data-roles="principal records">
         <div style="border-top:1px solid var(--border);margin:16px 0 12px;"></div>
         <div class="card-title" style="font-size:.9rem;">Write down a paper request</div>
         <div class="form-grid-3">
@@ -1117,9 +1174,11 @@
           <div class="field" style="grid-column:span 2;"><label>Reason *</label><input id="pp-reason" placeholder="As written on the request"></div>
         </div>
         <button class="btn btn-secondary btn-sm" onclick="enterPostponement(event)">Send to the Principal</button>
+        </div>
+        <p class="help-note" data-roles="dparc" style="margin-top:10px;">The Principal decides each request; you are told of every one.</p>
       </div>
 
-      <div class="card" data-roles="principal finance">
+      <div class="card" data-status-section="finish" data-roles="principal finance">
         <div class="card-title">Finishing students <span class="tip" tabindex="0" role="note" aria-label="Help: finishing" data-tip="Students who finished level 6. Finance prints the statement of every year and clears them when nothing is owed; the Principal then declares them cleared, which archives them — the portal closes, the record stays.">?</span></div>
         <div class="table-wrap">
           <table>
@@ -1127,6 +1186,207 @@
             <tbody id="fin-tbody"><tr><td colspan="6" style="color:var(--muted);">Nobody has finished yet</td></tr></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <div class="page" id="page-executive">
+      <div class="page-title" id="exec-page-title">Executive summary · Finance</div>
+      <div class="page-sub" id="exec-page-sub">The college's money for the year, in totals. Read-only: the accountant's ledger is where a student's account is kept.</div>
+
+      <div data-exec-section="finance">
+      <div class="card">
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+          <div class="field" style="max-width:220px;margin:0;"><label>Academic year</label><select id="exec-year" onchange="loadExecutiveFinance()"></select></div>
+        </div>
+        <div class="quick-facts" id="exec-totals"></div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="card inventory-chart-card">
+          <div class="card-title"><i class="bi bi-pie-chart"></i> Where the year's money stands</div>
+          <div class="inventory-chart-wrap"><canvas id="exec-position-chart"></canvas></div>
+        </div>
+        <div class="card inventory-chart-card">
+          <div class="card-title"><i class="bi bi-bar-chart"></i> Received each month</div>
+          <div class="inventory-chart-wrap"><canvas id="exec-month-chart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="card inventory-chart-card">
+          <div class="card-title"><i class="bi bi-bar-chart-steps"></i> Paid and owed, by programme and level</div>
+          <div class="inventory-chart-wrap"><canvas id="exec-programme-chart"></canvas></div>
+        </div>
+        <div class="card inventory-chart-card">
+          <div class="card-title"><i class="bi bi-bar-chart-steps"></i> Paid and owed, by kind of fee</div>
+          <div class="inventory-chart-wrap"><canvas id="exec-family-chart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="card">
+          <div class="card-title">By kind of fee</div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Fee</th><th>Billed</th><th>Waived</th><th>Paid</th><th>Outstanding</th></tr></thead>
+            <tbody id="exec-family-tbody"></tbody>
+          </table></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Received, by bank account</div>
+          <div class="table-wrap"><table class="compact">
+            <thead><tr><th>Account</th><th>Purpose</th><th>Received</th></tr></thead>
+            <tbody id="exec-account-tbody"></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">By programme and level <span class="tip" tabindex="0" role="note" aria-label="Help: programme and level" data-tip="Each student is counted under the programme and level they stand at now.">?</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Programme</th><th>Level</th><th>Students</th><th>Owing</th><th>Billed</th><th>Paid</th><th>Outstanding</th></tr></thead>
+          <tbody id="exec-programme-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="card">
+          <div class="card-title">Received, by month</div>
+          <div class="table-wrap"><table class="compact">
+            <thead><tr><th>Month</th><th>Received</th></tr></thead>
+            <tbody id="exec-month-tbody"></tbody>
+          </table></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Spending</div>
+          <p class="help-note" id="exec-spending">Spending is not recorded in the system yet. The expenses register comes next: the accountant records each expense, and the Principal or DPFPA approves it. It will be summed here against the budget.</p>
+        </div>
+      </div>
+
+      </div>
+
+      <div data-exec-section="spending">
+        <div class="card">
+          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+            <div class="field" style="max-width:220px;margin:0;"><label>Academic year</label><select id="sp-year" onchange="loadExecutiveSpending()"></select></div>
+          </div>
+          <div class="quick-facts" id="sp-totals"></div>
+        </div>
+
+        <div class="card" id="sp-queue-card">
+          <div class="card-title">Waiting for approval <span class="tip" tabindex="0" role="note" aria-label="Help: approving" data-tip="The Principal or DPFPA decides; one approval is enough. A rejection needs a reason, and so does an approval that takes a category over its budget. Nobody approves an expense they recorded.">?</span></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Date</th><th>Category</th><th>Payee · what for</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+            <tbody id="sp-queue-tbody"></tbody>
+          </table></div>
+        </div>
+
+        <div class="dash-grid">
+          <div class="card inventory-chart-card">
+            <div class="card-title"><i class="bi bi-bar-chart"></i> Budget and spending, by category</div>
+            <div class="inventory-chart-wrap"><canvas id="sp-budget-chart"></canvas></div>
+          </div>
+          <div class="card inventory-chart-card">
+            <div class="card-title"><i class="bi bi-arrow-left-right"></i> Money in and out</div>
+            <div class="inventory-chart-wrap"><canvas id="sp-flow-chart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">By category</div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Category</th><th>Budget</th><th>Waiting</th><th>Committed</th><th>Paid</th><th>Left</th></tr></thead>
+            <tbody id="sp-category-tbody"></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <div data-exec-section="inventory">
+        <div class="card">
+          <div class="card-title">In figures <span class="tip" tabindex="0" role="note" aria-label="Help: college property" data-tip="The estate manager's asset register, in figures. The estate manager keeps it; this view changes nothing.">?</span></div>
+          <div class="quick-facts" id="exec-property-facts"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+            <a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=assets"><i class="bi bi-download"></i> Asset register</a>
+            <a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=maintenance"><i class="bi bi-download"></i> Maintenance</a>
+            <a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=disposals"><i class="bi bi-download"></i> Disposals</a>
+            <a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=transfers"><i class="bi bi-download"></i> Transfers</a>
+            <a class="btn btn-ghost btn-sm" href="/api/inventory/report/?type=inspections"><i class="bi bi-download"></i> Inspections</a>
+          </div>
+        </div>
+
+        <div class="dash-grid">
+          <div class="card inventory-chart-card">
+            <div class="card-title"><i class="bi bi-pie-chart"></i> Items by condition</div>
+            <div class="inventory-chart-wrap"><canvas id="exec-condition-chart"></canvas></div>
+          </div>
+          <div class="card inventory-chart-card">
+            <div class="card-title"><i class="bi bi-bar-chart"></i> Items by location</div>
+            <div class="inventory-chart-wrap"><canvas id="exec-location-chart"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Three small tables; even columns that fold to one on a phone. -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:16px;align-items:start;">
+          <div class="card">
+            <div class="card-title">By condition</div>
+            <div class="table-wrap"><table class="compact">
+              <thead><tr><th>Condition</th><th>Records</th><th>Items</th></tr></thead>
+              <tbody id="exec-condition-tbody"></tbody>
+            </table></div>
+          </div>
+          <div class="card">
+            <div class="card-title">By category</div>
+            <div class="table-wrap"><table class="compact">
+              <thead><tr><th>Category</th><th>Records</th><th>Items</th></tr></thead>
+              <tbody id="exec-category-tbody"></tbody>
+            </table></div>
+          </div>
+          <div class="card">
+            <div class="card-title">By location</div>
+            <div class="table-wrap"><table class="compact">
+              <thead><tr><th>Location</th><th>Records</th><th>Items</th></tr></thead>
+              <tbody id="exec-location-tbody"></tbody>
+            </table></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" id="page-veta-courses">
+      <div class="page-title">VETA courses</div>
+      <div class="page-sub">The courses, their modules, and who is on each intake. Kept by the course coordinator.</div>
+
+      <div class="card">
+        <div class="form-grid-3">
+          <div class="field"><label>Course</label><select id="vc-course" onchange="renderVetaCourse()"></select></div>
+        </div>
+        <div class="quick-facts" id="vc-info"></div>
+        <p class="help-note">The Principal or DPARC defines a course (name, code, duration, short or NVA long) under Departments; the accountant sets its fees; the admission office opens its intakes.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Modules <span class="tip" tabindex="0" role="note" aria-label="Help: modules" data-tip="One list per course, used by every intake. A long course's modules each belong to an NVA level. Test marks per module come next.">?</span></div>
+        <div class="table-wrap"><table class="compact">
+          <thead><tr><th>Code</th><th>Module</th><th id="vc-level-head">NVA level</th><th>Order</th><th>In use</th></tr></thead>
+          <tbody id="vc-modules-tbody"></tbody>
+        </table></div>
+        <div data-roles="coordinator principal dparc" style="margin-top:12px;">
+          <div class="form-grid-3">
+            <div class="field"><label>Code *</label><input id="vc-m-code" placeholder="e.g. HCT01"></div>
+            <div class="field"><label>Name *</label><input id="vc-m-name" placeholder="e.g. Clipper basics"></div>
+            <div class="field" id="vc-m-level-wrap"><label>NVA level *</label><select id="vc-m-level"><option value="1">Level I</option><option value="2">Level II</option><option value="3">Level III</option></select></div>
+            <div class="field"><label>Order</label><input id="vc-m-order" type="number" min="0" value="0"></div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveVetaModule(event)">Save module</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Intakes and students</div>
+        <div class="form-grid-3"><div class="field"><label>Intake</label><select id="vc-intake" onchange="loadVetaStudents()"></select></div></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Name</th><th>Registration</th><th>Phone</th><th>Lives</th><th>Status</th></tr></thead>
+          <tbody id="vc-students-tbody"></tbody>
+        </table></div>
       </div>
     </div>
 
@@ -1174,6 +1434,7 @@
         <div class="form-grid-3">
           <div class="field"><label>Programme *</label><select id="adm-programme"></select></div>
           <div class="field"><label>Level *</label><select id="adm-level"></select></div>
+          <div class="field"><label>Form Four index No.</label><input id="adm-f4" placeholder="S0123/0045/2021"></div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="openApplication(event)"><i class="bi bi-person-plus"></i> Open the application</button>
       </div>
@@ -1237,6 +1498,50 @@
         </div>
       </div>
 
+      <div class="card" data-adm-section="veta">
+        <div class="card-title">Intakes <span class="tip" tabindex="0" role="note" aria-label="Help: intakes" data-tip="A VETA course runs in intakes, not semesters. The end date follows the course's duration. The accountant sets the course's fees under Fee Setup ▸ Course Fees.">?</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Intake</th><th>Course</th><th>Runs</th><th>Admitted</th><th>Applying</th><th>Taking applications</th></tr></thead>
+          <tbody id="veta-intakes-tbody"></tbody>
+        </table></div>
+        <div data-roles="principal admission">
+          <div style="border-top:1px solid var(--border);margin:16px 0 12px;"></div>
+          <div class="card-title" style="font-size:.9rem;">Open an intake</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Course *</label><select id="veta-intake-course"></select></div>
+            <div class="field"><label>Starts on *</label><input type="date" id="veta-intake-start"></div>
+            <div class="field"><label>Places (optional)</label><input type="number" min="1" id="veta-intake-capacity"></div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="openVetaIntake(event)">Open the intake</button>
+        </div>
+      </div>
+
+      <div class="card" data-adm-section="veta" data-roles="principal admission">
+        <div class="card-title">Take someone on <span class="tip" tabindex="0" role="note" aria-label="Help: taking someone on" data-tip="Same desks as a first year: records takes the details and a next of kin (no documents needed), finance states day or hostel and raises the fees, then admission admits. The college ID number comes at admission.">?</span></div>
+        <div class="form-grid-3">
+          <div class="field"><label>Intake *</label><select id="veta-app-intake"></select></div>
+          <div class="field"><label>Full name *</label><input id="veta-app-name"></div>
+          <div class="field"><label>Phone</label><input id="veta-app-phone"></div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="createVetaApplication(event)">Start the application</button>
+      </div>
+
+      <div class="card" data-adm-section="veta">
+        <div class="card-title">Applications
+          <div style="margin-left:auto;">
+            <select id="veta-app-filter" class="btn btn-secondary btn-sm" onchange="loadVetaApplications()">
+              <option value="">Every desk I see</option><option value="intake">Intake</option>
+              <option value="information">Records</option><option value="finance">Finance</option>
+              <option value="admission">Admission</option><option value="admitted">Admitted</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Name</th><th>Intake</th><th>Where it is</th><th></th></tr></thead>
+          <tbody id="veta-apps-tbody"></tbody>
+        </table></div>
+      </div>
+
       <div class="card" id="adm-settings-card" data-adm-section="settings">
         <div class="card-title">How admissions run <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— the admission officer's settings</span></div>
         <div class="form-grid-3">
@@ -1258,6 +1563,10 @@
           <div class="field"><label>The year starts at</label><input type="number" id="adm-id-start" min="1"></div>
           <div class="field"><label>Next number to issue</label><input type="number" id="adm-id-next" min="1" oninput="previewCollegeId()"></div>
           <div class="field"><label>Looks like</label><input id="adm-id-example" readonly></div>
+        </div>
+        <div class="form-grid-3">
+          <div class="field" style="grid-column:span 2;"><label>Pattern for VETA courses <span class="tip" tabindex="0" role="note" aria-label="Help: VETA pattern" data-tip="The same pieces and the same counter. Leave it blank to number VETA students like everybody else.">?</span></label><input id="adm-id-veta-pattern" placeholder="blank: as above — e.g. {COLLEGE}/VETA/{PROG}/{YY}/{SEQ}"></div>
+          <div class="field"><label>A VETA number looks like</label><input id="adm-id-veta-example" readonly></div>
         </div>
         <button class="btn btn-secondary btn-sm" onclick="saveCollegeIdFormat()">Save the format</button>
         <div style="border-top:1px solid var(--border);margin:16px 0 12px;"></div>
@@ -1321,9 +1630,9 @@
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;" id="rev-actions">
           <button class="btn btn-secondary btn-sm" onclick="buildReviews(event)"><i class="bi bi-arrow-repeat"></i> Read the results again</button>
-          <button class="btn btn-primary btn-sm" onclick="confirmProposed(event)"><i class="bi bi-check2-all"></i> Confirm everyone not in doubt</button>
+          <button class="btn btn-primary btn-sm" id="rev-confirm-all" onclick="confirmProposed(event)"><i class="bi bi-check2-all"></i> Confirm everyone not in doubt</button>
         </div>
-        <p class="help-note" id="rev-readonly" style="display:none;">Read only — the Principal and the examination officer decide.</p>
+        <p class="help-note" id="rev-readonly" style="display:none;">The examination officer prepares the review; the Principal or DPARC confirms it.</p>
         <div class="quick-facts" id="rev-counts" style="margin-top:12px;"></div>
       </div>
 
@@ -1367,20 +1676,25 @@
       <div class="page-title">User Accounts</div>
       <div class="page-sub">Staff logins and roles.</div>
 
-      <div class="card admin-only">
-        <div class="card-title">Create Staff Account</div>
+      <div class="card account-manager-only">
+        <div class="card-title">Create Staff Account <span class="tip" tabindex="0" role="note" aria-label="Help: who gives which role" data-tip="Tutor and secretary are given here. Every other role is an appointment: the Principal gives it, after the appointment letter is accepted.">?</span></div>
         <div class="form-grid-3">
           <div class="field">
             <label>Role</label>
             <select id="acct-role" onchange="toggleAccountRoleFields()">
               <option value="tutor">Tutor</option>
-              <option value="accountant">Accountant</option>
-              <option value="estate_officer">Estate Officer</option>
               <option value="secretary">Secretary</option>
-              <option value="principal">Principal</option>
-              <option value="hod">Head of Department</option>
-              <option value="records_officer">Records Officer</option>
-              <option value="admission_officer">Admission Officer</option>
+              <option value="dparc" class="senior-role">DPARC — Deputy Principal Academic</option>
+              <option value="dpfpa" class="senior-role">DPFPA — Deputy Principal Finance</option>
+              <option value="hod" class="senior-role">Head of Department</option>
+              <option value="coordinator" class="senior-role">Course Coordinator (VETA)</option>
+              <option value="dean" class="senior-role">Dean of Students</option>
+              <option value="exam_officer" class="senior-role">Exam Officer</option>
+              <option value="ict_officer" class="senior-role">ICT Officer</option>
+              <option value="accountant" class="senior-role">Accountant</option>
+              <option value="admission_officer" class="senior-role">Admission Officer</option>
+              <option value="records_officer" class="senior-role">Records Officer</option>
+              <option value="estate_officer" class="senior-role">Estate Officer</option>
             </select>
           </div>
           <div class="field"><label>Full Name</label><input id="acct-full-name" placeholder="e.g. Jane Mwangi" /></div>
@@ -1395,12 +1709,22 @@
         <div id="acct-created-info" style="font-size:.78rem;color:var(--muted);margin-top:12px;"></div>
       </div>
 
-      <div class="card admin-only">
+      <div class="card">
         <div class="card-title">Existing Staff</div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Username</th><th>Full Name</th><th>Roles</th><th>Modules</th><th></th></tr></thead>
             <tbody id="staff-accounts-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card account-manager-only">
+        <div class="card-title">Role changes <span class="tip" tabindex="0" role="note" aria-label="Help: role changes" data-tip="Every role given or taken away, by whom and when. The Principal appoints; this is where an appointment can be checked.">?</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>When</th><th>Account</th><th>Given</th><th>Taken away</th><th>By</th></tr></thead>
+            <tbody id="role-changes-tbody"><tr><td colspan="5" style="color:var(--muted);">No changes yet</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1614,7 +1938,7 @@
 
       <div id="rw-banner"></div>
 
-      <div class="card admin-only exam-write" id="result-window-card">
+      <div class="card admin-only exam-office-only" id="result-window-card">
         <div class="card-title">Mark entry windows <span class="tip" tabindex="0" role="note" aria-label="Help: Outside an open window only the exam office can change marks. The CA window governs tutors; the end-of-semester one is the office deadline." data-tip="Outside an open window only the exam office can change marks. The CA window governs tutors; the end-of-semester one is the office deadline.">?</span>
           <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px">— when tutors may enter marks</span>
         </div>
@@ -1669,7 +1993,7 @@
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" onclick="downloadAuthorityGradeTemplate()">⬇ Download Level Template</button>
-          <button class="btn btn-primary btn-sm exam-write" onclick="uploadAuthorityGrades()">⬆ Upload Authority Grades</button>
+          <button class="btn btn-primary btn-sm exam-office-only" onclick="uploadAuthorityGrades()">⬆ Upload Authority Grades</button>
         </div>
       </div>
 
@@ -1749,10 +2073,10 @@
           <div class="card-title">
             📝 CA Marks <span style="font-size:.75rem;font-weight:400;color:var(--muted);">(Assignments + CATs — 40%)</span>
             <div style="display:flex;gap:6px;margin-left:auto;">
-              <button class="btn btn-green btn-sm admin-only exam-write" onclick="setCAApproval(true)">Approve CA</button>
-              <button class="btn btn-danger btn-sm admin-only exam-write" onclick="setCAApproval(false)">Hide CA</button>
+              <button class="btn btn-green btn-sm exam-office-only" onclick="setCAApproval(true)">Approve CA</button>
+              <button class="btn btn-danger btn-sm exam-office-only" onclick="setCAApproval(false)">Hide CA</button>
               <button class="btn btn-secondary btn-sm" onclick="printCAResults()">🖨 Print</button>
-              <button class="btn btn-primary btn-sm exam-write" onclick="saveAllResults()">💾 Save</button>
+              <button class="btn btn-primary btn-sm" onclick="saveAllResults()">💾 Save</button>
             </div>
           </div>
           <div class="table-wrap">
@@ -1770,10 +2094,10 @@
           <div class="card-title">
             🌾 Field Results <span style="font-size:.75rem;font-weight:400;color:var(--muted);">(CA 40% + Final 60%)</span>
             <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;">
-              <button class="btn btn-green btn-sm admin-only exam-write" onclick="setFinalApproval(true)">Approve Results</button>
-              <button class="btn btn-danger btn-sm admin-only exam-write" onclick="setFinalApproval(false)">Unapprove</button>
+              <button class="btn btn-green btn-sm exam-office-only" onclick="setFinalApproval(true)">Approve Results</button>
+              <button class="btn btn-danger btn-sm exam-office-only" onclick="setFinalApproval(false)">Unapprove</button>
               <button class="btn btn-secondary btn-sm admin-only" onclick="downloadFieldResultsExcel()">⬇ Export to Excel</button>
-              <button class="btn btn-primary btn-sm exam-write" onclick="saveAllResults()">💾 Save</button>
+              <button class="btn btn-primary btn-sm" onclick="saveAllResults()">💾 Save</button>
             </div>
           </div>
           <div class="table-wrap">
@@ -1791,8 +2115,8 @@
           <div class="card-title">
             🎓 End of Semester Exam <span id="end-exam-weight-label" style="font-size:.75rem;font-weight:400;color:var(--muted);"></span>
             <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;">
-              <button class="btn btn-green btn-sm exam-write" onclick="setFinalApproval(true)">Approve Final Results</button>
-              <button class="btn btn-danger btn-sm exam-write" onclick="setFinalApproval(false)">Unapprove</button>
+              <button class="btn btn-green btn-sm exam-office-only" onclick="setFinalApproval(true)">Approve Final Results</button>
+              <button class="btn btn-danger btn-sm exam-office-only" onclick="setFinalApproval(false)">Unapprove</button>
               <button class="btn btn-secondary btn-sm" onclick="printFinalResults()">🖨 Print</button>
             </div>
           </div>
@@ -1831,7 +2155,7 @@
           <div class="field"><label>Search</label><input id="decl-search" oninput="renderExamDeclarations()" placeholder="name or registration number" /></div>
           <div class="field"><label>Status</label><select id="decl-helper-filter" onchange="renderExamDeclarations()"><option value="needs_action">Candidates Only</option><option value="all">All Students</option></select></div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <div class="exam-office-only" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
           <button class="btn btn-warning btn-sm" onclick="declareSelectedExamStudents()">Declare Selected</button>
           <button class="btn btn-secondary btn-sm" onclick="selectDeclarationCandidates()">Select Candidates</button>
         </div>
@@ -2007,6 +2331,11 @@
             <input type="checkbox" id="fin-ct-charged_again_on_readmission" checked />
             <span>Bill it again when a discontinued student is readmitted
               <span style="color:var(--muted);font-size:.78rem;">(only matters for a charge billed Once)</span></span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;margin-bottom:6px;cursor:pointer;">
+            <input type="checkbox" id="fin-ct-for_repeaters" />
+            <span>Bill it once a year to a student repeating failed modules only
+              <span style="color:var(--muted);font-size:.78rem;">(the repeaters' direct cost; they pay no programme fees)</span></span>
           </label>
           <button class="btn btn-primary btn-sm" onclick="saveChargeType()" id="fin-ct-save">💾 Save charge type</button>
           <button class="btn btn-ghost btn-sm" onclick="cancelChargeTypeEdit()" id="fin-ct-cancel"
@@ -2287,6 +2616,103 @@
           </div>
           <p class="help-note" id="fin-ps-status" style="margin-top:8px;"></p>
           <button class="btn btn-primary btn-sm" onclick="savePaymentSchedule(event)">Save the schedule</button>
+        </div>
+      </div>
+
+      <div class="finance-section" id="finance-section-course-fees">
+        <div class="card finance-only">
+          <div class="card-title">Course fees <span class="tip" tabindex="0" role="note" aria-label="Help: course fees" data-tip="Pick a VETA course and the year. Each fee is a charge type — the charge type says which bank account it is paid into (set under Charge Types). Split a fee into instalments, each due so many days after the intake starts; they must add up to the fee. A hostel-only fee is charged only to students living in the hostel.">?</span></div>
+          <div class="form-grid-3">
+            <div class="field"><label>Course</label><select id="cf-course" onchange="renderCourseFees()"></select></div>
+            <div class="field"><label>Academic year</label><select id="cf-year" onchange="loadCourseFees()"></select></div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Fee</th><th>Paid into</th><th>Amount</th><th>Instalments (days after the start)</th><th>Hostel only</th><th></th></tr></thead>
+            <tbody id="cf-tbody"></tbody>
+          </table></div>
+        </div>
+        <div class="card finance-only">
+          <div class="card-title">Add or change a fee</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Charge type *</label><select id="cf-charge"></select></div>
+            <div class="field"><label>Amount *</label><input id="cf-amount" type="number" min="0" step="0.01" placeholder="e.g. 300000"></div>
+            <div class="field"><label style="display:flex;align-items:center;gap:8px;margin-top:22px;"><input type="checkbox" id="cf-hostel"> Hostel students only</label>
+              <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="cf-before"> The first instalment is paid before admission</label></div>
+          </div>
+          <div class="field"><label>Instalments — one per line: <em>days after the start, amount</em> (blank: all at the start)</label>
+            <textarea id="cf-parts" rows="3" placeholder="0, 200000&#10;30, 100000"></textarea></div>
+          <button class="btn btn-primary btn-sm" onclick="saveCourseFee(event)">Save fee</button>
+        </div>
+      </div>
+
+      <div class="finance-section" id="finance-section-expenses">
+        <div class="card finance-only">
+          <div class="card-title">Request an expense <span class="tip" tabindex="0" role="note" aria-label="Help: requesting an expense" data-tip="It waits for the Principal or DPFPA. One approval is enough; they may instead query it, and you answer (correcting it if need be). Once approved, record the payment here. Petty cash is paid in cash, out of the float. A wrong entry is cancelled, never deleted.">?</span></div>
+          <div class="form-grid-3">
+            <div class="field"><label>Category *</label><select id="ex-category"></select></div>
+            <div class="field"><label>Money from *</label>
+              <select id="ex-source"><option value="office">Office funds (bank)</option>
+                <option value="petty_cash">Petty cash (emergency / small spending)</option></select></div>
+            <div class="field"><label>Payee *</label><input id="ex-payee" placeholder="Who is paid"></div>
+            <div class="field"><label>Amount *</label><input id="ex-amount" type="number" min="0" step="0.01"></div>
+            <div class="field" style="grid-column:span 2;"><label>What it is for *</label><input id="ex-description" placeholder="e.g. Printing paper, 20 reams"></div>
+            <div class="field"><label>Date</label><input id="ex-date" type="date"></div>
+            <div class="field"><label>Supplier's invoice / quotation no.</label><input id="ex-ref"></div>
+            <div class="field"><label>Receipt or quotation (optional)</label><input id="ex-file" type="file" accept=".pdf,image/*"></div>
+          </div>
+          <div id="ex-budget-note" class="help-note" style="margin-bottom:10px;"></div>
+          <button class="btn btn-primary btn-sm" onclick="recordExpense(event)">Send for approval</button>
+        </div>
+        <div class="card finance-only">
+          <div class="card-title">Register
+            <div style="margin-left:auto;display:flex;gap:6px;">
+              <select id="ex-filter" class="btn btn-secondary btn-sm" onchange="loadExpenses()">
+                <option value="">All</option><option value="pending">Waiting for approval</option>
+                <option value="queried">Queried — to answer</option>
+                <option value="approved">Approved, to pay</option><option value="paid">Paid</option>
+                <option value="rejected">Rejected</option><option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Date</th><th>Category</th><th>Payee · what for</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+            <tbody id="ex-tbody"></tbody>
+          </table></div>
+        </div>
+        <div class="card finance-only">
+          <div class="card-title">Petty cash <span class="tip" tabindex="0" role="note" aria-label="Help: petty cash" data-tip="The float you hold for small and emergency spending. Top it up from a college bank account; every petty-cash expense, once approved and paid, comes out of it. A payment bigger than the float is refused. A wrong top-up is reversed with a negative amount and a reason.">?</span></div>
+          <div class="quick-facts" id="pc-facts"></div>
+          <div class="form-grid-3" style="margin-top:12px;">
+            <div class="field"><label>Top up by *</label><input id="pc-amount" type="number" step="0.01" placeholder="e.g. 200000"></div>
+            <div class="field"><label>Drawn from *</label><select id="pc-account"></select></div>
+            <div class="field"><label>Cheque / withdrawal no.</label><input id="pc-ref"></div>
+            <div class="field"><label>Date</label><input id="pc-date" type="date"></div>
+            <div class="field" style="grid-column:span 2;"><label>Note</label><input id="pc-note" placeholder="Needed for a reversal"></div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="topUpPettyCash(event)">Record top-up</button>
+          <div class="table-wrap" style="margin-top:12px;"><table class="compact">
+            <thead><tr><th>Date</th><th>Amount</th><th>From</th><th>Reference · note</th><th>By</th></tr></thead>
+            <tbody id="pc-tbody"></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <div class="finance-section" id="finance-section-expense-budget">
+        <div class="card finance-only">
+          <div class="card-title">This year's budget <span class="tip" tabindex="0" role="note" aria-label="Help: budget" data-tip="Committed is approved plus paid. An approval that takes a category over its budget needs a written reason from the Principal or DPFPA. Revise a budget mid-year by setting it again; every change is in the audit trail.">?</span></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Category</th><th>Budget</th><th>Waiting</th><th>Committed</th><th>Paid</th><th>Left</th><th></th></tr></thead>
+            <tbody id="eb-tbody"></tbody>
+          </table></div>
+        </div>
+        <div class="card finance-only">
+          <div class="card-title">Add a category</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Name *</label><input id="ec-name" placeholder="e.g. Stationery"></div>
+            <div class="field"><label>Code</label><input id="ec-code" placeholder="optional"></div>
+            <div class="field"><label>Description</label><input id="ec-description"></div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveExpenseCategory(event)">Add category</button>
         </div>
       </div>
 
@@ -2887,9 +3313,60 @@
       <div class="field"><label>Programme name *</label><input id="prog-name" placeholder="e.g. Pharmaceutical Sciences" /></div>
       <div class="field"><label>Course code *</label><input id="prog-code" placeholder="e.g. PST" /></div>
     </div>
-    <div class="field"><label>Taught at</label><div id="prog-levels" class="check-grid"></div></div>
+    <div class="field" style="margin-bottom:10px;"><label>Structure * <span class="tip" tabindex="0" role="note" aria-label="Help: structure" data-tip="Semester-based: NACTVET, NTA levels, like PST. A VETA short course runs in intakes of a few months and ends with a college certificate. A VETA long course runs in intakes over years, through NVA Level I, II and III. It cannot change once students have studied on it.">?</span></label>
+      <select id="prog-structure" onchange="toggleProgrammeStructure()">
+        <option value="semester">Semester-based (NACTVET, NTA levels)</option>
+        <option value="short">VETA short course</option>
+        <option value="nva">VETA long course (NVA Level I, II, III)</option>
+      </select>
+    </div>
+    <div class="form-grid-3" id="prog-veta-fields" style="margin-bottom:10px;display:none;">
+      <div class="field"><label>Duration (months) *</label><input id="prog-duration" type="number" min="1" placeholder="e.g. 3"></div>
+      <div class="field" id="prog-top-level-wrap"><label>Ends at NVA level *</label>
+        <select id="prog-top-level"><option value="">—</option><option value="1">Level I</option><option value="2">Level II</option><option value="3">Level III</option></select></div>
+      <div class="field"><label>Pass mark</label><input id="prog-pass-mark" type="number" min="0" max="100" placeholder="set later"></div>
+    </div>
+    <div class="field" id="prog-levels-wrap"><label>Taught at</label><div id="prog-levels" class="check-grid"></div></div>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><input type="checkbox" id="prog-active" checked> Active</label>
     <button class="btn btn-primary btn-sm" onclick="saveProgramme()">Save programme</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="veta-app-modal">
+  <div class="modal" style="max-width:760px;">
+    <div class="modal-title">
+      <span id="veta-modal-title">Application</span>
+      <button class="modal-close" onclick="closeVetaModal()">✕</button>
+    </div>
+    <input type="hidden" id="veta-modal-id">
+    <div id="veta-modal-summary" style="font-size:.84rem;margin-bottom:12px;"></div>
+    <div id="veta-modal-blockers"></div>
+    <div id="veta-modal-details" style="display:none;">
+      <div class="card-title" style="font-size:.9rem;">Details — the records desk</div>
+      <div class="form-grid-3">
+        <div class="field"><label>Phone</label><input id="veta-d-phone"></div>
+        <div class="field"><label>Gender</label><select id="veta-d-gender"><option value="">—</option><option value="M">Male</option><option value="F">Female</option></select></div>
+        <div class="field"><label>Date of birth</label><input type="date" id="veta-d-dob"></div>
+        <div class="field"><label>Next of kin *</label><input id="veta-d-kin-name" placeholder="Name"></div>
+        <div class="field"><label>Their phone</label><input id="veta-d-kin-phone"></div>
+        <div class="field"><label>Relationship</label><select id="veta-d-kin-rel">
+          <option value="parent">Parent</option><option value="guardian">Guardian</option><option value="spouse">Spouse</option>
+          <option value="sibling">Sibling</option><option value="relative">Other relative</option><option value="other">Other</option></select></div>
+      </div>
+      <p class="help-note">No documents are needed for VETA courses.</p>
+      <button class="btn btn-secondary btn-sm" onclick="saveVetaDetails(event)">Save the details</button>
+    </div>
+    <div id="veta-modal-fees" style="display:none;margin-top:12px;">
+      <div class="card-title" style="font-size:.9rem;">Fees — the finance desk</div>
+      <div id="veta-modal-fee-list" style="font-size:.8rem;margin-bottom:8px;"></div>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="field" style="margin:0;"><label>Lives</label><select id="veta-f-residence"><option value="day">Day</option><option value="hostel">Hostel</option></select></div>
+        <button class="btn btn-secondary btn-sm" onclick="raiseVetaFees(event)">Raise the fees</button>
+      </div>
+    </div>
+    <div class="field" style="margin-top:12px;"><label>Note for the record</label><input id="veta-modal-note"></div>
+    <div id="veta-modal-actions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+    <div id="veta-modal-steps" style="font-size:.78rem;color:var(--muted);margin-top:12px;"></div>
   </div>
 </div>
 
@@ -3360,7 +3837,14 @@ function toggleModulesMenu(event) {
   const group = document.getElementById('modules-nav-group');
   group.classList.toggle('open');
   if (!document.getElementById('page-modules').classList.contains('active')) {
-    showModuleSection('register', group.querySelector('[data-module-section="register"]'));
+    if ((state.offices || {}).runs) {
+      showModuleSection('register', group.querySelector('[data-module-section="register"]'));
+    } else {
+      // The examination officer reads this semester's modules and class lists.
+      const sem = document.getElementById('flt-mod-sem');
+      if (!sem.value && state.activeSem) sem.value = state.activeSem.id;
+      showModuleSection('manage', group.querySelector('[data-module-section="manage"]'));
+    }
   }
   event.stopPropagation();
 }
@@ -3563,6 +4047,10 @@ async function boot() {
     state.isRecordsOffice = !!(dash.is_records_officer || dash.is_admission_officer);
     state.canEditStudentRecords = !!dash.can_edit_student_records;
     state.canReviewProgression = !!dash.can_review_progression;
+    state.canConfirmReviews = !!dash.can_confirm_reviews;
+    state.canAdvanceSemester = !!dash.can_advance_semester;
+    const advanceBtn = document.getElementById('advance-sem-btn');
+    if (advanceBtn && !state.canAdvanceSemester) advanceBtn.style.display = 'none';
     renderPasswordAge(dash.password);
     if (state.isRecordsOffice && !state.isStaff) {
       document.body.classList.add('is-records');
@@ -3621,6 +4109,19 @@ async function boot() {
     // Likewise the records and admission offices, whose work is the student record.
     if (state.isRecordsOffice && !state.isStaff && !state.isSecretary) {
       showAdmissionSection('desk', document.querySelector('[data-adm-section="desk"].nav-sub-btn'));
+    }
+    // The ICT officer's work is the accounts; DPFPA's the money in summary.
+    if (dash.is_ict_officer && !state.isStaff) {
+      showPage('accounts', document.querySelector('[data-page="accounts"]'));
+      loadStaffAccounts();
+    } else if ((state.offices || {}).coordinator && !state.isStaff) {
+      showPage('veta-courses', document.querySelector('[data-page="veta-courses"]'));
+      loadVetaCourses();
+    } else if ((state.offices || {}).dean && !state.isStaff && !state.isRecordsOffice) {
+      showPage('health', document.querySelector('[data-page="health"]'));
+      loadHealthRecords();
+    } else if (dash.is_dpfpa && !state.isStaff && !state.isAccountant) {
+      showExecSection('finance', document.querySelector('[data-exec-section="finance"].nav-sub-btn'));
     }
     updatePeriodLocks();
     loadAnnouncements();
@@ -3770,7 +4271,7 @@ async function goToModule(id) {
 
 // ── USER ACCOUNTS ──────────────────────────────────────────────────────────────
 async function loadAccountModules() {
-  if (!state.isStaff) return;
+  if (!(state.offices || {}).runs && !state.canManageAccounts) return;
   try {
     if (!state.allModules.length) state.allModules = await api('GET', '/all-modules/');
     renderAccountModuleList();
@@ -3819,7 +4320,8 @@ async function createStaffAccount() {
 }
 
 async function loadStaffAccounts() {
-  if (!state.isStaff) return;
+  // The staff list is for the offices that run departments and keep accounts.
+  if (!(state.offices || {}).runs && !state.canManageAccounts) return;
   try {
     state.staffAccounts = await api('GET', '/staff-accounts/');
     if (!state.allModules.length) state.allModules = await api('GET', '/all-modules/');
@@ -3827,6 +4329,21 @@ async function loadStaffAccounts() {
   } catch(e) {
     toast('Failed to load staff accounts', 'var(--red)');
   }
+  if (state.canManageAccounts) loadRoleChanges();
+}
+
+async function loadRoleChanges() {
+  try {
+    const rows = await api('GET', '/staff-accounts/role-changes/');
+    const list = roles => roles.length ? roles.map(r => `<span class="badge badge-gen">${safeText(r)}</span>`).join(' ') : '—';
+    document.getElementById('role-changes-tbody').innerHTML = rows.length ? rows.map(row => `<tr>
+        <td style="white-space:nowrap;">${safeText(new Date(row.changed_at).toLocaleString())}</td>
+        <td>${safeText(row.user)} <span style="font-family:var(--font-mono);font-size:.72rem;color:var(--muted);">${safeText(row.username)}</span></td>
+        <td>${list(row.added)}</td>
+        <td>${list(row.removed)}</td>
+        <td>${safeText(row.changed_by)}</td>
+      </tr>`).join('') : '<tr><td colspan="5" style="color:var(--muted);">No changes yet</td></tr>';
+  } catch (e) { /* the list is a help, not the page */ }
 }
 
 function renderStaffAccounts() {
@@ -3857,7 +4374,7 @@ function renderStaffAccounts() {
       <td style="line-height:1.9">${badges}</td>
       <td style="font-size:.75rem">${modules}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-secondary btn-sm" onclick="openRolesModal(${u.id})">Change roles</button>
+        ${state.canManageAccounts ? `<button class="btn btn-secondary btn-sm" onclick="openRolesModal(${u.id})">Change roles</button>` : ''}
         ${isTutor ? `<button class="btn btn-ghost btn-sm" onclick="openTeacherModulesModal(${u.id})">Modules</button>` : ''}
       </td>
     </tr>`;
@@ -3865,14 +4382,24 @@ function renderStaffAccounts() {
 }
 
 const ROLE_LABELS = {
-  tutor: 'Tutor', accountant: 'Accountant', estate_officer: 'Estate Officer',
-  secretary: 'Secretary', principal: 'Principal', hod: 'Head of Department',
-  exam_officer: 'Exam Officer', records_officer: 'Records Officer', admission_officer: 'Admission Officer',
+  principal: 'Principal', dparc: 'DPARC', dpfpa: 'DPFPA', hod: 'Head of Department', coordinator: 'Course Coordinator',
+  dean: 'Dean of Students',
+  exam_officer: 'Exam Officer', ict_officer: 'ICT Officer',
+  admission_officer: 'Admission Officer', records_officer: 'Records Officer',
+  accountant: 'Accountant', estate_officer: 'Estate Officer',
+  secretary: 'Secretary', tutor: 'Tutor',
 };
+//: Given by whoever keeps the accounts. Every other role is an appointment.
+const OPEN_ROLES = new Set(['tutor', 'secretary']);
 const ROLE_NOTES = {
-  exam_officer: 'Results, eligibility and exam declarations. Full academic admin.',
-  principal: 'Everything academic. Not the ledger, not the asset register.',
+  principal: 'Sees everything; appoints; decides postponements. Finance in summary, never the ledger.',
+  dparc: 'Deputy Principal Academic: every academic area, confirms reviews and advances the year. No finance.',
+  dpfpa: 'Deputy Principal Finance: the money in summary, approves spending, reads college property.',
+  exam_officer: 'Results, windows, eligibility and exam declarations. Prepares the semester review.',
+  ict_officer: 'Staff accounts, passwords and the open roles. Sees no results or money.',
   hod: 'Runs the department and reads examinations, but does not decide them.',
+  coordinator: 'The training (course) coordinator: runs the VETA courses — modules, intakes, class lists.',
+  dean: 'Student welfare: reads the health records the records office keeps, for reference.',
   tutor: 'Takes attendance and enters CA marks for their own modules.',
   secretary: 'Answers what students have asked the College for.',
   accountant: 'The fees ledger, payments, clearance and the items check.',
@@ -3889,11 +4416,15 @@ function openRolesModal(userId) {
   const held = new Set(user.roles || []);
   document.getElementById('roles-user-id').value = userId;
   document.getElementById('roles-user-name').textContent = user.full_name;
+  // A senior role is the Principal's to give, by appointment; the
+  // Principal's own office is the Board's. Shown, but locked, for anyone else.
+  const locked = role => role === 'principal' ? !state.isSuperuser
+    : (!OPEN_ROLES.has(role) && !state.canAppoint);
   document.getElementById('roles-list').innerHTML = Object.keys(ROLE_LABELS).map(role => `
-    <label class="check-item">
-      <input type="checkbox" name="user-role" value="${role}" ${held.has(role) ? 'checked' : ''}>
+    <label class="check-item" ${locked(role) ? 'style="opacity:.6"' : ''}>
+      <input type="checkbox" name="user-role" value="${role}" ${held.has(role) ? 'checked' : ''} ${locked(role) ? 'disabled' : ''}>
       <span><strong>${safeText(ROLE_LABELS[role])}</strong>
-        <div style="font-size:.72rem;color:var(--muted)">${safeText(ROLE_NOTES[role])}</div></span>
+        <div style="font-size:.72rem;color:var(--muted)">${safeText(ROLE_NOTES[role])}${locked(role) ? (role === 'principal' ? ' Appointed by the Board.' : ' Given by the Principal.') : ''}</div></span>
     </label>`).join('');
   document.getElementById('roles-modal').classList.add('open');
 }
@@ -4042,8 +4573,8 @@ async function loadModules() {
         <td>${m.student_count}</td>
         <td><div class="row-actions">
           <button class="btn btn-secondary btn-sm" title="View students" onclick="selectModuleRoster(${m.id})">🎓</button>
-          <button class="btn btn-secondary btn-sm" title="Edit module" onclick="openModuleEditModal(${m.id})">✎</button>
-          <button class="btn btn-danger btn-sm" title="Delete module" onclick="deleteModule(${m.id},'${m.name.replace(/'/g,"\\'")}')">✕</button>
+          ${(state.offices || {}).runs ? `<button class="btn btn-secondary btn-sm" title="Edit module" onclick="openModuleEditModal(${m.id})">✎</button>
+          <button class="btn btn-danger btn-sm" title="Delete module" onclick="deleteModule(${m.id},'${m.name.replace(/'/g,"\\'")}')">✕</button>` : ''}
         </div></td>
       </tr>`
     ).join('');
@@ -4109,7 +4640,7 @@ function renderModuleRoster() {
   document.getElementById('module-roster-tbody').innerHTML = rows.length ? rows.map(s => `<tr>
     <td><span style="font-family:var(--font-mono);font-size:.78rem">${s.nactvet_reg_no}</span></td><td>${s.name}</td>
     <td>${s.class_level_name}</td><td>${s.semester_label}</td>
-    <td><button class="btn btn-danger btn-sm" onclick="deleteRosterStudent(${s.id},'${s.name.replace(/'/g,"\\'")}')">Remove</button></td>
+    <td>${(state.offices || {}).runs ? `<button class="btn btn-danger btn-sm" onclick="deleteRosterStudent(${s.id},'${s.name.replace(/'/g,"\\'")}')">Remove</button>` : ''}</td>
   </tr>`).join('') : '<tr><td colspan="5"><div class="empty">No matching students in this module</div></td></tr>';
 }
 async function deleteRosterStudent(id, name) {
@@ -4219,7 +4750,7 @@ function renderDepartmentFormPickers(hodId = null, staffIds = []) {
 function renderDepartments() {
   const list = document.getElementById('dept-list');
   const departments = state.departments || [];
-  const canChange = state.isStaff && !document.body.classList.contains('is-hod');
+  const canChange = document.body.classList.contains('can-manage-departments');
   if (!departments.length) {
     list.innerHTML = '<div class="card"><div class="empty"><div class="ei">🏛️</div>No departments registered yet</div></div>';
     return;
@@ -4245,7 +4776,9 @@ function renderDepartments() {
           <tr>
             <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${safeText(p.code)}</span></td>
             <td><strong>${safeText(p.name)}</strong></td>
-            <td style="font-size:.78rem">${p.level_names.length ? p.level_names.map(safeText).join(', ') : '<span style="color:var(--muted)">not restricted</span>'}</td>
+            <td style="font-size:.78rem">${p.is_veta
+              ? `<span class="badge badge-yellow">${safeText(p.structure === 'nva' ? `VETA long · to Level ${p.nva_top_level}` : 'VETA short')}</span> ${p.duration_months} months`
+              : (p.level_names.length ? p.level_names.map(safeText).join(', ') : '<span style="color:var(--muted)">not restricted</span>')}</td>
             <td>${p.module_count}</td>
             <td>${p.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-yellow">Inactive</span>'}</td>
             ${canChange ? `<td><div class="row-actions">
@@ -4317,9 +4850,23 @@ function openProgrammeModal(departmentId, programmeId = null) {
       <input type="checkbox" name="prog-level" value="${l.id}" ${chosen.has(String(l.id)) ? 'checked' : ''}>
       <span>${safeText(l.name)}</span>
     </label>`).join('');
+  document.getElementById('prog-structure').value = p ? p.structure : 'semester';
+  document.getElementById('prog-duration').value = p && p.duration_months ? p.duration_months : '';
+  document.getElementById('prog-top-level').value = p && p.nva_top_level ? p.nva_top_level : '';
+  document.getElementById('prog-pass-mark').value = p && p.pass_mark != null ? p.pass_mark : '';
+  toggleProgrammeStructure();
   document.getElementById('prog-modal-title').textContent =
     p ? `Edit ${p.code}` : `Add a programme to ${d ? d.name : 'the department'}`;
   document.getElementById('programme-modal').classList.add('open');
+}
+
+// A VETA course has a duration (and a long course its top NVA level) instead
+// of NTA levels.
+function toggleProgrammeStructure() {
+  const structure = document.getElementById('prog-structure').value;
+  document.getElementById('prog-veta-fields').style.display = structure === 'semester' ? 'none' : '';
+  document.getElementById('prog-top-level-wrap').style.display = structure === 'nva' ? '' : 'none';
+  document.getElementById('prog-levels-wrap').style.display = structure === 'semester' ? '' : 'none';
 }
 
 function closeProgrammeModal() { document.getElementById('programme-modal').classList.remove('open'); }
@@ -4332,7 +4879,15 @@ async function saveProgramme() {
     code: document.getElementById('prog-code').value.trim().toUpperCase(),
     levels: [...document.querySelectorAll('input[name="prog-level"]:checked')].map(el => Number(el.value)),
     is_active: document.getElementById('prog-active').checked,
+    structure: document.getElementById('prog-structure').value,
   };
+  if (payload.structure !== 'semester') {
+    payload.levels = [];
+    payload.duration_months = Number(document.getElementById('prog-duration').value) || null;
+    payload.nva_top_level = payload.structure === 'nva' ? (Number(document.getElementById('prog-top-level').value) || null) : null;
+    const mark = document.getElementById('prog-pass-mark').value;
+    payload.pass_mark = mark === '' ? null : Number(mark);
+  }
   if (!payload.name || !payload.code) { toast('Give the programme a name and a course code', 'var(--red)'); return; }
   try {
     if (id) await api('PATCH', `/programmes/${id}/`, payload);
@@ -5168,8 +5723,8 @@ function renderSummaryStudents() {
       : safeText(s.failed.join(', '));
     const grades = Object.entries(s.grades).map(([code, grade]) => `${safeText(code)} <strong>${safeText(grade || '—')}</strong>`).join(' · ');
     const portal = s.withheld_id
-      ? `<span class="badge badge-yellow">withheld</span> <button class="btn btn-ghost btn-sm exam-write" onclick="releaseResults(${s.withheld_id})">Release</button>`
-      : (s.profile_id ? `<button class="btn btn-ghost btn-sm exam-write" onclick="withholdResults(${s.profile_id})">Withhold</button>` : '');
+      ? `<span class="badge badge-yellow">withheld</span> <button class="btn btn-ghost btn-sm exam-office-only" onclick="releaseResults(${s.withheld_id})">Release</button>`
+      : (s.profile_id ? `<button class="btn btn-ghost btn-sm exam-office-only" onclick="withholdResults(${s.profile_id})">Withhold</button>` : '');
     return `<tr>
       <td>${safeText(s.reg_no)}</td><td>${safeText(s.name)}</td>
       <td><strong>${s.gpa == null ? '—' : s.gpa.toFixed(2)}</strong></td>
@@ -5605,6 +6160,8 @@ async function loadDeclarationModule() {
     ]);
     declarationModuleInfo = data.module;
     declarationData = data.results || [];
+    state.directRepeat = new Set((data.direct_repeat || []).map(String));
+    state.failedRepeat = new Set((data.failed_repeat || []).map(String));
     declaredKinds = declared.declared || {};
     renderExamDeclarations();
   } catch(e) { toast('Failed to load declaration candidates', 'var(--red)'); }
@@ -5618,14 +6175,26 @@ function examDeclarationReason(r, type) {
   if (hp && (r.cat1_practical === null || r.cat1_practical === undefined)) missing.push('CAT 1 practical');
   if (hp && (r.cat2_practical === null || r.cat2_practical === undefined)) missing.push('CAT 2 practical');
   if (type === 'special_exam') return missing.length ? `Missing ${missing.join(', ')}` : '';
+  // More than half of the semester's modules failed: no supplementary, the
+  // failed modules are repeated (the college's rule, whatever the GPA).
+  const direct = (state.directRepeat || new Set()).has(String(r.student));
+  // Failed again at the repeat sitting: a discontinuation, not another repeat.
+  const failedAgain = (state.failedRepeat || new Set()).has(String(r.student));
   if (type === 'supp_exam') {
-    if (r.result_status !== 'SUPP') return '';
+    if (r.result_status !== 'SUPP' || direct) return '';
     const labels = (r.failed_end_components || []).map(field =>
       field === 'end_practical' ? 'practical' : 'theory'
     );
     return `End-of-semester ${labels.join(' and ') || 'exam'} component is below 50`;
   }
-  if (type === 'repeat_module') return r.result_status === 'REPEAT' ? `Supplementary mark ${r.supplementary_mark} is below 50` : '';
+  if (type === 'repeat_module') {
+    if (failedAgain) return '';
+    if (direct && ['SUPP', 'FAIL', 'REPEAT'].includes(r.result_status)) {
+      return 'Failed more than half of the semester\'s modules — repeats, no supplementary';
+    }
+    return r.result_status === 'REPEAT' ? `Supplementary mark ${r.supplementary_mark} is below 50` : '';
+  }
+  if (failedAgain) return 'Failed this module again at its repeat sitting — discontinued';
   return 'GPA below 2.0 requires discontinuation review.';
 }
 
@@ -5659,7 +6228,7 @@ function renderExamDeclarations() {
   } else if (type === 'supp_exam') {
     note.textContent = 'Every end-of-semester component must score at least 50. For practical modules, either theory or practical below 50 automatically requires a supplementary exam.';
   } else if (type === 'repeat_module') {
-    note.textContent = 'Students who score below 50 in the supplementary exam automatically repeat the module.';
+    note.textContent = 'Students who score below 50 in the supplementary exam repeat the module — and so does a student who failed more than half of the semester\'s modules, with no supplementary.';
   } else {
     note.textContent = 'A GPA below 2.0 requires discontinuation review. Discontinuation is not charged here — it is decided when the semester results are reviewed.';
   }
@@ -6290,7 +6859,8 @@ function blockedList(clearance) {
 }
 
 function financeNavGroupFor(section = state.financeSection || 'overview') {
-  if (['accounts', 'charge-types', 'fee-structure', 'payment-schedule'].includes(section)) return document.getElementById('finance-setup-nav-group');
+  if (['accounts', 'charge-types', 'fee-structure', 'payment-schedule', 'course-fees'].includes(section)) return document.getElementById('finance-setup-nav-group');
+  if (['expenses', 'expense-budget'].includes(section)) return document.getElementById('finance-expenses-nav-group');
   if (['record', 'history', 'collections'].includes(section)) return document.getElementById('finance-payments-nav-group');
   if (['students', 'extra-charge', 'overrides', 'hostel'].includes(section)) return document.getElementById('finance-students-nav-group');
   return null;
@@ -6308,6 +6878,9 @@ const FINANCE_COPY = {
   'charge-types':  ['Charge Types', 'What the college charges for, how often, and what each one blocks when unpaid.'],
   'fee-structure': ['Fee Structure', 'How much each level pays, over how many installments, and when each falls due.'],
   'payment-schedule': ['Payment Schedule', 'When each fee falls due — awamu za malipo — for new and continuing students.'],
+  'course-fees':   ['Course Fees (VETA)', 'What each VETA course charges, which account it is paid into, and in which instalments.'],
+  expenses:        ['Expense Register', 'Record what the college spends; the Principal or DPFPA approves; then record the payment.'],
+  'expense-budget': ['Categories & Budget', 'What the college spends on, and how much it plans to spend on each this year.'],
   hostel:          ['Hostel', 'Students asking for a hostel place, and who lives where.'],
   record:          ['Record a Payment', 'Look up the reference on the slip, then record what arrived.'],
   history:         ['Payment History', 'Every payment recorded, and the reversals that corrected them.'],
@@ -6333,7 +6906,7 @@ function showFinanceSection(section, btn) {
 }
 
 function toggleFinanceMenu(event, area = 'payments') {
-  const firstOf = { setup: 'charge-types', payments: 'record', students: 'students' };
+  const firstOf = { setup: 'charge-types', payments: 'record', students: 'students', expenses: 'expenses' };
   const group = document.getElementById(`finance-${area}-nav-group`);
   if (!group) return;
   group.classList.toggle('open');
@@ -6401,6 +6974,9 @@ async function loadFinanceSection() {
       case 'charge-types':   await loadChargeTypes(); break;
       case 'fee-structure':  await loadFeeGrid(); break;
       case 'payment-schedule': await loadPaymentSchedule(); break;
+      case 'course-fees':    await loadCourseFees(); break;
+      case 'expenses':       await loadExpenses(); break;
+      case 'expense-budget': await loadExpenseBudget(); break;
       case 'hostel':         await loadHostelApplications(); break;
       case 'record':         await loadOutstandingForPayment(); break;
       case 'history':        await loadPaymentHistory(); break;
@@ -6419,12 +6995,37 @@ async function loadFinanceSection() {
 
 // ── postponement and finishing ────────────────────────────────────────────────
 
-async function loadStatusPage() {
-  const me = state.offices || {};
-  await Promise.all([
-    (me.principal || me.records) ? loadPostponements() : null,
-    (me.principal || me.finance) ? loadFinishing() : null,
-  ]);
+// Postponements and finishing are two pieces of work for different offices,
+// so each has its own menu item and its own screen.
+const STATUS_SECTIONS = {
+  postpone: ['Postponements', 'Students asking to stop for a while. The Principal decides.'],
+  finish: ['Finishing', 'Students who finished level 6: finance clears them, then the Principal declares them cleared.'],
+};
+
+function toggleStatusMenu(event) {
+  const group = document.getElementById('status-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-status').classList.contains('active')) {
+    const me = state.offices || {};
+    const first = (me.principal || me.records || me.dparc) ? 'postpone' : 'finish';
+    showStatusSection(first, group.querySelector(`[data-status-section="${first}"]`));
+  }
+  event.stopPropagation();
+}
+
+function showStatusSection(section, btn) {
+  if (!STATUS_SECTIONS[section]) section = 'postpone';
+  document.querySelectorAll('#page-status [data-status-section]').forEach(card =>
+    card.classList.toggle('sec-on', card.dataset.statusSection === section));
+  document.querySelectorAll('[data-status-section].nav-sub-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.statusSection === section));
+  const [title, sub] = STATUS_SECTIONS[section];
+  document.getElementById('status-page-title').textContent = title;
+  document.getElementById('status-page-sub').textContent = sub;
+  showPage('status', document.querySelector('#status-nav-group .nav-btn'));
+  document.getElementById('status-nav-group').classList.add('open');
+  if (btn) btn.classList.add('active');
+  return section === 'postpone' ? loadPostponements() : loadFinishing();
 }
 
 async function loadPostponements() {
@@ -6438,7 +7039,7 @@ async function loadPostponements() {
         <td style="max-width:280px;">${safeText(row.reason)}</td>
         <td>${row.by_student ? 'Portal' : `Paper — ${safeText(row.entered_by)}`}</td>
         <td>${row.status === 'pending' ? '<span class="badge badge-yellow">Waiting</span>'
-             : row.status === 'approved' ? `<span class="badge badge-green">Approved</span><div style="font-size:.72rem;">back ${safeText(row.returns)} · ${money(row.fees_reversed)} reversed</div>`
+             : row.status === 'approved' ? `<span class="badge badge-green">Approved</span><div style="font-size:.72rem;">back ${safeText(row.returns)}${row.fees_reversed === null ? '' : ` · ${money(row.fees_reversed)} reversed`}</div>`
              : `<span class="badge badge-gen">${safeText(row.status_display)}</span><div style="font-size:.72rem;color:var(--muted);">${safeText(row.decision_note)}</div>`}</td>
         <td style="white-space:nowrap;">${row.status === 'pending' && me.principal ? `
           <button class="btn btn-primary btn-sm" onclick="decidePostponement(${row.id}, 'approve')">Approve</button>
@@ -6859,6 +7460,7 @@ function editChargeType(id) {
   document.getElementById('fin-ct-sort_order').value = c.sort_order || 0;
   document.getElementById('fin-ct-declaration').value = c.declaration || '';
   document.getElementById('fin-ct-charged_again_on_readmission').checked = c.charged_again_on_readmission !== false;
+  document.getElementById('fin-ct-for_repeaters').checked = !!c.for_repeaters;
   BLOCK_FIELDS.forEach(f => { document.getElementById(`fin-ct-${f}`).checked = !!c[f]; });
 
   document.getElementById('fin-ct-title').textContent = `Editing: ${c.name}`;
@@ -6880,6 +7482,7 @@ function cancelChargeTypeEdit() {
   document.getElementById('fin-ct-account').value = '';
   document.getElementById('fin-ct-declaration').value = '';
   document.getElementById('fin-ct-charged_again_on_readmission').checked = true;
+  document.getElementById('fin-ct-for_repeaters').checked = false;
   BLOCK_FIELDS.forEach(f => { document.getElementById(`fin-ct-${f}`).checked = false; });
   document.getElementById('fin-ct-title').textContent = 'Add a charge type';
   document.getElementById('fin-ct-save').textContent = '💾 Save charge type';
@@ -6901,6 +7504,7 @@ async function saveChargeType() {
     sort_order: order === '' ? 0 : Number(order),
     declaration: document.getElementById('fin-ct-declaration').value,
     charged_again_on_readmission: document.getElementById('fin-ct-charged_again_on_readmission').checked,
+    for_repeaters: document.getElementById('fin-ct-for_repeaters').checked,
   };
   BLOCK_FIELDS.forEach(f => { payload[f] = document.getElementById(`fin-ct-${f}`).checked; });
 
@@ -7030,6 +7634,10 @@ window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',
 
 const NOTIFICATION_LINKS = {
   'forms:requests': () => showFormsSection('requests'),
+  'status:postponements': () => showStatusSection('postpone', document.querySelector('[data-status-section="postpone"].nav-sub-btn')),
+  'executive:spending': () => showExecSection('spending', document.querySelector('[data-exec-section="spending"].nav-sub-btn')),
+  'finance:expenses': () => showFinanceSection('expenses', document.querySelector('[data-finance-section="expenses"].nav-sub-btn')),
+  'health': () => { showPage('health', document.querySelector('[data-page="health"]')); loadHealthRecords(); },
 };
 
 async function loadNotifications() {
@@ -8970,11 +9578,12 @@ async function searchRecords() {
         <td>${safeText(row.college_id || '—')}</td>
         <td>${safeText(row.name)}</td>
         <td>${safeText(row.standing_display)}${row.class_level ? ' · ' + safeText(row.class_level) : ''}</td>
-        <td>${row.gender && row.phone && row.next_of_kin.length >= 2 && row.date_of_birth
-              ? '<span class="badge badge-green">complete</span>' : '<span class="badge badge-yellow">incomplete</span>'}</td>
+        <td>${safeText(row.gender_display || '—')}</td>
+        <td>${!(row.missing || []).length
+              ? '<span class="badge badge-green">complete</span>' : `<span class="badge badge-yellow" title="${safeText((row.missing || []).join(', '))}">incomplete</span>`}</td>
         <td><button class="btn btn-ghost btn-sm" onclick="openRecord(${row.id})">Open</button></td>
       </tr>`).join('')
-      : '<tr><td colspan="6"><div class="empty">Nobody by that name or number</div></td></tr>';
+      : '<tr><td colspan="7"><div class="empty">Nobody by that name or number</div></td></tr>';
   } catch (e) {
     toast(apiErrorText(e, 'Could not search'), 'var(--red)');
   }
@@ -8990,6 +9599,7 @@ async function openRecord(profileId) {
       ? `<div class="missing-note">Still to record: ${safeText(record.missing.join(', '))}</div>` : '';
     document.getElementById('rec-editor-form').innerHTML = detailsFormHtml('rec-det', record);
     await renderRecordDocuments(profileId);
+    await renderRecordHealth(profileId);
     const editor = document.getElementById('rec-editor');
     editor.style.display = '';
     editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -9010,6 +9620,86 @@ async function saveRecord(event) {
   } catch (e) {
     toast(apiErrorText(e, 'Could not save'), 'var(--red)');
   } finally { done(); }
+}
+
+// ── health records: kept by records, read by the Dean of Students ───────────
+function healthRowsHtml(rows, { withStudent = false, canClose = false } = {}) {
+  return rows.map(r => `<tr>
+    ${withStudent ? `<td><strong>${safeText(r.name)}</strong><div style="font-size:.72rem;color:var(--muted)">${safeText(r.reg_no)}${r.college_id ? ' · ' + safeText(r.college_id) : ''}</div></td>
+                     <td>${safeText(r.gender || '—')}</td>` : ''}
+    <td><strong>${safeText(r.condition)}</strong>${r.is_current ? '' : `<div style="font-size:.72rem;color:var(--muted)">closed: ${safeText(r.closed_note)}</div>`}</td>
+    <td>${safeText(r.notes || '—')}</td>
+    <td><a href="${r.certificate_url}" target="_blank" rel="noopener">${safeText(r.certificate_name)}</a>
+        <div style="font-size:.72rem;color:var(--muted)">verified by ${safeText(r.verified_by || '—')}</div></td>
+    <td style="white-space:nowrap">${safeText(new Date(r.recorded_at).toLocaleDateString())}<div style="font-size:.72rem;color:var(--muted)">${safeText(r.recorded_by)}</div></td>
+    ${canClose ? `<td>${r.is_current ? `<button class="btn btn-ghost btn-sm" onclick="closeHealthRecord(${r.id}, ${r.profile_id})">No longer applies…</button>` : ''}</td>` : ''}
+  </tr>`).join('');
+}
+
+async function renderRecordHealth(profileId) {
+  const box = document.getElementById('rec-editor-health');
+  const me = state.offices || {};
+  const keeper = me.records || me.principal;
+  try {
+    const [rows, docs] = await Promise.all([
+      api('GET', `/health-records/?profile_id=${profileId}`),
+      keeper ? api('GET', `/student-documents/?profile_id=${profileId}&kind=medical`) : Promise.resolve([]),
+    ]);
+    const certificates = (docs.results ?? docs).filter(d => d.is_verified);
+    box.innerHTML = (rows.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Condition</th><th>What to allow for</th><th>Certificate</th><th>Recorded</th>${keeper ? '<th></th>' : ''}</tr></thead>
+        <tbody>${healthRowsHtml(rows, { canClose: keeper })}</tbody></table></div>`
+      : '<p class="help-note">No health problem recorded.</p>') +
+      (keeper ? (certificates.length ? `<div class="form-grid-3" style="margin-top:10px;">
+          <div class="field"><label>Condition *</label><input id="hr-condition" placeholder="As the certificate names it"></div>
+          <div class="field"><label>What to allow for</label><input id="hr-notes" placeholder="e.g. excuse from heavy practicals"></div>
+          <div class="field"><label>Certificate *</label><select id="hr-certificate">${certificates.map(d =>
+            `<option value="${d.id}">${safeText(d.display_name)}</option>`).join('')}</select></div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="addHealthRecord(event, ${profileId})">Record health problem</button>`
+        : '<p class="help-note">To record a health problem, upload the medical certificate above as a <em>Medical form</em> and mark it seen.</p>') : '');
+  } catch (e) { box.innerHTML = ''; }
+}
+
+async function addHealthRecord(event, profileId) {
+  const done = working(event?.currentTarget, 'Saving…');
+  try {
+    await api('POST', '/health-records/', {
+      profile_id: profileId, condition: document.getElementById('hr-condition').value.trim(),
+      notes: document.getElementById('hr-notes').value.trim(),
+      certificate_id: document.getElementById('hr-certificate').value });
+    toast('Recorded — the Dean of Students is told', 'var(--green)');
+    await renderRecordHealth(profileId);
+  } catch (e) { toast(apiErrorText(e, 'Could not record it'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function closeHealthRecord(id, profileId) {
+  const note = prompt('Why does it no longer apply? (It is kept, not deleted.)');
+  if (note === null) return;
+  try {
+    await api('POST', `/health-records/${id}/close/`, { note });
+    toast('Closed', 'var(--green)');
+    if (document.getElementById('page-health').classList.contains('active')) await loadHealthRecords();
+    else await renderRecordHealth(profileId);
+  } catch (e) { toast(apiErrorText(e, 'Could not close it'), 'var(--red)'); }
+}
+
+let healthSearchTimer;
+function scheduleHealthSearch() {
+  clearTimeout(healthSearchTimer);
+  healthSearchTimer = setTimeout(loadHealthRecords, 300);
+}
+
+async function loadHealthRecords() {
+  const body = document.getElementById('hr-tbody');
+  const search = document.getElementById('hr-search').value.trim();
+  const current = document.getElementById('hr-current').checked ? '1' : '';
+  try {
+    const rows = await api('GET', `/health-records/?search=${encodeURIComponent(search)}&current=${current}`);
+    body.innerHTML = rows.length ? healthRowsHtml(rows, { withStudent: true })
+      : '<tr><td colspan="6"><div class="empty">No health records</div></td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load health records'), 'var(--red)'); }
 }
 
 async function renderRecordDocuments(profileId) {
@@ -9091,6 +9781,7 @@ const ADMISSION_SECTIONS = {
   all: ['All applications', 'Every application this semester.'],
   dueback: ['Expected back', 'Discontinued and postponed students due this semester.'],
   settings: ['Window & ID numbers', 'When admissions run, and the college ID format.'],
+  veta: ['VETA courses', 'Intakes, and students on their way through the desks.'],
   items: ['Items check', 'TPH book, calculator, rim paper — checked again each semester.'],
 };
 
@@ -9129,6 +9820,7 @@ async function showAdmissionSection(section, btn) {
     await loadApplications();
   }
   if (section === 'dueback') await loadDueBack();
+  if (section === 'veta') await loadVeta();
   if (section === 'items') {
     const picker = document.getElementById('items-semester');
     if (!picker.options.length) {
@@ -9383,6 +10075,7 @@ async function openApplication(event) {
     name: document.getElementById('adm-name').value.trim(),
     programme_id: document.getElementById('adm-programme').value,
     class_level_id: document.getElementById('adm-level').value,
+    form_four_index: document.getElementById('adm-f4').value.trim(),
   };
   if (!payload.name) { toast('A name is needed', 'var(--red)'); return; }
   if (!payload.nactvet_reg_no && payload.kind !== 'new') {
@@ -9393,7 +10086,7 @@ async function openApplication(event) {
   try {
     const application = await api('POST', '/applications/capture/', payload);
     toast(`${application.student_name} is now with ${DESK_LABELS[application.state]}`, 'var(--green)');
-    ['adm-regno', 'adm-name'].forEach(id => { document.getElementById(id).value = ''; });
+    ['adm-regno', 'adm-name', 'adm-f4'].forEach(id => { document.getElementById(id).value = ''; });
     document.getElementById('adm-lookup').textContent = '';
     await refreshAdmissions();
   } catch (e) {
@@ -9412,8 +10105,8 @@ async function openApplicationModal(id) {
       ${safeText(KIND_LABELS[application.kind] || application.kind)} ·
       ${safeText(application.programme_code || '')} ${safeText(application.class_level_name || '')} ·
       ${safeText(application.semester_label)}<br>
-      <strong>Where it is:</strong> ${safeText(DESK_LABELS[application.state] || application.state)} ·
-      <strong>Owes:</strong> ${safeText(application.balance)}
+      <strong>Where it is:</strong> ${safeText(DESK_LABELS[application.state] || application.state)}
+      ${application.balance === null ? '' : ` · <strong>Owes:</strong> ${safeText(application.balance)}`}
       ${application.payment ? `<br><strong>To register:</strong> ${application.payment.cleared
           ? '<span class="badge badge-green">paid</span>'
           : `<span class="badge badge-red">not paid</span> ${safeText(application.payment.reason)}`}` : ''}
@@ -9510,6 +10203,8 @@ function detailsFormHtml(prefix, details) {
     </div>
     <div class="form-grid-3">
       <div class="field"><label>Date of birth</label><input type="date" id="${prefix}-dob" value="${safeText(details.date_of_birth || '')}"></div>
+      ${details.veta_only ? '' : `<div class="field"><label>Form Four index No. (CSEE)</label>
+        <input id="${prefix}-f4" value="${safeText(details.form_four_index || '')}" placeholder="S0123/0045/2021"></div>`}
     </div>
     ${[1, 2].map(n => `<div class="form-grid-3">
       <div class="field"><label>Next of kin ${n}</label><input id="${prefix}-kin${n}-name" value="${safeText(kin(n).name || '')}"></div>
@@ -9523,6 +10218,7 @@ function readDetailsForm(prefix) {
   return {
     name: value('name'), phone: value('phone'), gender: value('gender'),
     date_of_birth: value('dob'),
+    ...(document.getElementById(`${prefix}-f4`) ? { form_four_index: value('f4') } : {}),
     next_of_kin: [1, 2].map(n => ({ name: value(`kin${n}-name`), phone: value(`kin${n}-phone`),
                                     relationship: value(`kin${n}-rel`) })),
   };
@@ -9534,6 +10230,7 @@ function detailsReadOnlyHtml(details) {
   return `<dl class="facts">
     <dt>Gender</dt><dd>${safeText(details.gender_display || details.gender || '—')}</dd>
     <dt>Date of birth</dt><dd>${safeText(details.date_of_birth || '—')}</dd>
+    <dt>Form Four index</dt><dd>${safeText(details.form_four_index || '—')}</dd>
     <dt>Phone</dt><dd>${safeText(details.phone || '—')}</dd>
     <dt>Next of kin</dt><dd>${kin || '—'}</dd>
   </dl>`;
@@ -9740,6 +10437,16 @@ function renderApplicationActions(application) {
   }
   const last = application.state === 'admission';
   const me = state.offices || {};
+  // Which office works each desk — the same table as DESK_ROLES in views.py.
+  // DPARC reads the queue and works no desk.
+  const deskOffice = {
+    intake: me.admission, information: me.records || me.admission, finance: me.finance,
+    records: me.records, admission: me.admission,
+  };
+  if (!(me.principal || deskOffice[application.state])) {
+    box.innerHTML = `<span style="font-size:.82rem;color:var(--muted);">Read only. The office at this desk clears it: ${safeText(DESK_LABELS[application.state] || application.state)}.</span>`;
+    return;
+  }
   // Refusing is the admission office's decision; the other desks send back.
   box.innerHTML = `
     <button class="btn btn-primary btn-sm" onclick="completeApplicationStep(event)">
@@ -9864,6 +10571,8 @@ async function loadAdmissionSettings() {
     document.getElementById('adm-id-start').value = fmt.starts_at;
     document.getElementById('adm-id-next').value = fmt.next_number;
     document.getElementById('adm-id-example').value = fmt.example;
+    document.getElementById('adm-id-veta-pattern').value = fmt.veta_pattern || '';
+    document.getElementById('adm-id-veta-example').value = fmt.veta_example || '';
   } catch (e) { /* not this account's card */ }
   await loadRequirements();
 }
@@ -10029,9 +10738,11 @@ async function saveCollegeIdFormat() {
       sequence_width: Number(document.getElementById('adm-id-width').value) || 3,
       starts_at: Number(document.getElementById('adm-id-start').value) || 1,
       next_number: Number(document.getElementById('adm-id-next').value) || 1,
+      veta_pattern: document.getElementById('adm-id-veta-pattern').value.trim(),
     });
     state.collegeIdFormat = saved;
     document.getElementById('adm-id-example').value = saved.example;
+    document.getElementById('adm-id-veta-example').value = saved.veta_example || '';
     toast(`Saved — the next number is ${saved.example}`, 'var(--green)');
   } catch (e) {
     toast(apiErrorText(e, 'Could not save the format'), 'var(--red)');
@@ -10065,7 +10776,8 @@ function outcomeBadge(outcome) {
 
 async function loadProgression() {
   document.getElementById('rev-actions').style.display = state.canReviewProgression ? '' : 'none';
-  document.getElementById('rev-readonly').style.display = state.canReviewProgression ? 'none' : '';
+  document.getElementById('rev-confirm-all').style.display = state.canConfirmReviews ? '' : 'none';
+  document.getElementById('rev-readonly').style.display = state.canConfirmReviews ? 'none' : '';
   const select = document.getElementById('rev-semester');
   const semesters = state.semesters || [];
   if (!select.options.length && semesters.length) {
@@ -10164,7 +10876,7 @@ function renderReviews() {
     const confirmed = row.confirmed
       ? `${outcomeBadge(row.confirmed)}<div style="font-size:.68rem;color:var(--muted);">${safeText(row.confirmed_by_name || '')}${row.confirmed_reason ? ' — ' + safeText(row.confirmed_reason) : ''}</div>`
       : '<span style="color:var(--muted);font-size:.75rem;">—</span>';
-    const actions = !state.canReviewProgression
+    const actions = !state.canConfirmReviews
       ? ''
       : row.confirmed
       ? `<button class="btn btn-ghost btn-sm" onclick="openReviewModal(${row.id})">Change</button>`
@@ -10853,23 +11565,905 @@ function editDisposal(id) {
   const x=state.inventoryDisposals.find(v=>v.id===id);if(!x)return; document.getElementById('ds-id').value=x.id;document.getElementById('ds-asset').value=x.asset;document.getElementById('ds-proposed').value=x.proposed_date;document.getElementById('ds-status').value=x.status;document.getElementById('ds-method').value=x.method;document.getElementById('ds-date').value=x.disposal_date||'';document.getElementById('ds-reference').value=x.reference;document.getElementById('ds-reason').value=x.reason;
 }
 
+// ── VETA COURSE FEES (accountant) ─────────────────────────────────────────────
+
+async function ensureVetaCourses() {
+  const programmes = await api('GET', '/programmes/?is_active=true');
+  state.vetaCourses = (programmes.results ?? programmes).filter(p => p.is_veta);
+  return state.vetaCourses;
+}
+
+function fillYearSelect(select) {
+  if (select.options.length) return;
+  const years = state.academicYears || [];
+  select.innerHTML = years.map(y => `<option value="${y.id}">${safeText(y.name)}</option>`).join('');
+  const active = years.find(y => y.is_active);
+  if (active) select.value = active.id;
+}
+
+async function loadCourseFees() {
+  await ensureVetaCourses();
+  const course = document.getElementById('cf-course');
+  const chosen = course.value;
+  course.innerHTML = state.vetaCourses.length
+    ? state.vetaCourses.map(p => `<option value="${p.id}">${safeText(p.code)} · ${safeText(p.name)}</option>`).join('')
+    : '<option value="">No VETA course defined yet</option>';
+  if (chosen) course.value = chosen;
+  fillYearSelect(document.getElementById('cf-year'));
+  if (!state.chargeTypes?.length) {
+    const types = await api('GET', '/charge-types/');
+    state.chargeTypes = types.results ?? types;
+  }
+  document.getElementById('cf-charge').innerHTML = state.chargeTypes.filter(c => c.is_active)
+    .map(c => `<option value="${c.id}">${safeText(c.name)}</option>`).join('');
+  const year = document.getElementById('cf-year').value;
+  state.courseFees = await api('GET', `/course-fees/?academic_year_id=${year}`);
+  renderCourseFees();
+}
+
+function renderCourseFees() {
+  const course = Number(document.getElementById('cf-course').value);
+  const rows = (state.courseFees || []).filter(f => f.programme === course);
+  document.getElementById('cf-tbody').innerHTML = rows.length ? rows.map(f => `<tr>
+      <td>${safeText(f.charge_type_name)}</td>
+      <td style="font-size:.78rem">${safeText(f.account || 'no account on this charge type')}<div style="color:var(--muted)">${safeText(f.account_purpose)}</div></td>
+      <td>${money(f.amount)}</td>
+      <td style="font-size:.78rem">${f.instalments.length ? f.instalments.map(i => `day ${i.due_after_days}: ${money(i.amount)}${i.before_admission ? ' <span class="badge badge-yellow">before admission</span>' : ''}`).join('<br>') : 'all at the start'}</td>
+      <td>${f.hostel_only ? '<span class="badge badge-yellow">hostel</span>' : '—'}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="removeCourseFee(${f.id})">Remove</button></td>
+    </tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted)">No fees set for this course and year yet.</td></tr>';
+}
+
+async function saveCourseFee(event) {
+  const instalments = document.getElementById('cf-parts').value.split('\n').map(l => l.trim()).filter(Boolean)
+    .map(l => { const [days, amount] = l.split(/[,;\s]+/); return { due_after_days: Number(days), amount }; });
+  const payload = {
+    programme: Number(document.getElementById('cf-course').value),
+    academic_year_id: Number(document.getElementById('cf-year').value),
+    charge_type: Number(document.getElementById('cf-charge').value),
+    amount: document.getElementById('cf-amount').value,
+    hostel_only: document.getElementById('cf-hostel').checked,
+    first_before_admission: document.getElementById('cf-before').checked,
+    instalments,
+  };
+  if (!payload.programme || !payload.amount) { toast('Pick the course and give the amount', 'var(--red)'); return; }
+  const done = working(event?.currentTarget, 'Saving…');
+  try {
+    await api('POST', '/course-fees/', payload);
+    toast('Fee saved', 'var(--green)');
+    ['cf-amount', 'cf-parts'].forEach(id => document.getElementById(id).value = '');
+    await loadCourseFees();
+  } catch (e) { toast(apiErrorText(e, 'Could not save the fee'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function removeCourseFee(id) {
+  if (!confirm('Remove this fee? Students already billed keep their charges.')) return;
+  try { await api('DELETE', `/course-fees/${id}/`); await loadCourseFees(); }
+  catch (e) { toast(apiErrorText(e, 'Could not remove it'), 'var(--red)'); }
+}
+
+// ── EXPENSES (accountant) ─────────────────────────────────────────────────────
+
+const EXPENSE_BADGE = { pending: 'badge-yellow', queried: 'badge-orange', approved: 'badge-blue',
+                        paid: 'badge-green', rejected: 'badge-red', cancelled: 'badge-gen' };
+
+async function loadExpenseCategories() {
+  state.expenseCategories = await api('GET', '/expense-categories/');
+  const select = document.getElementById('ex-category');
+  if (select) select.innerHTML = state.expenseCategories.filter(c => c.is_active)
+    .map(c => `<option value="${c.id}">${safeText(c.name)}</option>`).join('')
+    || '<option value="">Add a category first (Categories & Budget)</option>';
+}
+
+function expenseRow(e, { forApproval = false } = {}) {
+  const status = `<span class="badge ${EXPENSE_BADGE[e.status] || ''}">${safeText(e.status_display)}</span>`
+    + (e.over_budget_by ? `<div style="font-size:.7rem;color:var(--red)">over budget by ${money(e.over_budget_by)}</div>` : '')
+    + (e.decision_note ? `<div style="font-size:.7rem;color:var(--muted)">${safeText(e.decided_by)}: ${safeText(e.decision_note)}</div>` : '')
+    + (e.status === 'paid' ? `<div style="font-size:.7rem;color:var(--muted)">${safeText(e.payment_method)} ${safeText(e.bank_account)} ${safeText(e.payment_reference)}</div>` : '')
+    + (e.cancelled_reason ? `<div style="font-size:.7rem;color:var(--muted)">${safeText(e.cancelled_reason)}</div>` : '')
+    + (e.query_note ? `<div style="font-size:.7rem;color:var(--orange)">Query (${safeText(e.queried_by)}): ${safeText(e.query_note)}</div>` : '')
+    + (e.answer_note ? `<div style="font-size:.7rem;color:var(--muted)">Answer: ${safeText(e.answer_note)}</div>` : '');
+  const actions = [
+    e.has_attachment ? `<a class="btn btn-ghost btn-sm" href="${API}/expenses/${e.id}/attachment/" target="_blank" rel="noopener">Receipt</a>` : '',
+    e.can_decide ? `<button class="btn btn-primary btn-sm" onclick="decideExpense(${e.id}, 'approve', ${e.over_budget_by ? 'true' : 'false'})">Approve</button>
+                    <button class="btn btn-ghost btn-sm" onclick="decideExpense(${e.id}, 'reject')">Reject…</button>` : '',
+    e.can_query ? `<button class="btn btn-ghost btn-sm" onclick="queryExpense(${e.id})">Query…</button>` : '',
+    !forApproval && e.can_answer ? `<button class="btn btn-primary btn-sm" onclick="answerExpense(${e.id}, '${e.amount}')">Answer…</button>` : '',
+    !forApproval && e.can_pay ? `<button class="btn btn-primary btn-sm" onclick="openPayExpense(${e.id}, '${e.source}')">Record payment</button>` : '',
+    !forApproval && e.can_cancel ? `<button class="btn btn-ghost btn-sm" onclick="cancelExpense(${e.id})">Cancel…</button>` : '',
+  ].join(' ');
+  return `<tr>
+    <td style="white-space:nowrap">${safeText(e.incurred_on)}</td>
+    <td>${safeText(e.category_name)}<div style="font-size:.7rem;color:var(--muted)">${safeText(e.source_display || '')}</div></td>
+    <td><strong>${safeText(e.payee)}</strong><div style="font-size:.75rem;color:var(--muted)">${safeText(e.description)}${e.supplier_reference ? ' · ' + safeText(e.supplier_reference) : ''}</div>
+        <div style="font-size:.7rem;color:var(--muted)">recorded by ${safeText(e.recorded_by)}</div></td>
+    <td style="white-space:nowrap">${money(e.amount)}</td>
+    <td>${status}</td>
+    <td style="white-space:nowrap">${actions}</td>
+  </tr>`;
+}
+
+async function loadExpenses() {
+  await loadExpenseCategories();
+  const dateInput = document.getElementById('ex-date');
+  if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+  const wanted = document.getElementById('ex-filter').value;
+  const rows = await api('GET', `/expenses/${wanted ? `?status=${wanted}` : ''}`);
+  document.getElementById('ex-tbody').innerHTML = rows.length ? rows.map(e => expenseRow(e)).join('')
+    : '<tr><td colspan="6" style="color:var(--muted)">Nothing recorded yet.</td></tr>';
+  await loadPettyCash();
+}
+
+async function loadPettyCash() {
+  const box = document.getElementById('pc-facts');
+  if (!box) return;
+  try {
+    const data = await api('GET', '/petty-cash/');
+    box.innerHTML = `
+      <div class="qf-item"><span>In the float now</span><strong>${money(data.balance)}</strong></div>
+      <div class="qf-item"><span>Topped up this year</span><strong>${money(data.topped_up)}</strong></div>
+      <div class="qf-item"><span>Spent this year</span><strong>${money(data.spent)}</strong></div>`;
+    document.getElementById('pc-tbody').innerHTML = data.topups.length ? data.topups.map(t => `<tr>
+        <td>${safeText(t.received_on)}</td><td>${money(t.amount)}</td><td>${safeText(t.bank_account || '—')}</td>
+        <td>${safeText(t.reference)}${t.note ? ' · ' + safeText(t.note) : ''}</td><td>${safeText(t.recorded_by)}</td></tr>`).join('')
+      : '<tr><td colspan="5" style="color:var(--muted)">No top-ups this year.</td></tr>';
+    if (!state.bankAccounts?.length) {
+      const accounts = await api('GET', '/bank-accounts/?is_active=true');
+      state.bankAccounts = accounts.results ?? accounts;
+    }
+    const select = document.getElementById('pc-account');
+    if (!select.options.length) {
+      select.innerHTML = state.bankAccounts.map(a =>
+        `<option value="${a.id}">${safeText(a.bank_name)} ${safeText(a.account_number)}</option>`).join('')
+        + '<option value="">— none (a reversal) —</option>';
+    }
+    const date = document.getElementById('pc-date');
+    if (!date.value) date.value = new Date().toISOString().slice(0, 10);
+  } catch (e) { box.innerHTML = ''; }
+}
+
+async function topUpPettyCash(event) {
+  const value = (id) => document.getElementById(id).value.trim();
+  const done = working(event?.currentTarget, 'Saving…');
+  try {
+    await api('POST', '/petty-cash/', { amount: value('pc-amount'), bank_account: value('pc-account') || null,
+                                        reference: value('pc-ref'), received_on: value('pc-date'), note: value('pc-note') });
+    toast('Petty cash updated', 'var(--green)');
+    ['pc-amount', 'pc-ref', 'pc-note'].forEach(id => document.getElementById(id).value = '');
+    await loadPettyCash();
+  } catch (e) { toast(apiErrorText(e, 'Could not record the top-up'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function queryExpense(id) {
+  const note = prompt('What do you want to ask the accountant? It waits until they answer.');
+  if (note === null) return;
+  try {
+    await api('POST', `/expenses/${id}/query/`, { note });
+    toast('Queried — the accountant is told', 'var(--green)');
+    if (document.getElementById('page-executive').classList.contains('active')) await loadExecutiveSpending();
+    else await loadExpenses();
+  } catch (e) { toast(apiErrorText(e, 'Could not send the query'), 'var(--red)'); }
+}
+
+async function answerExpense(id, amount) {
+  const note = prompt('Your answer to the query (the Principal and DPFPA read it):');
+  if (note === null) return;
+  const corrected = prompt('Correct the amount? Leave it as it is to keep it.', amount);
+  if (corrected === null) return;
+  const body = { note };
+  if (corrected.trim() && Number(corrected) !== Number(amount)) body.amount = corrected.trim();
+  try {
+    await api('POST', `/expenses/${id}/answer/`, body);
+    toast('Answered — it waits for approval again', 'var(--green)');
+    await loadExpenses();
+  } catch (e) { toast(apiErrorText(e, 'Could not send the answer'), 'var(--red)'); }
+}
+
+async function recordExpense(event) {
+  const form = new FormData();
+  const field = (key, id) => form.append(key, document.getElementById(id).value.trim());
+  field('category', 'ex-category'); field('payee', 'ex-payee'); field('amount', 'ex-amount');
+  field('description', 'ex-description'); field('incurred_on', 'ex-date'); field('supplier_reference', 'ex-ref');
+  field('source', 'ex-source');
+  const file = document.getElementById('ex-file').files[0];
+  if (file) form.append('attachment', file);
+  const done = working(event?.currentTarget, 'Sending…');
+  try {
+    const made = await api('POST', '/expenses/', form);
+    toast(made.over_budget_by ? `Sent for approval — it takes the category over budget by ${money(made.over_budget_by)}`
+                              : 'Sent for approval', made.over_budget_by ? 'var(--orange)' : 'var(--green)');
+    ['ex-payee', 'ex-amount', 'ex-description', 'ex-ref', 'ex-file'].forEach(id => document.getElementById(id).value = '');
+    await loadExpenses();
+  } catch (e) { toast(apiErrorText(e, 'Could not record the expense'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function decideExpense(id, decision, overBudget = false) {
+  let note = '';
+  if (decision === 'reject' || overBudget) {
+    note = prompt(decision === 'reject' ? 'Why is it rejected? The accountant reads this.'
+                                        : 'This takes the category over its budget. Why approve it?');
+    if (note === null) return;
+  } else if (!confirm('Approve this expense?')) {
+    return;
+  }
+  try {
+    await api('POST', `/expenses/${id}/decide/`, { decision, note });
+    toast(decision === 'approve' ? 'Approved' : 'Rejected', 'var(--green)');
+    if (document.getElementById('page-executive').classList.contains('active')) await loadExecutiveSpending();
+    else await loadExpenses();
+  } catch (e) { toast(apiErrorText(e, 'Could not record the decision'), 'var(--red)'); }
+}
+
+async function openPayExpense(id, source) {
+  if (source === 'petty_cash') {
+    if (!confirm('Paid in cash out of the petty cash float?')) return;
+    try {
+      await api('POST', `/expenses/${id}/pay/`, { method: 'cash', paid_on: new Date().toISOString().slice(0, 10) });
+      toast('Paid from petty cash', 'var(--green)');
+      await loadExpenses();
+    } catch (e) { toast(apiErrorText(e, 'Could not record the payment'), 'var(--red)'); }
+    return;
+  }
+  if (!state.bankAccounts?.length) {
+    const accounts = await api('GET', '/bank-accounts/?is_active=true');
+    state.bankAccounts = accounts.results ?? accounts;
+  }
+  const method = prompt('How was it paid? Type: bank, cheque, cash or mobile', 'bank');
+  if (method === null) return;
+  let bank_account = null, reference = '';
+  if (method.trim() !== 'cash') {
+    const list = state.bankAccounts.map((a, i) => `${i + 1}. ${a.bank_name} ${a.account_number} (${a.purpose})`).join('\n');
+    const pick = prompt(`Paid from which account? Type its number:\n${list}`, '1');
+    if (pick === null) return;
+    bank_account = state.bankAccounts[Number(pick) - 1]?.id || null;
+    reference = prompt('Transfer, cheque or transaction number:') || '';
+  }
+  try {
+    await api('POST', `/expenses/${id}/pay/`, { method: method.trim(), bank_account, reference,
+                                                paid_on: new Date().toISOString().slice(0, 10) });
+    toast('Payment recorded', 'var(--green)');
+    await loadExpenses();
+  } catch (e) { toast(apiErrorText(e, 'Could not record the payment'), 'var(--red)'); }
+}
+
+async function cancelExpense(id) {
+  const reason = prompt('Why is it cancelled? (Nothing is deleted.)');
+  if (reason === null) return;
+  try {
+    await api('POST', `/expenses/${id}/cancel/`, { reason });
+    toast('Cancelled', 'var(--green)');
+    await loadExpenses();
+  } catch (e) { toast(apiErrorText(e, 'Could not cancel it'), 'var(--red)'); }
+}
+
+async function loadExpenseBudget() {
+  const data = await api('GET', '/expense-budgets/');
+  document.getElementById('eb-tbody').innerHTML = data.rows.length ? data.rows.map(r => `<tr>
+      <td>${safeText(r.category)}</td>
+      <td>${r.budget === null ? '<span style="color:var(--muted)">not set</span>' : money(r.budget)}</td>
+      <td>${money(r.pending)}</td>
+      <td>${money(r.committed)}</td>
+      <td>${money(r.paid)}</td>
+      <td>${r.left === null ? '—' : `<span class="${r.over_budget ? 'badge badge-red' : ''}">${money(r.left)}</span>`}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="setExpenseBudget(${r.category_id}, '${safeText(r.category).replace(/'/g, "\\'")}', '${r.budget ?? ''}')">Set budget</button></td>
+    </tr>`).join('') : '<tr><td colspan="7" style="color:var(--muted)">Add a category below.</td></tr>';
+}
+
+async function setExpenseBudget(categoryId, name, current) {
+  const amount = prompt(`This year's budget for ${name}:`, current);
+  if (amount === null) return;
+  const note = current ? (prompt('Why is it revised? (kept in the audit trail)') || '') : '';
+  try {
+    await api('POST', '/expense-budgets/', { category: categoryId, amount, note });
+    toast('Budget set', 'var(--green)');
+    await loadExpenseBudget();
+  } catch (e) { toast(apiErrorText(e, 'Could not set the budget'), 'var(--red)'); }
+}
+
+async function saveExpenseCategory(event) {
+  const name = document.getElementById('ec-name').value.trim();
+  if (!name) { toast('Give the category a name', 'var(--red)'); return; }
+  const done = working(event?.currentTarget, 'Adding…');
+  try {
+    await api('POST', '/expense-categories/', { name, code: document.getElementById('ec-code').value.trim(),
+                                                description: document.getElementById('ec-description').value.trim() });
+    ['ec-name', 'ec-code', 'ec-description'].forEach(id => document.getElementById(id).value = '');
+    toast('Category added', 'var(--green)');
+    await loadExpenseBudget();
+  } catch (e) { toast(apiErrorText(e, 'Could not add it'), 'var(--red)'); }
+  finally { done(); }
+}
+
+// ── VETA COURSES at the admission desks ──────────────────────────────────────
+// Same desks and offices as a PST first year; the server decides who may clear
+// which desk (can_work) and whether the money is shown.
+
+const VETA_DESKS = { intake: 'Intake', information: 'Records', finance: 'Finance', admission: 'Admission',
+                     admitted: 'Admitted', rejected: 'Refused', cancelled: 'Withdrawn' };
+
+async function loadVeta() {
+  try {
+    const [intakes] = await Promise.all([api('GET', '/intakes/'), ensureVetaCourses()]);
+    state.vetaIntakes = intakes;
+    document.getElementById('veta-intakes-tbody').innerHTML = intakes.length ? intakes.map(i => `<tr>
+        <td>${safeText(i.name)}</td>
+        <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${safeText(i.programme_code)}</span> ${safeText(i.structure_display)}</td>
+        <td style="white-space:nowrap">${safeText(i.starts_on)} → ${safeText(i.ends_on)}</td>
+        <td>${i.enrolled}${i.capacity ? ` / ${i.capacity}` : ''}</td>
+        <td>${i.applying}</td>
+        <td>${(state.offices.admission || state.offices.principal)
+              ? `<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" ${i.is_open ? 'checked' : ''} onchange="setIntakeOpen(${i.id}, this.checked)"> ${i.is_open ? 'yes' : 'no'}</label>`
+              : (i.is_open ? 'yes' : 'no')}</td>
+      </tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted)">No intake yet.</td></tr>';
+    document.getElementById('veta-intake-course').innerHTML = state.vetaCourses.length
+      ? state.vetaCourses.map(p => `<option value="${p.id}">${safeText(p.code)} · ${safeText(p.name)} (${p.duration_months} months)</option>`).join('')
+      : '<option value="">No VETA course yet — the Principal defines one under Departments</option>';
+    document.getElementById('veta-app-intake').innerHTML = intakes.filter(i => i.is_open)
+      .map(i => `<option value="${i.id}">${safeText(i.name)}</option>`).join('') || '<option value="">No intake is open</option>';
+    await loadVetaApplications();
+  } catch (e) { toast(apiErrorText(e, 'Could not load the VETA courses'), 'var(--red)'); }
+}
+
+async function openVetaIntake(event) {
+  const payload = { programme: Number(document.getElementById('veta-intake-course').value),
+                    starts_on: document.getElementById('veta-intake-start').value,
+                    capacity: document.getElementById('veta-intake-capacity').value || null };
+  if (!payload.programme || !payload.starts_on) { toast('Pick the course and the start date', 'var(--red)'); return; }
+  const done = working(event?.currentTarget, 'Opening…');
+  try { await api('POST', '/intakes/', payload); toast('Intake opened', 'var(--green)'); await loadVeta(); }
+  catch (e) { toast(apiErrorText(e, 'Could not open the intake'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function setIntakeOpen(id, open) {
+  try { await api('PATCH', `/intakes/${id}/`, { is_open: open }); await loadVeta(); }
+  catch (e) { toast(apiErrorText(e, 'Could not change it'), 'var(--red)'); }
+}
+
+async function createVetaApplication(event) {
+  const payload = { intake: Number(document.getElementById('veta-app-intake').value),
+                    name: document.getElementById('veta-app-name').value.trim(),
+                    phone: document.getElementById('veta-app-phone').value.trim() };
+  if (!payload.intake || !payload.name) { toast('Pick the intake and give the name', 'var(--red)'); return; }
+  const done = working(event?.currentTarget, 'Starting…');
+  try {
+    const made = await api('POST', '/course-applications/', payload);
+    ['veta-app-name', 'veta-app-phone'].forEach(id => document.getElementById(id).value = '');
+    toast('Application started — at the intake desk', 'var(--green)');
+    await loadVeta();
+    openVetaModal(made.id);
+  } catch (e) { toast(apiErrorText(e, 'Could not start it'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function loadVetaApplications() {
+  const wanted = document.getElementById('veta-app-filter').value;
+  const rows = await api('GET', `/course-applications/${wanted ? `?state=${wanted}` : ''}`);
+  document.getElementById('veta-apps-tbody').innerHTML = rows.length ? rows.map(a => `<tr>
+      <td><strong>${safeText(a.name)}</strong><div style="font-size:.72rem;color:var(--muted);font-family:var(--font-mono)">${safeText(a.college_id || a.reg_no)}</div></td>
+      <td>${safeText(a.intake_name)}</td>
+      <td><span class="badge ${a.state === 'admitted' ? 'badge-green' : a.can_work ? 'badge-yellow' : 'badge-gen'}">${safeText(VETA_DESKS[a.state] || a.state)}</span>${a.can_work ? ' <span style="font-size:.72rem;color:var(--muted)">your desk</span>' : ''}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openVetaModal(${a.id})">Open</button></td>
+    </tr>`).join('') : '<tr><td colspan="4" style="color:var(--muted)">Nothing here.</td></tr>';
+}
+
+async function openVetaModal(id) {
+  let a;
+  try { a = await api('GET', `/course-applications/${id}/`); }
+  catch (e) { toast(apiErrorText(e, 'Could not open it'), 'var(--red)'); return; }
+  state.vetaApplication = a;
+  document.getElementById('veta-modal-id').value = a.id;
+  document.getElementById('veta-modal-title').textContent = `${a.name} — ${a.intake_name}`;
+  const kin = a.next_of_kin.map(k => `${safeText(k.name)} (${safeText(k.relationship)}, ${safeText(k.phone)})`).join('; ') || 'none yet';
+  document.getElementById('veta-modal-summary').innerHTML = `
+    <strong>Where it is:</strong> ${safeText(VETA_DESKS[a.state] || a.state)} ·
+    <strong>Registration:</strong> ${safeText(a.college_id || a.reg_no)}<br>
+    <strong>Phone:</strong> ${safeText(a.phone || '—')} · <strong>Next of kin:</strong> ${kin}
+    ${a.residence ? ` · <strong>Lives:</strong> ${safeText(a.residence)}` : ''}
+    ${a.money ? `<br><strong>Billed:</strong> ${money(a.money.billed)} · <strong>Paid:</strong> ${money(a.money.paid)} ·
+       <strong>Owing:</strong> ${money(a.money.owing)} (due by the start: ${money(a.money.owing_by_start)})` : ''}`;
+  document.getElementById('veta-modal-blockers').innerHTML = (a.can_work && a.blockers.length)
+    ? `<div class="missing-note" style="margin-bottom:10px;">${a.blockers.map(safeText).join(' ')}</div>` : '';
+  const atRecords = a.can_work && a.state === 'information';
+  document.getElementById('veta-modal-details').style.display = atRecords ? '' : 'none';
+  if (atRecords) {
+    document.getElementById('veta-d-phone').value = a.phone || '';
+    document.getElementById('veta-d-gender').value = a.gender || '';
+    document.getElementById('veta-d-dob').value = a.date_of_birth || '';
+    const first = a.next_of_kin[0] || {};
+    document.getElementById('veta-d-kin-name').value = first.name || '';
+    document.getElementById('veta-d-kin-phone').value = first.phone || '';
+    document.getElementById('veta-d-kin-rel').value = first.relationship || 'parent';
+  }
+  const atFinance = a.can_work && a.state === 'finance' && !a.fees_raised;
+  document.getElementById('veta-modal-fees').style.display = atFinance ? '' : 'none';
+  if (atFinance) {
+    document.getElementById('veta-modal-fee-list').innerHTML = (a.fees || []).length
+      ? a.fees.map(f => `${safeText(f.charge_type_name)}: ${money(f.amount)}${f.hostel_only ? ' (hostel only)' : ''} → ${safeText(f.account)}`).join('<br>')
+      : '<span style="color:var(--red)">No fees are set for this course yet (Fee Setup ▸ Course Fees).</span>';
+  }
+  const actions = [];
+  if (a.can_work) {
+    actions.push(`<button class="btn btn-primary btn-sm" onclick="vetaAction(event, 'clear')">${a.state === 'admission' ? 'Admit the student' : 'Clear this desk →'}</button>`);
+    if (a.state !== 'intake') actions.push(`<button class="btn btn-ghost btn-sm" onclick="vetaAction(event, 'send-back')">Send back…</button>`);
+  }
+  if (a.can_refuse) actions.push(`<button class="btn btn-danger btn-sm" onclick="vetaAction(event, 'refuse')">Refuse…</button>`);
+  if (a.state === 'admitted' && (state.offices.admission || state.offices.records || state.offices.principal)) {
+    actions.push(`<button class="btn btn-ghost btn-sm" onclick="vetaAction(event, 'reset-pin')">New portal password</button>`);
+  }
+  document.getElementById('veta-modal-actions').innerHTML = actions.join(' ')
+    || '<span style="font-size:.82rem;color:var(--muted)">Read only — another office works this desk.</span>';
+  document.getElementById('veta-modal-steps').innerHTML = a.steps.length
+    ? a.steps.map(st => `${safeText(new Date(st.at).toLocaleString())} · ${safeText(VETA_DESKS[st.desk] || st.desk)}: ${safeText(st.action)} by ${safeText(st.by)}${st.note ? ' — ' + safeText(st.note) : ''}`).join('<br>') : '';
+  document.getElementById('veta-modal-note').value = '';
+  document.getElementById('veta-app-modal').classList.add('open');
+}
+
+function closeVetaModal() { document.getElementById('veta-app-modal').classList.remove('open'); }
+
+async function saveVetaDetails(event) {
+  const id = document.getElementById('veta-modal-id').value;
+  const kinName = document.getElementById('veta-d-kin-name').value.trim();
+  const payload = {
+    phone: document.getElementById('veta-d-phone').value.trim(),
+    gender: document.getElementById('veta-d-gender').value,
+    date_of_birth: document.getElementById('veta-d-dob').value || null,
+    next_of_kin: kinName ? [{ name: kinName, phone: document.getElementById('veta-d-kin-phone').value.trim(),
+                              relationship: document.getElementById('veta-d-kin-rel').value }] : [],
+  };
+  const done = working(event?.currentTarget, 'Saving…');
+  try { await api('POST', `/course-applications/${id}/details/`, payload); toast('Details saved', 'var(--green)'); await openVetaModal(id); }
+  catch (e) { toast(apiErrorText(e, 'Could not save the details'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function raiseVetaFees(event) {
+  const id = document.getElementById('veta-modal-id').value;
+  const done = working(event?.currentTarget, 'Raising…');
+  try {
+    await api('POST', `/course-applications/${id}/fees/`, { residence: document.getElementById('veta-f-residence').value });
+    toast('Fees raised', 'var(--green)');
+    await openVetaModal(id);
+  } catch (e) { toast(apiErrorText(e, 'Could not raise the fees'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function vetaAction(event, action) {
+  const id = document.getElementById('veta-modal-id').value;
+  let note = document.getElementById('veta-modal-note').value.trim();
+  if ((action === 'send-back' || action === 'refuse') && !note) {
+    note = prompt(action === 'refuse' ? 'Why is it refused?' : 'Why does it go back?') || '';
+    if (!note) return;
+  }
+  if (action === 'reset-pin' && !confirm('Give this student a new portal password? The old one stops working.')) return;
+  const done = working(event?.currentTarget, 'Working…');
+  try {
+    const result = await api('POST', `/course-applications/${id}/${action}/`, { note });
+    if (result.portal_password) {
+      document.getElementById('pin-modal-regno').value = result.reg_no || result.username || '';
+      document.getElementById('pin-modal-collegeid').value = result.college_id || result.username || '';
+      document.getElementById('pin-modal-pin').value = result.portal_password;
+      closeVetaModal();
+      document.getElementById('pin-modal').classList.add('open');
+    } else {
+      toast(action === 'clear' ? 'Done — on to the next desk' : 'Done', 'var(--green)');
+      if (result.state && result.can_work) await openVetaModal(id); else closeVetaModal();
+    }
+    await loadVeta();
+  } catch (e) { toast(apiErrorText(e, 'Could not do that'), 'var(--red)'); }
+  finally { done(); }
+}
+
+// ── VETA COURSES (course coordinator) ────────────────────────────────────────
+
+async function loadVetaCourses() {
+  try {
+    const [, intakes] = await Promise.all([ensureVetaCourses(), api('GET', '/intakes/')]);
+    state.vetaIntakes = intakes;
+    const select = document.getElementById('vc-course');
+    const chosen = select.value;
+    select.innerHTML = state.vetaCourses.length
+      ? state.vetaCourses.map(p => `<option value="${p.id}">${safeText(p.code)} · ${safeText(p.name)}</option>`).join('')
+      : '<option value="">No VETA course yet</option>';
+    if (chosen) select.value = chosen;
+    await renderVetaCourse();
+  } catch (e) { toast(apiErrorText(e, 'Could not load the courses'), 'var(--red)'); }
+}
+
+async function renderVetaCourse() {
+  const id = Number(document.getElementById('vc-course').value);
+  const course = (state.vetaCourses || []).find(p => p.id === id);
+  if (!course) {
+    document.getElementById('vc-info').innerHTML = '';
+    document.getElementById('vc-modules-tbody').innerHTML = '';
+    return;
+  }
+  const long = course.structure === 'nva';
+  document.getElementById('vc-info').innerHTML = `
+    <div class="qf-item"><span>Kind</span><strong>${safeText(course.structure_display)}</strong></div>
+    <div class="qf-item"><span>Duration</span><strong>${course.duration_months} months</strong></div>
+    ${long ? `<div class="qf-item"><span>Ends at</span><strong>NVA Level ${course.nva_top_level}</strong></div>` : ''}
+    <div class="qf-item"><span>Pass mark</span><strong>${course.pass_mark ?? 'not set'}</strong></div>
+    <div class="qf-item"><span>Department</span><strong>${safeText(course.department_name)}</strong></div>`;
+  document.getElementById('vc-level-head').style.display = long ? '' : 'none';
+  document.getElementById('vc-m-level-wrap').style.display = long ? '' : 'none';
+  const modules = await api('GET', `/course-modules/?programme_id=${id}`);
+  document.getElementById('vc-modules-tbody').innerHTML = modules.length ? modules.map(m => `<tr>
+      <td style="font-family:var(--font-mono)">${safeText(m.code)}</td><td>${safeText(m.name)}</td>
+      ${long ? `<td>${m.nva_level ? 'Level ' + m.nva_level : '—'}</td>` : ''}
+      <td>${m.order}</td><td>${m.is_active ? 'yes' : 'no'}</td></tr>`).join('')
+    : `<tr><td colspan="5" style="color:var(--muted)">No modules listed yet.</td></tr>`;
+  const intakes = (state.vetaIntakes || []).filter(i => i.programme === id);
+  document.getElementById('vc-intake').innerHTML = intakes.length
+    ? intakes.map(i => `<option value="${i.id}">${safeText(i.name)} (${i.enrolled})</option>`).join('')
+    : '<option value="">No intake yet</option>';
+  await loadVetaStudents();
+}
+
+async function saveVetaModule(event) {
+  const payload = { programme: Number(document.getElementById('vc-course').value),
+                    code: document.getElementById('vc-m-code').value.trim(),
+                    name: document.getElementById('vc-m-name').value.trim(),
+                    nva_level: Number(document.getElementById('vc-m-level').value),
+                    order: Number(document.getElementById('vc-m-order').value) || 0 };
+  if (!payload.code || !payload.name) { toast('Give the module a code and a name', 'var(--red)'); return; }
+  const done = working(event?.currentTarget, 'Saving…');
+  try {
+    await api('POST', '/course-modules/', payload);
+    ['vc-m-code', 'vc-m-name'].forEach(id => document.getElementById(id).value = '');
+    toast('Module saved', 'var(--green)');
+    await renderVetaCourse();
+  } catch (e) { toast(apiErrorText(e, 'Could not save the module'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function loadVetaStudents() {
+  const intake = document.getElementById('vc-intake').value;
+  if (!intake) { document.getElementById('vc-students-tbody').innerHTML = ''; return; }
+  const rows = await api('GET', `/course-enrollments/?intake_id=${intake}`);
+  document.getElementById('vc-students-tbody').innerHTML = rows.length ? rows.map(r => `<tr>
+      <td>${safeText(r.name)}</td><td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.college_id || r.reg_no)}</td>
+      <td>${safeText(r.phone || '—')}</td><td>${safeText(r.residence)}</td>
+      <td><span class="badge badge-green">${safeText(r.status_display)}</span>${r.nva_level ? ` Level ${r.nva_level}` : ''}</td></tr>`).join('')
+    : '<tr><td colspan="5" style="color:var(--muted)">Nobody admitted yet.</td></tr>';
+}
+
+// ── EXECUTIVE SUMMARY ──────────────────────────────────────────────────────────
+// The college's money in totals, for the Principal and DPFPA (and the
+// accountant whose ledger it is drawn from). Nothing here records anything.
+
+let execCharts = [];
+
+// Shillings on an axis: 12,475,000 reads as 12.5M.
+function compactMoney(value) {
+  const n = Number(value) || 0;
+  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(n % 1e6 ? 1 : 0)}M`;
+  if (Math.abs(n) >= 1e3) return `${Math.round(n / 1e3)}k`;
+  return String(n);
+}
+
+function renderExecutiveCharts(data) {
+  execCharts.forEach(chart => chart.destroy());
+  execCharts = [];
+  const ink = chartInk();
+  const grid = { color: ink.grid };
+  const axis = { color: ink.muted };
+  const PAID = '#16a34a', OWED = '#dc2626', WAIVED = '#b45309', BLUE = '#1565c0';
+  const tip = { callbacks: { label: c => `${c.dataset.label || c.label}: ${money(c.raw)}` } };
+  const moneyAxis = { beginAtZero: true, ticks: { ...axis, callback: compactMoney }, grid };
+  const stacked = (labels, rows) => ({
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Paid', data: rows.map(r => Number(r.paid)), backgroundColor: PAID, borderRadius: 4, stack: 's' },
+      { label: 'Owed', data: rows.map(r => Number(r.outstanding)), backgroundColor: OWED, borderRadius: 4, stack: 's' },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+               plugins: { legend: { position: 'bottom', labels: { color: ink.text } }, tooltip: tip },
+               scales: { x: { stacked: true, ticks: axis, grid }, y: { ...moneyAxis, stacked: true } } },
+  });
+
+  const t = data.totals;
+  const position = document.getElementById('exec-position-chart');
+  if (position) {
+    execCharts.push(new Chart(position, {
+      type: 'doughnut',
+      data: { labels: ['Paid', 'Owed', 'Waived'],
+              datasets: [{ data: [Number(t.paid), Number(t.outstanding), Number(t.waived)],
+                           backgroundColor: [PAID, OWED, WAIVED], borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
+                 plugins: { legend: { position: 'bottom', labels: { color: ink.text } },
+                            tooltip: { callbacks: { label: c => `${c.label}: ${money(c.raw)}` } } } },
+    }));
+  }
+
+  const month = document.getElementById('exec-month-chart');
+  if (month) {
+    let running = 0;
+    const cumulative = data.by_month.map(r => (running += Number(r.paid)));
+    execCharts.push(new Chart(month, {
+      type: 'bar',
+      data: { labels: data.by_month.map(r => r.month), datasets: [
+        { type: 'bar', label: 'Received', data: data.by_month.map(r => Number(r.paid)),
+          backgroundColor: BLUE, borderRadius: 6, yAxisID: 'y' },
+        { type: 'line', label: 'Received so far', data: cumulative, borderColor: PAID,
+          backgroundColor: PAID, tension: .3, pointRadius: 3, yAxisID: 'y' },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false,
+                 plugins: { legend: { position: 'bottom', labels: { color: ink.text } }, tooltip: tip },
+                 scales: { x: { ticks: axis, grid }, y: moneyAxis } },
+    }));
+  }
+
+  const programme = document.getElementById('exec-programme-chart');
+  if (programme) {
+    execCharts.push(new Chart(programme, stacked(
+      data.by_programme.map(r => `${r.programme} · ${r.class_level}`), data.by_programme)));
+  }
+  const family = document.getElementById('exec-family-chart');
+  if (family) {
+    execCharts.push(new Chart(family, stacked(data.by_family.map(r => r.family), data.by_family)));
+  }
+}
+
+// Finance and inventory are two summaries, each with its own menu item.
+const EXEC_SECTIONS = {
+  finance: ['Executive summary · Finance',
+            "The college's money for the year, in totals. Read-only: the accountant's ledger is where a student's account is kept."],
+  spending: ['Executive summary · Spending',
+             'What the college spends against its budget, and the expenses waiting for the Principal or DPFPA.'],
+  inventory: ['Executive summary · Inventory',
+              "College property in figures, from the estate manager's register. Read-only: the estate manager keeps it."],
+};
+
+function toggleExecMenu(event) {
+  const group = document.getElementById('exec-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-executive').classList.contains('active')) {
+    showExecSection('finance', group.querySelector('[data-exec-section="finance"]'));
+  }
+  event.stopPropagation();
+}
+
+function showExecSection(section, btn) {
+  if (!EXEC_SECTIONS[section]) section = 'finance';
+  document.querySelectorAll('#page-executive [data-exec-section]').forEach(el =>
+    el.classList.toggle('sec-on', el.dataset.execSection === section));
+  document.querySelectorAll('[data-exec-section].nav-sub-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.execSection === section));
+  const [title, sub] = EXEC_SECTIONS[section];
+  document.getElementById('exec-page-title').textContent = title;
+  document.getElementById('exec-page-sub').textContent = sub;
+  showPage('executive', document.querySelector('#exec-nav-group .nav-btn'));
+  document.getElementById('exec-nav-group').classList.add('open');
+  if (btn) btn.classList.add('active');
+  if (section === 'spending') return loadExecutiveSpending();
+  return section === 'finance' ? loadExecutiveFinance() : loadExecutiveInventory();
+}
+
+async function loadExecutiveFinance() {
+  const select = document.getElementById('exec-year');
+  if (!select.options.length) {
+    try {
+      const years = await api('GET', '/academic-years/');
+      const list = years.results ?? years;
+      select.innerHTML = list.map(y => `<option value="${y.id}">${safeText(y.name)}</option>`).join('');
+      const active = list.find(y => y.is_active);
+      if (active) select.value = active.id;
+    } catch (e) { /* the active year is the default anyway */ }
+  }
+  const empty = cols => `<tr><td colspan="${cols}" style="color:var(--muted);">Nothing billed yet</td></tr>`;
+  try {
+    const data = await api('GET', `/executive/finance/${select.value ? `?academic_year_id=${select.value}` : ''}`);
+    const t = data.totals;
+    const payable = Number(t.billed) - Number(t.waived);
+    const rate = payable > 0 ? Math.round(Number(t.paid) / payable * 100) : 0;
+    document.getElementById('exec-totals').innerHTML = `
+      <div class="qf-item"><span>Collected</span><strong>${rate}%</strong></div>
+      <div class="qf-item"><span>Billed</span><strong>${money(t.billed)}</strong></div>
+      <div class="qf-item"><span>Paid</span><strong>${money(t.paid)}</strong></div>
+      <div class="qf-item"><span>Outstanding</span><strong>${money(t.outstanding)}</strong></div>
+      <div class="qf-item"><span>Waived</span><strong>${money(t.waived)}</strong></div>
+      <div class="qf-item"><span>Students billed</span><strong>${t.students}</strong></div>
+      <div class="qf-item"><span>Still owing</span><strong>${t.owing}</strong></div>`;
+    document.getElementById('exec-family-tbody').innerHTML = data.by_family.length ? data.by_family.map(r => `<tr>
+        <td>${safeText(r.family)}</td><td>${money(r.billed)}</td><td>${money(r.waived)}</td>
+        <td>${money(r.paid)}</td><td>${money(r.outstanding)}</td></tr>`).join('') : empty(5);
+    document.getElementById('exec-account-tbody').innerHTML = data.by_account.length ? data.by_account.map(r => `<tr>
+        <td>${safeText(r.account)}</td><td>${safeText(r.purpose)}</td><td>${money(r.paid)}</td></tr>`).join('') : empty(3);
+    document.getElementById('exec-programme-tbody').innerHTML = data.by_programme.length ? data.by_programme.map(r => `<tr>
+        <td>${safeText(r.programme)}</td><td>${safeText(r.class_level)}</td><td>${r.students}</td><td>${r.owing}</td>
+        <td>${money(r.billed)}</td><td>${money(r.paid)}</td><td>${money(r.outstanding)}</td></tr>`).join('') : empty(7);
+    document.getElementById('exec-month-tbody').innerHTML = data.by_month.length ? data.by_month.map(r => `<tr>
+        <td>${safeText(r.month)}</td><td>${money(r.paid)}</td></tr>`).join('') : empty(2);
+    renderExecutiveCharts(data);
+  } catch (e) { toast(apiErrorText(e, 'Could not load the summary'), 'var(--red)'); }
+}
+
+let spendingCharts = [];
+
+async function loadExecutiveSpending() {
+  const select = document.getElementById('sp-year');
+  if (!select.options.length) {
+    const years = await api('GET', '/academic-years/');
+    state.academicYears = years.results ?? years;
+    fillYearSelect(select);
+  }
+  const year = select.value;
+  try {
+    const [summary, pending, queried] = await Promise.all([
+      api('GET', `/executive/finance/?academic_year_id=${year}`),
+      api('GET', `/expenses/?status=pending&academic_year_id=${year}`),
+      api('GET', `/expenses/?status=queried&academic_year_id=${year}`),
+    ]);
+    const waiting = [...pending, ...queried];
+    const sp = summary.spending;
+    const t = sp.totals;
+    document.getElementById('sp-totals').innerHTML = `
+      <div class="qf-item"><span>Received (fees)</span><strong>${money(sp.received)}</strong></div>
+      <div class="qf-item"><span>Paid out</span><strong>${money(sp.paid_out)}</strong></div>
+      <div class="qf-item"><span>In minus out</span><strong>${money(sp.net)}</strong></div>
+      <div class="qf-item"><span>Budget</span><strong>${money(t.budget)}</strong></div>
+      <div class="qf-item"><span>Committed</span><strong>${money(t.committed)}</strong></div>
+      <div class="qf-item"><span>Waiting for approval</span><strong>${sp.waiting}</strong></div>
+      <div class="qf-item"><span>Queried, with the accountant</span><strong>${sp.queried ?? 0}</strong></div>
+      <div class="qf-item"><span>Petty cash float</span><strong>${money(sp.petty_cash?.balance ?? 0)}</strong></div>`;
+    document.getElementById('sp-queue-tbody').innerHTML = waiting.length
+      ? waiting.map(e => expenseRow(e, { forApproval: true })).join('')
+      : '<tr><td colspan="6" style="color:var(--muted)">Nothing is waiting.</td></tr>';
+    document.getElementById('sp-category-tbody').innerHTML = sp.rows.length ? sp.rows.map(r => `<tr>
+        <td>${safeText(r.category)}</td>
+        <td>${r.budget === null ? '<span style="color:var(--muted)">not set</span>' : money(r.budget)}</td>
+        <td>${money(r.pending)}</td><td>${money(r.committed)}</td><td>${money(r.paid)}</td>
+        <td>${r.left === null ? '—' : `<span class="${r.over_budget ? 'badge badge-red' : ''}">${money(r.left)}</span>`}</td>
+      </tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted)">No categories yet — the accountant adds them.</td></tr>';
+
+    spendingCharts.forEach(chart => chart.destroy());
+    spendingCharts = [];
+    const ink = chartInk();
+    const grid = { color: ink.grid };
+    const axis = { color: ink.muted };
+    const tip = { callbacks: { label: c => `${c.dataset.label || c.label}: ${money(c.raw)}` } };
+    const moneyAxis = { beginAtZero: true, ticks: { ...axis, callback: compactMoney }, grid };
+    const budget = document.getElementById('sp-budget-chart');
+    if (budget && sp.rows.length) {
+      spendingCharts.push(new Chart(budget, {
+        type: 'bar',
+        data: { labels: sp.rows.map(r => r.category), datasets: [
+          { label: 'Budget', data: sp.rows.map(r => Number(r.budget || 0)), backgroundColor: '#94a3b8', borderRadius: 4 },
+          { label: 'Committed', data: sp.rows.map(r => Number(r.committed)),
+            backgroundColor: sp.rows.map(r => r.over_budget ? '#dc2626' : '#1565c0'), borderRadius: 4 },
+        ] },
+        options: { responsive: true, maintainAspectRatio: false,
+                   plugins: { legend: { position: 'bottom', labels: { color: ink.text } }, tooltip: tip },
+                   scales: { x: { ticks: axis, grid }, y: moneyAxis } },
+      }));
+    }
+    const flow = document.getElementById('sp-flow-chart');
+    if (flow) {
+      spendingCharts.push(new Chart(flow, {
+        type: 'bar',
+        data: { labels: ['Received', 'Paid out'], datasets: [{ label: 'Amount',
+          data: [Number(sp.received), Number(sp.paid_out)], backgroundColor: ['#16a34a', '#b45309'], borderRadius: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tip },
+                   scales: { x: { ticks: axis, grid }, y: moneyAxis } },
+      }));
+    }
+  } catch (e) { toast(apiErrorText(e, 'Could not load the spending'), 'var(--red)'); }
+}
+
+let propertyCharts = [];
+
+async function loadExecutiveInventory() {
+  try {
+    const p = await api('GET', '/inventory/summary/');
+    document.getElementById('exec-property-facts').innerHTML = `
+      <div class="qf-item"><span>Asset records</span><strong>${p.records}</strong></div>
+      <div class="qf-item"><span>Items</span><strong>${p.items}</strong></div>
+      <div class="qf-item"><span>Repairs open</span><strong>${p.maintenance_open}</strong></div>
+      <div class="qf-item"><span>Disposals proposed</span><strong>${p.disposals_proposed}</strong></div>`;
+    const rows = list => list.length ? list.map(r => `<tr><td>${safeText(r.name)}</td><td>${r.records}</td><td>${r.items}</td></tr>`).join('')
+      : '<tr><td colspan="3" style="color:var(--muted);">No assets registered</td></tr>';
+    document.getElementById('exec-condition-tbody').innerHTML = rows(p.by_condition);
+    document.getElementById('exec-category-tbody').innerHTML = rows(p.by_category);
+    document.getElementById('exec-location-tbody').innerHTML = rows(p.by_location);
+
+    propertyCharts.forEach(chart => chart.destroy());
+    propertyCharts = [];
+    const ink = chartInk();
+    const condition = document.getElementById('exec-condition-chart');
+    if (condition && p.by_condition.length) {
+      const shade = { New: '#1565c0', Good: '#16a34a', Fair: '#b45309', Poor: '#c2410c', Unserviceable: '#dc2626' };
+      propertyCharts.push(new Chart(condition, {
+        type: 'doughnut',
+        data: { labels: p.by_condition.map(r => r.name),
+                datasets: [{ data: p.by_condition.map(r => r.items),
+                             backgroundColor: p.by_condition.map(r => shade[r.name] || '#64748b'), borderWidth: 0 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
+                   plugins: { legend: { position: 'bottom', labels: { color: ink.text } } } },
+      }));
+    }
+    const location = document.getElementById('exec-location-chart');
+    if (location && p.by_location.length) {
+      const grid = { color: ink.grid };
+      const axis = { color: ink.muted };
+      propertyCharts.push(new Chart(location, {
+        type: 'bar',
+        data: { labels: p.by_location.map(r => r.name),
+                datasets: [{ label: 'Items', data: p.by_location.map(r => r.items),
+                             backgroundColor: '#1565c0', borderRadius: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+                   scales: { x: { ticks: axis, grid }, y: { beginAtZero: true, ticks: { ...axis, precision: 0 }, grid } } },
+      }));
+    }
+  } catch (e) { toast(apiErrorText(e, 'Could not load college property'), 'var(--red)'); }
+}
+
 // ── INIT ───────────────────────────────────────────────────────────────────────
 installWebIconReplacements();
 // Inject user info from Django template context immediately (no API round-trip needed)
 (function initUser() {
   const username = '{{ request.user.username|escapejs }}';
-  const isStaff  = {{ request.user.is_staff|yesno:"true,false" }};
   // Read from the template rather than waiting on /dashboard/, so a Head of
   // Department never sees the examination menus flash up before they are hidden.
+  // Each office is read from its own profile; Django's is_staff flag no longer
+  // means anything here (attendance/roles.py says what each office may do).
   const isPrincipal = {% if request.user.principal_profile.is_active %}true{% else %}false{% endif %};
   const isHod = {% if request.user.hod_profile.is_active %}true{% else %}false{% endif %};
+  // The ICT officer is a Django superuser for /admin/ and stays the ICT officer
+  // here; only a superuser with no ICT office is the emergency account.
+  const isIct = {% if request.user.ict_officer_profile.is_active %}true{% else %}false{% endif %};
   const offices = {
     principal: isPrincipal,
+    hod: isHod,
+    dparc: {% if request.user.dparc_profile.is_active %}true{% else %}false{% endif %},
+    dpfpa: {% if request.user.dpfpa_profile.is_active %}true{% else %}false{% endif %},
+    exam: {% if request.user.exam_officer_profile.is_active %}true{% else %}false{% endif %},
+    ict: isIct,
+    coordinator: {% if request.user.coordinator_profile.is_active %}true{% else %}false{% endif %},
+    dean: {% if request.user.dean_profile.is_active %}true{% else %}false{% endif %},
     records: {% if request.user.records_officer_profile.is_active %}true{% else %}false{% endif %},
     admission: {% if request.user.admission_officer_profile.is_active %}true{% else %}false{% endif %},
     finance: {% if request.user.accountant_profile.is_active %}true{% else %}false{% endif %},
+    estate: {% if request.user.estate_officer_profile.is_active %}true{% else %}false{% endif %},
+    secretary: {% if request.user.secretary_profile.is_active %}true{% else %}false{% endif %},
+    tutor: {% if request.user.profile %}true{% else %}false{% endif %},
   };
+  // A superuser holding no office at all is the emergency account; one that
+  // holds an office (the ICT officer, or the old shared admin account now
+  // given the exam office) is that office here.
+  const isSuperuser = {{ request.user.is_superuser|yesno:"true,false" }}
+    && !Object.values(offices).some(Boolean);
+  offices.superuser = isSuperuser;
+  // The offices that run the departments: modules, enrollments, staff, forms,
+  // service requests, sick records. Not the examination officer.
+  offices.runs = isSuperuser || isPrincipal || offices.dparc || isHod;
+  // The academic side of the college: what used to be "is_staff".
+  offices.academic = isSuperuser || isPrincipal || isHod || offices.dparc || offices.exam;
+  offices.accounts = isSuperuser || offices.ict || isPrincipal;
+  const isStaff = offices.academic;
   state.offices = offices;
+  state.isSuperuser = isSuperuser;
+  state.canManageAccounts = offices.accounts;
+  state.canAppoint = isSuperuser || isPrincipal;
+  if (offices.exam || isSuperuser) document.body.classList.add('is-exam-office');
+  if (offices.runs) document.body.classList.add('runs-departments');
+  else {
+    // Read-only for everyone else on the academic side (the exam officer).
+    const manage = document.querySelector('#modules-nav-group [data-module-section="manage"]');
+    if (manage) manage.textContent = "This semester's modules";
+  }
+  if (offices.accounts) document.body.classList.add('can-manage-accounts');
+  if (isSuperuser || isPrincipal || offices.dparc) document.body.classList.add('can-manage-departments');
+  if (offices.ict) document.body.classList.add('is-ict');
+  if (offices.dpfpa) document.body.classList.add('is-dpfpa');
+  // A coordinator who teaches nothing at PST has no use for the academic menus.
+  if (offices.coordinator && !offices.academic && !offices.tutor) document.body.classList.add('is-coordinator-only');
+  if (offices.dean && !offices.academic && !offices.tutor) document.body.classList.add('is-coordinator-only');
+  // The roles only the Principal gives are not offered to anyone else.
+  if (!state.canAppoint) document.querySelectorAll('#acct-role .senior-role').forEach(o => o.remove());
   // Anything marked data-roles is for those offices only. Hidden rather than
   // removed, so scripts that look an element up still find it.
   document.querySelectorAll('[data-roles]').forEach(el => {
@@ -10888,7 +12482,12 @@ installWebIconReplacements();
     if (isHod) document.body.classList.add('is-hod');
     else if (isPrincipal) document.body.classList.add('is-principal');
     document.getElementById('role-badge').textContent =
-      isHod ? 'Head of Department' : isPrincipal ? 'Principal' : 'Exam Officer';
+      isHod ? 'Head of Department' : isPrincipal ? 'Principal' : offices.dparc ? 'DPARC'
+      : offices.exam ? 'Exam Officer' : 'Administrator';
+    document.getElementById('role-badge').className    = 'role-badge admin';
+  } else if (offices.dpfpa || offices.ict || offices.coordinator || offices.dean) {
+    document.getElementById('role-badge').textContent  = offices.dpfpa ? 'DPFPA' : offices.ict ? 'ICT Officer'
+      : offices.coordinator ? 'Course Coordinator' : 'Dean of Students';
     document.getElementById('role-badge').className    = 'role-badge admin';
   } else {
     document.getElementById('role-badge').textContent  = 'Tutor';

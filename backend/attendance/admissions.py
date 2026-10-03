@@ -33,6 +33,7 @@ The rules that live here rather than in a screen:
 """
 
 import logging
+import re
 import secrets
 
 from django.db import transaction
@@ -171,7 +172,7 @@ def set_nactvet_number(profile, number, *, actor=None):
 
 @transaction.atomic
 def capture_student(*, nactvet_reg_no, name, phone='', gender='', date_of_birth=None,
-                    next_of_kin=(), actor=None):
+                    next_of_kin=(), form_four_index='', actor=None):
     """Write down a person the college has not met before.
 
     A person on file is not yet a student: they have no registration, no
@@ -188,17 +189,20 @@ def capture_student(*, nactvet_reg_no, name, phone='', gender='', date_of_birth=
         # under a number of its own until the real one arrives at intake.
         reg_no = temporary_number()
 
+    existing = StudentProfile.objects.filter(nactvet_reg_no=reg_no).first()
+    index = clean_form_four_index(form_four_index, existing)
     profile, created = StudentProfile.objects.get_or_create(
         nactvet_reg_no=reg_no,
         defaults={'name': name.strip(), 'phone': phone, 'gender': gender,
-                  'date_of_birth': date_of_birth},
+                  'date_of_birth': date_of_birth, 'form_four_index': index},
     )
     if not created:
         profile.name = name.strip() or profile.name
         profile.phone = phone or profile.phone
         profile.gender = gender or profile.gender
         profile.date_of_birth = date_of_birth or profile.date_of_birth
-        profile.save(update_fields=['name', 'phone', 'gender', 'date_of_birth'])
+        profile.form_four_index = index or profile.form_four_index
+        profile.save(update_fields=['name', 'phone', 'gender', 'date_of_birth', 'form_four_index'])
 
     for position, kin in enumerate(next_of_kin, start=1):
         if not kin:
@@ -211,16 +215,51 @@ def capture_student(*, nactvet_reg_no, name, phone='', gender='', date_of_birth=
     return profile
 
 
+#: NECTA's Form Four (CSEE) index number: centre and candidate, and the year
+#: sat — S0123/0045/2021 for a school candidate, P… for a private one. The
+#: year is left off on some older slips.
+FORM_FOUR_INDEX = re.compile(r'^[SP]\d{4}/\d{4}(/\d{4})?$')
+
+
+def clean_form_four_index(value, profile=None):
+    """The index number in its printed form, or AdmissionError saying what is
+    wrong with it. Blank stays blank."""
+    index = re.sub(r'[\s.-]+', '/', (value or '').strip().upper()).strip('/')
+    if not index:
+        return ''
+    if not FORM_FOUR_INDEX.match(index):
+        raise AdmissionError(f'{value!r} is not a Form Four index number. It reads like '
+                             f'S0123/0045/2021: centre, candidate number and year.')
+    taken = StudentProfile.objects.filter(form_four_index=index)
+    if profile is not None:
+        taken = taken.exclude(pk=profile.pk)
+    other = taken.first()
+    if other is not None:
+        raise AdmissionError(f'Form Four index {index} is already on file for {other.name} '
+                             f'({other.nactvet_reg_no}).')
+    return index
+
+
+def is_veta_only(profile):
+    """A VETA course student with no PST record. They are not asked for a
+    Form Four index number or a date of birth."""
+    return (profile.course_applications.exists() and not profile.applications.exists()
+            and not Student.objects.filter(profile=profile).exists())
+
+
 @transaction.atomic
 def record_details(profile, *, name=None, phone=None, gender=None, date_of_birth=None,
-                   next_of_kin=None, actor=None):
+                   next_of_kin=None, form_four_index=None, actor=None):
     """The records desk writes down who the student is.
 
-    Name, phone, gender, date of birth and two next of kin — kept by records,
-    read by finance and admission. Only what is given is changed; a next of kin
-    left blank is left as it was.
+    Name, phone, gender, date of birth, the Form Four index number and two next
+    of kin — kept by records, read by finance and admission. Only what is given
+    is changed; a next of kin left blank is left as it was.
     """
     fields = []
+    if form_four_index is not None:
+        profile.form_four_index = clean_form_four_index(form_four_index, profile)
+        fields.append('form_four_index')
     if name is not None and name.strip():
         profile.name = name.strip(); fields.append('name')
     if phone is not None:
@@ -253,7 +292,17 @@ def record_details(profile, *, name=None, phone=None, gender=None, date_of_birth
 
 
 def missing_details(profile):
-    """What the records desk has still to take down."""
+    """What the records desk has still to take down. A VETA course student
+    is asked for less: a phone, their gender and a next of kin."""
+    if is_veta_only(profile):
+        missing = []
+        if not profile.phone:
+            missing.append('phone')
+        if not profile.gender:
+            missing.append('gender')
+        if not profile.next_of_kin.exists():
+            missing.append('next of kin')
+        return missing
     missing = []
     if not profile.phone:
         missing.append('phone')
@@ -261,6 +310,8 @@ def missing_details(profile):
         missing.append('gender')
     if not profile.date_of_birth:
         missing.append('date of birth')
+    if not profile.form_four_index:
+        missing.append('Form Four index number')
     if profile.next_of_kin.count() < 2:
         missing.append('next of kin')
     return missing
@@ -354,6 +405,8 @@ def academic_summary(application):
     repeats = [module.code for module, is_repeat in planned if is_repeat]
     if repeat_only:
         billing = f'Repeat rate × {len(repeats)} module(s)'
+        if ChargeType.objects.filter(for_repeaters=True, is_active=True).exists():
+            billing += ", plus the repeaters' direct cost (once a year)"
     elif application.kind == Application.READMISSION:
         billing = 'Full fees, one-time charges again (readmission)'
     elif application.kind == Application.NEW:
@@ -381,12 +434,16 @@ def _raise_charges(application, *, actor=None):
     bank and brings the receipt to the accountant, so the charge has to exist
     before the desk can be cleared.
 
-    A repeater is billed the repeat rate for each module they will sit again
-    and nothing else. Admission finds those charges when it enrolls them and
-    does not raise them a second time.
+    A repeater is billed the repeat rate for each module they will sit again,
+    and the year's flat direct cost for repeaters, and nothing else. Admission
+    finds those charges when it enrolls them and does not raise them a second
+    time.
     """
     if is_repeat_only(application.profile):
-        raised = []
+        raised = finance.charge_repeater_costs(
+            application.profile, application.semester.academic_year,
+            class_level=application.class_level, programme=application.programme,
+            semester=application.semester, actor=actor)
         for module, is_repeat in planned_modules(application):
             if not is_repeat:
                 continue

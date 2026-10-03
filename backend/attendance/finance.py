@@ -676,6 +676,36 @@ def raise_charge(profile, charge_type, academic_year, amount, due_date, *,
     return charge
 
 
+@transaction.atomic
+def charge_repeater_costs(profile, academic_year, *, class_level, programme=None, semester=None,
+                          actor=None):
+    """Bill a student who is repeating failed modules only their year's flat
+    direct cost — each charge type marked "charged to repeaters", at the rate
+    the accountant set for their level. Once a year: a student repeating in both
+    semesters pays it once. The per-module repeat rate is billed separately
+    (charge_declaration). Returns the charges raised now."""
+    raised = []
+    structures = structures_for(class_level, academic_year, programme)
+    for structure in structures.values():
+        charge_type = structure.charge_type
+        if not charge_type.for_repeaters:
+            continue
+        if StudentCharge.objects.filter(profile=profile, charge_type=charge_type,
+                                        academic_year=academic_year).exists():
+            continue
+        schedule = list(structure.installment_schedule.all())
+        due_date = schedule[0].due_date if schedule else date.today()
+        charge = StudentCharge.objects.create(
+            profile=profile, charge_type=charge_type, academic_year=academic_year, semester=semester,
+            fee_structure=structure, installment_number=1, amount=money(structure.amount),
+            due_date=due_date, source=StudentCharge.ON_REQUEST,
+            note=f'{charge_type} — repeating failed modules', created_by=actor)
+        audit('charge.repeater', 'StudentCharge', actor=actor, entity_id=charge.id, profile=profile,
+              summary=f'{charge_type} {money(structure.amount)} due {due_date} (repeater)')
+        raised.append(charge)
+    return raised
+
+
 class DeclarationError(ValueError):
     """A declaration that cannot be charged — no charge type or no rate set."""
 
@@ -1659,3 +1689,113 @@ def _charges_due(charges, semester, period, today):
     if period == ChargeType.REGISTRATION and charges:
         as_of = max(as_of, min(c.due_date for c in charges))
     return [c for c in charges if c.due_date <= as_of]
+
+
+# ── the executive view ────────────────────────────────────────────────────────
+
+def executive_summary(academic_year):
+    """The college's money for one year, in totals: what was billed, waived,
+    paid and is still owed — by kind of fee, by programme and level, by month
+    received and by bank account. No student is named.
+
+    What the Principal and DPFPA read. It is drawn from the same charges and
+    allocations as the accountant's ledger, so the figures agree with it; it
+    records nothing.
+    """
+    from django.db.models.functions import TruncMonth
+    from .models import StudentStanding
+
+    charges = StudentCharge.objects.filter(academic_year=academic_year)
+    allocations = (PaymentAllocation.objects.filter(charge__academic_year=academic_year)
+                   .exclude(payment__channel=Payment.CREDIT))
+
+    def _row(billed, waived, paid):
+        billed, waived, paid = billed or ZERO, waived or ZERO, paid or ZERO
+        return {'billed': str(money(billed)), 'waived': str(money(waived)),
+                'paid': str(money(paid)), 'outstanding': str(money(billed - waived - paid))}
+
+    totals = charges.aggregate(billed=Sum('amount'), waived=Sum('waived_amount'))
+    paid_total = allocations.aggregate(paid=Sum('amount'))['paid']
+
+    family_names = dict(ChargeType.FAMILY_CHOICES)
+    billed_by_family = {row['charge_type__family']: row for row in
+                        charges.values('charge_type__family').annotate(
+                            billed=Sum('amount'), waived=Sum('waived_amount'))}
+    paid_by_family = {row['charge__charge_type__family']: row['paid'] for row in
+                      allocations.values('charge__charge_type__family').annotate(paid=Sum('amount'))}
+    by_family = [
+        {'family': family_names.get(key, key), **_row(row['billed'], row['waived'], paid_by_family.get(key))}
+        for key, row in sorted(billed_by_family.items())
+    ]
+
+    # Each student counted under the programme and level they stand at now.
+    per_profile = {row['profile_id']: row for row in
+                   charges.values('profile_id').annotate(billed=Sum('amount'), waived=Sum('waived_amount'))}
+    paid_by_profile = {row['charge__profile_id']: row['paid'] for row in
+                       allocations.values('charge__profile_id').annotate(paid=Sum('amount'))}
+    where = {s.profile_id: s for s in StudentStanding.objects.filter(profile_id__in=per_profile)
+             .select_related('programme', 'class_level')}
+    groups = {}
+    owing = cleared = 0
+    for profile_id, row in per_profile.items():
+        standing = where.get(profile_id)
+        programme = standing.programme.code if standing and standing.programme_id else 'Not recorded'
+        level = standing.class_level.name if standing and standing.class_level_id else 'Not recorded'
+        order = standing.class_level.order if standing and standing.class_level_id else 999
+        paid = paid_by_profile.get(profile_id) or ZERO
+        balance = (row['billed'] or ZERO) - (row['waived'] or ZERO) - paid
+        if balance > ZERO:
+            owing += 1
+        else:
+            cleared += 1
+        group = groups.setdefault((programme, order, level), {
+            'students': 0, 'owing': 0, 'billed': ZERO, 'waived': ZERO, 'paid': ZERO})
+        group['students'] += 1
+        group['owing'] += 1 if balance > ZERO else 0
+        group['billed'] += row['billed'] or ZERO
+        group['waived'] += row['waived'] or ZERO
+        group['paid'] += paid
+    by_programme = [
+        {'programme': programme, 'class_level': level, 'students': group['students'],
+         'owing': group['owing'], **_row(group['billed'], group['waived'], group['paid'])}
+        for (programme, _order, level), group in sorted(groups.items())
+    ]
+
+    by_month = [
+        {'month': row['month'].strftime('%Y-%m') if row['month'] else '', 'paid': str(money(row['paid'] or ZERO))}
+        for row in allocations.annotate(month=TruncMonth('payment__payment_date'))
+        .values('month').annotate(paid=Sum('amount')).order_by('month')
+    ]
+    by_account = [
+        {'account': ' · '.join(part for part in (row['charge__charge_type__bank_account__bank_name'],
+                                                 row['charge__charge_type__bank_account__account_number'])
+                               if part) or 'No account set',
+         'purpose': row['charge__charge_type__bank_account__purpose'] or '',
+         'paid': str(money(row['paid'] or ZERO))}
+        for row in allocations.values('charge__charge_type__bank_account__bank_name',
+                                      'charge__charge_type__bank_account__account_number',
+                                      'charge__charge_type__bank_account__purpose')
+        .annotate(paid=Sum('amount')).order_by('-paid')
+    ]
+
+    return {
+        'academic_year': {'id': academic_year.id, 'name': academic_year.name},
+        'totals': {**_row(totals['billed'], totals['waived'], paid_total),
+                   'students': len(per_profile), 'owing': owing, 'cleared': cleared},
+        'by_family': by_family,
+        'by_programme': by_programme,
+        'by_month': by_month,
+        'by_account': by_account,
+        'spending': _spending(academic_year, paid_total),
+    }
+
+
+def _spending(academic_year, received):
+    """The year's spending against its budget, and money in against money out."""
+    from .expenses import budget_position
+    position = budget_position(academic_year)
+    paid_out = Decimal(position['totals']['paid'])
+    received = money(received or ZERO)
+    return {**position, 'received': str(received), 'paid_out': str(money(paid_out)),
+            'net': str(money(received - paid_out))}
+

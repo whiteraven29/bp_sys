@@ -219,8 +219,33 @@ class Programme(models.Model):
         ClassLevel, blank=True, related_name='programmes',
         help_text='The NTA levels this programme is taught at.',
     )
+    # Which structure the course follows. Every programme the college ran
+    # before VETA courses is semester-based, and stays so: nothing about PST
+    # changes. A VETA course runs in intakes (see Intake) instead of semesters.
+    SEMESTER = 'semester'
+    SHORT = 'short'
+    NVA = 'nva'
+    STRUCTURE_CHOICES = [
+        (SEMESTER, 'Semester-based (NACTVET, NTA levels)'),
+        (SHORT, 'VETA short course'),
+        (NVA, 'VETA long course (NVA Level I, II, III)'),
+    ]
+    structure = models.CharField(max_length=20, choices=STRUCTURE_CHOICES, default=SEMESTER)
+    duration_months = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1)],
+        help_text='VETA courses: how long one intake runs, in months.')
+    nva_top_level = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(3)],
+        help_text='VETA long courses: the NVA level the course ends at (1, 2 or 3).')
+    pass_mark = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(100)],
+        help_text='VETA courses: the test mark that passes a module.')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def is_veta(self):
+        return self.structure in (self.SHORT, self.NVA)
 
     class Meta:
         ordering = ['department__name', 'name']
@@ -338,6 +363,128 @@ class EstateOfficerProfile(models.Model):
 
     def __str__(self):
         return self.full_name
+
+
+class ExamOfficerProfile(models.Model):
+    """The examination officer: results, exam windows, eligibility, declarations.
+
+    Used to be any admin account that was neither Principal nor Head of
+    Department, which made the exam office the system administrator as well.
+    It is an office of its own now. Accounts belong to the ICT officer, and
+    confirming a semester review or advancing the year to the Principal and
+    DPARC.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='exam_officer_profile',
+    )
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
+class DeputyAcademicProfile(models.Model):
+    """DPARC — Deputy Principal Academic, Research and Consultancy.
+
+    Every academic and student matter, under the Principal: departments,
+    modules, admissions, records, results, semester reviews and the year
+    advance. No money: fees, payments and the ledger are DPFPA's side.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='dparc_profile',
+    )
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
+class DeputyFinanceProfile(models.Model):
+    """DPFPA — Deputy Principal Finance, Planning and Administration.
+
+    Reads the college's money in summary and approves spending, with the
+    Principal; the estate manager reports here, so college property is theirs
+    to see. Records nothing in the ledger: that stays with the accountant.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='dpfpa_profile',
+    )
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
+class ICTOfficerProfile(models.Model):
+    """The ICT officer: keeps the system running.
+
+    Creates staff accounts, resets passwords and gives the roles that need no
+    appointment. Sees no results, money or student records: running the
+    system is not the same as reading what is in it. A senior role is given by
+    the Principal.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='ict_officer_profile',
+    )
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
+class TrainingCoordinatorProfile(models.Model):
+    """The training (course) coordinator: runs the VETA courses day to day —
+    their modules, intakes and class lists. Sits beside the HoDs under DPARC
+    on the organisational chart."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='coordinator_profile',
+    )
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
+class DeanOfStudentsProfile(models.Model):
+    """The Dean of Students: student welfare. Reads the health records the
+    records office keeps, for reference when a student needs care or
+    allowances. Appointed by the Principal."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='dean_profile',
+    )
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
+class RoleChange(models.Model):
+    """Every time an account gained or lost a role, and who did it.
+
+    The Principal reads this: whoever can hand out roles can hand out every
+    other boundary in the system, so each change is written down where the
+    person who appoints can see it.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='role_changes')
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='role_changes_made')
+    added = models.JSONField(default=list, blank=True)
+    removed = models.JSONField(default=list, blank=True)
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-changed_at', '-id']
+
+    def __str__(self):
+        return f'{self.user} +{self.added} -{self.removed}'
 
 
 class InventoryLocation(models.Model):
@@ -948,13 +1095,30 @@ class StudentProfile(models.Model):
     college_id = models.CharField(
         max_length=40, unique=True, null=True, blank=True, verbose_name='College ID No.',
     )
+    # VETA long-course students get an NVA number only when they register for
+    # VETA's national assessment; until then the college number is theirs.
+    nva_number = models.CharField(max_length=50, blank=True, verbose_name='NVA No.')
+    # A VETA student has no PST module enrollment to carry a portal password,
+    # so theirs is kept here. PST students keep theirs on their enrollments.
+    portal_pin_hash = models.CharField(max_length=128, blank=True, editable=False)
+    must_change_portal_password = models.BooleanField(default=True, editable=False)
+    portal_pin_set_at = models.DateTimeField(null=True, blank=True, editable=False)
     phone = models.CharField(max_length=30, blank=True)
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
+    # The NECTA index number the student sat Form Four (CSEE) under, e.g.
+    # S0123/0045/2021. Asked of every PST student; a VETA course asks only that
+    # the applicant can read and write, so theirs may stay blank.
+    form_four_index = models.CharField(max_length=20, blank=True, verbose_name='Form Four index No.')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['name']
+        constraints = [
+            # One person per index number; blank is "not recorded yet".
+            models.UniqueConstraint(fields=['form_four_index'], condition=~Q(form_four_index=''),
+                                    name='one_profile_per_form_four_index'),
+        ]
 
     def __str__(self):
         return f'{self.nactvet_reg_no} – {self.name}'
@@ -1344,6 +1508,10 @@ class CollegeIdFormat(models.Model):
     starts_at = models.PositiveIntegerField(
         default=1, help_text='The first number of the year.')
     next_number = models.PositiveIntegerField(default=1)
+    veta_pattern = models.CharField(
+        max_length=120, blank=True,
+        help_text='How a VETA course student\'s number is written. Blank: the same as above. '
+                  'Same pieces; the same counter.')
     sequence_width = models.PositiveSmallIntegerField(
         default=3, help_text='How many digits the running number is padded to.')
     updated_by = models.ForeignKey(
@@ -1358,9 +1526,16 @@ class CollegeIdFormat(models.Model):
         return f'College ID · {self.academic_year} · {self.pattern}'
 
     def render(self, number, programme=None):
-        """One number, written out. Nothing here consumes the counter."""
+        """One number, written out. Nothing here consumes the counter.
+
+        A VETA course student's number follows `veta_pattern` when the office
+        has set one; everybody else's, and theirs when it is blank, `pattern`.
+        """
         opening = self.academic_year.name.split('/')[0]
-        return (self.pattern
+        pattern = self.pattern
+        if programme is not None and getattr(programme, 'is_veta', False) and self.veta_pattern:
+            pattern = self.veta_pattern
+        return (pattern
                 .replace('{COLLEGE}', self.college_code)
                 .replace('{PROG}', programme.code if programme else '')
                 .replace('{YEAR}', opening)
@@ -1668,6 +1843,41 @@ class StudentDocument(models.Model):
         return self.verified_at is not None
 
 
+class HealthRecord(models.Model):
+    """A health problem a student has, backed by a medical certificate.
+
+    Kept by the records office: the certificate is scanned under the student's
+    documents and marked seen (verified) before the condition can be written
+    down against it. Read by the Dean of Students for reference — the dean
+    looks after student welfare once the student is in college — and by the
+    Principal. Nobody else: not finance, not tutors, not the student's
+    classmates. Nothing is deleted; a condition that no longer applies is
+    closed with a note.
+    """
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='health_records')
+    condition = models.CharField(max_length=200, help_text='The health problem, as the certificate names it.')
+    notes = models.CharField(max_length=500, blank=True,
+                             help_text='What the college should know or allow for.')
+    certificate = models.ForeignKey(
+        StudentDocument, on_delete=models.PROTECT, related_name='health_records',
+        help_text='The verified medical certificate in the student\'s documents.')
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='health_records_kept')
+    recorded_at = models.DateTimeField(auto_now_add=True)
+    is_current = models.BooleanField(default=True)
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='health_records_closed')
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_note = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ['-is_current', '-recorded_at']
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · {self.condition}'
+
+
 class PasswordStatus(models.Model):
     """How old a staff account's password is, and whether it still opens the door.
 
@@ -1849,6 +2059,15 @@ class ChargeType(models.Model):
     charged_again_on_readmission = models.BooleanField(
         default=True,
         help_text='For a charge billed once, bill it again when a discontinued student is readmitted.',
+    )
+    # A student repeating failed modules pays no programme fees for the year —
+    # only the repeat rate per module, and this: a flat direct cost, once a
+    # year, at the rate the accountant sets for their level (280,000 in
+    # 2026/27). Not charged to a student who carries a repeat alongside a full
+    # year, as they already pay the year's direct costs.
+    for_repeaters = models.BooleanField(
+        default=False, verbose_name='Charged to repeaters',
+        help_text='Billed once a year to each student who is repeating failed modules only.',
     )
     # The hostel fee. Charged to a student the college records as living in the
     # hostel for the year — chosen at the finance desk, or granted on a hostel
@@ -2250,6 +2469,8 @@ class StudentCharge(models.Model):
     academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='charges')
     # Null for charges billed once per academic year rather than per semester.
     semester = models.ForeignKey(Semester, on_delete=models.PROTECT, null=True, blank=True, related_name='charges')
+    # A VETA course's fees are billed for its intake, not a semester.
+    intake = models.ForeignKey('Intake', on_delete=models.PROTECT, null=True, blank=True, related_name='charges')
     fee_structure = models.ForeignKey(
         FeeStructure, on_delete=models.SET_NULL, null=True, blank=True, related_name='charges',
     )
@@ -2976,12 +3197,24 @@ class Notification(models.Model):
     REQUEST_DECIDED = 'request.decided'
     REQUEST_DOCUMENT = 'request.document'
     FORM_PUBLISHED = 'form.published'
+    POSTPONEMENT_REQUESTED = 'postponement.requested'
+    POSTPONEMENT_DECIDED = 'postponement.decided'
+    EXPENSE_SUBMITTED = 'expense.submitted'
+    EXPENSE_DECIDED = 'expense.decided'
+    EXPENSE_QUERIED = 'expense.queried'
+    HEALTH_RECORDED = 'health.recorded'
     KIND_CHOICES = [
         (REQUEST_SUBMITTED, 'A student asked for something'),
         (REQUEST_FORWARDED, 'A request needs a decision'),
         (REQUEST_DECIDED, 'A request was answered'),
         (REQUEST_DOCUMENT, 'A document was sent'),
         (FORM_PUBLISHED, 'A form was opened'),
+        (POSTPONEMENT_REQUESTED, 'A student asked to postpone'),
+        (POSTPONEMENT_DECIDED, 'A postponement was decided'),
+        (EXPENSE_SUBMITTED, 'An expense needs approval'),
+        (EXPENSE_DECIDED, 'An expense was decided'),
+        (EXPENSE_QUERIED, 'An expense was queried or answered'),
+        (HEALTH_RECORDED, 'A student health record was added'),
     ]
 
     # Exactly one of these two is set: staff sign in as Django users, students
@@ -3102,3 +3335,365 @@ class FormSubmissionReceipt(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['form', 'profile'], name='one_receipt_per_student_per_form'),
         ]
+
+
+# ── VETA courses ──────────────────────────────────────────────────────────────
+#
+# Courses that run in intakes rather than semesters: VETA short courses (a few
+# months, a college certificate) and VETA long courses (NVA Level I, II, III).
+# Kept apart from Module / Student / StudentResult, which all hang off a
+# semester, so PST's grading, review and advance never see a VETA row. Money is
+# shared: a VETA course's fees are ordinary StudentCharges, billed for an intake.
+
+class Intake(models.Model):
+    """One run of a VETA course: "Hair Cutting — October 2026"."""
+    programme = models.ForeignKey(Programme, on_delete=models.PROTECT, related_name='intakes')
+    # The college year it is counted in: for the ID number counter, the fees
+    # and the reports. Charges need one; an intake starting in October belongs
+    # to the year that opens then.
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='intakes')
+    name = models.CharField(max_length=160, blank=True)
+    starts_on = models.DateField()
+    ends_on = models.DateField()
+    capacity = models.PositiveIntegerField(null=True, blank=True)
+    is_open = models.BooleanField(default=True, help_text='Taking applications.')
+    note = models.CharField(max_length=300, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='intakes_opened')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-starts_on', 'programme__name']
+
+    def __str__(self):
+        return self.name or f'{self.programme.name} — {self.starts_on:%B %Y}'
+
+    @property
+    def label(self):
+        return str(self)
+
+
+class CourseFee(models.Model):
+    """One fee a VETA course charges, for one year: what (the charge type, which
+    also says which bank account it is paid into), how much, and in how many
+    instalments. Set by the accountant after the course is defined."""
+    programme = models.ForeignKey(Programme, on_delete=models.PROTECT, related_name='course_fees')
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='course_fees')
+    charge_type = models.ForeignKey('ChargeType', on_delete=models.PROTECT, related_name='course_fees')
+    amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))])
+    hostel_only = models.BooleanField(
+        default=False, help_text='Charged only to students who live in the hostel.')
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='course_fees_set')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['programme__name', 'charge_type__sort_order', 'charge_type__name']
+        constraints = [
+            models.UniqueConstraint(fields=['programme', 'academic_year', 'charge_type'],
+                                    name='one_course_fee_per_charge'),
+        ]
+
+    def __str__(self):
+        return f'{self.programme.code} · {self.charge_type} · {self.amount}'
+
+
+class CourseFeeInstalment(models.Model):
+    """When part of a course fee falls due: so many days after the intake starts."""
+    fee = models.ForeignKey(CourseFee, on_delete=models.CASCADE, related_name='instalments')
+    number = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
+    amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))])
+    due_after_days = models.PositiveSmallIntegerField(default=0)
+    # The accountant says what must be paid before the admission desk may
+    # admit: typically the first instalment, paid when the student reports.
+    before_admission = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['fee', 'number']
+        constraints = [
+            models.UniqueConstraint(fields=['fee', 'number'], name='one_course_instalment_number'),
+        ]
+
+
+class CourseModule(models.Model):
+    """A module of a VETA course, reused by every intake. Long courses say
+    which NVA level it belongs to. Kept by the course coordinator."""
+    programme = models.ForeignKey(Programme, on_delete=models.PROTECT, related_name='course_modules')
+    code = models.CharField(max_length=40)
+    name = models.CharField(max_length=200)
+    nva_level = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(3)])
+    order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['programme__name', 'nva_level', 'order', 'code']
+        constraints = [
+            models.UniqueConstraint(fields=['programme', 'code'], name='unique_course_module_code'),
+        ]
+
+    def __str__(self):
+        return f'{self.code} – {self.name}'
+
+
+class CourseApplication(models.Model):
+    """One person's admission to a VETA intake, on its way through the same
+    four desks as a PST first year: intake → records → finance → admission.
+
+    Kept apart from Application, which is built around semesters; the desks,
+    the offices that work them and the rules for who may clear which are the
+    same (views.can_work_desk).
+    """
+    INTAKE = 'intake'
+    INFORMATION = 'information'
+    FINANCE = 'finance'
+    ADMISSION = 'admission'
+    ADMITTED = 'admitted'
+    REFUSED = 'rejected'
+    WITHDRAWN = 'cancelled'
+    STATE_CHOICES = [
+        (INTAKE, 'Intake — the admission office takes them on'),
+        (INFORMATION, 'Records — details'),
+        (FINANCE, 'With finance'),
+        (ADMISSION, 'With the admission officer'),
+        (ADMITTED, 'Admitted'),
+        (REFUSED, 'Refused'),
+        (WITHDRAWN, 'Withdrawn'),
+    ]
+    ROUTE = [INTAKE, INFORMATION, FINANCE, ADMISSION]
+    OPEN_STATES = set(ROUTE)
+
+    DAY = 'day'
+    HOSTEL = 'hostel'
+    RESIDENCE_CHOICES = [(DAY, 'Day'), (HOSTEL, 'Hostel')]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='course_applications')
+    intake = models.ForeignKey(Intake, on_delete=models.PROTECT, related_name='applications')
+    state = models.CharField(max_length=20, choices=STATE_CHOICES, default=INTAKE)
+    residence = models.CharField(max_length=10, choices=RESIDENCE_CHOICES, blank=True)
+    fees_raised_at = models.DateTimeField(null=True, blank=True)
+    note = models.CharField(max_length=300, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='course_applications_opened')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.profile} → {self.intake}'
+
+    @property
+    def is_open(self):
+        return self.state in self.OPEN_STATES
+
+    @property
+    def next_state(self):
+        if self.state not in self.ROUTE:
+            return None
+        index = self.ROUTE.index(self.state)
+        return self.ROUTE[index + 1] if index + 1 < len(self.ROUTE) else self.ADMITTED
+
+
+class CourseApplicationStep(models.Model):
+    """One desk's work on a VETA application: cleared, sent back or refused."""
+    CLEARED = 'cleared'
+    SENT_BACK = 'sent_back'
+    REFUSED = 'refused'
+    ACTION_CHOICES = [(CLEARED, 'Cleared'), (SENT_BACK, 'Sent back'), (REFUSED, 'Refused')]
+
+    application = models.ForeignKey(CourseApplication, on_delete=models.CASCADE, related_name='steps')
+    desk = models.CharField(max_length=20)
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES, default=CLEARED)
+    note = models.CharField(max_length=300, blank=True)
+    done_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='course_steps_done')
+    done_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['done_at', 'id']
+
+
+class CourseEnrollment(models.Model):
+    """One person on one VETA intake. Nobody is on two at once."""
+    STUDYING = 'studying'
+    COMPLETED = 'completed'
+    NOT_COMPLETED = 'not_completed'
+    WITHDRAWN = 'withdrawn'
+    STATUS_CHOICES = [
+        (STUDYING, 'Studying'),
+        (COMPLETED, 'Completed'),
+        (NOT_COMPLETED, 'Did not complete'),
+        (WITHDRAWN, 'Withdrawn'),
+    ]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='course_enrollments')
+    intake = models.ForeignKey(Intake, on_delete=models.PROTECT, related_name='enrollments')
+    application = models.OneToOneField(
+        CourseApplication, on_delete=models.SET_NULL, null=True, blank=True, related_name='enrollment')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STUDYING)
+    residence = models.CharField(max_length=10, choices=CourseApplication.RESIDENCE_CHOICES, default='day')
+    nva_level = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(3)],
+        help_text='VETA long courses: the level being studied now.')
+    admitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='course_enrollments_admitted')
+    admitted_at = models.DateTimeField(auto_now_add=True)
+    completed_on = models.DateField(null=True, blank=True)
+    certificate_no = models.CharField(max_length=60, blank=True)
+
+    class Meta:
+        ordering = ['-admitted_at']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'intake'], name='one_enrollment_per_intake'),
+        ]
+
+    def __str__(self):
+        return f'{self.profile} · {self.intake}'
+
+
+# ── Expenses ──────────────────────────────────────────────────────────────────
+#
+# What the college spends: recorded by the accountant against a category and
+# the year's budget, approved by the Principal or DPFPA (one approval is
+# enough), then paid. Nothing is deleted: a wrong entry is cancelled with a
+# reason, a refused one stays refused, and every step is in the audit trail.
+
+class ExpenseCategory(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    code = models.CharField(max_length=20, blank=True)
+    description = models.CharField(max_length=300, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name_plural = 'expense categories'
+
+    def __str__(self):
+        return self.name
+
+
+class ExpenseBudget(models.Model):
+    """What the college plans to spend on one category in one year. Set by the
+    accountant at the start of the year, and revised mid-year when needed."""
+    category = models.ForeignKey(ExpenseCategory, on_delete=models.PROTECT, related_name='budgets')
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='expense_budgets')
+    amount = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))])
+    note = models.CharField(max_length=300, blank=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='expense_budgets_set')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['academic_year__name', 'category__name']
+        constraints = [
+            models.UniqueConstraint(fields=['category', 'academic_year'], name='one_budget_per_category_year'),
+        ]
+
+
+class Expense(models.Model):
+    PENDING = 'pending'
+    APPROVED = 'approved'
+    REJECTED = 'rejected'
+    PAID = 'paid'
+    CANCELLED = 'cancelled'
+    QUERIED = 'queried'
+    STATUS_CHOICES = [
+        (PENDING, 'Waiting for approval'),
+        (QUERIED, 'Queried — waiting for the accountant'),
+        (APPROVED, 'Approved, not paid yet'),
+        (REJECTED, 'Rejected'),
+        (PAID, 'Paid'),
+        (CANCELLED, 'Cancelled'),
+    ]
+    #: Where the money comes from. Office funds are paid from a college bank
+    # account; petty cash is the float the accountant holds for small and
+    # emergency spending, always paid in cash.
+    OFFICE = 'office'
+    PETTY_CASH = 'petty_cash'
+    SOURCE_CHOICES = [(OFFICE, 'Office funds'), (PETTY_CASH, 'Petty cash')]
+    BANK = 'bank'
+    CHEQUE = 'cheque'
+    CASH = 'cash'
+    MOBILE = 'mobile'
+    METHOD_CHOICES = [
+        (BANK, 'Bank transfer'), (CHEQUE, 'Cheque'), (CASH, 'Cash'), (MOBILE, 'Mobile money'),
+    ]
+
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='expenses')
+    category = models.ForeignKey(ExpenseCategory, on_delete=models.PROTECT, related_name='expenses')
+    description = models.CharField(max_length=300)
+    payee = models.CharField(max_length=200)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    incurred_on = models.DateField()
+    supplier_reference = models.CharField(max_length=100, blank=True,
+                                          help_text="The supplier's invoice or quotation number.")
+    attachment = models.FileField(upload_to='expenses/%Y/%m/', blank=True)
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default=OFFICE)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=PENDING)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='expenses_recorded')
+    recorded_at = models.DateTimeField(auto_now_add=True)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='expenses_decided')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=300, blank=True)
+    paid_on = models.DateField(null=True, blank=True)
+    paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='expenses_paid')
+    payment_method = models.CharField(max_length=20, choices=METHOD_CHOICES, blank=True)
+    bank_account = models.ForeignKey(
+        'BankAccount', on_delete=models.PROTECT, null=True, blank=True, related_name='expenses_paid_from')
+    payment_reference = models.CharField(max_length=100, blank=True)
+    cancelled_reason = models.CharField(max_length=300, blank=True)
+    # The last query, and the accountant's answer to it. Every query and
+    # answer is also in the audit trail; these are what the screens show.
+    query_note = models.CharField(max_length=300, blank=True)
+    queried_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='expenses_queried')
+    queried_at = models.DateTimeField(null=True, blank=True)
+    answer_note = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ['-incurred_on', '-id']
+
+    def __str__(self):
+        return f'{self.category} · {self.payee} · {self.amount}'
+
+
+class PettyCashTopUp(models.Model):
+    """Money moved into the petty cash float, from a college bank account.
+
+    The float is what the top-ups bring in less the petty-cash expenses paid
+    out of it. The accountant keeps it; the Principal and DPFPA see it. Nothing
+    is deleted: a wrong top-up is reversed with a negative one and a reason."""
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='petty_cash_topups')
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    received_on = models.DateField()
+    bank_account = models.ForeignKey(
+        'BankAccount', on_delete=models.PROTECT, null=True, blank=True, related_name='petty_cash_topups')
+    reference = models.CharField(max_length=100, blank=True, help_text='Cheque or withdrawal number.')
+    note = models.CharField(max_length=300, blank=True)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='petty_cash_topups')
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-received_on', '-id']
+
+    def __str__(self):
+        return f'Petty cash +{self.amount} on {self.received_on}'
+

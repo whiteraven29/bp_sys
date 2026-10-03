@@ -21,7 +21,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from . import finance
-from .models import HeadOfDepartmentProfile, PrincipalProfile, Student
+from .models import ICTOfficerProfile, Student
 
 logger = logging.getLogger(__name__)
 
@@ -62,27 +62,19 @@ def bill_new_enrollment(sender, instance, created, **kwargs):
                     instance.nactvet_reg_no, academic_year, len(raised))
 
 
-@receiver(post_save, sender=PrincipalProfile,
-          dispatch_uid='attendance.principal_carries_admin_rights')
-@receiver(post_save, sender=HeadOfDepartmentProfile,
-          dispatch_uid='attendance.hod_carries_admin_rights')
-def office_carries_admin_rights(sender, instance, **kwargs):
-    """Holding one of these offices *is* having admin rights.
+@receiver(post_save, sender=ICTOfficerProfile,
+          dispatch_uid='attendance.ict_officer_opens_django_admin')
+def ict_officer_opens_django_admin(sender, instance, **kwargs):
+    """The ICT officer runs the system, so Django's own admin site is theirs,
+    with every table in it: the role makes the account a superuser.
 
-    Django's own admin will happily attach a Principal profile to an account
-    without touching `is_staff`, and the result is somebody who carries the
-    title and none of the access — they sign in and are still shown a tutor's
-    screen. That is not a role change anybody would recognise as one, so the
-    profile grants the rights itself.
-
-    Grants only, never revokes: the examination officer is `is_staff` with no
-    profile at all, so an automatic revoke here could not tell "this office
-    ended" from "this account was always the exam officer". Taking a role away
-    goes through set_roles, which knows the difference.
+    What the ICT officer may do inside the app is still decided by roles.py.
+    Django's admin will happily attach an ICT officer profile without touching
+    the flags, so the profile sets them itself. Grants only; taking the role
+    away goes through set_roles.
     """
     user = instance.user
-    if instance.is_active and not user.is_staff:
-        user.is_staff = True
-        user.save(update_fields=['is_staff'])
-        logger.info('Granted admin rights to %s on becoming %s',
-                    user.username, sender._meta.verbose_name)
+    if instance.is_active and not (user.is_staff and user.is_superuser):
+        user.is_staff = user.is_superuser = True
+        user.save(update_fields=['is_staff', 'is_superuser'])
+        logger.info('Opened the admin site to %s on becoming ICT officer', user.username)

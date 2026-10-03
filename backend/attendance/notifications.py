@@ -17,7 +17,8 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from .models import (
-    HeadOfDepartmentProfile, Notification, PrincipalProfile, SecretaryProfile,
+    DeputyAcademicProfile, DeputyFinanceProfile, HeadOfDepartmentProfile, Notification,
+    PrincipalProfile, SecretaryProfile,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,20 @@ def _users_holding(*profile_models):
 def secretaries():
     """Who receives what students ask for, and who acts on the answer."""
     return _users_holding(SecretaryProfile)
+
+
+def principal_and_dparc():
+    """The Principal decides a postponement; DPARC is told."""
+    return _users_holding(PrincipalProfile, DeputyAcademicProfile)
+
+
+def expense_approvers():
+    """An expense waits on the Principal or DPFPA; either may decide it."""
+    return _users_holding(PrincipalProfile, DeputyFinanceProfile)
+
+
+def dparc():
+    return _users_holding(DeputyAcademicProfile)
 
 
 def deciders():
@@ -137,3 +152,27 @@ def document_sent(service_request, attachment):
            title=f'{service_request.form.title} — document ready',
            body=f'{attachment.display_name} is ready to download.',
            link='my-requests')
+
+
+def postponement_requested(postponement):
+    """A student asked to postpone, or records wrote down a paper request.
+    The Principal decides it; DPARC follows the list."""
+    notify(principal_and_dparc(), kind=Notification.POSTPONEMENT_REQUESTED,
+           title=f'Postponement: {postponement.profile.name}',
+           body=f'{postponement.semester.label}. Waiting on the Principal\'s decision.',
+           link='status:postponements')
+
+
+def postponement_decided(postponement):
+    """The Principal decided. DPARC is told, and so is the student."""
+    verdict = 'approved' if postponement.status == postponement.APPROVED else 'declined'
+    notify(dparc(), kind=Notification.POSTPONEMENT_DECIDED,
+           title=f'Postponement {verdict}: {postponement.profile.name}',
+           body=postponement.semester.label, link='status:postponements')
+    if verdict == 'approved' and postponement.return_year_id:
+        body = (f'You return in semester {postponement.return_semester_number} of '
+                f'{postponement.return_year.name}.')
+    else:
+        body = postponement.decision_note
+    notify(profile=postponement.profile, kind=Notification.POSTPONEMENT_DECIDED,
+           title=f'Your postponement was {verdict}', body=body or '')

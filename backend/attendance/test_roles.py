@@ -13,8 +13,8 @@ from rest_framework.test import APIClient
 
 from .models import (
     AcademicYear, AccountantProfile, ClassLevel, EstateOfficerProfile,
-    HeadOfDepartmentProfile, Module, PrincipalProfile, Semester, Student,
-    StudentResult, TeacherProfile,
+    ExamOfficerProfile, HeadOfDepartmentProfile, ICTOfficerProfile, Module, PrincipalProfile,
+    Semester, Student, StudentResult, TeacherProfile,
 )
 from .views import roles_for as roles_of
 
@@ -55,15 +55,19 @@ class RoleTestBase(TestCase):
 
 
 class CreatingTheAccountsTests(RoleTestBase):
-    def test_the_principal_is_created_with_admin_rights(self):
-        user, _ = self._account('principal', 'principal')
-        self.assertTrue(user.is_staff)
+    def test_the_principal_is_created_with_the_academic_side(self):
+        """The office carries the access; Django's is_staff flag no longer does
+        (it only opens Django's own admin site, for the ICT officer)."""
+        user, client = self._account('principal', 'principal')
+        self.assertFalse(user.is_staff)
         self.assertTrue(PrincipalProfile.objects.filter(user=user).exists())
+        self.assertTrue(client.get('/api/dashboard/').json()['is_staff'])
 
-    def test_the_head_of_department_is_created_with_admin_rights(self):
-        user, _ = self._account('hod', 'hod')
-        self.assertTrue(user.is_staff)
+    def test_the_head_of_department_is_created_with_the_academic_side(self):
+        user, client = self._account('hod', 'hod')
+        self.assertFalse(user.is_staff)
         self.assertTrue(HeadOfDepartmentProfile.objects.filter(user=user).exists())
+        self.assertTrue(client.get('/api/dashboard/').json()['is_staff'])
 
     def test_both_appear_in_the_staff_list_under_their_own_names(self):
         self._account('principal', 'principal')
@@ -106,14 +110,23 @@ class PrincipalTests(RoleTestBase):
                       '/api/invoices/'):
             self.assertEqual(self.client_api.get(route).status_code, 403, route)
 
-    def test_the_principal_is_kept_out_of_college_property(self):
+    def test_the_principal_reads_college_property_and_changes_none(self):
+        """The estate manager keeps the register; the Principal (and DPFPA)
+        read it on the Executive Summary."""
+        for route in ('/api/assets/', '/api/asset-transfers/', '/api/inventory-locations/',
+                      '/api/inventory/summary/'):
+            self.assertEqual(self.client_api.get(route).status_code, 200, route)
         for route in ('/api/assets/', '/api/asset-transfers/', '/api/inventory-locations/'):
-            self.assertEqual(self.client_api.get(route).status_code, 403, route)
+            self.assertEqual(self.client_api.post(route, {}, format='json').status_code, 403, route)
 
     def test_the_dashboard_says_who_they_are(self):
         payload = self.client_api.get('/api/dashboard/').json()
         self.assertTrue(payload['is_principal'])
-        self.assertTrue(payload['can_manage_exams'])
+        # The Principal confirms reviews and advances the year; marks are the
+        # examination officer's (and each module's own tutors').
+        self.assertFalse(payload['can_manage_exams'])
+        self.assertTrue(payload['can_confirm_reviews'])
+        self.assertTrue(payload['can_advance_semester'])
         self.assertFalse(payload['is_head_of_department'])
         self.assertFalse(payload['is_accountant'])
 
@@ -246,7 +259,7 @@ class ChangingSomebodysRoleTests(RoleTestBase):
         self.assertEqual(promoted.data['roles'], ['hod', 'tutor'])
 
         self.user.refresh_from_db()
-        self.assertTrue(self.user.is_staff)
+        self.assertTrue(self.client_api.get('/api/dashboard/').json()['is_staff'])
         self.assertTrue(HeadOfDepartmentProfile.objects.filter(user=self.user).exists())
         # The whole point: nothing they already had was taken away.
         self.assertIn(self.module, self.user.modules_taught.all())
@@ -263,14 +276,13 @@ class ChangingSomebodysRoleTests(RoleTestBase):
         self.assertIn(self.module, self.user.modules_taught.all())
 
     def test_an_office_brings_its_access_with_it(self):
-        self.assertFalse(self.user.is_staff)
+        self.assertFalse(self.client_api.get('/api/dashboard/').json()['is_staff'])
         self._roles('tutor', 'principal')
-        self.user.refresh_from_db()
-        self.assertTrue(self.user.is_staff)
 
         payload = self.client_api.get('/api/dashboard/').json()
+        self.assertTrue(payload['is_staff'])
         self.assertTrue(payload['is_principal'])
-        self.assertTrue(payload['can_manage_exams'])
+        self.assertTrue(payload['can_confirm_reviews'])
 
     def test_taking_the_office_away_takes_the_access_with_it(self):
         self._roles('tutor', 'principal')
@@ -283,16 +295,18 @@ class ChangingSomebodysRoleTests(RoleTestBase):
         self.assertEqual(self.client_api.get('/api/charge-types/').status_code, 403)
 
     def test_the_exam_officer_can_be_handed_on(self):
-        """It is the one role with no profile of its own — is_staff and neither
-        office — so the editor has to be able to grant and revoke it by name."""
+        """An office of its own now, with its own profile — not "an admin that
+        is neither Principal nor HoD" — and no longer Django staff."""
         self._roles('tutor', 'exam_officer')
         self.user.refresh_from_db()
-        self.assertTrue(self.user.is_staff)
+        self.assertFalse(self.user.is_staff)
+        self.assertTrue(ExamOfficerProfile.objects.filter(user=self.user, is_active=True).exists())
         self.assertIn('exam_officer', roles_of(self.user))
+        self.assertTrue(self.client_api.get('/api/dashboard/').json()['can_manage_exams'])
 
         self._roles('tutor')
-        self.user.refresh_from_db()
-        self.assertFalse(self.user.is_staff)
+        self.assertFalse(ExamOfficerProfile.objects.filter(user=self.user).exists())
+        self.assertFalse(self.client_api.get('/api/dashboard/').json()['can_manage_exams'])
 
     def test_an_account_may_hold_several_offices(self):
         answered = self._roles('tutor', 'hod', 'secretary')
@@ -328,11 +342,11 @@ class ChangingSomebodysRoleTests(RoleTestBase):
         self.assertTrue(self.admin.is_staff)
 
     def test_every_account_is_listed_including_ones_with_no_profile(self):
-        """The examination officer has no profile row, so they used to be
-        invisible on the very screen that hands the job to somebody else."""
+        """The emergency superuser holds no office, and is still listed: an
+        account nobody can see is an account nobody checks."""
         listed = {row['username']: row for row in self.api.get('/api/staff-accounts/').json()}
         self.assertIn('admin', listed)
-        self.assertEqual(listed['admin']['roles'], ['exam_officer'])
+        self.assertEqual(listed['admin']['roles'], [])
         self.assertTrue(listed['admin']['is_superuser'])
         self.assertEqual(listed['jmwangi']['roles'], ['tutor'])
 
@@ -345,21 +359,27 @@ class DjangoAdminRoleChangeTests(RoleTestBase):
     """
 
     def test_attaching_a_principal_profile_grants_the_access(self):
+        """The profile is the access — nothing else needs setting."""
         user = User.objects.create_user('jmwangi', password='pw')
         TeacherProfile.objects.create(user=user, full_name='J Mwangi')
-        self.assertFalse(user.is_staff)
+        client = APIClient()
+        client.force_authenticate(user)
+        self.assertFalse(client.get('/api/dashboard/').json()['is_staff'])
 
         PrincipalProfile.objects.create(user=user, full_name='J Mwangi')
 
+        self.assertTrue(client.get('/api/dashboard/').json()['is_staff'])
         user.refresh_from_db()
-        self.assertTrue(user.is_staff)
+        self.assertFalse(user.is_staff)
 
-    def test_attaching_a_head_of_department_profile_grants_it_too(self):
+    def test_attaching_an_ict_officer_profile_opens_django_admin(self):
+        """The one office that opens Django's admin site, with every table."""
         user = User.objects.create_user('amtei', password='pw')
-        HeadOfDepartmentProfile.objects.create(user=user, full_name='A Mtei')
+        ICTOfficerProfile.objects.create(user=user, full_name='A Mtei')
 
         user.refresh_from_db()
         self.assertTrue(user.is_staff)
+        self.assertTrue(user.is_superuser)
 
     def test_an_inactive_profile_grants_nothing(self):
         user = User.objects.create_user('retired', password='pw')
@@ -428,10 +448,11 @@ class WearingTwoHatsTests(RoleTestBase):
         self._scope('mine')
         payload = self.browser.get('/api/dashboard/').json()
         self.assertTrue(payload['is_principal'])
-        self.assertTrue(payload['can_manage_exams'])
+        self.assertTrue(payload['can_confirm_reviews'])
         # Still barred from the same places as before — the switch is not a role.
         self.assertEqual(self.browser.get('/api/charge-types/').status_code, 403)
-        self.assertEqual(self.browser.get('/api/assets/').status_code, 403)
+        self.assertEqual(self.browser.post('/api/assets/', '{}',
+                                           content_type='application/json').status_code, 403)
 
     def test_the_switch_cannot_widen_anything(self):
         """A plain tutor asking for the whole college gets their own modules,

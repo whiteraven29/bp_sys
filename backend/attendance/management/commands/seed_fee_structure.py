@@ -96,9 +96,19 @@ CATALOGUE = [
      0, OTHER_ACCOUNT, (False, False, False, True, True)),
     (31, 'Special Exam', OTHER, YEARLY, ChargeType.ON_REQUEST, 'Examination Charges',
      0, OTHER_ACCOUNT, (False, False, False, True, True)),
+    # A repeater pays no programme fees: 200,000 for each module sat again,
+    # and a flat 280,000 direct cost once a year (set 3 October 2026).
     (32, 'Repeat Module', OTHER, YEARLY, ChargeType.ON_REQUEST, 'Examination Charges',
-     0, OTHER_ACCOUNT, (True, False, False, False, False)),
+     200_000, OTHER_ACCOUNT, (True, False, False, False, False)),
+    (33, 'Repeat direct costs', DIRECT, YEARLY, ChargeType.ON_REQUEST, 'Direct Costs',
+     280_000, OTHER_ACCOUNT, (True, False, False, False, False)),
 ]
+#: Which exam declaration raises each per-module charge. Linked only when no
+#: other charge type already holds the link (the accountant may have chosen one).
+DECLARATIONS = {'Supplementary Exam': ChargeType.SUPP_EXAM, 'Special Exam': ChargeType.SPECIAL_EXAM,
+                'Repeat Module': ChargeType.REPEAT_MODULE}
+#: Billed once a year to a student repeating failed modules only.
+FOR_REPEATERS = {'Repeat direct costs'}
 
 # Tuition is payable in full or five instalments; other charges and
 # accommodation in full or two. (Admission form, "Payment Instalments".)
@@ -179,16 +189,23 @@ class Command(BaseCommand):
                     'blocks_registration': reg, 'blocks_cat1': c1, 'blocks_cat2': c2,
                     'blocks_final': fin, 'blocks_results': res, 'is_active': True,
                     'is_hostel': name == 'Accommodation',
+                    'for_repeaters': name in FOR_REPEATERS,
                 },
             )
             created_types += int(made)
+            kind = DECLARATIONS.get(name)
+            if kind and not charge_type.declaration and not ChargeType.objects.filter(
+                    declaration=kind).exclude(pk=charge_type.pk).exists():
+                charge_type.declaration = kind
+                charge_type.save(update_fields=['declaration'])
 
-            if applies == ChargeType.ON_REQUEST or not amount:
+            if not amount:
                 continue   # priced by the accountant when they raise it
 
             period = (FeeStructure.ONCE if frequency == ChargeType.ONCE
                       else FeeStructure.ACADEMIC_YEAR)
-            count = INSTALMENTS.get(name, DEFAULT_INSTALMENTS)
+            # A declared or repeater charge is paid in one go.
+            count = 1 if applies == ChargeType.ON_REQUEST else INSTALMENTS.get(name, DEFAULT_INSTALMENTS)
             for level in levels:
                 structure, _ = FeeStructure.objects.update_or_create(
                     charge_type=charge_type, class_level=level, academic_year=year,

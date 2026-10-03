@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from . import views
+from . import veta_views, views
 
 router = DefaultRouter()
 router.register('academic-years', views.AcademicYearViewSet, basename='academicyear')
@@ -66,6 +66,28 @@ urlpatterns = [
     path('staff-accounts/<int:user_id>/reset-password/', views.reset_staff_password,
          name='staff-reset-password'),
     path('staff-accounts/', views.create_staff_account, name='staff-accounts'),
+    path('staff-accounts/role-changes/', views.role_changes, name='role-changes'),
+    path('executive/finance/', views.executive_finance, name='executive-finance'),
+    # VETA courses
+    path('intakes/', veta_views.intakes, name='intakes'),
+    path('intakes/<int:pk>/', veta_views.intake_detail, name='intake-detail'),
+    path('course-fees/', veta_views.course_fees, name='course-fees'),
+    path('course-fees/<int:pk>/', veta_views.course_fee_detail, name='course-fee-detail'),
+    path('course-modules/', veta_views.course_modules, name='course-modules'),
+    path('course-applications/', veta_views.course_applications, name='course-applications'),
+    path('course-applications/<int:pk>/', veta_views.course_application_action, name='course-application'),
+    path('course-applications/<int:pk>/<str:action>/', veta_views.course_application_action,
+         name='course-application-action'),
+    path('course-enrollments/', veta_views.course_enrollments, name='course-enrollments'),
+    # Expenses
+    path('health-records/', views.health_records, name='health-records'),
+    path('health-records/<int:pk>/close/', views.health_record_close, name='health-record-close'),
+    path('expense-categories/', veta_views.expense_categories, name='expense-categories'),
+    path('expense-budgets/', veta_views.expense_budgets, name='expense-budgets'),
+    path('expenses/', veta_views.expense_list, name='expenses'),
+    path('petty-cash/', veta_views.petty_cash, name='petty-cash'),
+    path('expenses/<int:pk>/attachment/', veta_views.expense_attachment, name='expense-attachment'),
+    path('expenses/<int:pk>/<str:action>/', veta_views.expense_action, name='expense-action'),
     path('staff-accounts/<int:user_id>/set-modules/', views.set_staff_modules, name='staff-set-modules'),
     path('staff-accounts/<int:user_id>/roles/', views.set_staff_roles, name='staff-set-roles'),
     path('module-scope/', views.set_module_scope, name='module-scope'),
@@ -83,6 +105,7 @@ urlpatterns = [
     path('inventory/bulk-create/', views.inventory_bulk_create, name='inventory-bulk-create'),
     path('inventory/office-register/', views.inventory_office_register, name='inventory-office-register'),
     path('inventory/report/', views.inventory_report, name='inventory-report'),
+    path('inventory/summary/', views.inventory_summary, name='inventory-summary'),
     path('results/download/', views.download_results, name='results-download'),
     path('results/download/ca-signoff/', views.download_ca_signoff, name='results-download-ca-signoff'),
     path('results/download/final/', views.download_final_results, name='results-download-final'),

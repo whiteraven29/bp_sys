@@ -8,6 +8,8 @@ from .models import (
     RequestAttachment,
     PrincipalProfile,
     HeadOfDepartmentProfile,
+    ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile, ICTOfficerProfile, RoleChange,
+    TrainingCoordinatorProfile, DeanOfStudentsProfile,
 )
 
 
@@ -74,6 +76,31 @@ class PrincipalProfileAdmin(admin.ModelAdmin):
 class HeadOfDepartmentProfileAdmin(admin.ModelAdmin):
     list_display = ['full_name', 'user', 'is_active']
     list_filter = ['is_active']
+
+
+# HealthRecord is deliberately not registered: a student's health is for the
+# records office, the Dean of Students and the Principal, not the ICT account.
+@admin.register(ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile, ICTOfficerProfile,
+                TrainingCoordinatorProfile, DeanOfStudentsProfile)
+class OfficeProfileAdmin(admin.ModelAdmin):
+    list_display = ['full_name', 'user', 'is_active']
+    list_filter = ['is_active']
+
+
+@admin.register(RoleChange)
+class RoleChangeAdmin(admin.ModelAdmin):
+    """Read-only: the record of who was given what is not edited after the fact."""
+    list_display = ['changed_at', 'user', 'added', 'removed', 'changed_by']
+    readonly_fields = ['user', 'added', 'removed', 'changed_by', 'changed_at']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Module)

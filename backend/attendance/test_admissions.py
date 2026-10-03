@@ -11,6 +11,7 @@ The college's rules, each one a test:
   * nobody is admitted twice for the same semester.
 """
 
+import itertools
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -28,6 +29,14 @@ from .models import (
 )
 
 User = get_user_model()
+
+
+_FORM_FOUR = itertools.count(1)
+
+
+def next_index():
+    """A Form Four index number nobody else in the test has."""
+    return f'S0101/{next(_FORM_FOUR):04d}/2025'
 
 
 class AdmissionBase(TestCase):
@@ -72,7 +81,7 @@ class AdmissionBase(TestCase):
     def applicant(self, reg_no='NACTVET/PENDING/001', name='Rehema Mtui'):
         return admissions.capture_student(
             nactvet_reg_no=reg_no, name=name, phone='0712000111', gender='F',
-            date_of_birth=date(2006, 4, 12), actor=self.officer,
+            date_of_birth=date(2006, 4, 12), actor=self.officer, form_four_index=next_index(),
             next_of_kin=[{'name': 'Mama Mtui', 'phone': '0713000222', 'relationship': 'parent'},
                          {'name': 'Baba Mtui', 'phone': '0714000333', 'relationship': 'parent'}],
         )
@@ -486,7 +495,7 @@ class AdmissionApiTests(AdmissionBase):
         """The records desk takes the student's details down."""
         response = self.records.post(f'/api/applications/{application_id}/details/', {
             'name': 'Rehema Mtui', 'phone': '0712000111', 'gender': 'F',
-            'date_of_birth': '2006-04-12',
+            'date_of_birth': '2006-04-12', 'form_four_index': next_index(),
             'next_of_kin': [{'name': 'Mama Mtui', 'phone': '0713000222', 'relationship': 'parent'},
                             {'name': 'Baba Mtui', 'phone': '0714000333', 'relationship': 'parent'}],
         }, format='json')
@@ -1061,6 +1070,7 @@ class OfficeBoundaryTests(OfficeClients):
 
         saved = self.records.post(f'/api/applications/{application_id}/details/', {
             'phone': '0715000100', 'gender': 'M', 'date_of_birth': '2005-11-02',
+            'form_four_index': 's0101 0777 2024',
             'next_of_kin': [{'name': 'Mama Laizer', 'phone': '0715000101', 'relationship': 'parent'},
                             {'name': 'Kaka Laizer', 'phone': '0715000102', 'relationship': 'sibling'}],
         }, format='json')
@@ -1090,6 +1100,7 @@ class OfficeBoundaryTests(OfficeClients):
         application = Application.objects.get(pk=application_id)
         admissions.record_details(application.profile, phone='0715000100', gender='M',
                                   date_of_birth=date(2005, 11, 2), actor=self.officer,
+                                  form_four_index=next_index(),
                                   next_of_kin=[{'name': 'A', 'phone': '1', 'relationship': 'parent'},
                                                {'name': 'B', 'phone': '2', 'relationship': 'parent'}])
         admissions.complete_step(application, actor=self.officer)       # intake
@@ -1191,6 +1202,45 @@ class FinanceSeesResultsTests(AdmissionBase):
         self.assertEqual(StudentCharge.objects.filter(
             profile=self.student, charge_type=self.repeat_type).count(), 1)
 
+    def repeaters_direct_cost(self, amount='280000'):
+        charge_type = ChargeType.objects.create(
+            name='Repeat direct costs', family=ChargeType.DIRECT_COST,
+            applies=ChargeType.ON_REQUEST, for_repeaters=True)
+        structure = FeeStructure.objects.create(
+            charge_type=charge_type, class_level=self.level4, academic_year=self.year,
+            amount=Decimal(amount), billing_period=FeeStructure.ACADEMIC_YEAR, installments=1)
+        finance.set_installment_schedule(structure, [date(2026, 11, 30)])
+        return charge_type
+
+    def test_a_repeater_also_pays_the_direct_cost_once_a_year(self):
+        direct = self.repeaters_direct_cost()
+        application = admissions.open_application(
+            profile=self.student, semester=self.sem1, programme=self.pst,
+            class_level=self.level4, kind=Application.CONTINUING, actor=self.officer)
+        academic = self.accounts.get(f'/api/applications/{application.id}/').data['academic']
+        self.assertIn("repeaters' direct cost", academic['billing'])
+        for _ in range(3):
+            admissions.complete_step(application, actor=self.officer)
+        # Enrolling them again (or for semester 2) does not bill it twice.
+        finance.charge_repeater_costs(self.student, self.year, class_level=self.level4,
+                                      programme=self.pst, semester=self.sem2)
+
+        billed = sorted((c.charge_type_id, c.amount) for c in
+                        StudentCharge.objects.filter(profile=self.student, academic_year=self.year))
+        self.assertEqual(billed, sorted([(self.repeat_type.id, Decimal('50000.00')),
+                                         (direct.id, Decimal('280000.00'))]))
+
+    def test_a_student_carrying_a_repeat_beside_a_full_year_pays_no_repeaters_cost(self):
+        self.repeaters_direct_cost()
+        StudentStanding.objects.filter(profile=self.student).update(status=StudentStanding.ACTIVE)
+        application = admissions.open_application(
+            profile=self.student, semester=self.sem1, programme=self.pst,
+            class_level=self.level4, kind=Application.CONTINUING, actor=self.officer)
+
+        self.assertFalse(StudentCharge.objects.filter(
+            profile=self.student, charge_type__for_repeaters=True).exists())
+        self.assertEqual(application.state, Application.FINANCE)
+
     def test_an_unconfirmed_review_is_shown_as_unconfirmed(self):
         SemesterReview.objects.filter(profile=self.student).update(confirmed='')
         application = admissions.open_application(
@@ -1289,7 +1339,7 @@ class OfficeVisibilityTests(OfficeClients):
         self.at_finance = Application.objects.get(pk=self.open_first_year())
         admissions.record_details(
             self.at_finance.profile, phone='0715000100', gender='F',
-            date_of_birth=date(2006, 1, 5), actor=self.officer,
+            date_of_birth=date(2006, 1, 5), actor=self.officer, form_four_index=next_index(),
             next_of_kin=[{'name': 'A', 'phone': '1', 'relationship': 'parent'},
                          {'name': 'B', 'phone': '2', 'relationship': 'parent'}])
         self.at_finance.profile.name = 'Finance Waiting'

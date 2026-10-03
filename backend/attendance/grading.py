@@ -96,6 +96,7 @@ def parse_authority_grade(value, class_level):
         'B+': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0,
     }
     points = points_by_grade[grade]
+    face_points = points            # what the grade is worth as it stands
     if failed_components:
         status, description = 'SUPP', 'Supplementary required by authority'
         points = SUPP_POINTS
@@ -109,6 +110,7 @@ def parse_authority_grade(value, class_level):
         'raw': raw, 'grade': raw,
         'status': status,
         'points': points,
+        'face_points': face_points,
         'description': description,
         'failed_components': failed_components,
     }
@@ -121,7 +123,8 @@ def result_outcome(result, serializer):
         return {
             'end_exam_mark': None, 'supplementary_required': parsed['status'] == 'SUPP',
             'status': parsed['status'], 'grade': parsed['grade'],
-            'grade_point': parsed['points'], 'grade_description': parsed['description'],
+            'grade_point': parsed['points'], 'face_points': parsed.get('face_points', parsed['points']),
+            'grade_description': parsed['description'],
             'official_total': None, 'failed_end_components': parsed['failed_components'],
         }
     final_total = serializer.get_final_total(result)
@@ -150,6 +153,9 @@ def result_outcome(result, serializer):
             return {
                 'end_exam_mark': end_exam_mark, 'supplementary_required': True,
                 'status': 'SUPP', 'grade': None, 'grade_point': SUPP_POINTS,
+                # The grade the first sitting earned, used instead of C when
+                # the student goes straight to repeat (more than half failed).
+                'face_points': grade_for_mark(final_total, result.student.module.class_level)[1],
                 'grade_description': 'Supplementary required',
                 'official_total': final_total,
                 'failed_end_components': failed_components,

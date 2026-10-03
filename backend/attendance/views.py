@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.contrib.auth import get_user_model
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
 from django.db.models import Count, Exists, F, OuterRef, Q, Sum
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden
@@ -29,7 +30,18 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import admissions, analytics, evaluations, finance, lifecycle, notifications, passwords, progression
+from . import admissions, analytics, evaluations, finance, lifecycle, notifications, passwords, progression, veta, health
+from .roles import (
+    OPEN_ROLES, can_advance_semester, can_appoint, can_confirm_reviews, can_decide_requests,
+    can_handle_requests, can_manage_accounts, can_manage_departments, can_manage_exams,
+    can_prepare_reviews, can_read_exams, can_read_inventory, can_view_finance_summary,
+    follows_postponements, is_academic_admin, is_accountant, is_admission_officer, is_break_glass,
+    is_dparc,
+    is_dpfpa, is_estate_officer, is_exam_officer, is_head_of_department, is_ict_officer,
+    is_principal, is_records_officer, is_secretary, runs_departments,
+    is_coordinator, runs_veta_courses, can_approve_expenses, can_view_expenses,
+    is_dean, can_read_health_records,
+)
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
 from .models import (
     AcademicYear, Semester, ClassLevel, Module,
@@ -47,7 +59,10 @@ from .models import (
     OutstandingRepeat, SemesterReview, StudentStanding, StandingChange,
     AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck, Application,
     PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultWithholding,
-    StudentDocument,
+    StudentDocument, HealthRecord, ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile,
+    ICTOfficerProfile, RoleChange, TrainingCoordinatorProfile, DeanOfStudentsProfile,
+    Intake, CourseFee, CourseFeeInstalment, CourseModule, CourseApplication, CourseEnrollment,
+    ExpenseCategory, ExpenseBudget, Expense,
     Form, FormSection, FormQuestion, FormAnswer, FormResponse, FormSubmissionReceipt,
 )
 from .serializers import (
@@ -108,7 +123,7 @@ def user_modules(user):
     """
     if getattr(user, 'teaching_scope_only', False):
         return user.modules_taught.all()
-    if user.is_staff:
+    if is_academic_admin(user):
         return Module.objects.all()
     return user.modules_taught.all()
 
@@ -134,60 +149,16 @@ def teaches_anything(user):
     return bool(user and user.is_authenticated and user.modules_taught.exists())
 
 
-def is_accountant(user):
-    return bool(
-        user
-        and user.is_authenticated
-        and AccountantProfile.objects.filter(user=user, is_active=True).exists()
-    )
-
-
 def can_manage_finance(user):
     """Only the accountant handles money.
 
-    `is_staff` in this system is the examination officer / HOD: they own
-    results, eligibility and the academic register, and deliberately have no
-    access to fees, payments or the ledger. Separating the two is the point —
-    the person who decides who sits an exam is not the person who decides
-    whether their money arrived.
+    The academic offices own results, eligibility and the academic register,
+    and deliberately have no access to fees, payments or the ledger. Separating
+    the two is the point — the person who decides who sits an exam is not the
+    person who decides whether their money arrived. The Principal and DPFPA
+    read the money in summary (can_view_finance_summary) and record none of it.
     """
     return is_accountant(user)
-
-
-def is_estate_officer(user):
-    return bool(
-        user and user.is_authenticated
-        and EstateOfficerProfile.objects.filter(user=user, is_active=True).exists()
-    )
-
-
-def is_principal(user):
-    return bool(
-        user and user.is_authenticated
-        and PrincipalProfile.objects.filter(user=user, is_active=True).exists()
-    )
-
-
-def is_head_of_department(user):
-    return bool(
-        user and user.is_authenticated
-        and HeadOfDepartmentProfile.objects.filter(user=user, is_active=True).exists()
-    )
-
-
-def can_manage_exams(user):
-    """Entering a mark, approving a result, declaring a student for an exam.
-
-    Every admin role except the Head of Department, who reads examinations but
-    does not decide them: the person who runs the department is not the person
-    who decides who sits an exam. Money and college property are already outside
-    every admin account — they need the accountant's or the estate officer's own
-    profile.
-    """
-    return bool(
-        user and user.is_authenticated
-        and user.is_staff and not is_head_of_department(user)
-    )
 
 
 #: The three families of writable fields on a result. They are governed
@@ -210,20 +181,27 @@ EXAM_OFFICE_FIELDS = frozenset({
 def check_result_entry(user, module, data):
     """May this person write these marks, on this module, today?
 
-    A tutor enters continuous assessment only — the CATs and assignments they
-    set and marked themselves — and only while the examination officer has the
-    books open. The end of semester examination, the supplementary and every
-    approval belong to the examination officer whatever the calendar says: the
-    person who marked the coursework is not the person who publishes the
-    result. The Head of Department reads results and never writes them.
+    Decided by the module, not the office. Whoever teaches it enters its
+    continuous assessment — the CATs and assignments they set and marked
+    themselves — and only while the examination officer has the books open.
+    The end of semester examination, the supplementary and every approval
+    belong to the examination officer whatever the calendar says: the person
+    who marked the coursework is not the person who publishes the result.
+
+    So a Principal, DPARC or Head of Department who teaches enters CA for their
+    own modules like any tutor, and holding the office adds nothing: they read
+    every other module's marks and write none of them.
     """
     if can_manage_exams(user):
         return
-    if is_head_of_department(user):
-        raise PermissionDenied(
-            'Entering and approving marks belongs to the examination officer.')
 
     touched = set(data)
+    if not touched & (CA_MARK_FIELDS | END_MARK_FIELDS | EXAM_OFFICE_FIELDS):
+        return
+    if not module.teachers.filter(pk=user.pk).exists():
+        raise PermissionDenied(
+            f'Marks for {module.code} are entered by the tutors who teach it and '
+            f'by the examination officer.')
     if touched & EXAM_OFFICE_FIELDS:
         raise PermissionDenied(
             'Only the examination officer can approve or publish results.')
@@ -249,51 +227,6 @@ def check_result_entry(user, module, data):
             f'was {when}. Ask the examination officer to reopen it.')
 
 
-def can_manage_accounts(user):
-    """Creating accounts and moving people between roles.
-
-    Deliberately narrower than "any admin". Role administration hands out every
-    other boundary the college drew, so an account that can do it can walk
-    through all of them: a Head of Department could grant themselves the
-    accountant's role and open the ledger, or drop their own HoD profile to
-    become the examination officer and start writing marks. Both were possible
-    and both are closed here. The Principal and the examination officer keep it.
-    """
-    return bool(user and user.is_authenticated
-                and user.is_staff and not is_head_of_department(user))
-
-
-def can_read_exams(user):
-    """Seeing marks, eligibility, the exports and the performance analysis.
-
-    Open to every admin role including the Head of Department: running a
-    department means watching how its students are doing, by module and over
-    time, and that is not the same power as changing a mark.
-    """
-    return bool(user and user.is_authenticated and user.is_staff)
-
-
-def is_secretary(user):
-    return bool(
-        user and user.is_authenticated
-        and SecretaryProfile.objects.filter(user=user, is_active=True).exists()
-    )
-
-
-def is_records_officer(user):
-    return bool(
-        user and user.is_authenticated
-        and RecordsOfficerProfile.objects.filter(user=user, is_active=True).exists()
-    )
-
-
-def is_admission_officer(user):
-    return bool(
-        user and user.is_authenticated
-        and AdmissionOfficerProfile.objects.filter(user=user, is_active=True).exists()
-    )
-
-
 def can_edit_student_records(user):
     """Keeping the student record — college ID numbers, personal details.
 
@@ -305,72 +238,9 @@ def can_edit_student_records(user):
     return is_records_officer(user) or is_admission_officer(user) or is_principal(user)
 
 
-def can_handle_requests(user):
-    """Whose desk a request lands on — receiving it, checking it, passing it on,
-    and sending the document back once it has been answered.
-
-    The secretary's job, with the examination officer as cover because somebody
-    has to work the queue when they are away. Deliberately not the Principal or
-    the Head of Department: theirs is the decision, and an office that both
-    prepares a request and approves it is how a request gets approved by the
-    person who wanted it approved.
-    """
-    if not (user and user.is_authenticated):
-        return False
-    if is_secretary(user):
-        return True
-    return bool(user.is_staff and not is_principal(user) and not is_head_of_department(user))
-
-
-def can_decide_requests(user):
-    """Who says yes or no.
-
-    The Principal and the Head of Department. Deliberately not the secretary:
-    they receive what students ask for and put it in front of somebody who can
-    answer it, and an office that both prepares and approves its own work is how
-    a request gets approved by the person who wanted it approved.
-
-    The examination officer keeps it as the system administrator — somebody has
-    to be able to answer when neither of the other two is here.
-    """
-    return bool(user and user.is_authenticated
-                and (is_principal(user) or is_head_of_department(user)
-                     or (user.is_staff and not is_secretary(user))))
-
-
 # Kept as the old name so nothing that only needs "may touch the queue" changes
 # meaning underneath it.
 can_answer_requests = can_handle_requests
-
-
-def can_review_progression(user):
-    """Deciding what a semester's results mean for a student: who is promoted,
-    who repeats, who is discontinued.
-
-    The Principal and the examination officer, because it is a decision taken
-    on examination results. Not the Head of Department, who reads results but
-    does not decide them; not the accountant; and not the records or admission
-    officer, whose work is the student record itself — keeping it, updating it
-    and retrieving it — rather than what the marks mean.
-    """
-    return bool(
-        user and user.is_authenticated
-        and (is_principal(user)
-             or (user.is_staff and not is_head_of_department(user)
-                 and not is_accountant(user) and not is_secretary(user)
-                 and not is_records_officer(user) and not is_admission_officer(user))))
-
-
-def can_advance_semester(user):
-    """Closing one semester and opening the next.
-
-    The heaviest button in the college: it promotes a year group, registers
-    them, enrolls them and sets what the students who failed come back to. The
-    same desk that decides the reviews it acts on — the Principal and the
-    examination officer. It used to be open to anyone with an admin account,
-    which included the Head of Department.
-    """
-    return can_review_progression(user)
 
 
 def active_semester():
@@ -396,8 +266,17 @@ class IsAuthenticatedReadOnlyOrAdmin(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and (request.method in SAFE_METHODS or request.user.is_staff)
+            and (request.method in SAFE_METHODS or is_academic_admin(request.user))
         )
+
+
+class ReadStaffWriteDepartments(BasePermission):
+    """The college's forms: read by any signed-in member of staff, written by
+    the offices that run the departments (roles.runs_departments)."""
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated
+                    and (request.method in SAFE_METHODS or runs_departments(request.user)))
 
 
 class IsFinanceUser(BasePermission):
@@ -423,15 +302,22 @@ class IsExamOfficerOrFinance(BasePermission):
 
 
 class IsEstateOfficer(BasePermission):
+    """The estate manager keeps college property. DPFPA, whom they report to,
+    reads it and changes none of it."""
+
     def has_permission(self, request, view):
+        if request.method in SAFE_METHODS and can_read_inventory(request.user):
+            return True
         return is_estate_officer(request.user)
 
 
 class ReadExamsWriteExamOfficer(BasePermission):
-    """Everyone who may already reach an examination endpoint keeps reading it;
-    only the roles that decide examinations may change one.
+    """Everyone who may already reach an examination endpoint keeps reading it.
 
-    Tutors are unaffected — their own module scoping is done by the view.
+    Writing a mark is decided per module by check_result_entry: the module's
+    own tutors enter its CA, whatever office they also hold, and the
+    examination officer the rest. Removing a result row is the examination
+    officer's alone — results are only ever added to.
     """
     message = 'Entering and approving marks belongs to the examination officer.'
 
@@ -440,7 +326,9 @@ class ReadExamsWriteExamOfficer(BasePermission):
             return False
         if request.method in SAFE_METHODS:
             return True
-        return not is_head_of_department(request.user)
+        if request.method == 'DELETE':
+            return can_manage_exams(request.user)
+        return True
 
 
 class CanReadExams(BasePermission):
@@ -463,14 +351,14 @@ class DeclaresExamWindows(BasePermission):
 class ReadStaffWriteAccountManagers(BasePermission):
     """Departments and programmes: every signed-in member of staff reads them —
     the accountant prices fees by programme, the records office registers
-    students into one. Only the Principal and the examination officer change
-    them, the same people who hand out roles."""
-    message = 'Only the Principal or the examination officer can change departments and programmes.'
+    students into one. The Principal and DPARC change them: academic structure
+    is the academic side's."""
+    message = 'Only the Principal or DPARC can change departments and programmes.'
 
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
             return False
-        return request.method in SAFE_METHODS or can_manage_accounts(request.user)
+        return request.method in SAFE_METHODS or can_manage_departments(request.user)
 
 
 class IsRequestOfficer(BasePermission):
@@ -572,6 +460,19 @@ def login_view(request):
                 student = st
                 break
 
+        # A VETA course student has no PST enrollment to sign in with: they are
+        # found by their registration number or college ID, with the password
+        # kept on their profile. Only tried when the PST lookup found nobody.
+        course_profile = None
+        if student is None:
+            candidate = veta.veta_profile_for_login(reg_no)
+            if candidate is not None and check_password(str(secret), candidate.portal_pin_hash):
+                course_profile = candidate
+
+        if course_profile is not None:
+            request.session.cycle_key()
+            request.session['course_profile_id'] = course_profile.id
+            return redirect('course-portal')
         if student is None:
             error = 'Invalid credentials.'
         elif passwords.student_is_locked(student):
@@ -772,6 +673,10 @@ def _result_statements(modules, class_level):
                      or result.get('grade') or '—',
             'status': status or '—',
         })
+        statement.setdefault('sittings', []).append({
+            'status': status, 'attempt': module.get('attempt'), 'credits': module['credits'],
+            'points': result.get('grade_point'),
+            'face_points': result.get('face_grade_point', result.get('grade_point'))})
         if result.get('grade_point') is not None:
             statement['points'].append((result['grade_point'], module['credits']))
         if status == 'SUPP':
@@ -787,18 +692,31 @@ def _result_statements(modules, class_level):
             statement.update(gpa=None, remark='WITHHELD', comment='')
             ordered.append(statement)
             continue
-        semester_gpa = (
-            round(sum(float(point) * credits for point, credits in points)
-                  / sum(credits for _, credits in points), 2)
-            if points else None
-        )
+        # Face value, except a supplementary still to sit counts as C for a
+        # student going to supplementaries (progression.semester_gpa).
+        semester_gpa = progression.semester_gpa(statement.get('sittings', []))
         supp, failed = statement['supp'], statement['failed']
-        if supp:
+        sittings = statement.pop('sittings', [])
+        statuses = [row['status'] for row in sittings]  # GPA above, from the same rows
+        failed_again = [m['code'] for m, sitting in zip(statement['modules'], sittings)
+                        if sitting.get('attempt') == Student.REPEAT
+                        and sitting['status'] in progression.FAILED_STATUSES]
+        if failed_again:
+            # A module failed again at its repeat sitting: discontinued.
+            remark, comment = 'DISCO', ', '.join(sorted(failed_again))
+        elif progression.fails_more_than_half(sittings) and not any(
+                status in ('INCOMPLETE', 'WITHHELD', 'NULLIFIED', 'DISCONTINUED') for status in statuses):
+            # More than half failed: the failed modules are repeated, with no
+            # supplementary, whatever the GPA (progression.fails_more_than_half).
+            remark, comment = 'REPEAT', ', '.join(sorted(supp + failed))
+        elif semester_gpa is not None and semester_gpa < progression.PASS_GPA:
+            # Below 2.0 even with each supplementary counted as C: no
+            # supplementary could lift it, so none is sat.
+            remark, comment = 'DISCO', ', '.join(sorted(failed + supp)) or 'GPA below 2.0'
+        elif supp:
             # Nothing is decided until the supplementary is marked, so the
             # remark says what is outstanding rather than guessing at a class.
             remark, comment = 'SUPP', ', '.join(sorted(supp))
-        elif semester_gpa is not None and semester_gpa < progression.PASS_GPA:
-            remark, comment = 'DISCO', ', '.join(sorted(failed)) or 'GPA below 2.0'
         elif failed:
             remark, comment = 'REPEAT', ', '.join(sorted(failed))
         else:
@@ -826,6 +744,7 @@ def _student_record_for_portal(profile):
         'college_id': profile.college_id,
         'gender': profile.get_gender_display() if profile.gender else '',
         'date_of_birth': profile.date_of_birth,
+        'form_four_index': profile.form_four_index,
         'phone': profile.phone,
         'programme': registration.programme.name if registration and registration.programme else '',
         'class_level': registration.class_level.name if registration and registration.class_level else '',
@@ -836,6 +755,44 @@ def _student_record_for_portal(profile):
         ],
         'missing': admissions.missing_details(profile),
     }
+
+
+def course_portal(request):
+    """The portal for a VETA course student: their course and intake, what they
+    owe and have paid, the course's modules, and their details. A skeleton to
+    grow with the VETA track (results and attendance come with it)."""
+    profile = StudentProfile.objects.filter(id=request.session.get('course_profile_id')).first()
+    if profile is None:
+        return redirect('login')
+    message, error = '', ''
+    if request.method == 'POST':
+        current = str(request.POST.get('current_password') or '')
+        new = str(request.POST.get('new_password') or '')
+        if not check_password(current, profile.portal_pin_hash):
+            error = 'The current password is not right.'
+        elif not student_password_is_strong(new):
+            error = ('Use at least 8 characters, with a capital letter, a small letter, '
+                     'a number and a symbol.')
+        else:
+            veta.set_portal_pin(profile, new, require_change=False)
+            message = 'Password changed.'
+    enrollment = veta.current_enrollment(profile)
+    charges = list(finance.with_balances(
+        StudentCharge.objects.filter(profile=profile, intake__isnull=False)
+        .select_related('charge_type__bank_account', 'intake')).order_by('due_date', 'id'))
+    rows = [{'name': c.charge_type.name, 'due': c.due_date, 'amount': c.payable,
+             'balance': finance.charge_balance(c),
+             'account': (f'{c.charge_type.bank_account.bank_name} · {c.charge_type.bank_account.account_number}'
+                         if c.charge_type.bank_account_id else '')} for c in charges]
+    modules = (CourseModule.objects.filter(programme=enrollment.intake.programme, is_active=True)
+               if enrollment else CourseModule.objects.none())
+    return render(request, 'course_portal.html', {
+        'profile': profile, 'enrollment': enrollment, 'charges': rows,
+        'billed': sum((r['amount'] for r in rows), Decimal('0')),
+        'owing': sum((r['balance'] for r in rows), Decimal('0')),
+        'modules': modules, 'next_of_kin': profile.next_of_kin.all(),
+        'must_change': profile.must_change_portal_password, 'message': message, 'error': error,
+    })
 
 
 @student_login_required
@@ -964,6 +921,7 @@ def student_dashboard(request):
             'class_level': data['class_level_name'],
             'semester': data['semester_label'],
             'semester_number': enrollment.module.semester.number,
+            'attempt': enrollment.attempt,
             'credits': enrollment.module.credits,
             'sessions_attended': data['sessions_attended'],
             'sessions_sick': data['sessions_sick'],
@@ -1207,7 +1165,7 @@ def logout_view(request):
 def register_view(request):
     if not request.user.is_authenticated:
         return redirect('login')
-    if not request.user.is_staff:
+    if not can_manage_accounts(request.user):
         return redirect('frontend')
     levels = ClassLevel.objects.prefetch_related('modules__semester__academic_year').all()
     form = TeacherRegistrationForm(request.POST or None)
@@ -1240,19 +1198,26 @@ ROLE_PROFILES = {
     'hod': HeadOfDepartmentProfile,
     'records_officer': RecordsOfficerProfile,
     'admission_officer': AdmissionOfficerProfile,
+    'exam_officer': ExamOfficerProfile,
+    'dparc': DeputyAcademicProfile,
+    'dpfpa': DeputyFinanceProfile,
+    'ict_officer': ICTOfficerProfile,
+    'coordinator': TrainingCoordinatorProfile,
+    'dean': DeanOfStudentsProfile,
 }
-#: The roles that carry Django's `is_staff`. "exam_officer" has no profile of
-#: its own — it *is* is_staff with neither of the other two offices — so it is
-#: named here to make it something the role editor can grant and take away
-#: rather than an invisible side effect.
-STAFF_ROLES = ('principal', 'hod', 'exam_officer')
+#: The roles that open Django's own admin site. The ICT officer's role makes
+#: the account a Django superuser (every table in /admin/); nothing inside the
+#: app reads either flag for anybody else (see roles.py).
+STAFF_ROLES = ('ict_officer',)
 #: Which title an account is listed under when it holds more than one.
-ROLE_ORDER = ('principal', 'hod', 'exam_officer', 'admission_officer', 'records_officer',
-              'secretary', 'accountant', 'estate_officer', 'tutor')
+ROLE_ORDER = ('principal', 'dparc', 'dpfpa', 'hod', 'coordinator', 'dean', 'exam_officer', 'ict_officer',
+              'admission_officer', 'records_officer', 'accountant', 'estate_officer',
+              'secretary', 'tutor')
 ROLE_LABELS = {
     'tutor': 'Tutor', 'accountant': 'Accountant', 'estate_officer': 'Estate Officer',
     'secretary': 'Secretary', 'principal': 'Principal', 'hod': 'Head of Department',
-    'exam_officer': 'Exam Officer',
+    'exam_officer': 'Exam Officer', 'ict_officer': 'ICT Officer',
+    'dparc': 'DPARC', 'dpfpa': 'DPFPA', 'coordinator': 'Course Coordinator', 'dean': 'Dean of Students',
     'records_officer': 'Records Officer', 'admission_officer': 'Admission Officer',
 }
 
@@ -1269,8 +1234,6 @@ def _held(model, user):
 def roles_for(user):
     """Every role this account holds, most senior first."""
     held = {name for name, model in ROLE_PROFILES.items() if _held(model, user)}
-    if user.is_staff and not held & {'principal', 'hod'}:
-        held.add('exam_officer')
     return [role for role in ROLE_ORDER if role in held]
 
 
@@ -1285,17 +1248,38 @@ def full_name_for(user):
     return user.get_full_name() or user.username
 
 
+def check_role_change(actor, user, before, after):
+    """May `actor` move `user` from these roles to those?
+
+    Tutor and secretary are open roles: whoever manages accounts gives them.
+    Every other role is an appointment, given by the Principal by letter, and
+    the Principal's own office is the Board's to give, so only the sealed
+    superuser account changes it in the system. Raises PermissionDenied.
+    """
+    changed = set(before) ^ set(after)
+    if 'principal' in changed and not is_break_glass(actor):
+        raise PermissionDenied('The Principal is appointed by the Board. Ask the ICT officer to '
+                               'record it with the emergency administrator account.')
+    appointed = changed - OPEN_ROLES
+    if appointed and not can_appoint(actor):
+        names = ', '.join(ROLE_LABELS.get(role, role) for role in ROLE_ORDER if role in appointed)
+        raise PermissionDenied(f'{names}: a senior role is given by the Principal, by appointment.')
+
+
 @transaction.atomic
-def set_roles(user, roles, *, full_name=None):
+def set_roles(user, roles, *, full_name=None, actor=None):
     """Make this account hold exactly these roles.
 
     Adding one never disturbs what the account already had — a tutor made Head
     of Department keeps every module they teach — and removing one takes away
     the office, not the history. Module assignments live on the module, not on
     the profile, so they survive either way.
+
+    Every change is written to RoleChange, which the Principal reads.
     """
     wanted = set(roles)
-    unknown = wanted - set(ROLE_PROFILES) - {'exam_officer'}
+    before = set(roles_for(user))
+    unknown = wanted - set(ROLE_PROFILES)
     if unknown:
         raise ValueError(f'Unknown role(s): {", ".join(sorted(unknown))}.')
     if not wanted:
@@ -1313,11 +1297,20 @@ def set_roles(user, roles, *, full_name=None):
         elif existing is not None:
             existing.delete()
 
-    # A superuser keeps the keys to the building whatever else changes.
-    staff = user.is_superuser or bool(wanted & set(STAFF_ROLES))
-    if user.is_staff != staff:
-        user.is_staff = staff
-        user.save(update_fields=['is_staff'])
+    # Django's admin site follows the ICT office: given with the role, taken
+    # away with it. Any other superuser (the emergency account) is left alone.
+    ict_now, ict_before = 'ict_officer' in wanted, 'ict_officer' in before
+    superuser = True if ict_now else (False if ict_before else user.is_superuser)
+    staff = superuser or bool(wanted & set(STAFF_ROLES))
+    if (user.is_staff, user.is_superuser) != (staff, superuser):
+        user.is_staff, user.is_superuser = staff, superuser
+        user.save(update_fields=['is_staff', 'is_superuser'])
+    added, removed = wanted - before, before - wanted
+    if added or removed:
+        RoleChange.objects.create(
+            user=user, changed_by=actor if getattr(actor, 'is_authenticated', False) else None,
+            added=[role for role in ROLE_ORDER if role in added],
+            removed=[role for role in ROLE_ORDER if role in removed])
     return user
 
 
@@ -1369,7 +1362,7 @@ def set_staff_roles(request, user_id):
     staff.
     """
     if not can_manage_accounts(request.user):
-        return Response({'detail': 'Only the Principal or the examination officer can '
+        return Response({'detail': 'Only the ICT officer or the Principal can '
                                    'change what role somebody holds.'},
                         status=status.HTTP_403_FORBIDDEN)
 
@@ -1388,7 +1381,9 @@ def set_staff_roles(request, user_id):
                         status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        set_roles(user, roles, full_name=str(request.data.get('full_name', '')).strip() or None)
+        check_role_change(request.user, user, roles_for(user), roles)
+        set_roles(user, roles, full_name=str(request.data.get('full_name', '')).strip() or None,
+                  actor=request.user)
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     return Response(staff_account_row(user))
@@ -1397,29 +1392,27 @@ def set_staff_roles(request, user_id):
 @api_view(['GET', 'POST'])
 @login_required
 def create_staff_account(request):
-    # Reading the staff list is open to any admin — a Head of Department runs
-    # the department and needs to see who is in it. Minting an account is not:
-    # it hands out roles, which is the one power that hands out every other.
-    if not request.user.is_staff:
-        return Response({'detail': 'Only the administrator can manage staff accounts.'}, status=status.HTTP_403_FORBIDDEN)
+    # Reading the staff list is open to the academic offices — a Head of
+    # Department runs the department and needs to see who is in it — and to
+    # whoever manages accounts. Minting an account is narrower: it hands out
+    # roles, which is the one power that hands out every other.
+    if not (runs_departments(request.user) or can_manage_accounts(request.user)):
+        return Response({'detail': 'Only the ICT officer or the Principal can manage staff accounts.'},
+                        status=status.HTTP_403_FORBIDDEN)
     if request.method == 'POST' and not can_manage_accounts(request.user):
-        return Response({'detail': 'Only the Principal or the examination officer can '
+        return Response({'detail': 'Only the ICT officer or the Principal can '
                                    'create staff accounts.'},
                         status=status.HTTP_403_FORBIDDEN)
 
     if request.method == 'GET':
-        # An account with no profile at all used to be invisible here — which
-        # meant the examination officer could not see their own row, let alone
-        # give somebody else the job.
-        users = User.objects.filter(
-            Q(profile__isnull=False) | Q(accountant_profile__isnull=False)
-            | Q(estate_officer_profile__isnull=False) | Q(secretary_profile__isnull=False)
-            | Q(principal_profile__isnull=False) | Q(hod_profile__isnull=False)
-            | Q(is_staff=True)
-        ).distinct().select_related(
-            'profile', 'accountant_profile', 'estate_officer_profile', 'secretary_profile',
-            'principal_profile', 'hod_profile',
-        ).prefetch_related('modules_taught').order_by('username')
+        # Every account holding any office, and the emergency superuser.
+        related = [model._meta.get_field('user').remote_field.related_name
+                   for model in ROLE_PROFILES.values()]
+        holds_one = Q(is_superuser=True)
+        for name in related:
+            holds_one |= Q(**{f'{name}__isnull': False})
+        users = (User.objects.filter(holds_one).distinct()
+                 .prefetch_related('modules_taught').order_by('username'))
 
         return Response([staff_account_row(user) for user in users])
 
@@ -1429,12 +1422,14 @@ def create_staff_account(request):
     password = str(request.data.get('password', '')).strip()
     module_ids = request.data.get('module_ids') or []
 
-    # Every role that has a profile of its own. The examination officer has none
-    # — it is granted in the role editor, not by creating an account for it.
     if role not in ROLE_PROFILES:
         choices = ', '.join(ROLE_LABELS[r].lower() for r in ROLE_ORDER if r in ROLE_PROFILES)
         return Response({'detail': f'Role must be one of: {choices}.'},
                         status=status.HTTP_400_BAD_REQUEST)
+    try:
+        check_role_change(request.user, None, [], [role])
+    except PermissionDenied as exc:
+        return Response({'detail': str(exc.detail)}, status=status.HTTP_403_FORBIDDEN)
     if not full_name or not username or len(password) < 6:
         return Response({'detail': 'Full name, username, and a 6+ character password are required.'}, status=status.HTTP_400_BAD_REQUEST)
     if User.objects.filter(username__iexact=username).exists():
@@ -1448,16 +1443,47 @@ def create_staff_account(request):
             first_name=parts[0],
             last_name=parts[1] if len(parts) > 1 else '',
         )
-        # One place decides what a role means — including that the Principal and
-        # the Head of Department carry admin rights. What each of them is *not*
-        # allowed near (money, college property, and for the HoD examinations)
-        # is decided by the checks those areas make, not by withholding is_staff.
-        set_roles(user, [role], full_name=full_name)
+        # One place decides what a role means (roles.py); set_roles only
+        # records which offices the account holds.
+        set_roles(user, [role], full_name=full_name, actor=request.user)
         if role == 'tutor':
             for module in Module.objects.filter(id__in=module_ids):
                 module.teachers.add(user)
 
     return Response(staff_account_row(user), status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@login_required
+def role_changes(request):
+    """Who gained or lost which role, when, and who did it. The Principal
+    appoints, so the Principal reads this; the ICT officer who keeps the
+    accounts does too."""
+    if not can_manage_accounts(request.user):
+        raise PermissionDenied('For the Principal and the ICT officer.')
+    rows = RoleChange.objects.select_related('user', 'changed_by')[:300]
+    return Response([{
+        'id': row.id,
+        'user': full_name_for(row.user), 'username': row.user.username,
+        'added': [ROLE_LABELS.get(role, role) for role in row.added],
+        'removed': [ROLE_LABELS.get(role, role) for role in row.removed],
+        'changed_by': full_name_for(row.changed_by) if row.changed_by_id else 'System',
+        'changed_at': row.changed_at,
+    } for row in rows])
+
+
+@api_view(['GET'])
+@login_required
+def executive_finance(request):
+    """The college's money in summary, for the Principal and DPFPA. Totals
+    only — the accountant's ledger is where a student's account is read."""
+    if not can_view_finance_summary(request.user):
+        raise PermissionDenied('For the Principal, DPFPA and the accountant.')
+    year = (AcademicYear.objects.filter(id=request.query_params.get('academic_year_id')).first()
+            or active_academic_year())
+    if year is None:
+        return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(finance.executive_summary(year))
 
 
 @api_view(['POST'])
@@ -1470,7 +1496,7 @@ def reset_staff_password(request, user_id):
     next time they sign in, and the six months start from then.
     """
     if not can_manage_accounts(request.user):
-        return Response({'detail': 'Only the Principal or the examination officer can '
+        return Response({'detail': 'Only the ICT officer or the Principal can '
                                    'reset a password.'}, status=status.HTTP_403_FORBIDDEN)
     user = User.objects.filter(pk=user_id).first()
     if user is None:
@@ -1494,7 +1520,7 @@ def set_staff_modules(request, user_id):
     """Replace an existing tutor's full module set in one call — a tutor may
     carry several modules across different class levels/semesters, so this
     is a sync (add + remove diff), not an append."""
-    if not request.user.is_staff:
+    if not (runs_departments(request.user) or can_manage_accounts(request.user)):
         return Response({'detail': 'Only the administrator can assign modules.'}, status=status.HTTP_403_FORBIDDEN)
 
     try:
@@ -1530,7 +1556,7 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
         would happen to each student.
         """
         if not can_advance_semester(request.user):
-            return Response({'detail': 'Only the Principal or the examination officer may advance the semester.'},
+            return Response({'detail': 'Only the Principal or DPARC may advance the semester.'},
                             status=status.HTTP_403_FORBIDDEN)
         current = active_semester()
         if not current:
@@ -1575,7 +1601,7 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
         standing that says what they come back to. Nothing is deleted.
         """
         if not can_advance_semester(request.user):
-            return Response({'detail': 'Only the Principal or the examination officer may advance the semester.'},
+            return Response({'detail': 'Only the Principal or DPARC may advance the semester.'},
                             status=status.HTTP_403_FORBIDDEN)
 
         with transaction.atomic():
@@ -1641,8 +1667,8 @@ class SemesterViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['patch'], url_path='cutoffs')
     def update_cutoffs(self, request, pk=None):
         """Admin-only: set the attendance cutoff dates for CAT1, CAT2 and end of semester."""
-        if not request.user.is_staff:
-            raise PermissionDenied('Only the administrator can set cutoff dates.')
+        if not can_manage_exams(request.user):
+            raise PermissionDenied('Only the examination officer can set cutoff dates.')
         semester = self.get_object()
         for field in ('cat1_cutoff', 'cat2_cutoff', 'end_cutoff'):
             if field in request.data:
@@ -1741,14 +1767,15 @@ class ProgrammeViewSet(viewsets.ModelViewSet):
 # ── PROGRESSION ────────────────────────────────────────────────────────────────
 
 class ReviewsProgression(BasePermission):
-    """Any admin may read a semester review — the Head of Department watches
-    their department's results — and only the Principal and the examination
-    officer decide one."""
+    """Any academic office may read a semester review — the Head of Department
+    watches their department's results. The examination officer reviews the
+    results and builds them; confirming one is checked by the action itself
+    (can_confirm_reviews): the Principal and DPARC decide."""
 
     def has_permission(self, request, view):
         if request.method in SAFE_METHODS:
             return can_read_exams(request.user)
-        return can_review_progression(request.user)
+        return can_prepare_reviews(request.user)
 
 
 class ReadsStudentStandings(BasePermission):
@@ -1893,6 +1920,9 @@ class SemesterReviewViewSet(viewsets.ReadOnlyModelViewSet):
         return to, and a student who failed semester 1 after the supplementary
         is taken off semester 2.
         """
+        if not can_confirm_reviews(request.user):
+            raise PermissionDenied('The examination officer prepares the review; the Principal '
+                                   'or DPARC confirms it.')
         review = self.get_object()
         outcome = str(request.data.get('outcome') or review.proposed).strip()
         reason = str(request.data.get('reason') or '').strip()
@@ -1920,6 +1950,9 @@ class SemesterReviewViewSet(viewsets.ReadOnlyModelViewSet):
         for the officer, because "we are still waiting for their marks" is not a
         decision anybody can take in bulk.
         """
+        if not can_confirm_reviews(request.user):
+            raise PermissionDenied('The examination officer prepares the review; the Principal '
+                                   'or DPARC confirms it.')
         semester = _semester_from_request(request)
         if semester is None:
             return Response({'detail': 'No semester given and none is active.'},
@@ -1987,6 +2020,7 @@ def _record_details_from(request, profile):
         gender=data.get('gender'),
         date_of_birth=data.get('date_of_birth') if 'date_of_birth' in data else None,
         next_of_kin=data.get('next_of_kin'),
+        form_four_index=data.get('form_four_index'),
         actor=request.user,
     )
 
@@ -1996,7 +2030,8 @@ def _student_record_payload(profile):
     return {
         'id': profile.id, 'reg_no': profile.nactvet_reg_no, 'college_id': profile.college_id or '',
         'name': profile.name, 'phone': profile.phone, 'gender': profile.gender,
-        'date_of_birth': profile.date_of_birth,
+        'date_of_birth': profile.date_of_birth, 'form_four_index': profile.form_four_index,
+        'veta_only': admissions.is_veta_only(profile),
         'standing': standing.get_status_display() if standing else 'No standing recorded',
         'class_level': standing.class_level.name if standing and standing.class_level_id else '',
         'next_of_kin': [{'position': kin.position, 'name': kin.name, 'phone': kin.phone,
@@ -2024,6 +2059,51 @@ def student_record(request, profile_id):
         return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     profile.refresh_from_db()
     return Response(_student_record_payload(profile))
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def health_records(request):
+    """Students' health problems on verified certificates. Kept by records;
+    read by the Dean of Students and the Principal (health.py)."""
+    if not can_read_health_records(request.user):
+        raise PermissionDenied('Health records are for the records office, the Dean of Students '
+                               'and the Principal.')
+    if request.method == 'POST':
+        profile = get_object_or_404(visible_profiles(request.user), pk=request.data.get('profile_id'))
+        certificate = StudentDocument.objects.filter(
+            pk=request.data.get('certificate_id') or 0, profile=profile).first()
+        try:
+            record = health.add_record(profile, condition=request.data.get('condition'),
+                                       certificate=certificate, notes=request.data.get('notes') or '',
+                                       actor=request.user)
+        except health.HealthRecordError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(health.record_row(record), status=status.HTTP_201_CREATED)
+    qs = HealthRecord.objects.select_related(
+        'profile', 'certificate', 'certificate__verified_by', 'recorded_by')
+    profile_id = request.query_params.get('profile_id')
+    if profile_id:
+        qs = qs.filter(profile_id=profile_id)
+    search = (request.query_params.get('search') or '').strip()
+    if search:
+        qs = qs.filter(Q(profile__name__icontains=search) | Q(profile__nactvet_reg_no__icontains=search)
+                       | Q(profile__college_id__icontains=search) | Q(condition__icontains=search))
+    if request.query_params.get('current') in ('1', 'true'):
+        qs = qs.filter(is_current=True)
+    return Response([health.record_row(record) for record in qs[:500]])
+
+
+@api_view(['POST'])
+@login_required
+def health_record_close(request, pk):
+    record = get_object_or_404(HealthRecord, pk=pk)
+    try:
+        health.close_record(record, note=request.data.get('note'), actor=request.user)
+    except health.HealthRecordError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    record.refresh_from_db()
+    return Response(health.record_row(record))
 
 
 def can_check_items(user):
@@ -2160,7 +2240,10 @@ def search_student_records(request):
             'name': profile.name,
             'phone': profile.phone,
             'gender': profile.gender,
+            'gender_display': profile.get_gender_display() if profile.gender else '',
             'date_of_birth': profile.date_of_birth,
+            'form_four_index': profile.form_four_index,
+            'missing': admissions.missing_details(profile),
             'standing': standing.status if standing else '',
             'standing_display': standing.get_status_display() if standing else 'No standing recorded',
             'class_level': standing.class_level.name if standing and standing.class_level_id else '',
@@ -2237,6 +2320,9 @@ def student_document_download(request, pk):
         viewer = _student_profile(request)
         if viewer is None or viewer.id != document.profile_id:
             raise Http404('No such document.')
+    elif (request.user.is_authenticated and is_dean(request.user)
+          and document.health_records.exists()):
+        pass   # the certificate behind a health record, which the dean reads
     elif not (request.user.is_authenticated
               and (can_see_admissions(request.user) or can_edit_student_records(request.user))
               and visible_profiles(request.user).filter(pk=document.profile_id).exists()):
@@ -2481,7 +2567,7 @@ def results_summary(request):
     """How a class did in a semester: GPAs, pass / supp / repeat counts and
     each module's pass rate — for the examination office, the Principal and
     the Head of Department to read."""
-    if not request.user.is_staff:
+    if not can_read_exams(request.user):
         raise PermissionDenied('For the examination office.')
     semester = Semester.objects.filter(id=request.query_params.get('semester_id')).first()
     level = ClassLevel.objects.filter(id=request.query_params.get('class_level_id')).first()
@@ -2562,11 +2648,14 @@ def _postponements():
 @login_required
 def postponements(request):
     """The Principal's list of postponement requests; records writes down a
-    paper one."""
+    paper one. DPARC follows the list and decides nothing."""
     user = request.user
-    if not (is_principal(user) or can_enter_postponement(user)):
+    may_enter = is_principal(user) or can_enter_postponement(user)
+    if not (may_enter or follows_postponements(user)):
         raise PermissionDenied('Postponements are for the records office and the Principal.')
     if request.method == 'POST':
+        if not may_enter:
+            raise PermissionDenied('The records office writes down a postponement request.')
         reg_no = str(request.data.get('reg_no') or '').strip()
         profile = StudentProfile.objects.filter(nactvet_reg_no__iexact=reg_no).first() if reg_no else \
             StudentProfile.objects.filter(id=request.data.get('profile_id')).first()
@@ -2584,7 +2673,12 @@ def postponements(request):
     wanted = request.query_params.get('status', Postponement.PENDING)
     if wanted:
         rows = rows.filter(status=wanted)
-    return Response([_postponement_row(row) for row in rows[:200]])
+    out = [_postponement_row(row) for row in rows[:200]]
+    if not (may_enter or is_accountant(user)):
+        # DPARC reads who postponed and why, not the money moved.
+        for row in out:
+            row['fees_reversed'] = None
+    return Response(out)
 
 
 @api_view(['POST'])
@@ -2729,10 +2823,11 @@ def visible_application_states(user):
     """Which applications an office may see; None for all of them.
 
     The admission office runs the whole queue and the Principal oversees it, so
-    both see every desk. Records and finance see the desks they work and the
-    students who have been admitted — not who is standing at another office.
+    both see every desk; so does DPARC, to whom the admission officer reports,
+    reading only. Records and finance see the desks they work and the students
+    who have been admitted — not who is standing at another office.
     """
-    if is_principal(user) or is_admission_officer(user):
+    if is_principal(user) or is_admission_officer(user) or is_dparc(user):
         return None
     states = {step for step, (_, held) in DESK_ROLES.items() if held(user)}
     states.add(Application.ADMITTED)
@@ -2758,11 +2853,12 @@ def visible_profiles(user, qs=None):
 
 
 def can_see_admissions(user):
-    """The three offices that work an admission, and the Principal who
-    oversees it."""
+    """The three offices that work an admission, the Principal who oversees it,
+    and DPARC, who reads it: the admission officer reports there. DPARC works
+    no desk (can_work_desk) and is shown no balances (ApplicationSerializer)."""
     return bool(user and user.is_authenticated
                 and (is_records_officer(user) or is_admission_officer(user)
-                     or is_accountant(user) or is_principal(user)))
+                     or is_accountant(user) or is_principal(user) or is_dparc(user)))
 
 
 class WorksAdmissions(BasePermission):
@@ -2932,6 +3028,7 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
                     gender=data.get('gender', ''),
                     date_of_birth=data.get('date_of_birth') or None,
                     next_of_kin=data.get('next_of_kin') or [],
+                    form_four_index=data.get('form_four_index', ''),
                     actor=request.user,
                 )
                 application = admissions.open_application(
@@ -3224,8 +3321,8 @@ class ModuleViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        if not self.request.user.is_staff:
-            raise PermissionDenied('Only the administrator can create modules.')
+        if not runs_departments(self.request.user):
+            raise PermissionDenied('Modules are registered by the Head of Department, DPARC or the Principal.')
         module = serializer.save()
         module.teachers.add(self.request.user)
         # Registration and the module list are built in either order. A module
@@ -3234,13 +3331,13 @@ class ModuleViewSet(viewsets.ModelViewSet):
         progression.enroll_module(module, actor=self.request.user)
 
     def update(self, request, *args, **kwargs):
-        if not request.user.is_staff:
-            raise PermissionDenied('Only the administrator can edit modules.')
+        if not runs_departments(request.user):
+            raise PermissionDenied('Modules are kept by the Head of Department, DPARC or the Principal.')
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
-        if not request.user.is_staff:
-            raise PermissionDenied('Only the administrator can delete modules.')
+        if not runs_departments(request.user):
+            raise PermissionDenied('Modules are kept by the Head of Department, DPARC or the Principal.')
         m = self.get_object()
         # Deleting a module takes its enrollments, attendance and marks with it
         # — the cascade is silent and there is no undo. A module anybody has
@@ -3271,7 +3368,7 @@ class ModuleViewSet(viewsets.ModelViewSet):
         # yet. Once a module has a tutor, moving/adding tutors is an admin
         # action — otherwise any teacher account could grant themselves access
         # to another module's students, attendance and CA marks at will.
-        if not request.user.is_staff and m.teachers.exists() and not m.teachers.filter(pk=request.user.pk).exists():
+        if not runs_departments(request.user) and m.teachers.exists() and not m.teachers.filter(pk=request.user.pk).exists():
             raise PermissionDenied('This module already has a tutor. Ask the administrator to add you.')
         m.teachers.add(request.user)
         return Response({'detail': f'Claimed: {m.name}'})
@@ -3320,16 +3417,18 @@ class StudentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         module = serializer.validated_data.get('module')
-        if not self.request.user.is_staff:
-            allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
+        # Enrolling is the departments' work; a tutor adds to their own module
+        # only. The examination officer reads class lists and changes none.
+        if not runs_departments(self.request.user):
+            allowed_module_ids = self.request.user.modules_taught.values_list('id', flat=True)
             if module is None or module.id not in allowed_module_ids:
                 raise PermissionDenied('Only tutors for this module can add students.')
         serializer.save()
 
     def update(self, request, *args, **kwargs):
-        if not request.user.is_staff:
+        if not runs_departments(request.user):
             obj = self.get_object()
-            allowed_module_ids = set(user_modules(self.request.user).values_list('id', flat=True))
+            allowed_module_ids = set(self.request.user.modules_taught.values_list('id', flat=True))
             if obj.module_id not in allowed_module_ids:
                 raise PermissionDenied('Only tutors for this module can edit students.')
             target_module = request.data.get('module')
@@ -3344,8 +3443,8 @@ class StudentViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         obj = self.get_object()
-        if not request.user.is_staff:
-            allowed_module_ids = user_modules(self.request.user).values_list('id', flat=True)
+        if not runs_departments(request.user):
+            allowed_module_ids = self.request.user.modules_taught.values_list('id', flat=True)
             if obj.module_id not in allowed_module_ids:
                 raise PermissionDenied('Only tutors for this module can remove students.')
         return super().destroy(request, *args, **kwargs)
@@ -3418,7 +3517,7 @@ class StudentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='bulk_set_pin')
     def bulk_set_pin(self, request):
-        if not request.user.is_staff:
+        if not runs_departments(request.user):
             raise PermissionDenied('Only the administrator can set student passwords in bulk.')
         portal_pin = str(request.data.get('portal_pin', '')).strip()
         if len(portal_pin) < 6:
@@ -3616,14 +3715,28 @@ def dashboard(request):
         'active_semester': SemesterSerializer(sem).data if sem else None,
         'recent_sessions': recent,
         'levels': levels,
-        'is_staff': request.user.is_staff,
+        # "is_staff" is the name the page has always read; it means the
+        # academic side of the college (roles.is_academic_admin), not Django's flag.
+        'is_staff': is_academic_admin(request.user),
         'is_accountant': is_accountant(request.user),
         'is_estate_officer': False,
         'is_secretary': is_secretary(request.user),
         'is_records_officer': is_records_officer(request.user),
         'is_admission_officer': is_admission_officer(request.user),
+        'is_exam_officer': is_exam_officer(request.user),
+        'is_dparc': is_dparc(request.user),
+        'is_dpfpa': is_dpfpa(request.user),
+        'is_ict_officer': is_ict_officer(request.user),
         'can_edit_student_records': can_edit_student_records(request.user),
-        'can_review_progression': can_review_progression(request.user),
+        'can_review_progression': can_prepare_reviews(request.user),
+        'can_confirm_reviews': can_confirm_reviews(request.user),
+        'can_advance_semester': can_advance_semester(request.user),
+        'can_manage_accounts': can_manage_accounts(request.user),
+        'can_appoint': can_appoint(request.user),
+        'can_manage_departments': can_manage_departments(request.user),
+        'can_view_finance_summary': can_view_finance_summary(request.user),
+        'can_read_inventory': can_read_inventory(request.user),
+        'follows_postponements': follows_postponements(request.user),
         'password': passwords.reading_for(request.user),
         'is_principal': is_principal(request.user),
         'is_head_of_department': is_head_of_department(request.user),
@@ -4089,8 +4202,34 @@ def inventory_office_register(request):
 
 
 @api_view(['GET'])
+def inventory_summary(request):
+    """College property in figures: how many items, in what condition, where,
+    and what is waiting on repair or disposal. For DPFPA, to whom the estate
+    manager reports, and for the estate manager. Read-only."""
+    if not can_read_inventory(request.user):
+        return Response({'detail': 'For the estate manager and DPFPA.'}, status=403)
+    assets = Asset.objects.all()
+    condition_names = dict(Asset.CONDITION_CHOICES)
+
+    def grouped(field, label):
+        return [{'name': label(row[field]), 'records': row['records'], 'items': row['items'] or 0}
+                for row in assets.values(field).annotate(records=Count('id'), items=Sum('quantity'))
+                .order_by('-items')]
+
+    return Response({
+        'records': assets.count(),
+        'items': assets.aggregate(items=Sum('quantity'))['items'] or 0,
+        'by_condition': grouped('condition', lambda key: condition_names.get(key, key)),
+        'by_category': grouped('category__name', lambda key: key),
+        'by_location': grouped('location__name', lambda key: key),
+        'maintenance_open': AssetMaintenance.objects.exclude(status=AssetMaintenance.COMPLETED).count(),
+        'disposals_proposed': AssetDisposal.objects.filter(status=AssetDisposal.PROPOSED).count(),
+    })
+
+
+@api_view(['GET'])
 def inventory_report(request):
-    if not is_estate_officer(request.user):
+    if not can_read_inventory(request.user):
         return Response({'detail': 'Estate Officer access required.'}, status=403)
     report_type = request.query_params.get('type', 'assets')
     wb = Workbook(); ws = wb.active
@@ -4226,7 +4365,7 @@ class StudentFinanceObligationViewSet(viewsets.ModelViewSet):
         return qs.order_by('-created_at')
 
     def perform_create(self, serializer):
-        if not self.request.user.is_staff:
+        if not can_manage_exams(self.request.user):
             raise PermissionDenied('Only the examination officer can declare special, supplementary, and repeat-module obligations.')
         serializer.save(declared_by=self.request.user)
 
@@ -4807,8 +4946,8 @@ def sick_records(request):
 @api_view(['PATCH'])
 @login_required
 def update_sick_record(request, pk):
-    if not request.user.is_staff:
-        return Response({'detail': 'Only the administrator can update sick records.'}, status=status.HTTP_403_FORBIDDEN)
+    if not runs_departments(request.user):
+        return Response({'detail': 'Sick records are kept by the Head of Department.'}, status=status.HTTP_403_FORBIDDEN)
 
     try:
         record = AttendanceRecord.objects.select_related('student__module').get(pk=pk, status='S')
@@ -4841,7 +4980,7 @@ def update_attendance_status(request, pk):
     `sick_note` and `certificate_submitted` may be provided. Non-staff users
     are forbidden.
     """
-    if not request.user.is_staff:
+    if not is_academic_admin(request.user):
         return Response({'detail': 'Only the administrator can change attendance status.'}, status=status.HTTP_403_FORBIDDEN)
 
     try:
@@ -4997,6 +5136,14 @@ class ResultViewSet(viewsets.ModelViewSet):
                 'semester':     module.semester.label,
             },
             'results': StudentResultSerializer(results, many=True).data,
+            # Students who failed more than half of the semester's modules:
+            # they repeat, with no supplementary, so the declarations screen
+            # offers them for a repeat, not a supplementary.
+            'direct_repeat': progression.direct_repeat_enrollments(module.semester, list(students)),
+            # Repeat sittings failed again: a discontinuation, not another repeat.
+            'failed_repeat': [result.student_id for result in results
+                              if result.student.attempt == Student.REPEAT
+                              and progression.module_row(result.student)['status'] in progression.FAILED_STATUSES],
         })
 
     @action(detail=False, methods=['get'], url_path='cat-analysis')
@@ -5251,16 +5398,17 @@ class ResultViewSet(viewsets.ModelViewSet):
         if not updates:
             return Response({'detail': 'Empty list.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        exam_office = can_manage_exams(request.user)
         mod_ids   = set(user_modules(request.user).values_list('id', flat=True))
         CA_MARKS = ['assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical']
         CA_FIELDS = ['field_ca'] + CA_MARKS + [f'{field}_absent' for field in CA_MARKS]
         END_MARKS = ['end_theory', 'end_practical', 'supplementary_mark']
         END_FIELDS = END_MARKS + [f'{field}_absent' for field in END_MARKS] + ['ca_approved', 'final_approved']
-        FIELDS     = CA_FIELDS + (END_FIELDS if request.user.is_staff else [])
+        FIELDS     = CA_FIELDS + (END_FIELDS if exam_office else [])
         saved, errors = 0, []
 
         for item in updates:
-            if not request.user.is_staff:
+            if not exam_office:
                 restricted = {'end_theory', 'end_practical', 'supplementary_mark', 'end_theory_absent',
                               'end_practical_absent', 'ca_approved', 'final_approved'}
                 blocked = restricted.intersection(item.keys())
@@ -5280,6 +5428,14 @@ class ResultViewSet(viewsets.ModelViewSet):
 
             if result.student.module_id not in mod_ids:
                 errors.append(f'Result {item.get("id")}: permission denied')
+                continue
+            # The same rule as saving one result: the module's own tutors enter
+            # its CA while the window is open, the examination officer the rest.
+            try:
+                check_result_entry(request.user, result.student.module,
+                                   {field: item[field] for field in FIELDS if field in item})
+            except PermissionDenied as exc:
+                errors.append(f'Result {item.get("id")}: {exc.detail}')
                 continue
 
             for field in FIELDS:
@@ -7529,11 +7685,11 @@ def college_profile(request):
 class FormViewSet(viewsets.ModelViewSet):
     """The forms the college publishes, and what came back.
 
-    Read is open to any signed-in member of staff; only the admin
-    (`is_staff` — the exam officer / HOD) may create, edit or publish one.
+    Read is open to any signed-in member of staff; only the academic offices
+    (is_academic_admin) may create, edit or publish one.
     """
     serializer_class = FormSerializer
-    permission_classes = [IsAuthenticatedReadOnlyOrAdmin]
+    permission_classes = [ReadStaffWriteDepartments]
 
     def get_queryset(self):
         qs = (
@@ -7588,7 +7744,7 @@ class FormViewSet(viewsets.ModelViewSet):
             return Response(
                 {'detail': 'That form is answered by students on their portal.'},
                 status=status.HTTP_400_BAD_REQUEST)
-        if not request.user.is_staff:
+        if not runs_departments(request.user):
             raise PermissionDenied('Only the admin can fill this form in.')
 
         answers = request.data.get('answers')
@@ -7654,7 +7810,7 @@ class FormViewSet(viewsets.ModelViewSet):
 
 class FormSectionViewSet(viewsets.ModelViewSet):
     serializer_class = FormSectionSerializer
-    permission_classes = [IsAuthenticatedReadOnlyOrAdmin]
+    permission_classes = [ReadStaffWriteDepartments]
 
     def get_queryset(self):
         qs = FormSection.objects.select_related('form').prefetch_related('questions')
@@ -7675,7 +7831,7 @@ class FormSectionViewSet(viewsets.ModelViewSet):
 
 class FormQuestionViewSet(viewsets.ModelViewSet):
     serializer_class = FormQuestionSerializer
-    permission_classes = [IsAuthenticatedReadOnlyOrAdmin]
+    permission_classes = [ReadStaffWriteDepartments]
 
     def get_queryset(self):
         qs = FormQuestion.objects.select_related('section__form')

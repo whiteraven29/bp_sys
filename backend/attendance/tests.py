@@ -1080,6 +1080,14 @@ class AttendanceSecurityTests(TestCase):
             cat1_theory=70,
             cat2_theory=65,
         )
+        # A tutor saves CA only while the examination officer has the window
+        # open — the same rule whether one result is saved or a whole sheet.
+        from .models import ResultEntryWindow
+        from django.utils import timezone as _tz
+        ResultEntryWindow.objects.create(
+            semester=self.semester, kind=ResultEntryWindow.CA,
+            opens_on=_tz.localdate() - timedelta(days=1),
+            closes_on=_tz.localdate() + timedelta(days=7), declared_by=self.admin)
         self.client.force_authenticate(self.teacher)
 
         response = self.client.post('/api/results/bulk_save/', [
@@ -1092,6 +1100,21 @@ class AttendanceSecurityTests(TestCase):
         self.assertEqual(float(result.assign2), 75)
         self.assertEqual(float(result.cat1_theory), 70)
         self.assertEqual(float(result.cat2_theory), 65)
+
+    def test_bulk_result_save_keeps_to_the_ca_window(self):
+        """The sheet's Save button used to skip the window a single save
+        obeys, so CA could be typed in after the examination officer closed
+        the books."""
+        result = StudentResult.objects.create(student=self.student, assign1=80)
+        self.client.force_authenticate(self.teacher)
+        response = self.client.post('/api/results/bulk_save/', [
+            {'id': result.id, 'assign1': 90},
+        ], format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['saved'], 0)
+        self.assertIn('has not opened continuous assessment', response.data['errors'][0])
+        result.refresh_from_db()
+        self.assertEqual(float(result.assign1), 80)
 
     def test_teacher_cannot_approve_ca_results(self):
         result = StudentResult.objects.create(student=self.student, assign1=80)

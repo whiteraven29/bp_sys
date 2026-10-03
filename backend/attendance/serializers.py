@@ -7,6 +7,10 @@ from django.db import transaction
 from django.urls import reverse
 from . import finance
 from .grading import result_outcome
+from .roles import (
+    is_academic_admin, is_accountant, is_admission_officer, is_dparc, is_principal,
+    is_records_officer, runs_departments,
+)
 from .models import (
     AcademicYear, Semester, ClassLevel, Module, Student, Session, AttendanceRecord,
     StudentResult, PaymentCategory, StudentFinanceObligation, StudentPayment,
@@ -617,6 +621,7 @@ class StudentResultSerializer(serializers.ModelSerializer):
     result_status = serializers.SerializerMethodField()
     grade = serializers.SerializerMethodField()
     grade_point = serializers.SerializerMethodField()
+    face_grade_point = serializers.SerializerMethodField()
     grade_description = serializers.SerializerMethodField()
 
     class Meta:
@@ -635,7 +640,7 @@ class StudentResultSerializer(serializers.ModelSerializer):
             'end_theory_w', 'end_prac_w', 'end_exam_total', 'final_total',
             'supplementary_mark', 'end_exam_mark', 'supplementary_required',
             'failed_end_components',
-            'result_status', 'grade', 'grade_point', 'grade_description',
+            'result_status', 'grade', 'grade_point', 'face_grade_point', 'grade_description',
             'authority_grade', 'authority_status',
             'ca_approved', 'final_approved',
             'updated_at',
@@ -778,6 +783,12 @@ class StudentResultSerializer(serializers.ModelSerializer):
     def get_grade_point(self, obj):
         return self._outcome(obj)['grade_point']
 
+    def get_face_grade_point(self, obj):
+        """What the result is worth as it stands — differs from grade_point
+        only for a supplementary still to be sat (progression.semester_gpa)."""
+        outcome = self._outcome(obj)
+        return outcome.get('face_points', outcome['grade_point'])
+
     def get_grade_description(self, obj):
         return self._outcome(obj)['grade_description']
 
@@ -817,7 +828,7 @@ class BulkStudentSerializer(serializers.Serializer):
     def validate(self, data):
         user = self.context.get('user')
         module = data.get('module')
-        if module and user and not user.is_staff:
+        if module and user and not runs_departments(user):
             if module not in user.modules_taught.all():
                 raise PermissionDenied('You may only add students to modules you tutor.')
         return data
@@ -827,7 +838,7 @@ class BulkStudentSerializer(serializers.Serializer):
         rows = validated_data['students']
         user = self.context.get('user')
         allowed_module_ids = None
-        if user and not user.is_staff:
+        if user and not runs_departments(user):
             allowed_module_ids = set(user.modules_taught.values_list('id', flat=True))
 
         added, skipped, pin_skipped = 0, 0, 0
@@ -926,7 +937,7 @@ class ChargeTypeSerializer(serializers.ModelSerializer):
             'bank_account', 'bank_account_label',
             'blocks_registration', 'blocks_cat1', 'blocks_cat2', 'blocks_final',
             'blocks_results', 'declaration', 'declaration_display', 'charged_again_on_readmission',
-            'is_active', 'in_use', 'created_at',
+            'for_repeaters', 'is_active', 'in_use', 'created_at',
         ]
         read_only_fields = ['id', 'created_at']
 
@@ -1487,12 +1498,15 @@ class ProgrammeSerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(source='department.name', read_only=True)
     level_names = serializers.SerializerMethodField()
     module_count = serializers.SerializerMethodField()
+    structure_display = serializers.CharField(source='get_structure_display', read_only=True)
+    is_veta = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Programme
         fields = [
             'id', 'department', 'department_name', 'name', 'code', 'levels', 'level_names',
-            'module_count', 'is_active', 'created_at',
+            'module_count', 'structure', 'structure_display', 'is_veta', 'duration_months',
+            'nva_top_level', 'pass_mark', 'is_active', 'created_at',
         ]
         read_only_fields = ['id', 'created_at']
         # The database enforces one name per department; the message is ours.
@@ -1510,6 +1524,20 @@ class ProgrammeSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'name': f'{department} already runs a programme called {name}.'})
         if others.filter(code__iexact=code).exists():
             raise serializers.ValidationError({'code': f'The course code {code} is already in use.'})
+        structure = attrs.get('structure', getattr(self.instance, 'structure', Programme.SEMESTER))
+        if self.instance is not None and 'structure' in attrs and attrs['structure'] != self.instance.structure:
+            # A programme's structure decides where its students' records live;
+            # once anybody has studied on it, it stays what it is.
+            if self.instance.registrations.exists() or self.instance.intakes.exists():
+                raise serializers.ValidationError(
+                    {'structure': 'Students have already studied on this programme, so its structure stays.'})
+        if structure != Programme.SEMESTER:
+            months = attrs.get('duration_months', getattr(self.instance, 'duration_months', None))
+            if not months:
+                raise serializers.ValidationError({'duration_months': 'How many months does the course run?'})
+            if structure == Programme.NVA and not attrs.get(
+                    'nva_top_level', getattr(self.instance, 'nva_top_level', None)):
+                raise serializers.ValidationError({'nva_top_level': 'Which NVA level does it end at: 1, 2 or 3?'})
         return attrs
 
     def get_level_names(self, obj):
@@ -1686,9 +1714,23 @@ class CollegeIdFormatSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CollegeIdFormat
-        fields = ['id', 'academic_year', 'academic_year_name', 'pattern', 'college_code',
-                  'starts_at', 'next_number', 'sequence_width', 'example', 'updated_at']
+        fields = ['id', 'academic_year', 'academic_year_name', 'pattern', 'veta_pattern', 'college_code',
+                  'starts_at', 'next_number', 'sequence_width', 'example', 'veta_example', 'updated_at']
         read_only_fields = ['id', 'updated_at']
+
+    veta_example = serializers.SerializerMethodField()
+
+    def get_veta_example(self, obj):
+        """The next number as a VETA course student would get it."""
+        course = Programme.objects.filter(is_active=True).exclude(
+            structure=Programme.SEMESTER).order_by('code').first()
+        return obj.render(obj.next_number, course) if course else ''
+
+    def validate_veta_pattern(self, value):
+        value = (value or '').strip()
+        if value and '{SEQ}' not in value:
+            raise serializers.ValidationError('The VETA pattern needs {SEQ} too.')
+        return value
 
     def validate_pattern(self, value):
         if '{SEQ}' not in value:
@@ -1779,6 +1821,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
         return {
             'name': profile.name, 'phone': profile.phone, 'gender': profile.gender,
             'gender_display': profile.get_gender_display() if profile.gender else '',
+            'form_four_index': profile.form_four_index,
             'date_of_birth': profile.date_of_birth,
             'next_of_kin': [{'position': kin.position, 'name': kin.name, 'phone': kin.phone,
                              'relationship': kin.relationship,
@@ -1799,12 +1842,25 @@ class ApplicationSerializer(serializers.ModelSerializer):
         from .admissions import academic_summary
         return academic_summary(obj)
 
+    def _hides_money(self):
+        """DPARC reads the admission queue but not the money in it."""
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        return bool(user and is_dparc(user) and not (
+            is_principal(user) or is_accountant(user)
+            or is_admission_officer(user) or is_records_officer(user)))
+
     def get_payment(self, obj):
         """Whether they have paid what registration needs — the one thing that
         holds a student at finance. Worked out when one application is opened."""
         view = self.context.get('view')
         if view is None or getattr(view, 'action', None) != 'retrieve' or not obj.is_open:
             return None
+        if self._hides_money():
+            result = finance.exam_clearance(obj.profile, obj.semester.academic_year,
+                                            ChargeType.REGISTRATION, semester=obj.semester)
+            return {'cleared': result['cleared'], 'reason': '', 'balance': None,
+                    'overridden': result['overridden']}
         result = finance.exam_clearance(obj.profile, obj.semester.academic_year,
                                         ChargeType.REGISTRATION, semester=obj.semester)
         return {'cleared': result['cleared'], 'reason': result['reason'],
@@ -1836,6 +1892,8 @@ class ApplicationSerializer(serializers.ModelSerializer):
     def get_balance(self, obj):
         """What the student owes for the year they are being admitted into —
         the number the finance desk is looking at."""
+        if self._hides_money():
+            return None
         try:
             return str(finance.balance_for(obj.profile, obj.semester.academic_year)['balance'])
         except Exception:      # a student with no charges yet

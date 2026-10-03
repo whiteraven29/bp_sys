@@ -26,7 +26,7 @@ import logging
 from django.db import transaction
 from django.utils import timezone
 
-from . import finance, progression
+from . import finance, notifications, progression
 from .models import (
     AcademicYear, Application, CompletionClearance, OutstandingRepeat, Postponement, Semester,
     SemesterRegistration, StudentStanding,
@@ -61,8 +61,10 @@ def request_postponement(profile, semester, reason, *, by_student=False, entered
         raise LifecycleError(f'The student is not registered for {semester.label}.')
     if Postponement.objects.filter(profile=profile, status=Postponement.PENDING).exists():
         raise LifecycleError('A postponement request is already waiting for the Principal.')
-    return Postponement.objects.create(profile=profile, semester=semester, reason=reason[:2000],
-                                       by_student=by_student, entered_by=entered_by)
+    postponement = Postponement.objects.create(profile=profile, semester=semester, reason=reason[:2000],
+                                               by_student=by_student, entered_by=entered_by)
+    notifications.postponement_requested(postponement)
+    return postponement
 
 
 def _return_year(academic_year):
@@ -85,11 +87,13 @@ def decide_postponement(postponement, *, approve, actor=None, note=''):
             raise LifecycleError('Say why it is declined — the student reads it.')
         postponement.status = Postponement.DECLINED
         postponement.save(update_fields=['status', 'decided_by', 'decided_at', 'decision_note'])
+        notifications.postponement_decided(postponement)
         return postponement
     _postpone(postponement, actor=actor)
     postponement.status = Postponement.APPROVED
     postponement.save(update_fields=['status', 'decided_by', 'decided_at', 'decision_note',
                                      'return_year', 'return_semester_number', 'fees_reversed'])
+    notifications.postponement_decided(postponement)
     return postponement
 
 

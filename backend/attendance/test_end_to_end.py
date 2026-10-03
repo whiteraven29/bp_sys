@@ -116,6 +116,18 @@ class FirstYearEndToEndTests(TestCase):
 
     # ── the year ──────────────────────────────────────────────────────────────
 
+    def test_the_server_is_loaded_with_the_repeat_rates(self):
+        from .models import ChargeType, FeeStructure
+        repeat = ChargeType.objects.get(name='Repeat Module')
+        direct = ChargeType.objects.get(name='Repeat direct costs')
+        self.assertEqual(repeat.declaration, ChargeType.REPEAT_MODULE)
+        self.assertTrue(direct.for_repeaters)
+        for charge_type, amount in ((repeat, 200_000), (direct, 280_000)):
+            amounts = set(FeeStructure.objects.filter(charge_type=charge_type, academic_year=self.year)
+                          .values_list('amount', flat=True))
+            self.assertEqual(amounts, {amount})
+            self.assertEqual(FeeStructure.objects.filter(charge_type=charge_type).count(), 3)
+
     def test_a_first_year_from_admission_to_their_second_year(self):
         # 1. The admission desk takes them on and writes in their NACTVET number.
         application = self.ok(self.admission.post('/api/applications/capture/', {
@@ -132,6 +144,7 @@ class FirstYearEndToEndTests(TestCase):
         self.assertFalse(StudentCharge.objects.filter(profile=self.profile).exists())
         self.ok(self.records.post(f'/api/applications/{app_id}/details/', {
             'phone': '0712000111', 'gender': 'F', 'date_of_birth': '2006-04-12',
+            'form_four_index': 'S0101/0001/2025',
             'next_of_kin': [{'name': 'Mama Mtui', 'phone': '0713000222', 'relationship': 'parent'},
                             {'name': 'Baba Mtui', 'phone': '0714000333', 'relationship': 'parent'}],
         }, format='json'))
