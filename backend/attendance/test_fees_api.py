@@ -939,7 +939,7 @@ class PublishedFeeStructureTests(TestCase):
 
     def test_the_college_details_are_loaded_for_invoices(self):
         college = CollegeProfile.get()
-        self.assertEqual(college.name, 'Blue Pharma College of Health')
+        self.assertEqual(college.name, 'Blue Pharma Institute of Science and Technology')
         self.assertIn('1570', college.po_box)
         self.assertEqual(college.town, 'Singida')
         self.assertIn('mobile application', college.invoice_terms.lower())

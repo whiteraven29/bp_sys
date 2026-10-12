@@ -1206,7 +1206,7 @@
           <span class="tip" tabindex="0" role="note" aria-label="Help: CAT number format" data-tip="{COLLEGE} the college initials · {PROG} programme code · {LEVEL} NTA level · {SEM} semester · {CAT} 1 or 2 · {YEAR} e.g. 2026, {YY} e.g. 26 · {SEQ} the running number. {SEQ} is required; put {LEVEL} in it so two levels never share a number. Set for the academic year — next year starts from it.">?</span></div>
         <div class="form-grid-3">
           <div class="field" style="grid-column:span 2;"><label>Format</label><input id="cat-pattern" oninput="previewCatFormat()" placeholder="{COLLEGE}{LEVEL}CAT{CAT}S{SEM}/{YEAR}/{SEQ}"></div>
-          <div class="field"><label>College initials</label><input id="cat-college" oninput="previewCatFormat()" maxlength="20" placeholder="BLPCH"></div>
+          <div class="field"><label>College initials</label><input id="cat-college" oninput="previewCatFormat()" maxlength="20" placeholder="BPHIST"></div>
           <div class="field"><label>Running number digits</label>
             <select id="cat-width" onchange="previewCatFormat()"><option value="0">As it comes (1, 2 … 14)</option><option value="2">2 (01)</option><option value="3">3 (001)</option><option value="4">4 (0001)</option></select></div>
           <div class="field" style="grid-column:span 2;"><label>Example — level 4, semester 1, CAT 1, student 7</label><div id="cat-sample" style="font-family:var(--font-mono);padding:8px 0;"></div></div>
@@ -10612,7 +10612,7 @@ function downloadClassList() {
   const data = state.classList;
   if (!data || !data.rows.length) { toast('Load a class list first', 'var(--red)'); return; }
   const ws = XLSX.utils.aoa_to_sheet([
-    [`BLUE PHARMA COLLEGE OF HEALTH — CLASS LIST`],
+    [`BLUE PHARMA INSTITUTE OF SCIENCE AND TECHNOLOGY — CLASS LIST`],
     [`${data.class_level} · ${data.semester}${data.programme ? ' · ' + data.programme : ''}`],
     [data.final ? 'Admissions closed: final list' : `PROVISIONAL — admissions still open (${new Date().toLocaleDateString()})`],
     [],
@@ -10721,7 +10721,7 @@ function downloadCatNumbers() {
   const data = state.catNumbers;
   if (!data || !data.rows.length) { toast('Load a level first', 'var(--red)'); return; }
   const ws = XLSX.utils.aoa_to_sheet([
-    [`BLUE PHARMA COLLEGE OF HEALTH — CAT ${data.cat} EXAM NUMBERS`],
+    [`BLUE PHARMA INSTITUTE OF SCIENCE AND TECHNOLOGY — CAT ${data.cat} EXAM NUMBERS`],
     [`${data.class_level} · ${data.semester}`],
     [],
     ['S/N', 'CAT No.', 'Name', 'NACTVET Reg. No.', 'Status', 'Modules repeated'],

@@ -137,27 +137,27 @@ class CatNumberTests(ClassListSetup):
 
     def test_numbers_in_the_set_format(self):
         response = self.exam.post('/api/cat-number-format/', {
-            'pattern': '{COLLEGE}/{LEVEL}/S{SEM}/CAT{CAT}/{SEQ}', 'college_code': 'BLPCH',
+            'pattern': '{COLLEGE}/{LEVEL}/S{SEM}/CAT{CAT}/{SEQ}', 'college_code': 'BPHIST',
             'sequence_width': 3}, format='json')
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['sample'], 'BLPCH/4/S1/CAT1/007')
+        self.assertEqual(response.data['sample'], 'BPHIST/4/S1/CAT1/007')
         data = self.generate().data
         self.assertEqual(data['numbered_now'], 3)
         self.assertEqual([(r['name'], r['cat_number']) for r in data['rows']], [
-            ('Amina Said', 'BLPCH/4/S1/CAT1/001'),
-            ('Baraka Juma', 'BLPCH/4/S1/CAT1/002'),
-            ('Zainab Ally', 'BLPCH/4/S1/CAT1/003'),
+            ('Amina Said', 'BPHIST/4/S1/CAT1/001'),
+            ('Baraka Juma', 'BPHIST/4/S1/CAT1/002'),
+            ('Zainab Ally', 'BPHIST/4/S1/CAT1/003'),
         ])
 
     def test_the_default_format(self):
         rows = self.generate(cat=2).data['rows']
-        self.assertEqual(rows[0]['cat_number'], 'BLPCH4CAT2S1/2026/1')
+        self.assertEqual(rows[0]['cat_number'], 'BPHIST4CAT2S1/2026/1')
 
     def test_each_level_and_cat_runs_from_one(self):
         self.generate(cat=1)
         self.generate(cat=2)
         five = self.generate(cat=1, level=self.l5).data['rows']
-        self.assertEqual(five[0]['cat_number'], 'BLPCH5CAT1S1/2026/1')
+        self.assertEqual(five[0]['cat_number'], 'BPHIST5CAT1S1/2026/1')
         self.assertEqual(CatExamNumber.objects.filter(cat=2, sequence=1).count(), 1)
 
     def test_numbers_are_kept_and_a_late_student_continues_the_run(self):
@@ -167,7 +167,7 @@ class CatNumberTests(ClassListSetup):
                            [(self.m1, Student.NORMAL)])
         data = self.generate().data
         self.assertEqual(data['numbered_now'], 1)
-        self.assertEqual(CatExamNumber.objects.get(profile=late).number, 'BLPCH4CAT1S1/2026/4')
+        self.assertEqual(CatExamNumber.objects.get(profile=late).number, 'BPHIST4CAT1S1/2026/4')
         for name, number in given.items():
             self.assertEqual(CatExamNumber.objects.get(profile__name=name).number, number)
         self.assertEqual(data['rows'][-1]['name'], 'Aaron Late')               # in number order
@@ -178,15 +178,15 @@ class CatNumberTests(ClassListSetup):
 
     def test_a_format_without_the_running_number_is_refused(self):
         response = self.exam.post('/api/cat-number-format/', {'pattern': '{COLLEGE}{LEVEL}',
-                                                               'college_code': 'BLPCH'}, format='json')
+                                                               'college_code': 'BPHIST'}, format='json')
         self.assertEqual(response.status_code, 400)
         self.assertIn('{SEQ}', response.data['detail'])
         unknown = self.exam.post('/api/cat-number-format/', {'pattern': '{COLLEGE}{LEVL}{SEQ}',
-                                                              'college_code': 'BLPCH'}, format='json')
+                                                              'college_code': 'BPHIST'}, format='json')
         self.assertIn('{LEVL}', unknown.data['detail'])
 
     def test_a_format_that_gives_two_levels_the_same_numbers_is_refused(self):
-        self.exam.post('/api/cat-number-format/', {'pattern': '{COLLEGE}-{SEQ}', 'college_code': 'BLPCH'},
+        self.exam.post('/api/cat-number-format/', {'pattern': '{COLLEGE}-{SEQ}', 'college_code': 'BPHIST'},
                        format='json')
         self.generate()
         clash = self.generate(level=self.l5)

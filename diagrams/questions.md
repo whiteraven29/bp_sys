@@ -470,18 +470,29 @@ FAIL for a repeated one). Not changed for one student.
 
 ## K. Class lists, CAT numbers and the printed register (12 October 2026)
 
-### Q31. Which name goes on the college's documents? ◐
+### Q31. Which name goes on the college's documents? ✅
 
-The attendance register template carries the new name and crest — **Blue Pharma
-Institute of Science and Technology (BPHIST)** — and the register is built to it.
-Other documents still say Blue Pharma College of Health: the class list and CAT
-number Excel headings, and the CAT numbers' default initials **BLPCH** (the
-examination officer can change those on the page).
+**Answered 12 October 2026:** everywhere the old name was used now uses the new
+one, **Blue Pharma Institute of Science and Technology (BPHIST)** — printouts,
+Excel headings, the college profile on invoices (migration 0063), the seeds and
+forms, and the CAT numbers' initials (BPHIST).
 
-**Built as:** the register as the template; the rest unchanged.
+### Q33. The bank accounts' registered name ◐
 
-**Still open:** should the class lists, CAT numbers and other printouts move to
-the new name (and the CAT initials to e.g. BPHIST)?
+The CRDB account holder name is the bank's record, so it was not renamed: the fee
+seed still writes BLUE PHARMA COLLEGE OF HEALTH on the two accounts, and the
+account form shows it as the example. Today's accounts in the system are named
+"bphacoh".
+
+**Still open:** has CRDB renamed the accounts? If so, the accountant changes the
+names in Fee Setup ▸ Bank accounts, and the seed is updated to match.
+
+### Q34. The college's web address and email ◐
+
+The college profile (and the fee seed) still give info@bphacoh.ac.tz and
+www.bphacoh.ac.tz. Not changed: a new domain has to exist first.
+
+**Still open:** is there a new email and website for BPHIST?
 
 ### Q32. The department's name on the register cover ◐
 

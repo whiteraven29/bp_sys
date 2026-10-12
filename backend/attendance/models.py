@@ -1855,9 +1855,9 @@ class StudentDocument(models.Model):
 
 class CatNumberFormat(models.Model):
     """How the examination officer writes CAT exam numbers for one academic
-    year (said 12 October 2026), e.g. BLPCH4CAT1S1/2026/14:
+    year (said 12 October 2026), e.g. BPHIST4CAT1S1/2026/14:
 
-        {COLLEGE}  the college's initials, e.g. BLPCH
+        {COLLEGE}  the college's initials, e.g. BPHIST
         {PROG}     the programme code, e.g. PST
         {LEVEL}    the NTA level, e.g. 4
         {SEM}      the semester, 1 or 2
@@ -1870,7 +1870,7 @@ class CatNumberFormat(models.Model):
     students of one sitting apart."""
     academic_year = models.OneToOneField(AcademicYear, on_delete=models.CASCADE, related_name='cat_number_format')
     pattern = models.CharField(max_length=120, default='{COLLEGE}{LEVEL}CAT{CAT}S{SEM}/{YEAR}/{SEQ}')
-    college_code = models.CharField(max_length=20, default='BLPCH')
+    college_code = models.CharField(max_length=20, default='BPHIST')
     sequence_width = models.PositiveSmallIntegerField(default=0, help_text='0: no padding.')
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                    related_name='+')
@@ -2026,8 +2026,8 @@ class CollegeProfile(models.Model):
     A single row, edited by the accountant. Kept in the database rather than
     settings so the office can correct a phone number without a deploy.
     """
-    name = models.CharField(max_length=200, default='Blue Pharma College of Health')
-    short_name = models.CharField(max_length=60, default='BPHACOH')
+    name = models.CharField(max_length=200, default='Blue Pharma Institute of Science and Technology')
+    short_name = models.CharField(max_length=60, default='BPHIST')
     po_box = models.CharField(max_length=60, blank=True)
     town = models.CharField(max_length=80, blank=True)
     country = models.CharField(max_length=80, default='Tanzania')

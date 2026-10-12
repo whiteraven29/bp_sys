@@ -1,4 +1,4 @@
-"""Load Blue Pharma College of Health's published fee structure.
+"""Load Blue Pharma Institute of Science and Technology's published fee structure.
 
 Everything here comes from the 2026/2027 Admission Application Form: the two
 CRDB accounts, the tuition fee, and both "other charges" tables. The two tables
@@ -115,14 +115,14 @@ FOR_REPEATERS = {'Repeat direct costs'}
 INSTALMENTS = {'Tuition Fee': 5, 'Accommodation': 2, 'Meals': 2}
 DEFAULT_INSTALMENTS = 2
 
-TERMS = """Fees paid to the college are not refunded except under the BPHACOH refund policy.
+TERMS = """Fees paid to the college are not refunded except under the BPHIST refund policy.
 Deposit into the account shown above and write this invoice number on the pay-in slip.
 Payment by M-Pesa, Mixx by Yas, Airtel Money or any other mobile application is NOT accepted.
 Bring the original bank pay-in slip to the Accounts Office to be receipted."""
 
 
 class Command(BaseCommand):
-    help = "Load BPHACOH's published fee structure for an academic year."
+    help = "Load BPHIST's published fee structure for an academic year."
 
     def add_arguments(self, parser):
         parser.add_argument('--year', required=True, help='Academic year, e.g. 2026/2027')
@@ -150,7 +150,7 @@ class Command(BaseCommand):
             defaults={},
         )
         for field, value in [
-            ('name', 'Blue Pharma College of Health'), ('short_name', 'BPHACOH'),
+            ('name', 'Blue Pharma Institute of Science and Technology'), ('short_name', 'BPHIST'),
             ('po_box', 'P. O. Box 1570'), ('town', 'Singida'), ('country', 'Tanzania'),
             ('phone', '0743358048, 0620323644, 0786480125'),
             ('email', 'info@bphacoh.ac.tz'), ('website', 'www.bphacoh.ac.tz'),

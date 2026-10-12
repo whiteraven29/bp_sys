@@ -6142,7 +6142,7 @@ def download_field_results(request):
     center = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
     title_rows = (
-        'BLUE PHARMA COLLEGE OF HEALTH', 'FIELD RESULTS',
+        'BLUE PHARMA INSTITUTE OF SCIENCE AND TECHNOLOGY', 'FIELD RESULTS',
         f'{module.code} — {module.name}',
         f'{module.class_level.name} · {module.semester.label} · {module.semester.academic_year.name}',
     )
@@ -6684,7 +6684,7 @@ def download_final_eligibility_excel(request):
     def prepare_sheet(ws, level, title, last_column):
         last_letter = get_column_letter(max(last_column, 3))
         headings = [
-            'BLUE PHARMA COLLEGE OF HEALTH',
+            'BLUE PHARMA INSTITUTE OF SCIENCE AND TECHNOLOGY',
             'DEPARTMENT OF PHARMACEUTICAL SCIENCES',
             f'NTA LEVEL {level}',
             title,

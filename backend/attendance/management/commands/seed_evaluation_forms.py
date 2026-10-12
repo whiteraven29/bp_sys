@@ -1,4 +1,4 @@
-"""Load BPHACOH's evaluation and request forms.
+"""Load BPHIST's evaluation and request forms.
 
 Transcribed from the college's own documents — the End of Academic Year Course
 Evaluation Form, the Tutor's Evaluation Form, the Hostel Facilities and
@@ -228,7 +228,7 @@ FORMS = [
                   help_text='1 = very dissatisfied, 2 = Dissatisfied, 3 = Neutral, '
                             '4 = satisfied, 5 = very satisfied',
                   options=RATING_5, rows=COLLEGE_SERVICES),
-                q('Would you recommend Blue Pharma College of Health to others?',
+                q('Would you recommend Blue Pharma Institute of Science and Technology to others?',
                   options=RECOMMEND, required=True),
                 q('Please provide additional comments about the course that you have '
                   'recently completed', LONG),
@@ -241,7 +241,7 @@ FORMS = [
         'is_anonymous': True,
         'allow_multiple': True,          # one response per tutor, per module
         'title': "Tutor's Evaluation Form",
-        'intro': 'Blue Pharma College of Health aims at providing competency-based education '
+        'intro': 'Blue Pharma Institute of Science and Technology aims at providing competency-based education '
                  'that prepares you to be skills-oriented personnel after your graduation. '
                  'Your evaluation, comments and recommendations shall be used to improve '
                  'training only and not any otherwise. Fill this in once for each tutor.',
@@ -316,7 +316,7 @@ FORMS = [
             ]),
             ('Section C: Further studies', '', [
                 q('Have you pursued further education since graduating from Blue Pharma '
-                  'College of Health?', options=['Yes', 'No']),
+                  'Institute of Science and Technology?', options=['Yes', 'No']),
                 q('Degree/certificate pursued', SHORT),
                 q('Institutional Name', SHORT),
                 q('Field of Study', SHORT),
@@ -334,10 +334,10 @@ FORMS = [
             ]),
             ('Section D: Satisfaction and feedback', '', [
                 q('Overall, how satisfied are you with the education and training that you '
-                  'received at Blue Pharma College of Health?',
+                  'received at Blue Pharma Institute of Science and Technology?',
                   options=['Very satisfied', 'Satisfied', 'Neutral', 'Dissatisfied',
                            'Very dissatisfied']),
-                q('Would you recommend Blue Pharma College of Health to others?',
+                q('Would you recommend Blue Pharma Institute of Science and Technology to others?',
                   options=RECOMMEND),
                 q('Please provide additional comments or suggestions on how the college can '
                   'improve the program?', LONG),
@@ -574,8 +574,8 @@ FORMS = [
         'sections': [
             ('A. REQUEST TO HEALTH FACILITY',
              'To the Medical Officer in charge of the health facility named below. The Blue '
-             'Pharma College of Health student named on this form requires to consult your '
-             'facility for their health issues.', [
+             'Pharma Institute of Science and Technology student named on this form requires '
+             'to consult your facility for their health issues.', [
                 q('Name of the health facility you intend to consult', SHORT, required=True),
                 q('Where the facility is', SHORT,
                   help_text='Town, ward or district — enough for the office to identify it.'),
@@ -739,7 +739,7 @@ FORMS = [
 
 
 class Command(BaseCommand):
-    help = "Load BPHACOH's evaluation and letter request forms, aimed at the right NTA levels."
+    help = "Load BPHIST's evaluation and letter request forms, aimed at the right NTA levels."
 
     def add_arguments(self, parser):
         parser.add_argument('--year', default=None,

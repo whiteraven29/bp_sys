@@ -66,6 +66,11 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    NACTVET numbers, 5 sessions a page, 35 students a page; summary and signatures), exactly that
    many sessions. Warns while admissions are open. Department line from Departments — rename
    "Pharmaceutical science" to "Pharmaceutical Sciences" for the template's wording.
+2g. **New name everywhere — 12 Oct (not committed).** Blue Pharma Institute of Science and
+   Technology (BPHIST) replaces Blue Pharma College of Health: results and field sheet headings,
+   class list and CAT Excel, the student form page, the college profile on invoices (migration
+   0063, only if still the old name), the fee and form seeds, unanswered forms' questions, the
+   CAT initials (BPHIST). Not renamed: bank account holder names, email/website (questions Q33, Q34).
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password
