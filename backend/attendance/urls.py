@@ -90,6 +90,7 @@ urlpatterns = [
     path('expenses/<int:pk>/<str:action>/', veta_views.expense_action, name='expense-action'),
     path('student-passwords/reset/', views.reset_student_password, name='student-password-reset'),
     path('password-resets/', views.password_resets, name='password-resets'),
+    path('returning-students/', views.returning_students, name='returning-students'),
     path('student-passwords/issue/', views.issue_student_passwords, name='student-passwords-issue'),
     path('staff-accounts/<int:user_id>/set-modules/', views.set_staff_modules, name='staff-set-modules'),
     path('staff-accounts/<int:user_id>/roles/', views.set_staff_roles, name='staff-set-roles'),

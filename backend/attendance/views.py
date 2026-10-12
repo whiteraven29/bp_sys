@@ -42,6 +42,7 @@ from .roles import (
     is_principal, is_records_officer, is_secretary, runs_departments,
     is_coordinator, runs_veta_courses, can_approve_expenses, can_view_expenses,
     is_dean, can_read_health_records, can_reset_passwords, can_issue_student_passwords,
+    can_record_returning_students,
 )
 from .security import neutralise_formulas
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
@@ -1545,6 +1546,58 @@ def reset_student_password(request):
     return Response({'name': profile.name, 'reg_no': profile.nactvet_reg_no,
                      'college_id': profile.college_id or '', 'password': pin,
                      'detail': f'{profile.name} must choose their own password at the next sign-in.'})
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def returning_students(request):
+    """Students coming back from before the system — readmissions, repeaters,
+    postponement returns — entered from last year's papers so admission takes
+    them back the usual way. GET: the ones entered and not yet admitted.
+    POST: {'reference', 'students': [{reg_no, name, programme_id, class_level_id,
+    kind, return_semester, modules}]} — row by row, each refused on its own."""
+    if not can_record_returning_students(request.user):
+        raise PermissionDenied('The examination officer, the Principal or DPARC enters these.')
+    if request.method == 'GET':
+        rows = (StudentStanding.objects.filter(note__startswith='From the paper record')
+                .exclude(status__in=[StudentStanding.ACTIVE, StudentStanding.COMPLETED,
+                                     StudentStanding.ARCHIVED])
+                .select_related('profile', 'class_level', 'programme').order_by('profile__name'))
+        owed = {}
+        for repeat in OutstandingRepeat.objects.filter(
+                profile__in=[row.profile_id for row in rows], status=OutstandingRepeat.OPEN):
+            owed.setdefault(repeat.profile_id, []).append(repeat.module_code)
+        return Response([{
+            'reg_no': row.profile.nactvet_reg_no, 'name': row.profile.name,
+            'status': row.status, 'status_display': row.get_status_display(),
+            'class_level': row.class_level.name if row.class_level_id else '',
+            'programme': row.programme.code if row.programme_id else '',
+            'return_semester': row.return_semester_number,
+            'modules': sorted(owed.get(row.profile_id, [])), 'reference': row.note,
+        } for row in rows])
+    reference = str(request.data.get('reference') or '')
+    results = []
+    for item in request.data.get('students') or []:
+        reg_no = str(item.get('reg_no') or '').strip()
+        try:
+            programme_id, level_id = str(item.get('programme_id') or ''), str(item.get('class_level_id') or '')
+            programme = Programme.objects.filter(id=programme_id).first() if programme_id.isdigit() else None
+            level = ClassLevel.objects.filter(id=level_id).first() if level_id.isdigit() else None
+            if programme is None or level is None:
+                raise admissions.ReturningError('Choose the programme and the level.')
+            modules = item.get('modules') or []
+            if isinstance(modules, str):
+                modules = [part for part in re.split(r'[\s,;]+', modules) if part]
+            standing = admissions.record_returning_student(
+                reg_no=reg_no, name=str(item.get('name') or ''), programme=programme, class_level=level,
+                kind=str(item.get('kind') or ''), return_semester=int(item.get('return_semester') or 0),
+                modules=modules, reference=str(item.get('reference') or reference), actor=request.user)
+            results.append({'reg_no': reg_no, 'ok': True, 'status': standing.get_status_display()})
+        except (admissions.AdmissionError, ValueError) as exc:
+            results.append({'reg_no': reg_no, 'ok': False, 'error': str(exc)})
+    return Response({'results': results,
+                     'recorded': sum(1 for row in results if row['ok']),
+                     'refused': sum(1 for row in results if not row['ok'])})
 
 
 @api_view(['GET', 'POST'])

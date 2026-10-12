@@ -923,6 +923,7 @@
         <button class="nav-sub-btn admin-only" data-results-section="summary" onclick="showResultsSection('summary', this)">Results Summary</button>
       </div>
     </div>
+    <button class="nav-btn" data-page="returning" data-roles="principal dparc exam superuser" onclick="showPage('returning',this); loadReturning()"><span class="icon"><i class="bi bi-arrow-repeat"></i></span> Returning Students</button>
     <div class="nav-group admin-only exam-only" data-roles="principal dparc exam superuser" id="declarations-nav-group">
       <button class="nav-btn" data-page="declarations" onclick="toggleDeclarationsMenu(event)"><span class="icon"><i class="bi bi-pin-angle"></i></span> Exam Declarations <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
@@ -1147,6 +1148,51 @@
         <button class="btn btn-secondary btn-sm" onclick="importCollegeIds(true)">Check the sheet</button>
         <button class="btn btn-primary btn-sm" onclick="importCollegeIds(false)">Record</button>
         <div id="cid-result" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <div class="page" id="page-returning">
+      <div class="page-title">Returning Students</div>
+      <div class="page-sub">Students coming back from before the system — readmissions, repeaters and postponement returns — entered from last year's papers. Once entered, admission sees them under <em>Expected back</em> and takes them through the desks as usual.</div>
+      <div class="card">
+        <div class="card-title">From which paper <span class="tip" tabindex="0" role="note" aria-label="Help: paper" data-tip="NACTVET's results sheet for a repeater or a discontinuation; the Principal's letter for a postponement. It is written on every record made, so anybody can later see where the entry came from.">?</span></div>
+        <div class="field" style="max-width:520px;"><label>Reference *</label>
+          <input id="ret-reference" placeholder="e.g. NACTVET results, semester 2 2024/25 (supplementary)"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">One student</div>
+        <div class="form-grid-3">
+          <div class="field"><label>Registration number *</label><input id="ret-reg" placeholder="e.g. NS2183/0046/2023"></div>
+          <div class="field"><label>Name (if new to the system)</label><input id="ret-name"></div>
+          <div class="field"><label>They are *</label>
+            <select id="ret-kind" onchange="onReturningKindChange()">
+              <option value="readmission">Readmission — discontinued last year</option>
+              <option value="repeat">Repeating failed modules</option>
+              <option value="postponed">Back from a postponement</option></select></div>
+          <div class="field"><label>Programme *</label><select id="ret-programme"></select></div>
+          <div class="field"><label>Level they come back to *</label><select id="ret-level"></select></div>
+          <div class="field"><label>Semester they come back to *</label>
+            <select id="ret-semester"><option value="1">Semester 1</option><option value="2">Semester 2</option></select></div>
+          <div class="field" id="ret-modules-wrap" style="display:none;grid-column:span 3;"><label id="ret-modules-label">Module codes they repeat *</label>
+            <input id="ret-modules" placeholder="e.g. PST04209, PST04211 — as on the results sheet"></div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="recordReturning(event)">Record</button>
+      </div>
+      <div class="card">
+        <div class="card-title">A whole sheet (Excel) <span class="tip" tabindex="0" role="note" aria-label="Help: sheet" data-tip="Columns: Registration Number, Name, Kind (readmission, repeat or postponed), Programme (code), Level (4, 5 or 6), Semester (1 or 2), Modules (codes — for repeaters, and for a postponed student who was repeating). Each row is recorded or refused on its own, with the reason.">?</span></div>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="downloadReturningTemplate()">⬇ Template</button>
+          <div class="field" style="margin:0;"><label>Filled sheet</label><input type="file" id="ret-file" accept=".xlsx,.xls,.csv"></div>
+          <button class="btn btn-primary btn-sm" onclick="uploadReturning(event)">Record the sheet</button>
+        </div>
+        <div id="ret-result" style="margin-top:12px;"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Entered, not yet admitted</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Reg. No.</th><th>Name</th><th>Standing</th><th>Back to</th><th>Modules owed</th><th>From</th></tr></thead>
+          <tbody id="ret-tbody"></tbody>
+        </table></div>
       </div>
     </div>
 
@@ -10187,6 +10233,99 @@ async function saveItemCheck(profileId, requirementId, select) {
   }
 }
 
+// ── returning students, entered from last year's papers ──────────────────────
+async function loadReturning() {
+  await ensureProgrammes();
+  const programme = document.getElementById('ret-programme');
+  if (!programme.options.length) {
+    buildProgrammeOptions(programme, '— programme —');
+    // One programme (PST, today): chosen already.
+    const real = [...programme.options].filter(o => o.value);
+    if (real.length === 1) programme.value = real[0].value;
+  }
+  const level = document.getElementById('ret-level');
+  if (!level.options.length) level.innerHTML = (state.levels || []).map(l =>
+    `<option value="${l.id}">${safeText(l.name)}</option>`).join('');
+  try {
+    const rows = await api('GET', '/returning-students/');
+    document.getElementById('ret-tbody').innerHTML = rows.length ? rows.map(r => `<tr>
+        <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}</td>
+        <td>${safeText(r.name)}</td><td>${safeText(r.status_display)}</td>
+        <td>${safeText(r.class_level)} · ${safeText(r.programme)} · semester ${safeText(r.return_semester)}</td>
+        <td>${safeText(r.modules.join(', ') || '—')}</td>
+        <td style="font-size:.75rem;color:var(--muted)">${safeText(r.reference.replace(/^From the paper record: /, ''))}</td></tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty">Nobody entered yet</div></td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load returning students'), 'var(--red)'); }
+}
+
+function showReturningResults(data) {
+  const refused = data.results.filter(r => !r.ok);
+  document.getElementById('ret-result').innerHTML = `<div class="missing-note" style="border-left-color:${refused.length ? 'var(--orange)' : 'var(--green)'}">
+      Recorded ${data.recorded}; refused ${data.refused}.</div>`
+    + (refused.length ? `<div class="table-wrap"><table class="compact"><thead><tr><th>Reg. No.</th><th>Why not</th></tr></thead>
+      <tbody>${refused.map(r => `<tr><td>${safeText(r.reg_no || '(blank)')}</td><td>${safeText(r.error)}</td></tr>`).join('')}</tbody></table></div>` : '');
+}
+
+async function sendReturning(students, event) {
+  const reference = document.getElementById('ret-reference').value.trim();
+  if (!reference) { toast('Say which paper this comes from first', 'var(--red)'); return null; }
+  const done = working(event?.currentTarget, 'Recording…');
+  try {
+    const data = await api('POST', '/returning-students/', { reference, students });
+    showReturningResults(data);
+    await loadReturning();
+    return data;
+  } catch (e) { toast(apiErrorText(e, 'Could not record'), 'var(--red)'); return null; }
+  finally { done(); }
+}
+
+function onReturningKindChange() {
+  // A postponed student may have been repeating modules when they stopped:
+  // they come back as a repeater for those (admissions.is_repeat_only).
+  const kind = document.getElementById('ret-kind').value;
+  document.getElementById('ret-modules-wrap').style.display = kind === 'readmission' ? 'none' : '';
+  document.getElementById('ret-modules-label').textContent = kind === 'repeat'
+    ? 'Module codes they repeat *'
+    : 'Modules they were repeating when they postponed (if any)';
+}
+
+async function recordReturning(event) {
+  const value = id => document.getElementById(id).value.trim();
+  const data = await sendReturning([{
+    reg_no: value('ret-reg'), name: value('ret-name'), kind: value('ret-kind'),
+    programme_id: value('ret-programme'), class_level_id: value('ret-level'),
+    return_semester: value('ret-semester'), modules: value('ret-modules') }], event);
+  if (data && data.recorded) ['ret-reg', 'ret-name', 'ret-modules'].forEach(id => document.getElementById(id).value = '');
+}
+
+function downloadReturningTemplate() {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Registration Number', 'Name', 'Kind', 'Programme', 'Level', 'Semester', 'Modules'],
+    ['NS2183/0046/2023', 'Example Student', 'repeat', 'PST', 4, 2, 'PST04209, PST04211'],
+  ]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Returning students');
+  XLSX.writeFile(wb, 'returning_students.xlsx');
+}
+
+async function uploadReturning(event) {
+  const file = document.getElementById('ret-file').files[0];
+  if (!file) { toast('Choose the filled sheet', 'var(--red)'); return; }
+  await ensureProgrammes();
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: '' });
+  const programmeId = code => (state.programmes || []).find(p => String(p.code).toUpperCase() === String(code).trim().toUpperCase())?.id;
+  const levelId = n => (state.levels || []).find(l => String(l.order) === String(n).trim() || l.name === String(n).trim())?.id;
+  const students = rows.filter(r => String(r['Registration Number'] || '').trim()).map(r => ({
+    reg_no: String(r['Registration Number']).trim(), name: String(r['Name'] || '').trim(),
+    kind: String(r['Kind'] || '').trim().toLowerCase(), programme_id: programmeId(r['Programme']),
+    class_level_id: levelId(r['Level']), return_semester: String(r['Semester'] || '').trim(),
+    modules: String(r['Modules'] || '') }));
+  if (!students.length) { toast('No rows with a registration number', 'var(--red)'); return; }
+  if (!confirm(`Record ${students.length} returning student(s) from this sheet?`)) return;
+  await sendReturning(students, event);
+}
+
 async function loadDueBack() {
   try {
     const rows = await api('GET', '/applications/due-back/');
@@ -10195,10 +10334,11 @@ async function loadDueBack() {
       ? list.map(row => `<tr>
           <td>${safeText(row.reg_no)}</td>
           <td>${safeText(row.student_name)}</td>
-          <td>${safeText(STANDING_LABELS[row.status] || row.status)}</td>
+          <td>${safeText(STANDING_LABELS[row.status] || row.status)}${(row.outstanding || []).length
+            ? `<div style="font-size:.72rem;color:var(--orange)">repeating ${safeText(row.outstanding.map(r => r.code).join(', '))}</div>` : ''}</td>
           <td>${safeText(row.class_level_name || '—')}</td>
           <td>${row.return_semester_number ? `Semester ${row.return_semester_number}` : '—'}</td>
-          <td><button class="btn btn-ghost btn-sm" onclick="startReadmission(${jsArg(row.reg_no)}, ${row.class_level || 'null'}, ${row.programme || 'null'}, ${jsArg(row.student_name)}, ${jsArg(row.status)})">${row.status === 'postponed' ? 'Start their return' : 'Start readmission'}</button></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="startReadmission(${jsArg(row.reg_no)}, ${row.class_level || 'null'}, ${row.programme || 'null'}, ${jsArg(row.student_name)}, ${jsArg(row.status)})">${row.status === 'postponed' ? 'Start their return' : row.status === 'repeating' ? 'Start their repeat' : 'Start readmission'}</button></td>
         </tr>`).join('')
       : '<tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-people"></i></div>Nobody outstanding</div></td></tr>';
   } catch (e) { /* the list is a convenience */ }
@@ -10208,7 +10348,7 @@ async function startReadmission(regNo, levelId, programmeId, name, status) {
   await showAdmissionSection('new', document.querySelector('[data-adm-section="new"].nav-sub-btn'));
   // A postponed student comes back as the student they were; a discontinued
   // one is readmitted, and pays as a new student.
-  document.getElementById('adm-kind').value = status === 'postponed' ? 'continuing' : 'readmission';
+  document.getElementById('adm-kind').value = ['postponed', 'repeating'].includes(status) ? 'continuing' : 'readmission';
   document.getElementById('adm-regno').value = regNo;
   document.getElementById('adm-name').value = name;
   if (levelId) document.getElementById('adm-level').value = levelId;

@@ -37,6 +37,7 @@ import re
 import secrets
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from . import finance, progression
@@ -348,9 +349,19 @@ def open_application(*, profile, semester, programme, class_level, kind,
 
 def is_repeat_only(profile):
     """A student held at their level to repeat what they failed. They study
-    those modules only, and pay the per-module repeat rate — not a year's fees."""
+    those modules only, and pay the per-module repeat rate — not a year's fees.
+
+    A repeater who postponed is one too when they come back: postponing kept
+    the modules they owe, and the college holds a student at their level until
+    those are passed (said 12 October 2026). Before, their standing said only
+    "postponed", and they came back billed a full year."""
     standing = StudentStanding.objects.filter(profile=profile).first()
-    return bool(standing and standing.status == StudentStanding.REPEATING)
+    if standing is None:
+        return False
+    if standing.status == StudentStanding.REPEATING:
+        return True
+    return (standing.status == StudentStanding.POSTPONED
+            and progression.open_repeats(profile).exists())
 
 
 def planned_modules(application):
@@ -978,6 +989,104 @@ def admit(application, *, actor=None, note=''):
 
 # ── the students the college is expecting back ────────────────────────────────
 
+class ReturningError(AdmissionError):
+    """A returning student's paper record that cannot be entered as given."""
+
+
+#: What a student coming back from before the system can be.
+RETURNING_KINDS = {
+    'readmission': 'Readmission (discontinued last year)',
+    'repeat': 'Repeating failed modules',
+    'postponed': 'Back from a postponement',
+}
+
+
+@transaction.atomic
+def record_returning_student(*, reg_no, name, programme, class_level, kind, return_semester,
+                             modules=(), reference, actor=None, year=None):
+    """Enter last year's position for a student the system has no results for,
+    from the college's papers (NACTVET's results sheet, the postponement or
+    discontinuation letter), so admission can take them back the usual way.
+
+      readmission  → discontinued, due back this year into `return_semester`;
+                     they sit that semester afresh as first sittings and are
+                     billed as a new student (nothing of their old results is needed)
+      repeat       → repeating: the `modules` owed (codes), held at the level;
+                     billed 200,000 a module plus the yearly 280,000
+      postponed    → postponed, due back into `return_semester`; billed as continuing —
+                     or, with `modules` (they were repeating when they postponed),
+                     as a repeater for those modules
+
+    Nothing is guessed: a student whose results the system already holds is
+    refused (their review decides), and `reference` — which paper it came
+    from — is kept on every row this writes. Returns the standing.
+    """
+    from .models import AcademicYear, OutstandingRepeat, SemesterReview
+    if kind not in RETURNING_KINDS:
+        raise ReturningError('Readmission, repeat or postponed.')
+    reference = (reference or '').strip()
+    if not reference:
+        raise ReturningError('Say which paper this comes from, e.g. "NACTVET results, semester 2 2024/25".')
+    if return_semester not in (1, 2):
+        raise ReturningError('The semester they come back to is 1 or 2.')
+    year = year or AcademicYear.objects.filter(is_active=True).first()
+    if year is None:
+        raise ReturningError('No academic year is active.')
+    reg_no = (reg_no or '').strip().upper()
+    if not reg_no:
+        raise ReturningError('A returning student is found by their registration number.')
+
+    profile = StudentProfile.objects.filter(nactvet_reg_no__iexact=reg_no).first()
+    if profile is None:
+        if not (name or '').strip():
+            raise ReturningError(f'{reg_no} is not on file: give their name too.')
+        profile = capture_student(nactvet_reg_no=reg_no, name=name, actor=actor)
+    if SemesterReview.objects.filter(profile=profile).exists():
+        raise ReturningError(f'The system already holds {profile.name}\'s results; their semester '
+                             f'review decides what they come back to.')
+    if Application.objects.filter(profile=profile, semester__academic_year=year).exclude(
+            state__in=[Application.REJECTED, Application.CANCELLED]).exists():
+        raise ReturningError(f'{profile.name} already has an application this year.')
+
+    status = {'readmission': StudentStanding.DISCONTINUED, 'repeat': StudentStanding.REPEATING,
+              'postponed': StudentStanding.POSTPONED}[kind]
+    reason = f'From the paper record: {reference}'
+    owed = []
+    codes = sorted({str(code).strip().upper() for code in modules if str(code).strip()})
+    if kind == 'readmission' and codes:
+        raise ReturningError('A readmission sits the semester afresh: leave the modules empty.')
+    if kind == 'repeat' and not codes:
+        raise ReturningError('List the module codes they repeat.')
+    if codes:
+        offered = {module.code.upper(): module for module in Module.objects.filter(
+            semester__academic_year=year, semester__number=return_semester,
+            class_level=class_level, programme__in=[programme, None])}
+        unknown = [code for code in codes if code not in offered]
+        if unknown:
+            raise ReturningError(f'Not offered at {class_level} in semester {return_semester} this '
+                                 f'year: {", ".join(unknown)}. Check the codes, or add the modules first.')
+        previous = (AcademicYear.objects.filter(name__lt=year.name).order_by('-name').first())
+        origin = (Semester.objects.filter(academic_year=previous, number=return_semester).first()
+                  if previous else None)
+        if origin is None:
+            raise ReturningError('Last year and its semesters must exist (Academic Years) before a '
+                                 'repeat from it can be entered.')
+        for code in codes:
+            row, _ = OutstandingRepeat.objects.update_or_create(
+                profile=profile, module_code=code, origin_semester=origin,
+                defaults={'module_name': offered[code].name, 'class_level': class_level,
+                          'semester_number': return_semester, 'status': OutstandingRepeat.OPEN,
+                          'note': reason[:300]})
+            owed.append(row)
+
+    standing = progression.set_standing(
+        profile, status, actor=actor, reason=reason, class_level=class_level, programme=programme,
+        return_year=year, return_semester_number=return_semester, note=reason)
+    logger.info('Recorded %s as %s from paper (%s) by %s', profile.nactvet_reg_no, kind, reference,
+                getattr(actor, 'username', None))
+    return standing
+
+
 def due_back(semester):
     """Who the college should be seeing at this semester's admissions.
 
@@ -985,8 +1094,12 @@ def due_back(semester):
     the semester they said they would come back to, and without an application
     already open.
     """
+    # Repeaters with a return semester too: the year end registers its own
+    # repeaters itself, so the ones left here are those entered from last
+    # year's papers (record_returning_student).
     standings = (StudentStanding.objects
-                 .filter(status__in=sorted(StudentStanding.AWAY))
+                 .filter(Q(status__in=sorted(StudentStanding.AWAY))
+                         | Q(status=StudentStanding.REPEATING, return_semester_number__isnull=False))
                  .select_related('profile', 'programme', 'class_level', 'return_year'))
     applied = set(Application.objects.filter(semester=semester).exclude(
         state__in=[Application.REJECTED, Application.CANCELLED]).values_list('profile_id', flat=True))

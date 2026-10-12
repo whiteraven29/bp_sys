@@ -12,7 +12,7 @@ thing is half done, say which half.
 - `[!]` blocked — what it is waiting for is written next to it
 
 Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py test attendance --settings=edutrack.test_settings`
-(896 passing, including `test_end_to_end`, `test_offices`, `test_records_health` and `test_security`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
+(912 passing, including `test_end_to_end`, `test_offices`, `test_records_health`, `test_security` and `test_returning`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
 
 ---
 
@@ -50,6 +50,10 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    and the accountant answers, the accountant pays; office funds or petty cash (a float
    with top-ups, paid in cash, never beyond it); reasons for rejections, cancellations and
    over-budget approvals; receipts; audit trail; Executive Summary ▸ Spending.
+2d. **Returning students from before the system — 12 Oct (not committed).** Readmissions,
+   repeaters and postponement returns entered from last year's papers on Returning Students
+   (exam office, Principal, DPARC; one by one or an Excel sheet), then started from Admissions ▸
+   Expected back and billed correctly (release guide C4b).
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

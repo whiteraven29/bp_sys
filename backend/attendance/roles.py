@@ -198,6 +198,14 @@ def can_confirm_reviews(user):
     return is_break_glass(user) or is_principal(user) or is_dparc(user)
 
 
+def can_record_returning_students(user):
+    """Enters last year's position for a returning student the system has no
+    results for (readmission, repeat, postponement), from the college's papers:
+    the examination officer, who holds NACTVET's results, and the Principal and
+    DPARC, who decide reviews."""
+    return can_manage_exams(user) or can_confirm_reviews(user)
+
+
 def can_advance_semester(user):
     """Closing one semester and opening the next. Same desk as confirming the
     reviews it acts on."""
