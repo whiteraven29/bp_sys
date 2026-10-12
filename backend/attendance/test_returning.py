@@ -272,3 +272,74 @@ class StartingAtLevelFiveOrSixTests(ReturningBase):
         self.assertEqual(SemesterRegistration.objects.get(profile=profile).class_level, level6)
         self.assertEqual(Student.objects.filter(profile=profile).count(), 2)
         self.assertTrue(StudentCharge.objects.filter(profile=profile, charge_type__name='Admission fee').exists())
+
+
+class RepeatAcrossAPostponementTests(ReturningBase):
+    """Said 12 October 2026: a student owes a 2024/25 module, postponed in
+    2025/26, and comes back in 2026/27. They come back as a repeater for that
+    module; the repeat sitting is on the repeaters' sheet; passing it completes
+    their 2024/25 semester, which then reads cleared."""
+
+    def test_the_repeat_completes_the_semester_two_years_back(self):
+        from .models import SemesterReview, StudentResult
+        from .grading import parse_authority_grade
+        older_year = AcademicYear.objects.create(name='2024/2025')
+        older = Semester.objects.create(academic_year=older_year, number=1)
+        profile = StudentProfile.objects.create(nactvet_reg_no='NS0099/0001/2024', name='Long Way Back')
+        failed = None
+        for code, grade in (('PST04101', 'A'), ('PST04102', 'B'), ('PST04103', 'D')):
+            module = self.module(code, self.level4, older)
+            sitting = Student.objects.create(nactvet_reg_no=profile.nactvet_reg_no, name=profile.name,
+                                             profile=profile, module=module)
+            parsed = parse_authority_grade(grade, self.level4)
+            StudentResult.objects.create(student=sitting, authority_grade=parsed['raw'],
+                                         authority_status=parsed['status'], final_approved=True)
+            if code == 'PST04103':
+                failed = sitting
+        OutstandingRepeat.objects.create(
+            profile=profile, module_code='PST04103', module_name='PST04103', class_level=self.level4,
+            semester_number=1, origin_semester=older, origin_enrollment=failed)
+        # 2025/26: they postponed (lifecycle._postpone leaves exactly this).
+        progression.set_standing(profile, StudentStanding.POSTPONED, class_level=self.level4,
+                                 programme=self.pst, return_year=self.year, return_semester_number=1)
+
+        # 2026/27: back through admission, as a repeater for the module owed.
+        self.assertEqual([s.profile_id for s in admissions.due_back(self.sem1)], [profile.id])
+        _, application = self.take_back(Application.CONTINUING)
+        billed = sorted(StudentCharge.objects.filter(profile=profile, academic_year=self.year)
+                        .values_list('amount', flat=True))
+        self.assertEqual(billed, [Decimal('200000.00'), Decimal('280000.00')])
+        self.admit(application)
+        repeat = Student.objects.get(profile=profile, module__semester=self.sem1)
+        self.assertEqual((repeat.module.code, repeat.attempt, repeat.repeat_of_id),
+                         ('PST04103', Student.REPEAT, failed.id))
+
+        # The repeat result: only on the repeaters' sheet, completing 2024/25.
+        self.exam.post('/api/results/authority-grades/', {'semester_id': self.sem1.id, 'rows': [
+            {'reg_no': profile.nactvet_reg_no, 'module_code': 'PST04103', 'grade': 'C'}]}, format='json')
+        sheet = self.exam.get(f'/api/results-summary/?semester_id={self.sem1.id}'
+                              f'&class_level_id={self.level4.id}&sheet=repeaters').data['students']
+        self.assertEqual(len(sheet), 1)
+        self.assertEqual((sheet[0]['origin'], sheet[0]['remark'], sheet[0]['gpa']),
+                         (older.label, 'PASS', 3.0))                    # (4 + 3 + 2) / 3
+        continuing = self.exam.get(f'/api/results-summary/?semester_id={self.sem1.id}'
+                                   f'&class_level_id={self.level4.id}').data['students']
+        self.assertEqual(continuing, [])
+
+        # Their review clears the module owed; the 2024/25 failure stays on record.
+        review = progression.build_reviews(self.sem1, actor=self.exam_user)
+        mine = [r for r in review if r.profile_id == profile.id][0]
+        self.assertEqual(mine.proposed, SemesterReview.CLEAR)
+        progression.confirm_review(mine, mine.proposed, actor=self.exam_user)
+        self.assertEqual(OutstandingRepeat.objects.get(profile=profile).status, OutstandingRepeat.PASSED)
+        self.assertEqual(StudentResult.objects.get(student=failed).authority_grade, 'D')
+
+        # The portal reads 2024/25 complete.
+        repeat.set_portal_pin('Portal#2026', require_change=False)
+        repeat.save()
+        session = self.client.session
+        session['student_id'] = repeat.id
+        session.save()
+        statements = self.client.get('/student-dashboard/').context['result_statements']
+        self.assertEqual([s['label'] for s in statements], [older.label])
+        self.assertEqual(statements[0]['comment'], 'PASS')

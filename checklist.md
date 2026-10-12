@@ -12,7 +12,7 @@ thing is half done, say which half.
 - `[!]` blocked — what it is waiting for is written next to it
 
 Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py test attendance --settings=edutrack.test_settings`
-(912 passing, including `test_end_to_end`, `test_offices`, `test_records_health`, `test_security` and `test_returning`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
+(956 passing, including `test_end_to_end`, `test_offices`, `test_records_health`, `test_security`, `test_returning`, `test_classlists` and `test_registers`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
 
 ---
 
@@ -54,6 +54,18 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    repeaters and postponement returns entered from last year's papers on Returning Students
    (exam office, Principal, DPARC; one by one or an Excel sheet), then started from Admissions ▸
    Expected back and billed correctly (release guide C4b).
+2e. **Class lists and CAT exam numbers — 12 Oct (not committed).** Admissions ▸ Class lists:
+   a level's students this semester with NACTVET number and First sitting / Repeater (a
+   repeater's modules listed), provisional until the admission window closes, Excel. CAT Exam
+   Numbers (examination officer): the year's format (`{COLLEGE}{LEVEL}{SEM}{CAT}{SEQ}` …),
+   CAT 1 and CAT 2 per level, kept once given, Excel. Repeaters tagged and listed last on the
+   attendance roster, the module list and CA entry (release guide C4c).
+2f. **Printed class attendance register — 12 Oct (not committed).** Take Attendance ▸ Class
+   attendance register: the tutor declares the module's sessions (kept on the module) and downloads
+   a Word register to the college's template (cover with crest, level, code, name; names and
+   NACTVET numbers, 5 sessions a page, 35 students a page; summary and signatures), exactly that
+   many sessions. Warns while admissions are open. Department line from Departments — rename
+   "Pharmaceutical science" to "Pharmaceutical Sciences" for the template's wording.
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

@@ -780,7 +780,7 @@
               <tbody>
                 {% for row in statement.modules %}
                 <tr>
-                  <td><strong>{{ row.code }}</strong> · {{ row.name }}</td>
+                  <td><strong>{{ row.code }}</strong> · {{ row.name }}{% if row.note %}<div style="font-size:.72rem;color:var(--muted);">{{ row.note }}</div>{% endif %}</td>
                   <td><strong>{{ row.grade }}</strong></td>
                   <td><span class="status {% if row.status == 'PASS' %}pass{% elif row.status == 'SUPP' %}pending{% else %}fail{% endif %}">{{ row.status }}</span></td>
                 </tr>

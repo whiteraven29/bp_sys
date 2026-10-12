@@ -467,3 +467,27 @@ supplementary follows a sitting held that late, so a fail there is a repeat.
 FAIL for a repeated one). Not changed for one student.
 
 **Still open:** do you know why this one was REPEAT?
+
+## K. Class lists, CAT numbers and the printed register (12 October 2026)
+
+### Q31. Which name goes on the college's documents? ◐
+
+The attendance register template carries the new name and crest — **Blue Pharma
+Institute of Science and Technology (BPHIST)** — and the register is built to it.
+Other documents still say Blue Pharma College of Health: the class list and CAT
+number Excel headings, and the CAT numbers' default initials **BLPCH** (the
+examination officer can change those on the page).
+
+**Built as:** the register as the template; the rest unchanged.
+
+**Still open:** should the class lists, CAT numbers and other printouts move to
+the new name (and the CAT initials to e.g. BPHIST)?
+
+### Q32. The department's name on the register cover ◐
+
+The cover prints the department's name from Departments. It is stored as
+*Pharmaceutical science*, so the cover reads DEPARTMENT OF PHARMACEUTICAL
+SCIENCE; the template says SCIENCES. Not changed in the database.
+
+**To do (Principal or DPARC):** rename the department to *Pharmaceutical
+Sciences* in Departments, if that is the official name.

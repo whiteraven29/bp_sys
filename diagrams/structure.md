@@ -30,6 +30,8 @@ When the structure changes, update this file in the same change.
   │                      clearance, hostel                         │
   │      progression.py  semester review, repeats, year advance,   │
   │                      results summary                           │
+  │      classlists.py   a level's class list, CAT exam numbers    │
+  │      registers.py    the printed class attendance register     │
   │      lifecycle.py    postponement, finishing, clearance        │
   │      roles.py        what each office may do                   │
   │      veta.py         VETA courses: intakes, desks, fees        │

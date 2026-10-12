@@ -688,6 +688,12 @@ class Module(models.Model):
     teachers = models.ManyToManyField(
         settings.AUTH_USER_MODEL, related_name='modules_taught', blank=True
     )
+    # How many sessions the tutor has declared for the module: the printed
+    # attendance register has exactly that many (attendance/registers.py).
+    register_sessions = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text='Sessions declared by the tutor for the attendance register.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1845,6 +1851,72 @@ class StudentDocument(models.Model):
     @property
     def is_verified(self):
         return self.verified_at is not None
+
+
+class CatNumberFormat(models.Model):
+    """How the examination officer writes CAT exam numbers for one academic
+    year (said 12 October 2026), e.g. BLPCH4CAT1S1/2026/14:
+
+        {COLLEGE}  the college's initials, e.g. BLPCH
+        {PROG}     the programme code, e.g. PST
+        {LEVEL}    the NTA level, e.g. 4
+        {SEM}      the semester, 1 or 2
+        {CAT}      the test, 1 or 2
+        {YEAR}     the opening year in full, e.g. 2026;  {YY} in two digits
+        {SEQ}      the running number, padded to `sequence_width`
+
+    Each level's CAT starts at 1 in each semester: the number names the level,
+    the semester and the test, so the running number only has to tell the
+    students of one sitting apart."""
+    academic_year = models.OneToOneField(AcademicYear, on_delete=models.CASCADE, related_name='cat_number_format')
+    pattern = models.CharField(max_length=120, default='{COLLEGE}{LEVEL}CAT{CAT}S{SEM}/{YEAR}/{SEQ}')
+    college_code = models.CharField(max_length=20, default='BLPCH')
+    sequence_width = models.PositiveSmallIntegerField(default=0, help_text='0: no padding.')
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    PLACEHOLDERS = ('{COLLEGE}', '{PROG}', '{LEVEL}', '{SEM}', '{CAT}', '{YEAR}', '{YY}', '{SEQ}')
+
+    def render(self, *, sequence, level, semester, cat, programme=None):
+        year = self.academic_year.name.split('/')[0]
+        values = {
+            '{COLLEGE}': self.college_code, '{PROG}': programme.code if programme else '',
+            '{LEVEL}': str(getattr(level, 'order', '') or ''), '{SEM}': str(semester.number),
+            '{CAT}': str(cat), '{YEAR}': year, '{YY}': year[-2:],
+            '{SEQ}': str(sequence).zfill(self.sequence_width) if self.sequence_width else str(sequence),
+        }
+        text = self.pattern
+        for key, value in values.items():
+            text = text.replace(key, value)
+        return text
+
+
+class CatExamNumber(models.Model):
+    """One student's exam number for CAT 1 or CAT 2 of one semester. Kept once
+    given: generating again numbers only the students who have none."""
+    CAT1, CAT2 = 1, 2
+    CAT_CHOICES = [(CAT1, 'CAT 1'), (CAT2, 'CAT 2')]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='cat_numbers')
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name='cat_numbers')
+    cat = models.PositiveSmallIntegerField(choices=CAT_CHOICES)
+    class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, related_name='cat_numbers')
+    sequence = models.PositiveIntegerField()
+    number = models.CharField(max_length=80)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                   related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['semester', 'cat', 'class_level', 'sequence']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'semester', 'cat'], name='one_cat_number_per_sitting'),
+            models.UniqueConstraint(fields=['semester', 'cat', 'number'], name='cat_numbers_unique'),
+        ]
+
+    def __str__(self):
+        return self.number
 
 
 class PasswordReset(models.Model):

@@ -851,6 +851,7 @@
         <button class="nav-sub-btn" data-adm-section="all" onclick="showAdmissionSection('all', this)">All applications</button>
         <button class="nav-sub-btn" data-adm-section="dueback" data-roles="principal admission" onclick="showAdmissionSection('dueback', this)">Expected back</button>
         <button class="nav-sub-btn" data-adm-section="items" data-roles="principal finance" onclick="showAdmissionSection('items', this)">Items check</button>
+        <button class="nav-sub-btn" data-adm-section="classlist" onclick="showAdmissionSection('classlist', this)">Class lists</button>
         <button class="nav-sub-btn" data-adm-section="veta" data-roles="principal dparc admission records finance" onclick="showAdmissionSection('veta', this)">VETA courses</button>
         <button class="nav-sub-btn" data-adm-section="settings" data-roles="principal admission" onclick="showAdmissionSection('settings', this)">Window &amp; ID numbers</button>
       </div>
@@ -924,6 +925,7 @@
       </div>
     </div>
     <button class="nav-btn" data-page="returning" data-roles="principal dparc exam superuser" onclick="showPage('returning',this); loadReturning()"><span class="icon"><i class="bi bi-arrow-repeat"></i></span> Returning Students</button>
+    <button class="nav-btn" data-page="catnumbers" data-roles="principal dparc exam superuser" onclick="showPage('catnumbers',this); openCatNumbers()"><span class="icon"><i class="bi bi-123"></i></span> CAT Exam Numbers</button>
     <div class="nav-group admin-only exam-only" data-roles="principal dparc exam superuser" id="declarations-nav-group">
       <button class="nav-btn" data-page="declarations" onclick="toggleDeclarationsMenu(event)"><span class="icon"><i class="bi bi-pin-angle"></i></span> Exam Declarations <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
@@ -1192,6 +1194,41 @@
         <div class="table-wrap"><table>
           <thead><tr><th>Reg. No.</th><th>Name</th><th>Standing</th><th>Back to</th><th>Modules owed</th><th>From</th></tr></thead>
           <tbody id="ret-tbody"></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <div class="page" id="page-catnumbers">
+      <div class="page-title">CAT Exam Numbers</div>
+      <div class="page-sub">Exam numbers for CAT 1 and CAT 2, given to each level's class list. A number once given is kept: generating again numbers only the students who have none, continuing the run.</div>
+      <div class="card">
+        <div class="card-title">How the numbers are written <span id="cat-year" style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;"></span>
+          <span class="tip" tabindex="0" role="note" aria-label="Help: CAT number format" data-tip="{COLLEGE} the college initials · {PROG} programme code · {LEVEL} NTA level · {SEM} semester · {CAT} 1 or 2 · {YEAR} e.g. 2026, {YY} e.g. 26 · {SEQ} the running number. {SEQ} is required; put {LEVEL} in it so two levels never share a number. Set for the academic year — next year starts from it.">?</span></div>
+        <div class="form-grid-3">
+          <div class="field" style="grid-column:span 2;"><label>Format</label><input id="cat-pattern" oninput="previewCatFormat()" placeholder="{COLLEGE}{LEVEL}CAT{CAT}S{SEM}/{YEAR}/{SEQ}"></div>
+          <div class="field"><label>College initials</label><input id="cat-college" oninput="previewCatFormat()" maxlength="20" placeholder="BLPCH"></div>
+          <div class="field"><label>Running number digits</label>
+            <select id="cat-width" onchange="previewCatFormat()"><option value="0">As it comes (1, 2 … 14)</option><option value="2">2 (01)</option><option value="3">3 (001)</option><option value="4">4 (0001)</option></select></div>
+          <div class="field" style="grid-column:span 2;"><label>Example — level 4, semester 1, CAT 1, student 7</label><div id="cat-sample" style="font-family:var(--font-mono);padding:8px 0;"></div></div>
+        </div>
+        <button class="btn btn-primary btn-sm exam-edit" onclick="saveCatFormat(event)">Save the format</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Numbers</div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field"><label>Semester</label><select id="cat-semester" onchange="loadCatNumbers()"></select></div>
+          <div class="field"><label>Level</label><select id="cat-level" onchange="loadCatNumbers()"></select></div>
+          <div class="field"><label>Test</label><select id="cat-which" onchange="loadCatNumbers()"><option value="1">CAT 1</option><option value="2">CAT 2</option></select></div>
+          <div class="field exam-edit"><label>New numbers go</label><select id="cat-order"><option value="name">In name order</option><option value="reg_no">In registration number order</option></select></div>
+        </div>
+        <div id="cat-note" style="margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+          <button class="btn btn-primary btn-sm exam-edit" onclick="generateCatNumbers(event)"><i class="bi bi-123"></i> Give numbers</button>
+          <button class="btn btn-secondary btn-sm" onclick="downloadCatNumbers()"><i class="bi bi-download"></i> Excel</button>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>CAT No.</th><th>Name</th><th>NACTVET Reg. No.</th><th>Status</th><th>Modules repeated</th></tr></thead>
+          <tbody id="cat-tbody"><tr><td colspan="5"><div class="empty">Choose a semester and a level</div></td></tr></tbody>
         </table></div>
       </div>
     </div>
@@ -1516,6 +1553,23 @@
             <tbody id="adm-dueback-tbody"><tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-people"></i></div>Nobody outstanding</div></td></tr></tbody>
           </table>
         </div>
+      </div>
+
+      <div class="card" data-adm-section="classlist">
+        <div class="card-title">Class list <span class="tip" tabindex="0" role="note" aria-label="Help: class list" data-tip="Everybody at the level this semester, by name: NACTVET registration number, and first sitting or repeater. A repeater's repeat modules are listed. While the admission window is open the list is provisional — students are still being admitted; once it closes it is the class the semester runs with.">?</span></div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field"><label>Semester</label><select id="cl-semester" onchange="loadClassList()"></select></div>
+          <div class="field"><label>Level</label><select id="cl-level" onchange="loadClassList()"></select></div>
+          <div class="field"><label>Programme</label><select id="cl-programme" onchange="loadClassList()"></select></div>
+        </div>
+        <div id="cl-note" style="margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+          <button class="btn btn-secondary btn-sm" onclick="downloadClassList()"><i class="bi bi-download"></i> Excel</button>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>#</th><th>Name</th><th>NACTVET Reg. No.</th><th>Status</th><th>Modules repeated</th></tr></thead>
+          <tbody id="cl-tbody"><tr><td colspan="5"><div class="empty">Choose a semester and a level</div></td></tr></tbody>
+        </table></div>
       </div>
 
       <div class="card" data-adm-section="items">
@@ -1976,6 +2030,17 @@
           <input id="att-topic" placeholder="e.g. Introduction to Financial Statements" />
         </div>
       </div>
+      <div class="card" id="att-register-card" style="display:none">
+        <div class="card-title"><i class="bi bi-journal-text"></i>&nbsp;Class attendance register (print)
+          <span class="tip" tabindex="0" role="note" aria-label="Help: attendance register" data-tip="The college's register for this module, in Word: the cover with the crest, the NTA level, the module code and name; the students' names and NACTVET numbers, five sessions to a page; the summary of sessions and the signatures. Say how many sessions the module has — the register has exactly that many. Repeaters are listed last, marked (Repeat).">?</span></div>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+          <div class="field" style="margin:0;max-width:170px;"><label>Sessions in this module *</label>
+            <input type="number" id="att-reg-sessions" min="1" max="100" step="1" inputmode="numeric"></div>
+          <button class="btn btn-primary btn-sm" onclick="downloadAttendanceRegister(event)"><i class="bi bi-download"></i> Download register (Word)</button>
+        </div>
+        <div id="att-reg-note" style="font-size:.78rem;color:var(--muted);margin-top:8px;"></div>
+      </div>
+
       <div class="card" id="att-roster-card" style="display:none">
         <div class="card-title">
           <span>👥 Attendance Roster</span>
@@ -2070,6 +2135,12 @@
           <label>Search Students</label>
           <input id="res-search" type="text" placeholder="Search by name or reg no" oninput="onResSearchChange()" style="width:100%;" />
         </div>
+        <div class="field" style="min-width:200px; margin-bottom:0;">
+          <label>Students <span class="tip" tabindex="0" role="note" aria-label="Help: continuing and repeaters" data-tip="As NACTVET keeps them, a module's continuing students and its repeaters are entered, approved, printed and downloaded apart. Repeaters' results complete the semester they failed.">?</span></label>
+          <select id="res-sitting" onchange="applyResultsSitting()">
+            <option value="continuing">Continuing</option><option value="repeaters">Repeaters</option></select>
+          <div id="res-sitting-hint" style="font-size:.72rem;color:var(--orange);margin-top:3px;"></div>
+        </div>
       </div>
       <div class="card admin-only" id="authority-grade-card" style="display:none;">
         <div class="card-title">📥 Authority Grade Import</div>
@@ -2078,6 +2149,8 @@
           <div class="field"><label>Semester *</label><select id="auth-grade-semester"><option value="">— select semester —</option></select></div>
           <div class="field"><label>Class Level *</label><select id="auth-grade-level"><option value="">— select level —</option></select></div>
           <div class="field"><label>Grade File</label><input id="auth-grade-file" type="file" accept=".xlsx,.xls,.csv"></div>
+          <div class="field"><label>Sheet</label>
+            <select id="auth-grade-sheet"><option value="continuing">Continuing (first sittings)</option><option value="repeaters">Repeaters</option></select></div>
           <div class="field"><label>Sitting <span class="tip" tabindex="0" role="note" aria-label="Help: sitting" data-tip="NACTVET issues each semester twice: the first sitting, then the supplementary sitting, which lists every module again. On a supplementary sheet only the modules waiting for a supplementary are taken; a paper still starred there was failed again and is repeated. A sheet with exam numbers containing RSM is read as supplementary automatically.">?</span></label>
             <select id="auth-grade-sitting"><option value="first">First sitting</option><option value="supp">Supplementary sitting</option></select></div>
         </div>
@@ -2093,6 +2166,8 @@
           <div class="field"><label>Semester *</label><select id="sum-semester" onchange="loadResultsSummary()"></select></div>
           <div class="field"><label>Class level *</label><select id="sum-level" onchange="loadResultsSummary()"></select></div>
           <div class="field"><label>Find a student</label><input id="sum-search" placeholder="Name or registration" oninput="renderSummaryStudents()"></div>
+          <div class="field"><label>Sheet <span class="tip" tabindex="0" role="note" aria-label="Help: sheet" data-tip="As NACTVET keeps them: Continuing is the class's first sittings. Repeaters are the students sitting a repeat this semester — their repeat grades complete the semester they failed, which then reads cleared (or discontinued).">?</span></label>
+            <select id="sum-sheet" onchange="loadResultsSummary()"><option value="continuing">Continuing</option><option value="repeaters">Repeaters</option></select></div>
         </div>
         <div class="stats-grid" id="sum-stats"></div>
         <div class="card-title" style="font-size:.9rem;margin-top:14px;">Modules</div>
@@ -2559,6 +2634,8 @@
                 <option value="cash">Cash at the office</option>
               </select>
             </div>
+            <div class="field"><label>Paid into <span class="tip" tabindex="0" role="note" aria-label="Help: paid into" data-tip="The account on the slip. The payment then settles only that account's charges — tuition into the tuition account, the rest into the other-charges account. Choose it for every slip paid without an invoice (the long holiday).">?</span></label>
+              <select id="fin-pay-account"><option value="">— the oldest charges, any account —</option></select></div>
             <div class="field"><label>Bank / transaction ref.</label><input id="fin-pay-bankref" placeholder="from the slip" /></div>
             <div class="field"><label>EFD receipt no.</label><input id="fin-pay-efd" placeholder="from the machine" /></div>
             <div class="field"><label>Paid by</label><input id="fin-pay-payer" placeholder="name on the slip" /></div>
@@ -4837,11 +4914,28 @@ async function loadModuleRoster() {
     renderModuleRoster();
   } catch(e) { toast('Failed to load module students', 'var(--red)'); }
 }
+// After a repeater's name on the staff screens: they sit with the class but
+// their marks go on the repeaters' sheet and complete the semester they failed.
+function repeatTag(s) {
+  return s.attempt === 'repeat'
+    ? ' <span class="badge" style="background:var(--orange);font-size:.65rem;vertical-align:middle" title="Repeating this module: marks go on the Repeaters sheet">Repeat</span>'
+    : '';
+}
+// First sittings, then the repeaters under their own heading.
+function repeatersLast(rows) {
+  return [...rows.filter(s => s.attempt !== 'repeat'), ...rows.filter(s => s.attempt === 'repeat')];
+}
+function repeatersDivider(rows, i, cols) {
+  if (rows[i].attempt !== 'repeat' || (i > 0 && rows[i - 1].attempt === 'repeat')) return '';
+  const count = rows.filter(s => s.attempt === 'repeat').length;
+  return `<tr class="repeaters-divider"><td colspan="${cols}" style="background:var(--surface2);border-top:2px solid var(--orange);font-size:.75rem;font-weight:600;color:var(--orange);padding:6px 10px;">Repeaters (${count}) — repeating this module from an earlier semester</td></tr>`;
+}
+
 function renderModuleRoster() {
   const q = document.getElementById('roster-search').value.trim().toLowerCase();
-  const rows = moduleRosterRows.filter(s => !q || s.name.toLowerCase().includes(q) || s.nactvet_reg_no.toLowerCase().includes(q));
-  document.getElementById('module-roster-tbody').innerHTML = rows.length ? rows.map(s => `<tr>
-    <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(s.nactvet_reg_no)}</span></td><td>${safeText(s.name)}</td>
+  const rows = repeatersLast(moduleRosterRows.filter(s => !q || s.name.toLowerCase().includes(q) || s.nactvet_reg_no.toLowerCase().includes(q)));
+  document.getElementById('module-roster-tbody').innerHTML = rows.length ? rows.map((s, i) => `${repeatersDivider(rows, i, 5)}<tr>
+    <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(s.nactvet_reg_no)}</span></td><td>${safeText(s.name)}${repeatTag(s)}</td>
     <td>${s.class_level_name}</td><td>${s.semester_label}</td>
     <td>${(state.offices || {}).runs ? `<button class="btn btn-danger btn-sm" onclick="deleteRosterStudent(${s.id}, ${jsArg(s.name)})">Remove</button>` : ''}</td>
   </tr>`).join('') : '<tr><td colspan="5"><div class="empty">No matching students in this module</div></td></tr>';
@@ -5252,7 +5346,7 @@ function personRowHtml(p) {
       <thead><tr><th>Module</th><th>Level</th><th>Semester</th><th>Attendance</th><th></th></tr></thead>
       <tbody>${(p.enrollments || []).map(e => `
         <tr>
-          <td><strong>${safeText(e.module_code)}</strong> — ${safeText(e.module_name)}</td>
+          <td><strong>${safeText(e.module_code)}</strong> — ${safeText(e.module_name)}${repeatTag(e)}</td>
           <td style="font-size:.78rem">${safeText(e.class_level_name)}</td>
           <td style="font-size:.78rem">${safeText(e.semester_label)}</td>
           <td>${pctBadge(e.attendance_pct)}</td>
@@ -5451,7 +5545,7 @@ async function loadAttendanceRoster() {
   if (!modId) { document.getElementById('att-roster-card').style.display = 'none'; return; }
   try {
     const data = await api('GET', `/students/?module_id=${modId}`);
-    rosterStudents = (data.results ?? data).map(s => ({ ...s, status: 'P', sick_note: '' }));
+    rosterStudents = repeatersLast(data.results ?? data).map(s => ({ ...s, status: 'P', sick_note: '' }));
     renderRoster();
     document.getElementById('att-roster-card').style.display = 'block';
     updateSessionTypeLabel();
@@ -5475,10 +5569,10 @@ function renderRoster() {
     return;
   }
   tbody.innerHTML = rosterStudents.map((s, i) =>
-    `<tr id="row-${i}">
+    `${repeatersDivider(rosterStudents, i, 5)}<tr id="row-${i}">
       <td>${i+1}</td>
       <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(s.nactvet_reg_no)}</span></td>
-      <td>${safeText(s.name)}</td>
+      <td>${safeText(s.name)}${repeatTag(s)}</td>
       <td>
         <div class="att-toggle">
           <button onclick="setStatus(${i},'P')" class="${s.status==='P'?'st-p':''}">P</button>
@@ -5555,6 +5649,49 @@ async function submitAttendance() {
 function onAttendanceModuleChange() {
   loadAttendanceRoster();
   loadAttendanceHistory();
+  loadAttendanceRegister();
+}
+
+// The printed register (attendance/registers.py): the tutor declares the
+// module's sessions once; the Word file has exactly that many.
+async function loadAttendanceRegister() {
+  const card = document.getElementById('att-register-card');
+  const modId = document.getElementById('att-module').value;
+  state.attRegister = null;
+  if (!modId) { card.style.display = 'none'; return; }
+  try {
+    const info = await api('GET', `/attendance/register/?module_id=${encodeURIComponent(modId)}`);
+    state.attRegister = info;
+    document.getElementById('att-reg-sessions').value = info.sessions || '';
+    document.getElementById('att-reg-sessions').placeholder = `e.g. ${info.default_sessions}`;
+    const parts = [`${info.students} student(s)${info.repeaters ? `, ${info.repeaters} repeating` : ''}.`,
+      info.sessions ? `${info.sessions} sessions declared.` : 'No sessions declared yet.'];
+    if (info.admissions_open) parts.push(`Admissions are open until ${new Date(info.admissions_close).toLocaleDateString()}: students admitted later will not be on a copy printed now.`);
+    const note = document.getElementById('att-reg-note');
+    note.textContent = parts.join(' ');
+    note.style.color = info.admissions_open ? 'var(--orange)' : 'var(--muted)';
+    card.style.display = 'block';
+  } catch (e) { card.style.display = 'none'; }
+}
+
+async function downloadAttendanceRegister(event) {
+  const info = state.attRegister;
+  if (!info) return;
+  const sessions = Number(document.getElementById('att-reg-sessions').value);
+  if (!Number.isInteger(sessions) || sessions < 1 || sessions > info.max_sessions) {
+    toast(`Say how many sessions the module has (1 to ${info.max_sessions})`, 'var(--red)'); return;
+  }
+  if (!info.students) { toast('Nobody is enrolled in this module yet', 'var(--red)'); return; }
+  if (info.admissions_open && !confirm('Admissions are still open — students admitted later will not be on this copy. Download it anyway?')) return;
+  const done = working(event?.currentTarget, 'Preparing…');
+  try {
+    if (sessions !== info.sessions) {
+      Object.assign(info, await api('POST', '/attendance/register/', { module_id: info.module_id, sessions }));
+      loadAttendanceRegister();
+    }
+    window.location.href = `/api/attendance/register/download/?module_id=${encodeURIComponent(info.module_id)}&sessions=${sessions}`;
+  } catch (e) { toast(apiErrorText(e, 'Could not prepare the register'), 'var(--red)'); }
+  finally { setTimeout(done, 1200); }
 }
 
 async function loadAttendanceHistory() {
@@ -5815,7 +5952,8 @@ async function toggleClaim(id, el) {
 
 // ── RESULTS / CA MARKS PAGE ────────────────────────────────────────────────────
 let resModuleInfo = null;   // {id, name, code, has_practical, class_level, semester}
-let resData = [];           // array of result objects from API
+let resData = [];           // the chosen sitting's results (continuing or repeaters)
+let resAllData = [];        // every result for the module, both sittings
 let resSearchTerm = '';
 
 async function authorityTemplateData() {
@@ -5825,25 +5963,56 @@ async function authorityTemplateData() {
   const moduleData = await api('GET', `/modules/?semester_id=${encodeURIComponent(semesterId)}&class_level_id=${encodeURIComponent(levelId)}`);
   const modules = moduleData.results ?? moduleData;
   if (!modules.length) throw { detail: 'No modules found for the selected level and semester.' };
+  if (document.getElementById('auth-grade-sheet').value === 'repeaters') {
+    // NACTVET's repeaters' sheet: each repeater's whole semester, last time's
+    // grades in place and the repeat modules to fill — the upload takes only
+    // the repeat sittings, the rest are their earlier results.
+    const data = await api('GET', `/results-summary/?semester_id=${semesterId}&class_level_id=${levelId}&sheet=repeaters`);
+    const rows = data.students.map(s => {
+      const row = { 'Registration Number': s.reg_no, 'Student Name': s.name,
+                    'Sitting': 'Repeat: ' + (s.repeats || []).join(', '), 'Completes': s.origin };
+      modules.forEach(m => {
+        row[m.code] = (s.repeats || []).includes(m.code) ? (s.repeat_grades[m.code] || '')
+          : (m.code in s.grades ? (s.grades[m.code] || '') : 'NA');
+      });
+      return row;
+    });
+    return { modules, rows, levelId, repeaters: true };
+  }
   const rosters = await Promise.all(modules.map(m => api('GET', `/students/?module_id=${encodeURIComponent(m.id)}`)));
   const students = new Map();
+  // A module the student does not sit this semester reads NA (NACTVET's "not
+  // applicable"), so an empty cell always means "grade still to enter"; a
+  // repeater's row says which modules are repeat sittings.
   rosters.forEach((data, index) => (data.results ?? data).forEach(student => {
+    // The continuing sheet is the class's first sittings; repeat sittings go
+    // on the repeaters' sheet (NACTVET keeps the two apart).
+    if (student.attempt === 'repeat') return;
     const key = student.nactvet_reg_no.trim().toUpperCase();
-    if (!students.has(key)) students.set(key, { 'Registration Number': student.nactvet_reg_no, 'Student Name': student.name });
-    students.get(key)[modules[index].code] = '';
+    if (!students.has(key)) {
+      const row = { 'Registration Number': student.nactvet_reg_no, 'Student Name': student.name, 'Sitting': '' };
+      modules.forEach(m => { row[m.code] = 'NA'; });
+      students.set(key, row);
+    }
+    const row = students.get(key);
+    row[modules[index].code] = '';
+    if (student.attempt === 'repeat') {
+      row['Sitting'] = (row['Sitting'] ? row['Sitting'] + ', ' : 'Repeat: ') + modules[index].code;
+    }
   }));
   return { modules, rows: [...students.values()].sort((a, b) => a['Registration Number'].localeCompare(b['Registration Number'])), levelId };
 }
 
 async function downloadAuthorityGradeTemplate() {
   try {
-    const { modules, rows, levelId } = await authorityTemplateData();
-    const headers = ['Registration Number', 'Student Name', ...modules.map(m => m.code)];
+    const { modules, rows, levelId, repeaters } = await authorityTemplateData();
+    const headers = ['Registration Number', 'Student Name', 'Sitting', ...(repeaters ? ['Completes'] : []), ...modules.map(m => m.code)];
     const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
-    ws['!cols'] = [{ wch: 24 }, { wch: 30 }, ...modules.map(() => ({ wch: 14 }))];
+    ws['!cols'] = [{ wch: 24 }, { wch: 30 }, { wch: 22 }, ...modules.map(() => ({ wch: 14 }))];
     const help = XLSX.utils.aoa_to_sheet([
       ['AUTHORITY GRADE TEMPLATE INSTRUCTIONS'],
       ['Enter one authority grade under each module code. Do not edit registration numbers or module-code headings.'],
+      ['NA means the student does not sit that module this semester — leave it. "Repeat: …" in Sitting names their repeat sittings: a fail there (starred too) is a discontinuation.'],
       ['Item', 'Meaning'], ['Grade****', 'Failed both Written & Practical'],
       ['Grade***', 'Failed Written'], ['Grade**', 'Failed Practical'],
       ['Grade*', 'Failed Semester Exam (SE)'], ['*N*', 'Results Nullified'],
@@ -5853,7 +6022,7 @@ async function downloadAuthorityGradeTemplate() {
     XLSX.utils.book_append_sheet(wb, ws, 'Authority Grades');
     XLSX.utils.book_append_sheet(wb, help, 'Instructions');
     const level = state.levels.find(l => String(l.id) === String(levelId));
-    XLSX.writeFile(wb, `authority_grades_${(level?.name || 'level').replace(/\s+/g, '_')}.xlsx`);
+    XLSX.writeFile(wb, `authority_grades_${repeaters ? 'repeaters_' : ''}${(level?.name || 'level').replace(/\s+/g, '_')}.xlsx`);
     toast('Authority grade template downloaded', 'var(--green)');
   } catch(e) { toast(e?.detail || 'Could not create grade template', 'var(--red)'); }
 }
@@ -5887,7 +6056,8 @@ async function uploadAuthorityGrades() {
     const result = await api('POST', '/results/authority-grades/', {
       rows, sitting, semester_id: document.getElementById('auth-grade-semester').value,
     });
-    const same = result.unchanged ? `; ${result.unchanged} unchanged (not supplementaries)` : '';
+    const same = (result.unchanged ? `; ${result.unchanged} unchanged (not supplementaries)` : '')
+      + ((result.not_sitting || []).length ? `; ${result.not_sitting.length} skipped (not sitting that module this semester)` : '');
     toast(`Imported ${result.saved} authority grade(s)${same}${result.errors.length ? `; ${result.errors.length} error(s)` : ''}`, result.errors.length ? 'var(--yellow)' : 'var(--green)');
     if (result.errors.length) alert(`Imported ${result.saved} grade(s).\n\nNot imported:\n${result.errors.slice(0, 20).join('\n')}${result.errors.length > 20 ? '\n…' : ''}`);
     if (document.getElementById('res-flt-module').value) loadResultsModule();
@@ -5903,20 +6073,23 @@ async function loadResultsSummary() {
   const level = document.getElementById('sum-level').value;
   if (!semester || !level) return;
   try {
-    const data = await api('GET', `/results-summary/?semester_id=${semester}&class_level_id=${level}`);
+    const sheet = document.getElementById('sum-sheet').value;
+    const data = await api('GET', `/results-summary/?semester_id=${semester}&class_level_id=${level}&sheet=${sheet}`);
     state.resultsSummary = data;
     const c = data.counts;
     const tile = (label, value, colour, note = '') =>
       `<div class="stat-card" style="--c:var(${colour})"><div class="label">${label}</div><div class="value">${value}</div>${note ? `<div class="sublabel">${note}</div>` : ''}</div>`;
     const pct = n => c.total ? `${Math.round(100 * n / c.total)}%` : '';
     document.getElementById('sum-stats').innerHTML =
-      tile('Students', c.total, '--accent', data.average_gpa != null ? `average GPA ${data.average_gpa.toFixed(2)}` : '') +
+      tile(data.sheet === 'repeaters' ? 'Repeaters' : 'Students', c.total, '--accent', data.average_gpa != null ? `average GPA ${data.average_gpa.toFixed(2)}` : '') +
       tile('Passed', c.PASS, '--green', pct(c.PASS)) +
       tile('Supplementary', c.SUPP, '--yellow', pct(c.SUPP)) +
       tile('Repeat', c.REPEAT, '--orange', pct(c.REPEAT)) +
       tile('Discontinued', c.DISCO, '--red', pct(c.DISCO)) +
       tile('Waiting for results', c.INCOMPLETE, '--muted', c.withheld ? `${c.withheld} withheld on the portal` : '');
-    document.getElementById('sum-modules').innerHTML = data.modules.length ? data.modules.map(m => `<tr>
+    document.getElementById('sum-modules').innerHTML = !data.modules
+      ? '<tr><td colspan="8" style="color:var(--muted);">Each repeater is shown below with the semester their repeat completes.</td></tr>'
+      : data.modules.length ? data.modules.map(m => `<tr>
         <td><strong>${safeText(m.code)}</strong> <span style="color:var(--muted);font-size:.78rem;">${safeText(m.name)}</span></td>
         <td>${m.students}</td><td>${m.results}</td><td>${m.passed}</td><td>${m.supp}</td><td>${m.failed}</td><td>${m.waiting}</td>
         <td>${m.pass_rate == null ? '—' : `<strong>${m.pass_rate}%</strong>`}</td></tr>`).join('')
@@ -5936,13 +6109,16 @@ function renderSummaryStudents() {
       : s.remark === 'SUPP' ? safeText(s.supp.join(', '))
       : s.remark === 'INCOMPLETE' ? `waiting: ${safeText(s.waiting.join(', '))}`
       : safeText(s.failed.join(', '));
-    const grades = Object.entries(s.grades).map(([code, grade]) => `${safeText(code)} <strong>${safeText(grade || '—')}</strong>`).join(' · ');
+    const repeated = new Set(s.repeats || []);
+    const grades = Object.entries(s.grades).map(([code, grade]) =>
+      `${safeText(code)} <strong>${safeText(grade || '—')}</strong>${repeated.has(code) ? '<sup title="repeat">R</sup>' : ''}`).join(' · ');
     const portal = s.withheld_id
       ? `<span class="badge badge-yellow">withheld</span> <button class="btn btn-ghost btn-sm exam-office-only" onclick="releaseResults(${s.withheld_id})">Release</button>`
       : (s.profile_id ? `<button class="btn btn-ghost btn-sm exam-office-only" onclick="withholdResults(${s.profile_id})">Withhold</button>` : '');
     return `<tr>
-      <td>${safeText(s.reg_no)}</td><td>${safeText(s.name)}</td>
-      <td><strong>${s.gpa == null ? '—' : s.gpa.toFixed(2)}</strong></td>
+      <td>${safeText(s.reg_no)}</td><td>${safeText(s.name)}${s.origin
+        ? `<div style="font-size:.72rem;color:var(--muted)">completes ${safeText(s.origin)}</div>` : ''}</td>
+      <td><strong>${s.gpa == null ? '—' : s.gpa.toFixed(1)}</strong></td>
       <td><span class="badge ${REMARK_BADGES[s.remark] || 'badge-gen'}">${s.remark}</span> <span style="font-size:.75rem;">${detail}</span></td>
       <td style="font-size:.75rem;">${grades}</td>
       <td style="white-space:nowrap;">${portal}</td></tr>`;
@@ -6106,12 +6282,38 @@ async function loadResultsModule() {
       return;
     }
     resModuleInfo = data.module;
-    resData = data.results;
+    resAllData = data.results;
     document.getElementById('res-search').value = '';
     resSearchTerm = '';
+    applyResultsSitting(false);
     renderResultsPage();
     document.getElementById('res-module-info').style.display = 'block';
   } catch(e) { toast('Failed to load results', 'var(--red)'); }
+}
+
+// Continuing students and repeaters are entered, approved, printed and
+// downloaded apart, as NACTVET keeps them. Everything on the page reads resData,
+// so choosing a sitting here is all the rest needs.
+function applyResultsSitting(render = true) {
+  const select = document.getElementById('res-sitting');
+  const repeaters = resAllData.filter(r => r.attempt === 'repeat').length;
+  select.options[0].textContent = `Continuing (${resAllData.length - repeaters})`;
+  select.options[1].textContent = `Repeaters (${repeaters})`;
+  const wanted = select.value === 'repeaters' ? 'repeat' : 'normal';
+  resData = resAllData.filter(r => (r.attempt || 'normal') === wanted);
+  const elsewhere = select.value === 'repeaters' ? resAllData.length - repeaters : repeaters;
+  document.getElementById('res-sitting-hint').textContent = !elsewhere ? ''
+    : select.value === 'repeaters' ? `Entering repeaters' marks. ${elsewhere} continuing student(s) are on the Continuing sheet.`
+    : `${elsewhere} repeater(s) in this module: their marks go on the Repeaters sheet.`;
+  if (render) renderResultsPage();
+}
+
+function sittingLabel() {
+  return document.getElementById('res-sitting')?.value === 'repeaters' ? ' — REPEATERS' : '';
+}
+
+function sittingParam() {
+  return `sitting=${encodeURIComponent(document.getElementById('res-sitting')?.value || 'continuing')}&`;
 }
 
 function renderResultsPage() {
@@ -6523,7 +6725,7 @@ function renderResultsTable() {
       const statusClass = r.result_status === 'PASS' ? 'badge-green' : r.result_status === 'INCOMPLETE' ? 'badge-yellow' : 'badge-red';
       const approvalBadge = r.final_approved ? '<span class="badge badge-green">Approved</span>' : '<span class="badge badge-yellow">Hidden</span>';
       return `<tr>
-        <td>${i + 1}</td><td><span style="font-family:var(--font-mono);font-size:.75rem">${safeText(r.student_reg_no)}</span></td><td>${safeText(r.student_name)}</td>
+        <td>${i + 1}</td><td><span style="font-family:var(--font-mono);font-size:.75rem">${safeText(r.student_reg_no)}</span></td><td>${safeText(r.student_name)}${repeatTag(r)}</td>
         <td>${mkInput(r.id, 'field_ca', r.field_ca)}</td><td><strong>${caWeighted}</strong></td>
         <td>${mkInput(r.id, 'end_theory', r.end_theory, r.end_theory_absent)}</td><td><strong>${finalWeighted}</strong></td>
         <td><strong>${total}</strong></td><td><span class="badge ${grade === 'F' ? 'badge-red' : 'badge-blue'}">${grade}</span></td>
@@ -6545,8 +6747,8 @@ function renderResultsTable() {
       : '<span class="badge badge-yellow">Hidden</span>';
     let row = `<tr>
       <td>${i+1}</td>
-      <td><span style="font-family:var(--font-mono);font-size:.75rem">${r.student_reg_no}</span></td>
-      <td>${safeText(r.student_name)}</td>
+      <td><span style="font-family:var(--font-mono);font-size:.75rem">${safeText(r.student_reg_no)}</span></td>
+      <td>${safeText(r.student_name)}${repeatTag(r)}</td>
       <td>${mkInput(r.id,'assign1',r.assign1,r.assign1_absent)}</td>
       <td>${mkInput(r.id,'assign2',r.assign2,r.assign2_absent)}</td>
       <td>${mkInput(r.id,'cat1_theory',r.cat1_theory,r.cat1_theory_absent)}</td>
@@ -6590,7 +6792,7 @@ async function saveAllResults() {
     if (result.errors.length) console.warn('Save errors:', result.errors);
     // Reload fresh data
     const fresh = await api('GET', `/results/module/?module_id=${resModuleInfo.id}`);
-    resData = fresh.results;
+    resAllData = fresh.results; applyResultsSitting(false);
     renderResultsPage();
     document.getElementById(resModuleInfo?.is_field_module ? 'field-save-info' : 'res-save-info').textContent = `Last saved: ${new Date().toLocaleTimeString()}`;
   } catch(e) { toast(e?.detail || 'Save failed', 'var(--red)'); }
@@ -6604,7 +6806,7 @@ async function setCAApproval(approved) {
     const result = await api('POST', '/results/bulk_save/', payload);
     toast(`${approved ? 'Approved' : 'Hid'} ${result.saved} CA result(s)`, result.errors.length ? 'var(--yellow)' : 'var(--green)');
     const fresh = await api('GET', `/results/module/?module_id=${resModuleInfo.id}`);
-    resData = fresh.results;
+    resAllData = fresh.results; applyResultsSitting(false);
     renderResultsPage();
   } catch(e) {
     toast('CA approval update failed: ' + (e?.detail || ''), 'var(--red)');
@@ -6647,7 +6849,7 @@ function downloadResultsExcel() {
   const modId  = document.getElementById('res-flt-module').value;
   const semId  = document.getElementById('res-flt-sem').value;
   const lvlId  = document.getElementById('res-flt-level').value;
-  let url = '/api/results/download/?';
+  let url = '/api/results/download/?' + sittingParam();
   if (modId) url += `module_id=${modId}&`;
   if (semId) url += `semester_id=${semId}&`;
   if (lvlId) url += `class_level_id=${lvlId}&`;
@@ -6657,14 +6859,14 @@ function downloadResultsExcel() {
 function downloadCASignoffDocx() {
   const modId = document.getElementById('res-flt-module').value;
   if (!modId) { toast('Select a module before downloading the CA sign-off sheet.', 'var(--red)'); return; }
-  window.location.href = `/api/results/download/ca-signoff/?module_id=${encodeURIComponent(modId)}`;
+  window.location.href = `/api/results/download/ca-signoff/?${sittingParam()}module_id=${encodeURIComponent(modId)}`;
 }
 
 function downloadFinalExcel() {
   const modId  = document.getElementById('res-flt-module').value;
   const semId  = document.getElementById('res-flt-sem').value;
   const lvlId  = document.getElementById('res-flt-level').value;
-  let url = '/api/results/download/final/?';
+  let url = '/api/results/download/final/?' + sittingParam();
   if (modId) url += `module_id=${modId}&`;
   if (semId) url += `semester_id=${semId}&`;
   if (lvlId) url += `class_level_id=${lvlId}&`;
@@ -6677,7 +6879,7 @@ function downloadFieldResultsExcel() {
     toast('Select a field results module before exporting.', 'var(--red)');
     return;
   }
-  window.location.href = `/api/results/download/field/?module_id=${encodeURIComponent(modId)}`;
+  window.location.href = `/api/results/download/field/?${sittingParam()}module_id=${encodeURIComponent(modId)}`;
 }
 
 // ── END-OF-SEMESTER EXAM TABLE ─────────────────────────────────────────────────
@@ -6812,7 +7014,7 @@ async function setFinalApproval(approved) {
     const result = await api('POST', '/results/bulk_save/', payload);
     toast(`${approved ? 'Approved' : 'Unapproved'} ${result.saved} final result(s)`, result.errors.length ? 'var(--yellow)' : 'var(--green)');
     const fresh = await api('GET', `/results/module/?module_id=${resModuleInfo.id}`);
-    resData = fresh.results;
+    resAllData = fresh.results; applyResultsSitting(false);
     renderEndExamTable();
   } catch(e) {
     toast('Approval update failed: ' + (e?.detail || ''), 'var(--red)');
@@ -7005,7 +7207,7 @@ function printEligibility() {
 function printCAResults() {
   if (!resModuleInfo) { toast('Select a module first', 'var(--red)'); return; }
   document.getElementById('ca-print-header').textContent =
-    `CA Results — ${resModuleInfo.code} · ${resModuleInfo.name} · ${resModuleInfo.class_level} · ${resModuleInfo.semester} — ${new Date().toLocaleDateString()}`;
+    `CA Results${sittingLabel()} — ${resModuleInfo.code} · ${resModuleInfo.name} · ${resModuleInfo.class_level} · ${resModuleInfo.semester} — ${new Date().toLocaleDateString()}`;
   document.body.classList.add('print-ca');
   window.print();
   document.body.classList.remove('print-ca');
@@ -7014,7 +7216,7 @@ function printCAResults() {
 function printFinalResults() {
   if (!resModuleInfo) { toast('Select a module first', 'var(--red)'); return; }
   document.getElementById('final-print-header').textContent =
-    `Final Results — ${resModuleInfo.code} · ${resModuleInfo.name} · ${resModuleInfo.class_level} · ${resModuleInfo.semester} — ${new Date().toLocaleDateString()}`;
+    `Final Results${sittingLabel()} — ${resModuleInfo.code} · ${resModuleInfo.name} · ${resModuleInfo.class_level} · ${resModuleInfo.semester} — ${new Date().toLocaleDateString()}`;
   document.body.classList.add('print-final');
   window.print();
   document.body.classList.remove('print-final');
@@ -9173,6 +9375,17 @@ async function onPayProfileChange() {
 }
 
 async function loadOutstandingForPayment() {
+  const accounts = document.getElementById('fin-pay-account');
+  if (accounts && accounts.options.length < 2) {
+    try {
+      if (!state.bankAccounts?.length) {
+        const rows = await api('GET', '/bank-accounts/?is_active=true');
+        state.bankAccounts = rows.results ?? rows;
+      }
+      accounts.innerHTML = '<option value="">— the oldest charges, any account —</option>' + state.bankAccounts.map(a =>
+        `<option value="${a.id}">${safeText(a.bank_name)} ${safeText(a.account_number)} — ${safeText(a.purpose)}</option>`).join('');
+    } catch (e) { /* the list is a help */ }
+  }
   const profileId = document.getElementById('fin-pay-profile')?.value;
   const box = document.getElementById('fin-pay-outstanding');
   if (!box) return;
@@ -9217,9 +9430,17 @@ async function recordPayment() {
   };
   const invoiceId = document.getElementById('fin-pay-invoice').value;
   if (invoiceId) payload.invoice = Number(invoiceId);
+  const accountId = document.getElementById('fin-pay-account').value;
+  if (accountId) payload.bank_account = Number(accountId);
 
   try {
-    await api('POST', '/payments/record/', payload);
+    try {
+      await api('POST', '/payments/record/', payload);
+    } catch (e) {
+      // The same slip already in the ledger: fine only if it pays for both.
+      if (!e?.same_reference || !confirm(`${e.detail}\n\nRecord it for this student as well?`)) throw e;
+      await api('POST', '/payments/record/', { ...payload, allow_same_reference: true });
+    }
     ['fin-pay-amount', 'fin-pay-bankref', 'fin-pay-efd', 'fin-pay-payer', 'fin-pay-note',
      'fin-pay-invoice', 'fin-lookup-ref'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('fin-lookup-result').innerHTML = '';
@@ -9998,6 +10219,7 @@ const ADMISSION_SECTIONS = {
   settings: ['Window & ID numbers', 'When admissions run, and the college ID format.'],
   veta: ['VETA courses', 'Intakes, and students on their way through the desks.'],
   items: ['Items check', 'TPH book, calculator, rim paper — checked again each semester.'],
+  classlist: ['Class lists', 'A level\'s students this semester: first sitting or repeater.'],
 };
 
 function toggleAdmissionsMenu(event) {
@@ -10046,6 +10268,7 @@ async function showAdmissionSection(section, btn) {
     await loadItemChecks(1);
   }
   if (section === 'settings') await loadAdmissionSettings();
+  if (section === 'classlist') await openClassList();
 }
 
 // After something changes, refresh whatever is on screen.
@@ -10324,6 +10547,190 @@ async function uploadReturning(event) {
   if (!students.length) { toast('No rows with a registration number', 'var(--red)'); return; }
   if (!confirm(`Record ${students.length} returning student(s) from this sheet?`)) return;
   await sendReturning(students, event);
+}
+
+// ── Class lists (admission office) and CAT exam numbers (exam officer) ──────
+// One list behind both: everybody at the level this semester, first sitting
+// or repeater (classlists.py).
+function fillSemesterLevelPickers(semId, levelId) {
+  const sem = document.getElementById(semId);
+  if (!sem.options.length) {
+    sem.innerHTML = (state.semesters || []).map(s =>
+      `<option value="${s.id}">${safeText(s.label)}</option>`).join('');
+    const active = (state.semesters || []).find(s => s.is_active);
+    if (active) sem.value = active.id;
+  }
+  const level = document.getElementById(levelId);
+  if (!level.options.length) buildLevelOptions(level, false);
+}
+
+function classListNote(data) {
+  return data.final
+    ? `<div class="missing-note" style="border-left-color:var(--green)">Admissions for ${safeText(data.semester)} have closed: this is the class. ${data.first_sitting ?? ''}${data.first_sitting != null ? ' first sitting, ' + data.repeaters + ' repeating.' : ''}</div>`
+    : `<div class="missing-note" style="border-left-color:var(--orange)">Provisional — admissions for ${safeText(data.semester)} are still open, so students may still join and repeaters' modules may still change.${data.first_sitting != null ? ' So far ' + data.first_sitting + ' first sitting, ' + data.repeaters + ' repeating.' : ''}</div>`;
+}
+
+function statusBadge(status) {
+  return status === 'Repeater'
+    ? '<span class="badge" style="background:var(--orange)">Repeater</span>'
+    : '<span style="color:var(--muted)">First sitting</span>';
+}
+
+async function openClassList() {
+  await ensureProgrammes();
+  fillSemesterLevelPickers('cl-semester', 'cl-level');
+  const programme = document.getElementById('cl-programme');
+  if (!programme.options.length) buildProgrammeOptions(programme, 'All programmes');
+  await loadClassList();
+}
+
+async function loadClassList() {
+  const semester = document.getElementById('cl-semester').value;
+  const level = document.getElementById('cl-level').value;
+  const tbody = document.getElementById('cl-tbody');
+  state.classList = null;
+  if (!semester || !level) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty">Choose a semester and a level</div></td></tr>';
+    document.getElementById('cl-note').innerHTML = '';
+    return;
+  }
+  const programme = document.getElementById('cl-programme').value;
+  try {
+    const data = await api('GET', `/class-list/?semester_id=${encodeURIComponent(semester)}&class_level_id=${encodeURIComponent(level)}`
+      + (programme ? `&programme_id=${encodeURIComponent(programme)}` : ''));
+    state.classList = data;
+    document.getElementById('cl-note').innerHTML = classListNote(data);
+    tbody.innerHTML = data.rows.length ? data.rows.map((r, i) => `<tr>
+        <td>${i + 1}</td><td>${safeText(r.name)}</td>
+        <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}</td>
+        <td>${statusBadge(r.status)}</td><td>${safeText(r.modules_repeated.join(', ') || '—')}</td></tr>`).join('')
+      : '<tr><td colspan="5"><div class="empty">Nobody at this level this semester</div></td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load the class list'), 'var(--red)'); }
+}
+
+function downloadClassList() {
+  const data = state.classList;
+  if (!data || !data.rows.length) { toast('Load a class list first', 'var(--red)'); return; }
+  const ws = XLSX.utils.aoa_to_sheet([
+    [`BLUE PHARMA COLLEGE OF HEALTH — CLASS LIST`],
+    [`${data.class_level} · ${data.semester}${data.programme ? ' · ' + data.programme : ''}`],
+    [data.final ? 'Admissions closed: final list' : `PROVISIONAL — admissions still open (${new Date().toLocaleDateString()})`],
+    [],
+    ['S/N', 'Name', 'NACTVET Reg. No.', 'Status', 'Modules repeated'],
+    ...data.rows.map((r, i) => [i + 1, r.name, r.reg_no, r.status, r.modules_repeated.join(', ')]),
+    [],
+    [`First sitting: ${data.first_sitting}`, `Repeaters: ${data.repeaters}`, `Total: ${data.rows.length}`],
+  ]);
+  ws['!cols'] = [{ wch: 5 }, { wch: 34 }, { wch: 22 }, { wch: 14 }, { wch: 40 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Class list');
+  XLSX.writeFile(wb, `class_list_${data.class_level.replace(/\s+/g, '_')}_${data.semester.replace(/[^\w]+/g, '_')}.xlsx`);
+}
+
+async function openCatNumbers() {
+  const canEdit = !!(state.offices?.exam || state.isSuperuser);
+  document.querySelectorAll('#page-catnumbers .exam-edit').forEach(el => el.style.display = canEdit ? '' : 'none');
+  ['cat-pattern', 'cat-college', 'cat-width'].forEach(id => document.getElementById(id).disabled = !canEdit);
+  fillSemesterLevelPickers('cat-semester', 'cat-level');
+  try {
+    const fmt = await api('GET', '/cat-number-format/');
+    state.catFormat = fmt;
+    document.getElementById('cat-year').textContent = `— ${fmt.academic_year}`;
+    document.getElementById('cat-pattern').value = fmt.pattern;
+    document.getElementById('cat-college').value = fmt.college_code;
+    document.getElementById('cat-width').value = String(fmt.sequence_width);
+    previewCatFormat();
+  } catch (e) { toast(apiErrorText(e, 'Could not load the CAT number format'), 'var(--red)'); }
+  await loadCatNumbers();
+}
+
+function previewCatFormat() {
+  // The same substitution as CatNumberFormat.render, for the example only.
+  const width = Number(document.getElementById('cat-width').value || 0);
+  const year = (state.catFormat?.academic_year || '2026/2027').split('/')[0];
+  const programme = (state.programmes || [])[0]?.code || 'PST';
+  const values = { '{COLLEGE}': document.getElementById('cat-college').value.trim(), '{PROG}': programme,
+    '{LEVEL}': '4', '{SEM}': '1', '{CAT}': '1', '{YEAR}': year, '{YY}': year.slice(-2),
+    '{SEQ}': width ? '7'.padStart(width, '0') : '7' };
+  let text = document.getElementById('cat-pattern').value.trim();
+  Object.entries(values).forEach(([key, value]) => { text = text.split(key).join(value); });
+  const missing = !document.getElementById('cat-pattern').value.includes('{SEQ}');
+  document.getElementById('cat-sample').innerHTML = safeText(text || '—')
+    + (missing ? ' <span style="color:var(--red);font-family:inherit;font-size:.78rem">— needs {SEQ}</span>' : '');
+}
+
+async function saveCatFormat(event) {
+  const done = working(event?.currentTarget, 'Saving…');
+  try {
+    state.catFormat = await api('POST', '/cat-number-format/', {
+      pattern: document.getElementById('cat-pattern').value.trim(),
+      college_code: document.getElementById('cat-college').value.trim(),
+      sequence_width: document.getElementById('cat-width').value });
+    previewCatFormat();
+    toast('Format saved. Numbers already given keep the old one.', 'var(--green)');
+  } catch (e) { toast(apiErrorText(e, 'Could not save the format'), 'var(--red)'); }
+  finally { done(); }
+}
+
+function catQuery() {
+  return { semester_id: document.getElementById('cat-semester').value,
+           class_level_id: document.getElementById('cat-level').value,
+           cat: document.getElementById('cat-which').value };
+}
+
+function renderCatNumbers(data) {
+  state.catNumbers = data;
+  const given = data.rows.filter(r => r.cat_number).length;
+  document.getElementById('cat-note').innerHTML = classListNote(data)
+    + `<div style="font-size:.8rem;color:var(--muted);margin-top:6px;">${given} of ${data.rows.length} numbered for CAT ${data.cat}.</div>`;
+  document.getElementById('cat-tbody').innerHTML = data.rows.length ? data.rows.map(r => `<tr>
+      <td style="font-family:var(--font-mono);font-size:.8rem">${r.cat_number ? safeText(r.cat_number) : '<span style="color:var(--muted)">not yet</span>'}</td>
+      <td>${safeText(r.name)}</td><td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}</td>
+      <td>${statusBadge(r.status)}</td><td>${safeText(r.modules_repeated.join(', ') || '—')}</td></tr>`).join('')
+    : '<tr><td colspan="5"><div class="empty">Nobody at this level this semester</div></td></tr>';
+}
+
+async function loadCatNumbers() {
+  const q = catQuery();
+  state.catNumbers = null;
+  if (!q.semester_id || !q.class_level_id) {
+    document.getElementById('cat-tbody').innerHTML = '<tr><td colspan="5"><div class="empty">Choose a semester and a level</div></td></tr>';
+    document.getElementById('cat-note').innerHTML = '';
+    return;
+  }
+  try {
+    renderCatNumbers(await api('GET', '/cat-numbers/?' + new URLSearchParams(q)));
+  } catch (e) { toast(apiErrorText(e, 'Could not load CAT numbers'), 'var(--red)'); }
+}
+
+async function generateCatNumbers(event) {
+  const q = catQuery();
+  if (!q.semester_id || !q.class_level_id) { toast('Choose the semester and the level', 'var(--red)'); return; }
+  const level = document.getElementById('cat-level').selectedOptions[0]?.textContent || 'this level';
+  if (!confirm(`Give CAT ${q.cat} numbers to every ${level} student who has none yet? Numbers already given stay as they are.`)) return;
+  const done = working(event?.currentTarget, 'Numbering…');
+  try {
+    const data = await api('POST', '/cat-numbers/', { ...q, order: document.getElementById('cat-order').value });
+    renderCatNumbers(data);
+    toast(data.numbered_now ? `${data.numbered_now} numbered` : 'Everybody already had a number', 'var(--green)');
+  } catch (e) { toast(apiErrorText(e, 'Could not give the numbers'), 'var(--red)'); }
+  finally { done(); }
+}
+
+function downloadCatNumbers() {
+  const data = state.catNumbers;
+  if (!data || !data.rows.length) { toast('Load a level first', 'var(--red)'); return; }
+  const ws = XLSX.utils.aoa_to_sheet([
+    [`BLUE PHARMA COLLEGE OF HEALTH — CAT ${data.cat} EXAM NUMBERS`],
+    [`${data.class_level} · ${data.semester}`],
+    [],
+    ['S/N', 'CAT No.', 'Name', 'NACTVET Reg. No.', 'Status', 'Modules repeated'],
+    ...data.rows.map((r, i) => [i + 1, r.cat_number, r.name, r.reg_no, r.status, r.modules_repeated.join(', ')]),
+  ]);
+  ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 34 }, { wch: 22 }, { wch: 14 }, { wch: 36 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `CAT ${data.cat}`);
+  XLSX.writeFile(wb, `cat${data.cat}_numbers_${data.class_level.replace(/\s+/g, '_')}_${data.semester.replace(/[^\w]+/g, '_')}.xlsx`);
 }
 
 async function loadDueBack() {

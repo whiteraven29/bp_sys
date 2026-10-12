@@ -31,7 +31,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import admissions, analytics, evaluations, finance, lifecycle, notifications, passwords, progression, veta, health
+from . import admissions, analytics, classlists, registers, evaluations, finance, lifecycle, notifications, passwords, progression, veta, health
 from .roles import (
     OPEN_ROLES, can_advance_semester, can_appoint, can_confirm_reviews, can_decide_requests,
     can_handle_requests, can_manage_accounts, can_manage_departments, can_manage_exams,
@@ -58,7 +58,7 @@ from .models import (
     ChargeType, FeeStructure, FeeInstallment, StudentProfile, StudentCharge,
     Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
     BankAccount, CollegeProfile,
-    Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration,
+    CatNumberFormat, Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration,
     OutstandingRepeat, SemesterReview, StudentStanding, StandingChange,
     AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck, Application,
     PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultWithholding,
@@ -661,8 +661,11 @@ def _result_statements(modules, class_level):
         a module to repeat           remark REPEAT      comment the module code(s)
     """
     statements = {}
-    for module in modules:
-        key = (module['semester_number'], module['semester'])
+    # Repeat sittings last: each takes the failed module's place in the
+    # statement of the semester it completes, so that one must be built first.
+    for module in sorted(modules, key=lambda m: bool(m.get('completes'))):
+        key = tuple(module['completes']) if module.get('completes') else (module['semester_number'], module['semester'])
+        label = key[1]
         if module.get('withheld'):
             # The college is keeping this semester's results from the student:
             # one line saying so, no grades, no GPA.
@@ -673,8 +676,8 @@ def _result_statements(modules, class_level):
         if not module['has_final_result'] or not module['result']:
             continue
         statement = statements.setdefault(key, {
-            'label': module['semester'],
-            'number': module['semester_number'],
+            'label': label,
+            'number': key[0],
             'modules': [],
             'points': [],
             'supp': [],
@@ -683,18 +686,34 @@ def _result_statements(modules, class_level):
         })
         result = module['result']
         status = result.get('result_status') or ''
-        statement['modules'].append({
+        entry = {
             'code': module['module_code'],
             'name': module['module_name'],
             # The authority's own markers read as words, not codes.
             'grade': {'WITHHELD': 'Withheld', 'NULLIFIED': 'Nullified'}.get(status)
                      or result.get('grade') or '—',
             'status': status or '—',
-        })
-        statement.setdefault('sittings', []).append({
+        }
+        sitting = {
             'status': status, 'attempt': module.get('attempt'), 'credits': module['credits'],
             'points': result.get('grade_point'),
-            'face_points': result.get('face_grade_point', result.get('grade_point'))})
+            'face_points': result.get('face_grade_point', result.get('grade_point'))}
+        sittings_list = statement.setdefault('sittings', [])
+        if module.get('completes'):
+            entry['note'] = f'Repeat, {module["semester"]}'
+            # In the failed module's place; the failed result itself is kept
+            # in the college's record, only this statement reads the repeat.
+            for index, existing in enumerate(statement['modules']):
+                if existing['code'].upper() == entry['code'].upper():
+                    statement['modules'][index] = entry
+                    sittings_list[index] = sitting
+                    break
+            else:
+                statement['modules'].append(entry)
+                sittings_list.append(sitting)
+        else:
+            statement['modules'].append(entry)
+            sittings_list.append(sitting)
         if result.get('grade_point') is not None:
             statement['points'].append((result['grade_point'], module['credits']))
         if status == 'SUPP':
@@ -717,6 +736,10 @@ def _result_statements(modules, class_level):
             {**sitting, 'code': module['code']}
             for module, sitting in zip(statement['modules'], sittings)])
         semester_gpa, remark = decision['gpa'], decision['remark']
+        # From the decision, so a semester a repeat completed reads as it now is.
+        statement['supp'] = sorted(decision['supp'])
+        statement['failed'] = sorted(set(decision['failed'] + decision['failed_again']
+                                         + decision['discontinued']))
         if remark == progression.DISCO:
             remark, comment = 'DISCO', ', '.join(sorted(set(
                 decision['failed_again'] + decision['discontinued'] + decision['failed']
@@ -847,12 +870,26 @@ def student_dashboard(request):
             module__semester__academic_year=active_sem.academic_year
         )
     enrollments = enrollments.select_related(
-        'module__class_level', 'module__semester__academic_year', 'profile'
+        'module__class_level', 'module__semester__academic_year', 'profile',
+        'repeat_of__module__semester__academic_year',
     ).prefetch_related(
         'attendance_records__session', 'result', 'module__sessions'
     ).order_by(
         'module__semester__number', 'module__name'
     )
+    # A repeat completes the semester it repeats, so that semester's first
+    # sittings are read too — its statement then shows the whole semester,
+    # the repeat in the failed module's place (as NACTVET keeps it).
+    enrollments = list(enrollments)
+    completed = {e.repeat_of.module.semester_id for e in enrollments
+                 if e.attempt == Student.REPEAT and e.repeat_of_id}
+    if completed:
+        enrollments += list(
+            Student.objects.filter(nactvet_reg_no=student.nactvet_reg_no, attempt=Student.NORMAL,
+                                   module__semester_id__in=completed)
+            .exclude(id__in=[e.id for e in enrollments])
+            .select_related('module__class_level', 'module__semester__academic_year', 'profile')
+            .prefetch_related('attendance_records__session', 'result', 'module__sessions'))
 
     # Semesters whose results the college is keeping from the student for now.
     withheld_semesters = set(ResultWithholding.objects.filter(
@@ -932,6 +969,10 @@ def student_dashboard(request):
             'semester': data['semester_label'],
             'semester_number': enrollment.module.semester.number,
             'attempt': enrollment.attempt,
+            # A repeat completes the semester it repeats (NACTVET keeps it so):
+            # its statement shows the repeat in the failed module's place.
+            'completes': ((enrollment.repeat_of.module.semester.number, enrollment.repeat_of.module.semester.label)
+                          if enrollment.attempt == Student.REPEAT and enrollment.repeat_of_id else None),
             'credits': enrollment.module.credits,
             'sessions_attended': data['sessions_attended'],
             'sessions_sick': data['sessions_sick'],
@@ -1598,6 +1639,99 @@ def returning_students(request):
     return Response({'results': results,
                      'recorded': sum(1 for row in results if row['ok']),
                      'refused': sum(1 for row in results if not row['ok'])})
+
+
+def _by_id(model, value):
+    value = str(value or '')
+    return model.objects.filter(id=value).first() if value.isdigit() else None
+
+
+@api_view(['GET'])
+@login_required
+def class_list(request):
+    """A level's class this semester: name, NACTVET registration number and
+    first sitting or repeater, with a repeater's repeat modules (said 12
+    October 2026). Provisional while the admission window is still open."""
+    user = request.user
+    if not (can_see_admissions(user) or can_read_exams(user)):
+        raise PermissionDenied('The admission office, the examination officer and the academic offices read class lists.')
+    semester = _by_id(Semester, request.query_params.get('semester_id'))
+    level = _by_id(ClassLevel, request.query_params.get('class_level_id'))
+    if semester is None or level is None:
+        return Response({'detail': 'Choose the semester and the level.'}, status=400)
+    programme = _by_id(Programme, request.query_params.get('programme_id'))
+    rows = classlists.public(classlists.class_list(semester, level, programme=programme))
+    return Response({'semester': str(semester), 'class_level': level.name,
+                     'programme': programme.code if programme else '',
+                     'final': classlists.class_list_is_final(semester), 'rows': rows,
+                     'first_sitting': sum(1 for row in rows if row['status'] == classlists.FIRST_SITTING),
+                     'repeaters': sum(1 for row in rows if row['status'] == classlists.REPEATER)})
+
+
+def _cat_format_data(fmt):
+    sample_level = ClassLevel.objects.filter(order__gt=0).first()
+    sample_semester = fmt.academic_year.semesters.order_by('number').first()
+    sample = (fmt.render(sequence=7, level=sample_level, semester=sample_semester, cat=1,
+                         programme=Programme.objects.order_by('code').first())
+              if sample_level and sample_semester else '')
+    return {'academic_year': fmt.academic_year.name, 'pattern': fmt.pattern,
+            'college_code': fmt.college_code, 'sequence_width': fmt.sequence_width,
+            'placeholders': list(CatNumberFormat.PLACEHOLDERS), 'sample': sample}
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def cat_number_format(request):
+    """How CAT exam numbers are written this academic year. The examination
+    officer sets it; GET {academic_year_id?} — the active year by default."""
+    if not (can_manage_exams(request.user) or can_read_exams(request.user)):
+        raise PermissionDenied('The examination officer sets CAT exam numbers.')
+    source = request.data if request.method == 'POST' else request.query_params
+    year = _by_id(AcademicYear, source.get('academic_year_id')) or AcademicYear.objects.filter(is_active=True).first()
+    if year is None:
+        return Response({'detail': 'There is no active academic year.'}, status=400)
+    if request.method == 'GET':
+        return Response(_cat_format_data(classlists.cat_format_for(year)))
+    if not can_manage_exams(request.user):
+        raise PermissionDenied('Only the examination officer sets how CAT exam numbers are written.')
+    try:
+        width = int(request.data.get('sequence_width') or 0)
+        fmt = classlists.set_cat_format(year, pattern=request.data.get('pattern'),
+                                        college_code=request.data.get('college_code'),
+                                        sequence_width=width, actor=request.user)
+    except (classlists.CatNumberError, ValueError) as exc:
+        return Response({'detail': str(exc)}, status=400)
+    return Response(_cat_format_data(fmt))
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def cat_numbers(request):
+    """GET {semester_id, class_level_id, cat}: the level's class with each
+    student's CAT number. POST the same plus {order: name|reg_no}: number the
+    students who have none yet — numbers already given never change."""
+    if not (can_manage_exams(request.user) or can_read_exams(request.user)):
+        raise PermissionDenied('The examination officer gives CAT exam numbers.')
+    source = request.data if request.method == 'POST' else request.query_params
+    semester = _by_id(Semester, source.get('semester_id'))
+    level = _by_id(ClassLevel, source.get('class_level_id'))
+    cat = str(source.get('cat') or '')
+    if semester is None or level is None or cat not in ('1', '2'):
+        return Response({'detail': 'Choose the semester, the level and CAT 1 or CAT 2.'}, status=400)
+    made = None
+    if request.method == 'POST':
+        if not can_manage_exams(request.user):
+            raise PermissionDenied('Only the examination officer gives CAT exam numbers.')
+        try:
+            made = classlists.generate_cat_numbers(semester, level, int(cat),
+                                                   order=str(request.data.get('order') or 'name'),
+                                                   actor=request.user)
+        except classlists.CatNumberError as exc:
+            return Response({'detail': str(exc)}, status=400)
+    rows = classlists.cat_number_rows(semester, level, int(cat))
+    return Response({'semester': str(semester), 'class_level': level.name, 'cat': int(cat),
+                     'final': classlists.class_list_is_final(semester), 'numbered_now': made,
+                     'rows': rows})
 
 
 @api_view(['GET', 'POST'])
@@ -2702,7 +2836,8 @@ def results_summary(request):
     if semester is None or level is None:
         return Response({'detail': 'Pick a semester and a class level.'}, status=status.HTTP_400_BAD_REQUEST)
     programme = Programme.objects.filter(id=request.query_params.get('programme_id')).first()
-    return Response(progression.results_summary(semester, level, programme=programme))
+    sheet = 'repeaters' if request.query_params.get('sheet') == 'repeaters' else 'continuing'
+    return Response(progression.results_summary(semester, level, programme=programme, sheet=sheet))
 
 
 @api_view(['POST'])
@@ -3636,7 +3771,7 @@ class StudentViewSet(viewsets.ModelViewSet):
                 'class_level_id': module.class_level_id, 'class_level_name': level,
                 'semester_id': module.semester_id, 'semester_label': semester,
                 'attendance_pct': serializer.get_attendance_pct(enrollment),
-                'has_portal_pin': enrollment.has_portal_pin,
+                'has_portal_pin': enrollment.has_portal_pin, 'attempt': enrollment.attempt,
             })
             for field in ('sessions_attended', 'sessions_sick', 'sessions_absent',
                           'sessions_total', 'theory_total', 'practical_total'):
@@ -5213,7 +5348,12 @@ class ResultViewSet(viewsets.ModelViewSet):
         from .grading import parse_authority_supp_grade, result_outcome
         serializer = StudentResultSerializer()
 
-        saved, unchanged, errors = 0, 0, []
+        saved, unchanged, errors, not_sitting = 0, 0, [], []
+        # Who sits anything this semester: a grade for a module they are not
+        # sitting (NACTVET's repeat sheets list every module, the passed ones
+        # too) is reported, not an error — their earlier result stands.
+        sitting_here = {reg.upper() for reg in Student.objects.filter(module__semester=semester)
+                        .values_list('nactvet_reg_no', flat=True)}
         with transaction.atomic():
             for row in rows:
                 reg_no = str(row.get('reg_no', '')).strip()
@@ -5227,7 +5367,12 @@ class ResultViewSet(viewsets.ModelViewSet):
                            .select_related('module__class_level')
                            .order_by(F('withdrawn_at').asc(nulls_first=True), '-id').first())
                 if student is None:
-                    errors.append(f'{reg_no} / {module_code}: not enrolled in {semester.label}')
+                    if raw == 'NA':
+                        continue                      # not applicable: nothing to record
+                    if reg_no.upper() in sitting_here:
+                        not_sitting.append(f'{reg_no} / {module_code}')
+                    else:
+                        errors.append(f'{reg_no} / {module_code}: not enrolled in {semester.label}')
                     continue
                 try:
                     parse = parse_authority_supp_grade if sitting == 'supp' else parse_authority_grade
@@ -5262,7 +5407,8 @@ class ResultViewSet(viewsets.ModelViewSet):
                 result.final_approved = True
                 result.save(update_fields=['authority_grade', 'authority_status', 'final_approved', 'updated_at'])
                 saved += 1
-        return Response({'saved': saved, 'unchanged': unchanged, 'sitting': sitting, 'errors': errors})
+        return Response({'saved': saved, 'unchanged': unchanged, 'sitting': sitting, 'errors': errors,
+                         'not_sitting': not_sitting})
 
     # ── Get or create results for every student in a module ────────────────────
     @action(detail=False, methods=['get'], url_path='module')
@@ -5647,7 +5793,7 @@ def download_ca_signoff(request):
         return HttpResponseForbidden('You do not have access to this module.')
 
     students = list(
-        Student.objects.studying().filter(module=module)
+        Student.objects.studying().filter(module=module, **_sitting_filter(request)[0])
         .select_related('result')
         .order_by('name', 'nactvet_reg_no')
     )
@@ -5667,7 +5813,8 @@ def download_ca_signoff(request):
 
     title = document.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = title.add_run('CONTINUOUS ASSESSMENT RESULTS ACKNOWLEDGEMENT')
+    run = title.add_run('CONTINUOUS ASSESSMENT RESULTS ACKNOWLEDGEMENT'
+                        + (' — REPEATERS' if _sitting_filter(request)[1] == 'Repeaters' else ''))
     run.bold = True
     run.font.size = Pt(14)
     details = document.add_paragraph()
@@ -5748,6 +5895,84 @@ def download_ca_signoff(request):
     return response
 
 
+
+def _register_module(user, module_id):
+    module_id = str(module_id or '')
+    if not module_id.isdigit():
+        return None
+    return (user_modules(user).select_related('class_level', 'semester__academic_year', 'programme__department')
+            .filter(pk=module_id).first())
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def attendance_register(request):
+    """The printed class attendance register for a module (said 12 October
+    2026). GET {module_id}: the sessions declared, the class on it, and
+    whether admissions are still open (students admitted later are not on a
+    copy printed now). POST {module_id, sessions}: the tutor declares how many
+    sessions the module has; the register has exactly that many."""
+    source = request.data if request.method == 'POST' else request.query_params
+    module = _register_module(request.user, source.get('module_id'))
+    if module is None:
+        raise PermissionDenied('Only a module you teach (or the academic offices) has a register here.')
+    if request.method == 'POST':
+        try:
+            sessions = registers.session_count(request.data.get('sessions'))
+        except registers.RegisterError as exc:
+            return Response({'detail': str(exc)}, status=400)
+        if request.data.get('sessions') in (None, ''):
+            return Response({'detail': 'Say how many sessions the module has.'}, status=400)
+        module.register_sessions = sessions
+        module.save(update_fields=['register_sessions'])
+    students = registers.register_students(module)
+    window = AdmissionWindow.objects.filter(semester=module.semester).first()
+    return Response({
+        'module_id': module.id, 'code': module.code, 'name': module.name,
+        'class_level': module.class_level.name, 'semester': module.semester.label,
+        'sessions': module.register_sessions, 'default_sessions': registers.DEFAULT_SESSIONS,
+        'max_sessions': registers.MAX_SESSIONS, 'students': len(students),
+        'repeaters': sum(1 for s in students if s.attempt == Student.REPEAT),
+        'admissions_open': bool(window and window.is_open(timezone.localdate())),
+        'admissions_close': window.closes_on.isoformat() if window else None,
+    })
+
+
+@login_required
+def download_attendance_register(request):
+    """The register as a Word document, to the college's template: the cover,
+    five sessions to a signing page, the summary of sessions and signatures."""
+    module = _register_module(request.user, request.GET.get('module_id'))
+    if module is None:
+        return HttpResponseForbidden('You do not have access to this module.')
+    try:
+        sessions = registers.session_count(request.GET.get('sessions'), module)
+    except registers.RegisterError as exc:
+        return HttpResponse(str(exc), status=400)
+    document = registers.build_register(module, sessions)
+    safe_code = re.sub(r'[^A-Za-z0-9_-]+', '_', module.code).strip('_') or 'module'
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    )
+    response['Content-Disposition'] = (f'attachment; filename="{safe_code}_attendance_register_'
+                                       f'{sessions}_sessions.docx"')
+    document.save(response)
+    return response
+
+
+def _sitting_filter(request, field='attempt'):
+    """The sitting a results sheet is for: `continuing` (first sittings) or
+    `repeaters` (repeat sittings) — NACTVET keeps the two apart, and so do the
+    CA entry, the CA sheets and the final sheets. Anything else: both.
+    Returns (filter kwargs, a label for titles and file names)."""
+    sitting = request.GET.get('sitting', '')
+    if sitting == 'repeaters':
+        return {field: Student.REPEAT}, 'Repeaters'
+    if sitting == 'continuing':
+        return {field: Student.NORMAL}, 'Continuing'
+    return {}, ''
+
+
 @login_required
 def download_results(request):
     if not can_read_exams(request.user):
@@ -5769,6 +5994,8 @@ def download_results(request):
     if module_id:      qs = qs.filter(student__module_id=module_id)
     if semester_id:    qs = qs.filter(student__module__semester_id=semester_id)
     if class_level_id: qs = qs.filter(student__module__class_level_id=class_level_id)
+    sitting_kwargs, sitting_label = _sitting_filter(request, 'student__attempt')
+    qs = qs.filter(**sitting_kwargs)
 
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -5776,7 +6003,7 @@ def download_results(request):
 
     wb = Workbook()
     ws = wb.active
-    ws.title = 'CA Results'
+    ws.title = 'CA Results' + (f' - {sitting_label}' if sitting_label else '')
 
     HDR_FILL = PatternFill('solid', fgColor='1E2D78')
     HDR_FONT = Font(bold=True, color='FFFFFF', size=10)
@@ -5898,7 +6125,7 @@ def download_field_results(request):
         return HttpResponseForbidden('Select a valid field results module.')
 
     students = (
-        Student.objects.studying().filter(module=module)
+        Student.objects.studying().filter(module=module, **_sitting_filter(request)[0])
         .select_related('result')
         .order_by('name', 'nactvet_reg_no')
     )
@@ -6002,6 +6229,8 @@ def download_final_results(request):
     if module_id:      qs = qs.filter(student__module_id=module_id)
     if semester_id:    qs = qs.filter(student__module__semester_id=semester_id)
     if class_level_id: qs = qs.filter(student__module__class_level_id=class_level_id)
+    sitting_kwargs, sitting_label = _sitting_filter(request, 'student__attempt')
+    qs = qs.filter(**sitting_kwargs)
 
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -6009,7 +6238,7 @@ def download_final_results(request):
 
     wb = Workbook()
     ws = wb.active
-    ws.title = 'Final Results'
+    ws.title = 'Final Results' + (f' - {sitting_label}' if sitting_label else '')
 
     HDR_FILL = PatternFill('solid', fgColor='1E2D78')
     HDR_FONT = Font(bold=True, color='FFFFFF', size=10)
@@ -6995,8 +7224,11 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
                 channel=data['channel'], bank_reference=data['bank_reference'],
                 efd_receipt_no=data['efd_receipt_no'], payer_name=data['payer_name'],
                 payer_relation=data['payer_relation'], proof=data.get('proof'),
-                note=data['note'], request=request,
+                note=data['note'], request=request, bank_account=data.get('bank_account'),
+                allow_same_reference=data.get('allow_same_reference', False),
             )
+        except finance.SameSlipError as exc:
+            return Response({'detail': str(exc), 'same_reference': True}, status=status.HTTP_409_CONFLICT)
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)

@@ -473,3 +473,99 @@ class MoreThanHalfFailedTests(AuthorityBase):
         summary = self.exam.get(f'/api/results-summary/?semester_id={self.sem1.id}'
                                 f'&class_level_id={self.level4.id}').data
         self.assertEqual(summary['students'][0]['remark'], 'DISCO')
+
+
+class RepeatersSheetTests(AuthorityBase):
+    """NACTVET keeps two sheets: continuing students, and repeaters — whose
+    repeat grades go into the semester they failed, which then reads complete
+    and cleared (said 12 October 2026)."""
+
+    def setUp(self):
+        super().setUp()
+        # Last year: three modules; the student failed PST04103.
+        self.old = {code: self.module(code, code, semester=self.old_sem1)
+                    for code in ('PST04101', 'PST04102', 'PST04103')}
+        self.profile = StudentProfile.objects.create(nactvet_reg_no='NIT/90', name='Rudia Repeater')
+        SemesterRegistration.objects.create(profile=self.profile, semester=self.old_sem1, programme=self.pst,
+                                            class_level=self.level4, kind=SemesterRegistration.NEW)
+        self.old_sittings = {code: Student.objects.create(nactvet_reg_no='NIT/90', name='Rudia Repeater',
+                                                          profile=self.profile, module=module)
+                             for code, module in self.old.items()}
+        self.upload(self.exam, [('NIT/90', 'PST04101', 'A'), ('NIT/90', 'PST04102', 'B'),
+                                ('NIT/90', 'PST04103', 'D')], semester=self.old_sem1)
+        # This year: the repeat sitting of PST04103 only, beside a continuing classmate.
+        self.repeat_module = self.module('PST04103', 'Pharmacognosy')
+        SemesterRegistration.objects.create(profile=self.profile, semester=self.sem1, programme=self.pst,
+                                            class_level=self.level4, kind=SemesterRegistration.REPEATING)
+        self.repeat = Student.objects.create(nactvet_reg_no='NIT/90', name='Rudia Repeater', profile=self.profile,
+                                             module=self.repeat_module, attempt=Student.REPEAT,
+                                             repeat_of=self.old_sittings['PST04103'])
+        self.student('NIT/91', 'Cleo Continuing', self.anatomy, self.maths, self.repeat_module)
+        self.upload(self.exam, [('NIT/91', 'PST04101', 'B'), ('NIT/91', 'PST04102', 'B'),
+                                ('NIT/91', 'PST04103', 'B')])
+
+    def summary(self, sheet):
+        return self.exam.get(f'/api/results-summary/?semester_id={self.sem1.id}'
+                             f'&class_level_id={self.level4.id}&sheet={sheet}').data
+
+    def test_the_continuing_sheet_leaves_repeaters_out(self):
+        self.upload(self.exam, [('NIT/90', 'PST04103', 'C')])
+        self.assertEqual([s['reg_no'] for s in self.summary('continuing')['students']], ['NIT/91'])
+
+    def test_a_passed_repeat_completes_the_failed_semester(self):
+        self.upload(self.exam, [('NIT/90', 'PST04103', 'C')])
+        row = self.summary('repeaters')['students'][0]
+        self.assertEqual(row['origin'], self.old_sem1.label)
+        self.assertEqual(row['repeats'], ['PST04103'])
+        self.assertEqual(row['grades'], {'PST04101': 'A', 'PST04102': 'B', 'PST04103': 'C'})
+        self.assertEqual((row['remark'], row['gpa']), ('PASS', 3.0))      # (4 + 3 + 2) / 3
+        # The failed result is untouched.
+        self.assertEqual(StudentResult.objects.get(student=self.old_sittings['PST04103']).authority_grade, 'D')
+
+    def test_a_failed_repeat_is_a_discontinuation_on_the_sheet(self):
+        self.upload(self.exam, [('NIT/90', 'PST04103', 'D*')])
+        self.assertEqual(self.summary('repeaters')['students'][0]['remark'], 'DISCO')
+
+    def test_waiting_until_the_repeat_grade_is_in(self):
+        self.assertEqual(self.summary('repeaters')['students'][0]['remark'], 'INCOMPLETE')
+
+    def test_the_portal_shows_the_completed_semester(self):
+        self.upload(self.exam, [('NIT/90', 'PST04103', 'C')])
+        self.repeat.set_portal_pin('Portal#2026', require_change=False)
+        self.repeat.save()
+        session = self.client.session
+        session['student_id'] = self.repeat.id
+        session.save()
+
+        statements = self.client.get('/student-dashboard/').context['result_statements']
+
+        self.assertEqual([s['label'] for s in statements], [self.old_sem1.label])
+        old = statements[0]
+        grades = {m['code']: (m['grade'], m.get('note', '')) for m in old['modules']}
+        self.assertEqual(grades['PST04103'], ('C', f'Repeat, {self.sem1.label}'))
+        self.assertEqual(grades['PST04101'][0], 'A')
+        self.assertEqual(old['comment'], 'PASS')
+        self.assertEqual(old['gpa'], 3.0)
+
+    def test_the_ca_and_final_sheets_are_downloaded_apart(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        self.client.force_login(self.exam_user)
+        # Opening the module's results page makes a result row for everybody
+        # (as the page does before anything is downloaded).
+        self.exam.get(f'/api/results/module/?module_id={self.repeat_module.id}')
+        for url in ('/api/results/download/', '/api/results/download/final/'):
+            for sitting, expected in (('continuing', {'NIT/91'}), ('repeaters', {'NIT/90'})):
+                response = self.client.get(f'{url}?module_id={self.repeat_module.id}&sitting={sitting}')
+                self.assertEqual(response.status_code, 200)
+                sheet = load_workbook(BytesIO(response.content)).active
+                found = {cell for row in sheet.iter_rows(values_only=True) for cell in row
+                         if isinstance(cell, str) and cell.startswith('NIT/')}
+                self.assertEqual(found, expected, f'{url} {sitting}')
+                if sitting == 'repeaters':
+                    self.assertIn('Repeaters', sheet.title)
+
+    def test_each_result_row_says_its_sitting(self):
+        rows = self.exam.get(f'/api/results/module/?module_id={self.repeat_module.id}').data['results']
+        self.assertEqual({r['student_reg_no']: r['attempt'] for r in rows},
+                         {'NIT/90': Student.REPEAT, 'NIT/91': Student.NORMAL})

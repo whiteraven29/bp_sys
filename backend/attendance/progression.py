@@ -309,7 +309,74 @@ def module_row(enrollment, serializer=None):
     return row
 
 
-def results_summary(semester, class_level, *, programme=None):
+def complete_with_repeats(origin_rows, repeat_rows):
+    """A repeater's original semester, completed by their repeat sittings —
+    as NACTVET keeps it (said 12 October 2026): the repeat result takes the
+    failed module's place, so the semester reads complete and cleared once the
+    repeats are passed. The failed result is not changed; this is a reading of
+    the two together. Repeat rows with no first sitting here are added."""
+    merged = {row['code'].upper(): row for row in origin_rows}
+    for row in repeat_rows:
+        merged[row['code'].upper()] = {**row, 'repeat': True}
+    return sorted(merged.values(), key=lambda row: row['code'])
+
+
+def repeaters_summary(semester, class_level, *, programme=None):
+    """NACTVET's repeaters' sheet: every student sitting a repeat this
+    semester at this level, with the semester they failed completed by the
+    repeat — the earlier grades, the repeat grades in the failed modules'
+    places, the GPA and remark of the whole. A repeat entered from paper (no
+    earlier semester in the system) shows its repeat sittings alone."""
+    from .grading import gpa_classification
+
+    sittings = (Student.objects.studying()
+                .filter(module__semester=semester, module__class_level=class_level,
+                        attempt=Student.REPEAT)
+                .select_related('module__class_level', 'module__programme', 'result', 'profile',
+                                'repeat_of__module__semester__academic_year')
+                .order_by('name', 'module__code'))
+    if programme is not None:
+        sittings = sittings.filter(module__programme=programme)
+    serializer = _result_serializer()
+    people = {}
+    for sitting in sittings:
+        people.setdefault(sitting.profile_id or sitting.nactvet_reg_no.upper(), []).append(sitting)
+
+    students = []
+    for rows_for_person in people.values():
+        first = rows_for_person[0]
+        origin = next((s.repeat_of.module.semester for s in rows_for_person if s.repeat_of_id), None)
+        origin_rows = []
+        if origin is not None:
+            origin_rows = [module_row(e, serializer) for e in Student.objects.filter(
+                nactvet_reg_no__iexact=first.nactvet_reg_no, module__semester=origin,
+                attempt=Student.NORMAL).select_related('module__class_level', 'result')]
+        repeat_rows = [module_row(s, serializer) for s in rows_for_person]
+        merged = complete_with_repeats(origin_rows, repeat_rows)
+        decision = decide(merged)
+        remark = decision['remark']
+        students.append({
+            'profile_id': first.profile_id, 'reg_no': first.nactvet_reg_no, 'name': first.name,
+            'origin': origin.label if origin else 'From the paper record',
+            'repeats': [row['code'] for row in repeat_rows],
+            'gpa': decision['gpa'], 'remark': remark,
+            'classification': gpa_classification(decision['gpa'], class_level) if remark == PASS else '',
+            'failed': sorted(set(decision['failed'] + decision['failed_again'] + decision['discontinued'])),
+            'supp': decision['supp'], 'waiting': decision['waiting'],
+            'grades': {row['code']: row['grade'] for row in merged},
+            'repeat_grades': {row['code']: row['grade'] for row in repeat_rows},
+        })
+    counts = {remark: sum(1 for student in students if student['remark'] == remark)
+              for remark in (PASS, SUPP, REPEAT, DISCO, INCOMPLETE)}
+    counts['total'] = len(students)
+    return {
+        'semester': semester.label, 'class_level': class_level.name, 'sheet': 'repeaters',
+        'counts': counts,
+        'students': sorted(students, key=lambda row: row['name']),
+    }
+
+
+def results_summary(semester, class_level, *, programme=None, sheet='continuing'):
     """How a class did in a semester, once the results are in — for the
     examination office: each student's GPA and where they stand, and each
     module's pass rate.
@@ -317,9 +384,16 @@ def results_summary(semester, class_level, *, programme=None):
     Read from the same per-module outcome the semester review uses, so the two
     never disagree. An authority grade counts as the result whether or not
     marks were entered.
+
+    Two sheets, as NACTVET keeps them (said 12 October 2026): `continuing` — the
+    class's first sittings — and `repeaters` (repeaters_summary), whose repeat
+    sittings complete the semester they failed.
     """
     from .grading import gpa_classification
     from .models import ResultWithholding
+
+    if sheet == 'repeaters':
+        return repeaters_summary(semester, class_level, programme=programme)
 
     enrollments = (Student.objects.studying()
                    .filter(module__semester=semester, module__class_level=class_level)
@@ -338,9 +412,17 @@ def results_summary(semester, class_level, *, programme=None):
 
     students = []
     for key, rows_for_person in people.items():
+        # Somebody sitting only repeats is on the repeaters' sheet. Somebody
+        # with first sittings is here — their grades and the module pass rates
+        # are the first sittings', but the remark and GPA are the whole
+        # semester's, as the review decides it (a failed repeat beside a
+        # passed year is still a discontinuation).
+        if all(enrollment.attempt == Student.REPEAT for enrollment in rows_for_person):
+            continue
         first = rows_for_person[0]
         rows = [module_row(enrollment, serializer) for enrollment in rows_for_person]
         decision = decide(rows)
+        rows = [row for row in rows if row.get('attempt') != Student.REPEAT]
         gpa, remark = decision['gpa'], decision['remark']
         supp, waiting = decision['supp'], decision['waiting']
         failed = sorted(set(decision['failed'] + decision['failed_again'] + decision['discontinued']))

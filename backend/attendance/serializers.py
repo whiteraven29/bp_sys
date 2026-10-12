@@ -296,9 +296,9 @@ class StudentSerializer(serializers.ModelSerializer):
             'semester_id', 'semester_label',
             'sessions_attended', 'sessions_sick', 'sessions_absent',
             'sessions_total', 'theory_total', 'practical_total',
-            'attendance_pct', 'has_portal_pin', 'portal_pin', 'created_at',
+            'attendance_pct', 'has_portal_pin', 'portal_pin', 'attempt', 'created_at',
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_at', 'attempt']
 
     def _may_set_password(self):
         """A student's portal password is set by the ICT officer or the
@@ -603,6 +603,8 @@ class SessionCreateSerializer(serializers.ModelSerializer):
 class StudentResultSerializer(serializers.ModelSerializer):
     student_name   = serializers.CharField(source='student.name',           read_only=True)
     student_reg_no = serializers.CharField(source='student.nactvet_reg_no', read_only=True)
+    # First sitting or repeat sitting: repeaters' CA is entered and printed apart.
+    attempt        = serializers.CharField(source='student.attempt', read_only=True)
     module_id      = serializers.IntegerField(source='student.module.id',   read_only=True)
     has_practical  = serializers.BooleanField(source='student.module.has_practical', read_only=True)
     is_field_module = serializers.BooleanField(source='student.module.is_field_module', read_only=True)
@@ -640,7 +642,7 @@ class StudentResultSerializer(serializers.ModelSerializer):
     class Meta:
         model  = StudentResult
         fields = [
-            'id', 'student', 'student_name', 'student_reg_no', 'module_id', 'has_practical', 'is_field_module',
+            'id', 'student', 'student_name', 'student_reg_no', 'attempt', 'module_id', 'has_practical', 'is_field_module',
             'field_ca',
             'assign1', 'assign2', 'cat1_theory', 'cat2_theory', 'cat1_practical', 'cat2_practical',
             'assign1_absent', 'assign2_absent', 'cat1_theory_absent', 'cat2_theory_absent',
@@ -1191,6 +1193,12 @@ class RecordPaymentSerializer(serializers.Serializer):
     payer_relation = serializers.ChoiceField(choices=Payment.PAYER_CHOICES, default=Payment.SELF)
     proof = serializers.FileField(required=False, allow_null=True)
     note = serializers.CharField(max_length=300, required=False, allow_blank=True, default='')
+    # Which CRDB account the slip was paid into: the payment settles that
+    # account's charges only. Matters most for a slip paid without an invoice.
+    bank_account = serializers.PrimaryKeyRelatedField(
+        queryset=BankAccount.objects.all(), required=False, allow_null=True)
+    # One slip paying for two students: confirmed by the accountant.
+    allow_same_reference = serializers.BooleanField(required=False, default=False)
 
     def validate_payment_date(self, value):
         # The date on the slip. It may be in the past — often is, when the
@@ -1209,13 +1217,16 @@ class RecordPaymentSerializer(serializers.Serializer):
             raise serializers.ValidationError({'invoice': 'That invoice was cancelled.'})
 
         # A receipt may only be banked once. Catches the double-keyed slip and
-        # the same M-Pesa code claimed twice.
-        for field, label in (('bank_reference', 'bank reference'), ('efd_receipt_no', 'EFD receipt number')):
-            value = (data.get(field) or '').strip()
-            if value and Payment.objects.filter(**{field: value}, reverses__isnull=True).exists():
-                raise serializers.ValidationError({
-                    field: f'That {label} has already been recorded.'
-                })
+        # the same M-Pesa code claimed twice. A payment since reversed does not
+        # count (recorded against the wrong student, it must be recordable for
+        # the right one). The bank reference is checked in finance.record_payment,
+        # where the accountant may confirm one slip paying for two students.
+        value = (data.get('efd_receipt_no') or '').strip()
+        if value and Payment.objects.filter(efd_receipt_no=value, reverses__isnull=True,
+                                            reversal__isnull=True).exists():
+            raise serializers.ValidationError({
+                'efd_receipt_no': 'That EFD receipt number has already been recorded.'
+            })
         return data
 
 

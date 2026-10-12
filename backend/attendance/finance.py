@@ -211,7 +211,6 @@ def structures_for(class_level, academic_year, programme=None):
 
 # ── raising charges ───────────────────────────────────────────────────────────
 
-@transaction.atomic
 # ── new or continuing, and when things fall due ──────────────────────────────
 
 def entry_for(profile, academic_year, registration=None):
@@ -270,6 +269,7 @@ def _instalments(structure, schedule):
     return [(row.number, row.amount, row.due_date, 1) for row in schedule_rows]
 
 
+@transaction.atomic
 def generate_charges(profile, academic_year, *, actor=None, class_level=None, programme=None,
                      entry=None, readmitted=None):
     """Raise every automatic charge this student owes for the year, and the
@@ -1375,11 +1375,26 @@ def invoice_status(invoice, today=None):
 
 # ── payments ──────────────────────────────────────────────────────────────────
 
+class SameSlipError(ValueError):
+    """This bank reference is already in the ledger."""
+
+
+def payment_with_reference(bank_reference):
+    """A payment already recorded under this bank reference, not reversed."""
+    reference = (bank_reference or '').strip()
+    if not reference:
+        return None
+    return (Payment.objects.filter(bank_reference__iexact=reference, reverses__isnull=True)
+            .exclude(channel=Payment.CREDIT).filter(reversal__isnull=True)
+            .select_related('profile').first())
+
+
 @transaction.atomic
 def record_payment(profile, amount, payment_date, *, recorded_by, invoice=None,
                    channel=Payment.CRDB, bank_reference='', efd_receipt_no='',
                    payer_name='', payer_relation=Payment.SELF, proof=None,
-                   note='', allocations=None, request=None):
+                   note='', allocations=None, request=None, bank_account=None,
+                   allow_same_reference=False):
     """Record money the accountant has seen proof of.
 
     Payments are only ever created here, only by a member of staff, and only
@@ -1388,11 +1403,25 @@ def record_payment(profile, amount, payment_date, *, recorded_by, invoice=None,
     clearance.
 
     `allocations` is an optional [(charge, amount)] list. Left out, the payment
-    settles the invoice's lines, or the oldest outstanding charges first.
+    settles the invoice's lines, or the oldest outstanding charges first —
+    only those paid into `bank_account` when it is given: a slip paid without
+    an invoice (the long holiday, before the system) went into one of the two
+    CRDB accounts, and settling the other account's charges with it would make
+    the ledger disagree with the bank.
+
+    The same bank reference twice is refused (SameSlipError) unless
+    `allow_same_reference` — one slip can pay for two brothers, but a slip
+    recorded twice by mistake is the commonest way to show money that never came.
     """
     amount = money(amount)
     if amount <= ZERO:
         raise ValueError('A payment must be greater than zero.')
+    earlier = payment_with_reference(bank_reference)
+    if earlier is not None and not allow_same_reference:
+        raise SameSlipError(
+            f'Bank reference {bank_reference.strip()} is already recorded: {money(earlier.amount)} on '
+            f'{earlier.payment_date} for {earlier.profile.name} ({earlier.profile.nactvet_reg_no}). '
+            f'If this slip really pays for both, record it again and confirm.')
 
     payment = Payment.objects.create(
         profile=profile, invoice=invoice, amount=amount, payment_date=payment_date,
@@ -1402,7 +1431,7 @@ def record_payment(profile, amount, payment_date, *, recorded_by, invoice=None,
     )
 
     if allocations is None:
-        allocations = _auto_allocate(profile, amount, invoice)
+        allocations = _auto_allocate(profile, amount, invoice, bank_account=bank_account)
     _write_allocations(payment, allocations)
 
     audit('payment.record', 'Payment', actor=recorded_by, entity_id=payment.id, profile=profile,
@@ -1416,13 +1445,15 @@ def record_payment(profile, amount, payment_date, *, recorded_by, invoice=None,
     return payment
 
 
-def _auto_allocate(profile, amount, invoice):
+def _auto_allocate(profile, amount, invoice, bank_account=None):
     """Settle the invoice's own lines first, then anything else outstanding,
-    oldest due date first."""
+    oldest due date first — only charges paid into `bank_account` when given."""
     if invoice is not None:
         candidates = [line.charge for line in invoice.lines.select_related('charge__charge_type')]
     else:
         candidates = outstanding_charges(profile)
+    if bank_account is not None:
+        candidates = [charge for charge in candidates if charge.charge_type.bank_account_id == bank_account.id]
     candidates = sorted(candidates, key=lambda c: (c.due_date, c.id))
 
     remaining, plan = amount, []
