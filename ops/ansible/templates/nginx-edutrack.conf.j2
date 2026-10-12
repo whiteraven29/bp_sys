@@ -2,6 +2,19 @@
 # Source: ops/ansible/templates/nginx-edutrack.conf.j2 — change that file and run
 # the playbook; edits made here by hand are overwritten.
 
+# Request limits (this file is included inside nginx's http{} block, where
+# these zones must be declared). Per client address:
+#   sign-in   5 a minute, bursts of 10 — slows password guessing; the app also
+#             locks a name after 10 failures (attendance/passwords.py)
+#   API       20 a second, bursts of 60 — generous, because a whole class
+#             reaches the server through one college Wi-Fi address; the app
+#             throttles each account and each student session on its own
+#   everything else 30 a second, bursts of 60
+limit_req_zone $binary_remote_addr zone=edutrack_login:10m rate=5r/m;
+limit_req_zone $binary_remote_addr zone=edutrack_api:10m rate=20r/s;
+limit_req_zone $binary_remote_addr zone=edutrack_pages:10m rate=30r/s;
+limit_conn_zone $binary_remote_addr zone=edutrack_conn:10m;
+
 server {
     listen 80;
     server_name {{ domain_list | join(' ') }};
@@ -35,21 +48,48 @@ server {
 {% endif %}
 {% endif %}
 
+    server_tokens off;
+    limit_req_status 429;
+    limit_conn_status 429;
+    limit_conn edutrack_conn 60;
+    client_max_body_size {{ upload_limit }};
+
     location /static/ {
         alias {{ backend_dir }}/staticfiles/;
         expires 30d;
         add_header Cache-Control "public, immutable";
     }
 
-    # Uploaded files are NOT served here: every download goes through Django,
-    # which checks who is asking.
-    location / {
+    # Signing in (POST /login/), limited hardest.
+    location = /login/ {
+        limit_req zone=edutrack_login burst=10 nodelay;
+        proxy_pass http://{{ gunicorn_bind }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /api/ {
+        limit_req zone=edutrack_api burst=60 nodelay;
         proxy_pass http://{{ gunicorn_bind }};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 120;
-        client_max_body_size {{ upload_limit }};
+    }
+
+    # Uploaded files are NOT served here: every download goes through Django,
+    # which checks who is asking. X-Real-IP is the address the app trusts
+    # (finance.client_ip); X-Forwarded-For's first entry is the client's word.
+    location / {
+        limit_req zone=edutrack_pages burst=60 nodelay;
+        proxy_pass http://{{ gunicorn_bind }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120;
     }
 }

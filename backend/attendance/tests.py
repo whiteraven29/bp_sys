@@ -996,14 +996,28 @@ class AttendanceSecurityTests(TestCase):
         self.assertEqual(level_response.status_code, 403)
         self.assertEqual(year_response.status_code, 403)
 
-    def test_portal_pin_is_write_only_and_hashed(self):
+    def test_a_tutor_cannot_set_a_students_password(self):
+        # A password set by whoever teaches the module is a way into the
+        # student's account (security review S1/S5).
         self.client.force_authenticate(self.teacher)
+        response = self.client.patch(f'/api/students/{self.student.id}/', {'portal_pin': 'new-pin-42'},
+                                     format='json')
+        self.assertEqual(response.status_code, 403)
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.check_portal_pin('new-pin-42'))
+
+    def test_portal_pin_is_write_only_and_hashed(self):
+        from .views import set_roles
+        # The Principal keeps the class lists and is a password desk.
+        boss = User.objects.create_user('boss-desk', password='safe-password')
+        set_roles(boss, ['principal'], full_name='Principal')
+        self.client.force_authenticate(boss)
         response = self.client.patch(
             f'/api/students/{self.student.id}/',
             {'portal_pin': 'new-pin-42'},
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, response.data)
         self.assertNotIn('portal_pin', response.data)
         self.student.refresh_from_db()
         self.assertNotEqual(self.student.portal_pin_hash, 'new-pin-42')
@@ -1547,10 +1561,19 @@ class AuditFixRegressionTests(TestCase):
         self.assertNotIn(self.other_teacher, self.module.teachers.all())
 
     def test_claiming_an_unclaimed_module_still_works(self):
+        TeacherProfile.objects.get_or_create(user=self.other_teacher, defaults={'full_name': 'Other'})
         self.client.force_authenticate(self.other_teacher)
         response = self.client.post(f'/api/modules/{self.other_module.id}/claim/')
         self.assertEqual(response.status_code, 200)
         self.assertIn(self.other_teacher, self.other_module.teachers.all())
+
+    def test_only_a_tutor_claims_a_module(self):
+        # Another office (here, no tutor role at all) would gain a class list
+        # and its CA marks (security review S6).
+        self.client.force_authenticate(self.other_teacher)
+        response = self.client.post(f'/api/modules/{self.other_module.id}/claim/')
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn(self.other_teacher, self.other_module.teachers.all())
 
     # ── bulk student import no longer resets an existing student's PIN ──────
     def test_bulk_create_does_not_reset_an_existing_students_pin(self):

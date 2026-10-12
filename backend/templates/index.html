@@ -1,12 +1,12 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EduTrack — Attendance Management</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+<link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet">
+<script src="{% static 'vendor/xlsx.full.min.js' %}"></script>
+<script src="{% static 'vendor/chart.umd.min.js' %}"></script>
 <style>
   :root {
     /* Grey page behind white panels, so panels read as panels without needing
@@ -194,7 +194,9 @@
   /* Two cards side by side instead of stacked full-width — same content,
      roughly half the vertical scrolling. */
   .dash-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(260px, .7fr); gap: 16px; align-items: start; }
-  @media (max-width: 900px) { .dash-grid { grid-template-columns: 1fr; } }
+  /* minmax(0, 1fr), not 1fr: a plain 1fr column grows to the widest table
+     inside it, which pushed every card in the grid past a phone's edge. */
+  @media (max-width: 900px) { .dash-grid { grid-template-columns: minmax(0, 1fr); } }
 
   /* Announcements as a plain news-style list, not a data table. */
   .ann-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
@@ -204,6 +206,24 @@
   .ann-row-title:hover { text-decoration: underline; }
   .ann-row-note { margin-top: 3px; color: var(--muted); font-size: .78rem; }
   .ann-row-meta { margin-top: 4px; color: var(--muted); font-size: .72rem; }
+  .ann-new { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: var(--radius);
+             background: var(--green-fill); color: var(--on-fill); font-size: .64rem; font-weight: 700;
+             letter-spacing: .03em; text-transform: uppercase; vertical-align: 1px; }
+  .ann-row-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .ann-row-actions .ann-read { min-height: 34px; text-decoration: none; }
+  .ann-size { margin-left: 4px; font-size: .7rem; font-weight: 400; opacity: .85; }
+  .ann-more { margin-top: 10px; }
+  /* Posting is folded away, so the notices themselves come first. */
+  body.is-admin .admin-only.ann-post { display: block !important; margin-bottom: 12px; }
+  .ann-post summary { cursor: pointer; font-size: .82rem; font-weight: 600; color: var(--accent); }
+  .ann-post-form { display: grid; gap: 10px; margin-top: 10px; }
+  @media (max-width: 900px) {
+    /* One column on a phone: notices before the sessions table, not under it. */
+    #dash-announcements { order: -1; }
+  }
+  @media (max-width: 580px) {
+    .ann-row-actions .ann-read { flex: 1; justify-content: center; min-height: 40px; }
+  }
 
   /* Card = plain white panel with a ruled header, like the reference's
      "Published Results" / "News List" panels. No shadow, no rounding. */
@@ -1050,14 +1070,17 @@
           </div>
           <div id="elig-performance-summary" style="display:none;margin-top:22px;"></div>
         </div>
-        <div class="card">
+        <div class="card" id="dash-announcements">
           <div class="card-title">Announcements</div>
-          <div class="admin-only" style="margin-bottom:14px;flex-direction:column;align-items:stretch;gap:10px;">
-            <div class="field"><label>Title *</label><input id="ann-title" placeholder="e.g. Semester 1 timetable"></div>
-            <div class="field"><label>Note</label><input id="ann-note" placeholder="Optional short note"></div>
-            <div class="field"><label>PDF File *</label><input id="ann-file" type="file" accept="application/pdf"></div>
-            <button class="btn btn-primary btn-sm" style="width:fit-content;" onclick="uploadAnnouncement()">Post Announcement</button>
-          </div>
+          <details class="admin-only ann-post" id="ann-post">
+            <summary><i class="bi bi-plus-lg"></i> Post an announcement</summary>
+            <div class="ann-post-form">
+              <div class="field"><label>Title *</label><input id="ann-title" placeholder="e.g. Semester 1 timetable"></div>
+              <div class="field"><label>Note</label><input id="ann-note" placeholder="Optional short note — shown above the Read button"></div>
+              <div class="field"><label>PDF File *</label><input id="ann-file" type="file" accept="application/pdf"></div>
+              <button class="btn btn-primary btn-sm" style="width:fit-content;" onclick="uploadAnnouncement()">Post Announcement</button>
+            </div>
+          </details>
           <div id="announcements-list"></div>
         </div>
       </div>
@@ -1720,6 +1743,25 @@
       </div>
 
       <div class="card account-manager-only">
+        <div class="card-title">Password desk <span class="tip" tabindex="0" role="note" aria-label="Help: password desk" data-tip="Anybody who has forgotten their password comes here: staff (use Reset password in the list above — the Principal's too) and students. They get a temporary password, shown once, and must choose their own at the next sign-in. Every reset is recorded below and shown to the holder.">?</span></div>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+          <div class="field" style="margin:0;min-width:260px;"><label>Student's registration number or college ID</label>
+            <input id="pwd-student-id" placeholder="e.g. NS0245/0034/2023 or BPH/PST/2026/014"></div>
+          <button class="btn btn-primary btn-sm" onclick="resetStudentPassword(event)">Reset student password</button>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;">
+          <span id="pwd-waiting" style="font-size:.85rem;color:var(--muted);"></span>
+          <button class="btn btn-secondary btn-sm" id="pwd-issue-btn" style="display:none" onclick="issueMissingPasswords(event)">Issue passwords to students who have none</button>
+        </div>
+        <div id="pwd-result" style="margin-top:12px;"></div>
+        <div class="block-title" style="margin-top:16px;">Recent resets</div>
+        <div class="table-wrap"><table class="compact">
+          <thead><tr><th>When</th><th>Account</th><th>Who</th><th>Reset by</th><th>From</th></tr></thead>
+          <tbody id="pwd-resets-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <div class="card account-manager-only">
         <div class="card-title">Role changes <span class="tip" tabindex="0" role="note" aria-label="Help: role changes" data-tip="Every role given or taken away, by whom and when. The Principal appoints; this is where an appointment can be checked.">?</span></div>
         <div class="table-wrap">
           <table>
@@ -1798,7 +1840,7 @@
             <div class="field"><label>Module *</label><select id="add-stu-module"><option value="">— select module —</option></select></div>
             <div class="field"><label>NACTVET Reg. No. *</label><input id="add-stu-regno" placeholder="e.g. NTA/L4/0001" /></div>
             <div class="field"><label>Student Name *</label><input id="add-stu-name" placeholder="e.g. John Doe" /></div>
-            <div class="field"><label>Portal PIN *</label><input id="add-stu-pin" type="password" minlength="6" placeholder="At least 6 characters" /></div>
+            <div class="field account-manager-only" style="flex-direction:column;"><label>Portal password (optional)</label><input id="add-stu-pin" type="password" minlength="6" placeholder="Or give it later at the Password desk" /></div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="addSingleStudent()">Add Student</button>
         </div>
@@ -1832,7 +1874,7 @@
           <div class="card-title">🎓 Enrolled Students
             <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px" id="stu-list-note"></span>
           </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" class="admin-only">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" class="account-manager-only">
             <button class="btn btn-warning btn-sm" onclick="bulkSetStudentPins()">🔑 Set Password/PIN for Filtered Students</button>
           </div>
           <div class="table-wrap">
@@ -1990,6 +2032,8 @@
           <div class="field"><label>Semester *</label><select id="auth-grade-semester"><option value="">— select semester —</option></select></div>
           <div class="field"><label>Class Level *</label><select id="auth-grade-level"><option value="">— select level —</option></select></div>
           <div class="field"><label>Grade File</label><input id="auth-grade-file" type="file" accept=".xlsx,.xls,.csv"></div>
+          <div class="field"><label>Sitting <span class="tip" tabindex="0" role="note" aria-label="Help: sitting" data-tip="NACTVET issues each semester twice: the first sitting, then the supplementary sitting, which lists every module again. On a supplementary sheet only the modules waiting for a supplementary are taken; a paper still starred there was failed again and is repeated. A sheet with exam numbers containing RSM is read as supplementary automatically.">?</span></label>
+            <select id="auth-grade-sitting"><option value="first">First sitting</option><option value="supp">Supplementary sitting</option></select></div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" onclick="downloadAuthorityGradeTemplate()">⬇ Download Level Template</button>
@@ -3505,7 +3549,7 @@
       <div class="field"><label>Module *</label><select id="edit-stu-module"><option value="">— select module —</option></select></div>
       <div class="field"><label>NACTVET Reg. No. *</label><input id="edit-stu-regno"></div>
       <div class="field"><label>Student Name *</label><input id="edit-stu-name"></div>
-      <div class="field"><label>New Portal PIN</label><input id="edit-stu-pin" type="password" minlength="6" placeholder="Leave blank to keep current PIN"></div>
+      <div class="field account-manager-only" style="flex-direction:column;"><label>New portal password</label><input id="edit-stu-pin" type="password" minlength="6" placeholder="Leave blank to keep the current one"></div>
     </div>
     <button class="btn btn-primary btn-sm" onclick="saveStudentEdit()">Save Changes</button>
   </div>
@@ -4154,10 +4198,10 @@ async function boot() {
     } else {
       tbody.innerHTML = dash.recent_sessions.map(s =>
         `<tr>
-          <td><strong>${s.module}</strong></td>
+          <td><strong>${safeText(s.module)}</strong></td>
           <td>${typeBadge(s.session_type)}</td>
-          <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.topic || '<span style="color:var(--muted)">—</span>'}</td>
-          <td>${s.class_level}</td>
+          <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.topic ? safeText(s.topic) : '<span style="color:var(--muted)">—</span>'}</td>
+          <td>${safeText(s.class_level)}</td>
           <td style="font-size:.75rem;color:var(--muted)">${s.semester}</td>
           <td>${s.date}</td>
           <td><span class="badge badge-green">${s.present}</span></td>
@@ -4256,9 +4300,9 @@ async function buildSidebarModules() {
     let html = '';
     for (const [, grp] of Object.entries(byLevel)) {
       if (!grp.mods.length) continue;
-      html += `<div class="sidebar-level">${grp.name}</div>`;
+      html += `<div class="sidebar-level">${safeText(grp.name)}</div>`;
       grp.mods.forEach(m => {
-        html += `<div class="sidebar-module" onclick="goToModule(${m.id})"><span>${m.code} – ${m.name}</span></div>`;
+        html += `<div class="sidebar-module" onclick="goToModule(${m.id})"><span>${safeText(m.code)} – ${safeText(m.name)}</span></div>`;
       });
     }
     container.innerHTML = html || '<div style="padding:8px 10px;font-size:.78rem;color:var(--muted);">No modules yet</div>';
@@ -4286,7 +4330,7 @@ function renderAccountModuleList() {
   box.innerHTML = state.allModules.length ? state.allModules.map(m => `
     <label class="check-item">
       <input type="checkbox" name="acct-module" value="${m.id}">
-      <span>${m.code} · ${m.name} · ${m.class_level}</span>
+      <span>${m.code} · ${safeText(m.name)} · ${safeText(m.class_level)}</span>
     </label>
   `).join('') : '<div style="color:var(--muted);font-size:.83rem;">No modules available.</div>';
 }
@@ -4309,7 +4353,7 @@ async function createStaffAccount() {
   try {
     const created = await api('POST', '/staff-accounts/', { role, full_name, username, password, module_ids });
     document.getElementById('acct-created-info').innerHTML =
-      `<strong style="color:var(--text)">Created ${created.role} account:</strong> username <span style="font-family:var(--font-mono)">${created.username}</span>. Give this username and password to the user.`;
+      `<strong style="color:var(--text)">Created ${created.role} account:</strong> username <span style="font-family:var(--font-mono)">${safeText(created.username)}</span>. Give this username and password to the user.`;
     ['acct-full-name', 'acct-username', 'acct-password'].forEach(id => document.getElementById(id).value = '');
     document.querySelectorAll('input[name="acct-module"]').forEach(el => el.checked = false);
     toast('Staff account created', 'var(--green)');
@@ -4329,7 +4373,7 @@ async function loadStaffAccounts() {
   } catch(e) {
     toast('Failed to load staff accounts', 'var(--red)');
   }
-  if (state.canManageAccounts) loadRoleChanges();
+  if (state.canManageAccounts) { loadRoleChanges(); loadPasswordResets(); loadWaitingForPasswords(); }
 }
 
 async function loadRoleChanges() {
@@ -4374,11 +4418,114 @@ function renderStaffAccounts() {
       <td style="line-height:1.9">${badges}</td>
       <td style="font-size:.75rem">${modules}</td>
       <td style="white-space:nowrap">
-        ${state.canManageAccounts ? `<button class="btn btn-secondary btn-sm" onclick="openRolesModal(${u.id})">Change roles</button>` : ''}
+        ${state.canManageAccounts ? `<button class="btn btn-secondary btn-sm" onclick="openRolesModal(${u.id})">Change roles</button>
+          <button class="btn btn-ghost btn-sm" onclick="resetStaffPassword(${u.id}, ${jsArg(u.username)})">Reset password</button>` : ''}
         ${isTutor ? `<button class="btn btn-ghost btn-sm" onclick="openTeacherModulesModal(${u.id})">Modules</button>` : ''}
       </td>
     </tr>`;
   }).join('');
+}
+
+// ── the password desk: the ICT officer resets anybody's forgotten password ──
+function showTemporaryPassword(who, account, password) {
+  document.getElementById('pwd-result').innerHTML = `<div class="missing-note" style="border-left-color:var(--green)">
+    <strong>${safeText(who)}</strong> (${safeText(account)}) — temporary password:
+    <span style="font-family:var(--font-mono);font-size:1rem;font-weight:700;margin-left:6px;">${safeText(password)}</span>
+    <div style="font-size:.75rem;color:var(--muted);margin-top:4px;">Shown once. Give it to them in person; they choose their own at the next sign-in.</div></div>`;
+}
+
+async function resetStaffPassword(userId, username) {
+  if (!confirm(`Give ${username} a new temporary password? Their current one stops working.`)) return;
+  try {
+    const result = await api('POST', `/staff-accounts/${userId}/reset-password/`, {});
+    showTemporaryPassword(result.username, 'staff', result.password);
+    document.getElementById('pwd-result').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await loadPasswordResets();
+  } catch (e) { toast(apiErrorText(e, 'Could not reset the password'), 'var(--red)'); }
+}
+
+async function resetStudentPassword(event) {
+  const identifier = document.getElementById('pwd-student-id').value.trim();
+  if (!identifier) { toast("Type the student's registration number or college ID", 'var(--red)'); return; }
+  if (!confirm(`Give ${identifier} a new temporary portal password? Their current one stops working.`)) return;
+  const done = working(event?.currentTarget, 'Resetting…');
+  try {
+    const result = await api('POST', '/student-passwords/reset/', { identifier });
+    showTemporaryPassword(result.name, result.college_id || result.reg_no, result.password);
+    document.getElementById('pwd-student-id').value = '';
+    await loadPasswordResets();
+  } catch (e) { toast(apiErrorText(e, 'Could not reset the password'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function loadWaitingForPasswords() {
+  const label = document.getElementById('pwd-waiting');
+  if (!label || !state.canManageAccounts) return;
+  try {
+    const data = await api('GET', '/student-passwords/issue/');
+    label.textContent = data.count
+      ? `${data.count} student(s) have no portal password yet (newly admitted).`
+      : 'Every current student has a portal password.';
+    document.getElementById('pwd-issue-btn').style.display = data.count ? '' : 'none';
+  } catch (e) { label.textContent = ''; }
+}
+
+async function issueMissingPasswords(event) {
+  if (!confirm('Give every student without a portal password their own temporary password? '
+               + 'The list is shown once — print it or download it now.')) return;
+  const done = working(event?.currentTarget, 'Issuing…');
+  try {
+    const { issued } = await api('POST', '/student-passwords/issue/', {});
+    state.issuedPasswords = issued;
+    document.getElementById('pwd-result').innerHTML = issued.length ? `
+      <div class="missing-note" style="border-left-color:var(--green)">${issued.length} password(s) issued — shown
+        once. Hand each student their own slip; they choose their own password at the first sign-in.
+        <div style="margin-top:8px;display:flex;gap:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="downloadIssuedPasswords()">Download (Excel)</button>
+          <button class="btn btn-ghost btn-sm" onclick="printIssuedPasswords()">Print slips</button></div></div>
+      <div class="table-wrap" style="margin-top:8px;"><table class="compact">
+        <thead><tr><th>Name</th><th>Registration No.</th><th>College ID</th><th>Temporary password</th></tr></thead>
+        <tbody>${issued.map(r => `<tr><td>${safeText(r.name)}</td><td>${safeText(r.reg_no)}</td>
+          <td>${safeText(r.college_id || '—')}</td>
+          <td style="font-family:var(--font-mono);font-weight:700">${safeText(r.password)}</td></tr>`).join('')}</tbody>
+      </table></div>` : '<p class="help-note">Nobody was waiting.</p>';
+    await loadWaitingForPasswords();
+    await loadPasswordResets();
+  } catch (e) { toast(apiErrorText(e, 'Could not issue the passwords'), 'var(--red)'); }
+  finally { done(); }
+}
+
+function downloadIssuedPasswords() {
+  const rows = (state.issuedPasswords || []).map(r => ({
+    'Name': r.name, 'Registration Number': r.reg_no, 'College ID': r.college_id,
+    'Temporary password': r.password }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Portal passwords');
+  XLSX.writeFile(wb, `portal_passwords_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+function printIssuedPasswords() {
+  const slips = (state.issuedPasswords || []).map(r => `<div class="slip"><strong>${safeText(r.name)}</strong><br>
+    ${safeText(r.college_id || r.reg_no)}<br>Portal password: <b>${safeText(r.password)}</b><br>
+    <small>Sign in at the college portal with your registration number or college ID, then choose your own password.</small></div>`).join('');
+  const w = window.open('', '_blank');
+  w.document.write(`<!doctype html><title>Portal password slips</title><style>body{font-family:sans-serif}
+    .slip{border:1px dashed #999;padding:10px;margin:6px;display:inline-block;width:45%;vertical-align:top;font-size:13px}
+    b{font-family:monospace;font-size:15px}</style>${slips}`);
+  w.document.close(); w.print();
+}
+
+async function loadPasswordResets() {
+  const body = document.getElementById('pwd-resets-tbody');
+  if (!body || !state.canManageAccounts) return;
+  try {
+    const rows = await api('GET', '/password-resets/');
+    body.innerHTML = rows.length ? rows.slice(0, 30).map(r => `<tr>
+        <td style="white-space:nowrap">${safeText(new Date(r.done_at).toLocaleString())}</td>
+        <td>${safeText(r.kind_display)} · <span style="font-family:var(--font-mono)">${safeText(r.account)}</span></td>
+        <td>${safeText(r.who)}</td><td>${safeText(r.done_by)}</td><td>${safeText(r.ip || '—')}</td></tr>`).join('')
+      : '<tr><td colspan="5" style="color:var(--muted)">No resets yet.</td></tr>';
+  } catch (e) { body.innerHTML = ''; }
 }
 
 const ROLE_LABELS = {
@@ -4455,7 +4602,7 @@ async function openTeacherModulesModal(userId) {
   document.getElementById('teacher-modules-list').innerHTML = state.allModules.length ? state.allModules.map(m => `
     <label class="check-item">
       <input type="checkbox" name="teacher-module" value="${m.id}" ${checked.has(String(m.id)) ? 'checked' : ''}>
-      <span>${m.code} · ${m.name} · ${m.class_level}</span>
+      <span>${m.code} · ${safeText(m.name)} · ${safeText(m.class_level)}</span>
     </label>
   `).join('') : '<div style="color:var(--muted);font-size:.83rem;">No modules available.</div>';
   document.getElementById('teacher-modules-modal').classList.add('open');
@@ -4495,18 +4642,27 @@ function renderAnnouncements() {
     list.innerHTML = '<div class="empty">No announcements posted yet</div>';
     return;
   }
-  // A plain list (title + tag + date), not a data table — this panel sits in
-  // a narrow column next to Recent Sessions, so it reads like a news feed.
-  list.innerHTML = rows.map(a => `
+  // A plain list, not a data table — this panel sits in a narrow column next
+  // to Recent Sessions, and on a phone it is read with a thumb. The PDF opens
+  // in the device's own viewer only when Read is tapped; Delete sits apart
+  // from it so a slip of the thumb does not reach it.
+  const shown = state.showAllAnnouncements ? rows : rows.slice(0, 5);
+  list.innerHTML = shown.map(a => `
     <div class="ann-row">
-      <div class="ann-row-top">
-        <a class="ann-row-title" href="${a.download_url}" target="_blank" rel="noopener">${safeText(a.title)}</a>
-        <button class="btn btn-danger btn-sm admin-only" title="Delete" onclick="deleteAnnouncement(${a.id},'${safeText(a.title).replace(/'/g,"\\'")}')">✕</button>
-      </div>
+      <div class="ann-row-title" style="color:var(--text)">${a.is_new ? '<span class="ann-new">New</span>' : ''}${safeText(a.title)}</div>
       ${a.note ? `<div class="ann-row-note">${safeText(a.note)}</div>` : ''}
       <div class="ann-row-meta">${safeText(a.uploaded_by_name)} · ${new Date(a.created_at).toLocaleDateString()}</div>
+      <div class="ann-row-actions">
+        <a class="btn btn-secondary btn-sm ann-read" href="${a.download_url}" target="_blank" rel="noopener">
+          <i class="bi bi-file-earmark-pdf"></i> Read${a.size_label ? `<span class="ann-size">PDF · ${safeText(a.size_label)}</span>` : ''}</a>
+        <button class="btn btn-ghost btn-sm admin-only" style="margin-left:auto;color:var(--red)" title="Delete this announcement"
+                onclick="deleteAnnouncement(${a.id}, ${jsArg(a.title)})"><i class="bi bi-trash"></i></button>
+      </div>
     </div>
-  `).join('');
+  `).join('') + (rows.length > 5
+    ? `<button class="btn btn-ghost btn-sm ann-more" onclick="state.showAllAnnouncements = !state.showAllAnnouncements; renderAnnouncements()">
+         ${state.showAllAnnouncements ? 'Show fewer' : `Show older (${rows.length - 5})`}</button>`
+    : '');
 }
 
 async function uploadAnnouncement() {
@@ -4527,6 +4683,7 @@ async function uploadAnnouncement() {
     document.getElementById('ann-title').value = '';
     document.getElementById('ann-note').value = '';
     document.getElementById('ann-file').value = '';
+    document.getElementById('ann-post').open = false;
     loadAnnouncements();
   } catch(e) {
     toast(e?.file?.[0] || e?.detail || 'Failed to post announcement', 'var(--red)');
@@ -4563,7 +4720,7 @@ async function loadModules() {
     tbody.innerHTML = state.modules.map(m =>
       `<tr>
         <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${m.code}</span>${m.programme_code ? `<div style="font-size:.68rem;color:var(--muted);margin-top:2px">${safeText(m.programme_code)}</div>` : ''}</td>
-        <td><strong>${m.name}</strong></td>
+        <td><strong>${safeText(m.name)}</strong></td>
         <td>${m.credits}</td>
         <td>${m.class_level_name}</td>
         <td style="font-size:.75rem;color:var(--muted)">${m.semester_label}</td>
@@ -4574,7 +4731,7 @@ async function loadModules() {
         <td><div class="row-actions">
           <button class="btn btn-secondary btn-sm" title="View students" onclick="selectModuleRoster(${m.id})">🎓</button>
           ${(state.offices || {}).runs ? `<button class="btn btn-secondary btn-sm" title="Edit module" onclick="openModuleEditModal(${m.id})">✎</button>
-          <button class="btn btn-danger btn-sm" title="Delete module" onclick="deleteModule(${m.id},'${m.name.replace(/'/g,"\\'")}')">✕</button>` : ''}
+          <button class="btn btn-danger btn-sm" title="Delete module" onclick="deleteModule(${m.id}, ${jsArg(m.name)})">✕</button>` : ''}
         </div></td>
       </tr>`
     ).join('');
@@ -4638,9 +4795,9 @@ function renderModuleRoster() {
   const q = document.getElementById('roster-search').value.trim().toLowerCase();
   const rows = moduleRosterRows.filter(s => !q || s.name.toLowerCase().includes(q) || s.nactvet_reg_no.toLowerCase().includes(q));
   document.getElementById('module-roster-tbody').innerHTML = rows.length ? rows.map(s => `<tr>
-    <td><span style="font-family:var(--font-mono);font-size:.78rem">${s.nactvet_reg_no}</span></td><td>${s.name}</td>
+    <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(s.nactvet_reg_no)}</span></td><td>${safeText(s.name)}</td>
     <td>${s.class_level_name}</td><td>${s.semester_label}</td>
-    <td>${(state.offices || {}).runs ? `<button class="btn btn-danger btn-sm" onclick="deleteRosterStudent(${s.id},'${s.name.replace(/'/g,"\\'")}')">Remove</button>` : ''}</td>
+    <td>${(state.offices || {}).runs ? `<button class="btn btn-danger btn-sm" onclick="deleteRosterStudent(${s.id}, ${jsArg(s.name)})">Remove</button>` : ''}</td>
   </tr>`).join('') : '<tr><td colspan="5"><div class="empty">No matching students in this module</div></td></tr>';
 }
 async function deleteRosterStudent(id, name) {
@@ -5016,8 +5173,8 @@ function studentRowHtml(s) {
     <td>
       <div class="row-actions">
         <button class="btn btn-secondary btn-sm" title="Update student" onclick="openStudentEditModal(${s.id})">✎</button>
-        <button class="btn btn-secondary btn-sm" title="Set portal PIN" onclick="setStudentPin(${s.id},${JSON.stringify(s.name)})">🔑</button>
-        <button class="btn btn-danger btn-sm" title="Remove from this module" onclick="deleteStudent(${s.id},${JSON.stringify(s.name)})">✕</button>
+        ${state.canManageAccounts ? `<button class="btn btn-secondary btn-sm" title="Set portal password" onclick="setStudentPin(${s.id}, ${jsArg(s.name)})">🔑</button>` : ''}
+        <button class="btn btn-danger btn-sm" title="Remove from this module" onclick="deleteStudent(${s.id}, ${jsArg(s.name)})">✕</button>
       </div>
     </td>
   </tr>`;
@@ -5039,8 +5196,8 @@ function personRowHtml(p) {
     <td>${pctBadge(p.attendance_pct)}${progressBar(p.attendance_pct)}</td>
     <td>
       <div class="row-actions">
-        <button class="btn btn-secondary btn-sm" title="Set portal password on every enrolment"
-                onclick="setPersonPin(${JSON.stringify(p.nactvet_reg_no)},${JSON.stringify(p.name)})">🔑</button>
+        ${state.canManageAccounts ? `<button class="btn btn-secondary btn-sm" title="Set portal password on every enrolment"
+                onclick="setPersonPin(${jsArg(p.nactvet_reg_no)}, ${jsArg(p.name)})">🔑</button>` : ''}
       </div>
     </td>
   </tr>
@@ -5056,7 +5213,7 @@ function personRowHtml(p) {
           <td>
             <div class="row-actions">
               <button class="btn btn-secondary btn-sm" title="Update this enrolment" onclick="openStudentEditModal(${e.id})">✎</button>
-              <button class="btn btn-danger btn-sm" title="Remove from this module" onclick="deleteStudent(${e.id},${JSON.stringify(p.name)})">✕</button>
+              <button class="btn btn-danger btn-sm" title="Remove from this module" onclick="deleteStudent(${e.id}, ${jsArg(p.name)})">✕</button>
             </div>
           </td>
         </tr>`).join('')}</tbody>
@@ -5140,9 +5297,12 @@ async function addSingleStudent() {
   const regNo = document.getElementById('add-stu-regno').value.trim().toUpperCase();
   const name = document.getElementById('add-stu-name').value.trim();
   const portalPin = document.getElementById('add-stu-pin').value.trim();
-  if (!moduleId || !regNo || !name || portalPin.length < 6) { toast('All fields required; PIN must be at least 6 characters', 'var(--red)'); return; }
+  if (!moduleId || !regNo || !name) { toast('Module, registration number and name are required', 'var(--red)'); return; }
+  if (portalPin && portalPin.length < 6) { toast('A portal password needs at least 6 characters', 'var(--red)'); return; }
   try {
-    await api('POST', '/students/bulk_create/', { module: parseInt(moduleId, 10), students: [{ nactvet_reg_no: regNo, name, portal_pin: portalPin }] });
+    const row = { nactvet_reg_no: regNo, name };
+    if (portalPin) row.portal_pin = portalPin;
+    await api('POST', '/students/bulk_create/', { module: parseInt(moduleId, 10), students: [row] });
     toast('Student added!', 'var(--green)');
     document.getElementById('add-stu-regno').value = '';
     document.getElementById('add-stu-name').value = '';
@@ -5271,8 +5431,8 @@ function renderRoster() {
   tbody.innerHTML = rosterStudents.map((s, i) =>
     `<tr id="row-${i}">
       <td>${i+1}</td>
-      <td><span style="font-family:var(--font-mono);font-size:.78rem">${s.nactvet_reg_no}</span></td>
-      <td>${s.name}</td>
+      <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(s.nactvet_reg_no)}</span></td>
+      <td>${safeText(s.name)}</td>
       <td>
         <div class="att-toggle">
           <button onclick="setStatus(${i},'P')" class="${s.status==='P'?'st-p':''}">P</button>
@@ -5370,8 +5530,8 @@ async function loadAttendanceHistory() {
       <td>${session.module_name}</td>
       <td>${session.exam_period_display}</td>
       <td>${typeBadge(session.session_type)}</td>
-      <td>${session.label}</td>
-      <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${session.topic || '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${safeText(session.label)}</td>
+      <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${session.topic ? safeText(session.topic) : '<span style="color:var(--muted)">—</span>'}</td>
       <td><span class="badge badge-green">${session.present_count}</span></td>
       <td><span class="badge badge-orange">${session.sick_count}</span></td>
       <td><span class="badge badge-red">${session.absent_count}</span></td>
@@ -5467,10 +5627,10 @@ async function loadReport() {
 
     document.getElementById('report-tbody').innerHTML = reportData.rows.map(r =>
       `<tr>
-        <td><span style="font-family:var(--font-mono);font-size:.78rem">${r.nactvet_reg_no}</span></td>
-        <td>${r.name}</td>
-        <td>${r.module}</td>
-        <td>${r.class_level}</td>
+        <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.nactvet_reg_no)}</span></td>
+        <td>${safeText(r.name)}</td>
+        <td>${safeText(r.module)}</td>
+        <td>${safeText(r.class_level)}</td>
         <td style="font-size:.75rem;color:var(--muted)">${r.semester}</td>
         <td>${r.teacher}</td>
         <td>${r.theory_held}</td>
@@ -5487,12 +5647,12 @@ async function loadReport() {
     document.getElementById('history-tbody').innerHTML = reportData.session_history.map(h =>
       `<tr>
         <td>${h.date}</td>
-        <td>${h.module}</td>
+        <td>${safeText(h.module)}</td>
         <td>${typeBadge(h.session_type)}</td>
-        <td>${h.class_level}</td>
+        <td>${safeText(h.class_level)}</td>
         <td style="font-size:.75rem;color:var(--muted)">${h.semester}</td>
-        <td>${h.label}</td>
-        <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.topic || '<span style="color:var(--muted)">—</span>'}</td>
+        <td>${safeText(h.label)}</td>
+        <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.topic ? safeText(h.topic) : '<span style="color:var(--muted)">—</span>'}</td>
         <td><span class="badge badge-green">${h.present}</span></td>
         <td><span class="badge badge-orange">${h.sick}</span></td>
         <td><span class="badge badge-red">${h.absent}</span></td>
@@ -5589,8 +5749,8 @@ function renderClaimGrid() {
     `<div class="claim-item ${m.claimed ? 'claimed' : ''}" onclick="toggleClaim(${m.id}, this)">
       <div class="ci-dot"></div>
       <div class="ci-info">
-        <div class="ci-name">${m.name}</div>
-        <div class="ci-code">${m.code} · ${m.class_level}</div>
+        <div class="ci-name">${safeText(m.name)}</div>
+        <div class="ci-code">${m.code} · ${safeText(m.class_level)}</div>
         <div class="ci-code">${m.semester}</div>
       </div>
     </div>`
@@ -5660,8 +5820,15 @@ async function uploadAuthorityGrades() {
     const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
     const sourceRows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: '' });
     const rows = [];
+    // NACTVET's exam numbers say which sitting a sheet is: …TES… for the
+    // first sitting, …RSM… for the supplementary one.
+    const sittingSelect = document.getElementById('auth-grade-sitting');
+    const examNumbers = sourceRows.map(row => String(row['Exam Number'] || '')).filter(Boolean);
+    if (examNumbers.length && examNumbers.every(n => /RSM/i.test(n))) sittingSelect.value = 'supp';
+    else if (examNumbers.length && examNumbers.every(n => /TES/i.test(n))) sittingSelect.value = 'first';
+    const sitting = sittingSelect.value;
     sourceRows.forEach(row => {
-      const regNo = String(row['Registration Number'] || row['Reg No'] || row['RegNo'] || '').trim();
+      const regNo = String(row['Registration Number'] || row['RegNum'] || row['Reg No'] || row['RegNo'] || '').trim();
       if (!regNo) return;
       modules.forEach(module => {
         const grade = String(row[module.code] || '').trim();
@@ -5669,11 +5836,13 @@ async function uploadAuthorityGrades() {
       });
     });
     if (!rows.length) { toast('No grades were found in the selected file', 'var(--red)'); return; }
-    if (!confirm(`Import ${rows.length} authority grade(s)? Uploaded grades become the approved final result.`)) return;
+    const sittingLabel = sitting === 'supp' ? 'SUPPLEMENTARY sitting' : 'first sitting';
+    if (!confirm(`Import ${rows.length} authority grade(s) as the ${sittingLabel}? Uploaded grades become the approved final result.`)) return;
     const result = await api('POST', '/results/authority-grades/', {
-      rows, semester_id: document.getElementById('auth-grade-semester').value,
+      rows, sitting, semester_id: document.getElementById('auth-grade-semester').value,
     });
-    toast(`Imported ${result.saved} authority grade(s)${result.errors.length ? `; ${result.errors.length} error(s)` : ''}`, result.errors.length ? 'var(--yellow)' : 'var(--green)');
+    const same = result.unchanged ? `; ${result.unchanged} unchanged (not supplementaries)` : '';
+    toast(`Imported ${result.saved} authority grade(s)${same}${result.errors.length ? `; ${result.errors.length} error(s)` : ''}`, result.errors.length ? 'var(--yellow)' : 'var(--green)');
     if (result.errors.length) alert(`Imported ${result.saved} grade(s).\n\nNot imported:\n${result.errors.slice(0, 20).join('\n')}${result.errors.length > 20 ? '\n…' : ''}`);
     if (document.getElementById('res-flt-module').value) loadResultsModule();
   } catch(e) { toast(e?.detail || 'Authority grade upload failed', 'var(--red)'); }
@@ -5797,7 +5966,7 @@ async function loadCatAnalysis() {
     </tr>`;
     tbody.innerHTML = data.rows.length ? data.rows.map(row => `<tr>
       <td><strong>${row.module_code}</strong><br><span style="font-size:.72rem;color:var(--muted)">${row.module_name}</span></td>
-      <td>${row.class_level}</td>
+      <td>${safeText(row.class_level)}</td>
       <td>${row.assessed}</td>
       ${grades.map(g => `<td>${row.grade_counts[g] || 0}</td>`).join('')}
       <td style="color:var(--green);font-weight:700">${row.passed}</td>
@@ -6248,11 +6417,11 @@ function renderExamDeclarations() {
   }
   tbody.innerHTML = candidates.length ? candidates.map(item => `
     <tr>
-      <td>${item.selectable ? `<input type="checkbox" name="decl-student" value="${item.result.student}" data-reason="${item.reason.replace(/"/g, '&quot;')}">` : '—'}</td>
+      <td>${item.selectable ? `<input type="checkbox" name="decl-student" value="${item.result.student}" data-reason="${safeText(item.reason)}">` : '—'}</td>
       <td><span style="font-family:var(--font-mono);font-size:.78rem">${item.result.student_reg_no}</span></td>
-      <td>${item.result.student_name}</td>
+      <td>${safeText(item.result.student_name)}</td>
       <td>${declarationModuleInfo.code}</td>
-      <td>${item.reason}</td>
+      <td>${safeText(item.reason)}</td>
       <td>${item.declared ? '<span class="badge badge-blue">Declared · charged</span>'
           : item.selectable ? '<span class="badge badge-yellow">Ready to declare</span>'
           : '<span class="badge badge-green">No action</span>'}</td>
@@ -6308,7 +6477,7 @@ function renderResultsTable() {
       const statusClass = r.result_status === 'PASS' ? 'badge-green' : r.result_status === 'INCOMPLETE' ? 'badge-yellow' : 'badge-red';
       const approvalBadge = r.final_approved ? '<span class="badge badge-green">Approved</span>' : '<span class="badge badge-yellow">Hidden</span>';
       return `<tr>
-        <td>${i + 1}</td><td><span style="font-family:var(--font-mono);font-size:.75rem">${r.student_reg_no}</span></td><td>${r.student_name}</td>
+        <td>${i + 1}</td><td><span style="font-family:var(--font-mono);font-size:.75rem">${safeText(r.student_reg_no)}</span></td><td>${safeText(r.student_name)}</td>
         <td>${mkInput(r.id, 'field_ca', r.field_ca)}</td><td><strong>${caWeighted}</strong></td>
         <td>${mkInput(r.id, 'end_theory', r.end_theory, r.end_theory_absent)}</td><td><strong>${finalWeighted}</strong></td>
         <td><strong>${total}</strong></td><td><span class="badge ${grade === 'F' ? 'badge-red' : 'badge-blue'}">${grade}</span></td>
@@ -6331,7 +6500,7 @@ function renderResultsTable() {
     let row = `<tr>
       <td>${i+1}</td>
       <td><span style="font-family:var(--font-mono);font-size:.75rem">${r.student_reg_no}</span></td>
-      <td>${r.student_name}</td>
+      <td>${safeText(r.student_name)}</td>
       <td>${mkInput(r.id,'assign1',r.assign1,r.assign1_absent)}</td>
       <td>${mkInput(r.id,'assign2',r.assign2,r.assign2_absent)}</td>
       <td>${mkInput(r.id,'cat1_theory',r.cat1_theory,r.cat1_theory_absent)}</td>
@@ -6561,7 +6730,7 @@ function renderEndExamRows() {
       return `<tr>
         <td>${i+1}</td>
         <td><span style="font-family:var(--font-mono);font-size:.75rem">${r.student_reg_no}</span></td>
-        <td>${r.student_name}</td>
+        <td>${safeText(r.student_name)}</td>
         <td>${caTd}</td>
         <td>${mkInput(r.id,'end_theory',r.end_theory,r.end_theory_absent)}</td>
         <td>${mkInput(r.id,'end_practical',r.end_practical,r.end_practical_absent)}</td>
@@ -6576,7 +6745,7 @@ function renderEndExamRows() {
       return `<tr>
         <td>${i+1}</td>
         <td><span style="font-family:var(--font-mono);font-size:.75rem">${r.student_reg_no}</span></td>
-        <td>${r.student_name}</td>
+        <td>${safeText(r.student_name)}</td>
         <td>${caTd}</td>
         <td>${mkInput(r.id,'end_theory',r.end_theory,r.end_theory_absent)}</td>
         <td id="etw-${r.id}">${etw !== null ? `<span style="color:var(--accent)">${etw}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
@@ -6713,8 +6882,8 @@ function renderEligibilityTable() {
           : '<td><span class="badge badge-red">Ineligible</span></td>';
       }).join('');
       return `<tr>
-        <td><span style="font-family:var(--font-mono);font-size:.78rem">${student.regNo}</span></td>
-        <td>${student.name}</td>
+        <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(student.regNo)}</span></td>
+        <td>${safeText(student.name)}</td>
         ${moduleCells}
       </tr>`;
     }).join('') : '<tr><td colspan="2"><div class="empty"><div class="ei">📋</div>No students match this eligibility filter</div></td></tr>';
@@ -6760,16 +6929,16 @@ function renderEligibilityTable() {
     const rowClass = elig === true ? 'row-eligible' : elig === false ? 'row-ineligible' : '';
     return `<tr class="${rowClass}">
       <td>${i+1}</td>
-      <td><span style="font-family:var(--font-mono);font-size:.78rem">${r.nactvet_reg_no}</span></td>
-      <td>${r.name}</td>
-      <td>${r.module}</td>
-      <td>${r.class_level}</td>
+      <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.nactvet_reg_no)}</span></td>
+      <td>${safeText(r.name)}</td>
+      <td>${safeText(r.module)}</td>
+      <td>${safeText(r.class_level)}</td>
       <td style="font-size:.75rem;color:var(--muted)">${r.semester}</td>
       <td>${ses ?? '—'}</td>
       <td>${att ?? '—'}</td>
       <td>${pctBadge(pct, pct === null)}</td>
       <td>${eligCell}</td>
-      <td style="font-size:.75rem;color:var(--muted)">${note}</td>
+      <td style="font-size:.75rem;color:var(--muted)">${safeText(note)}</td>
     </tr>`;
   }).join('') : '<tr><td colspan="11"><div class="empty"><div class="ei">📋</div>No students match this eligibility filter</div></td></tr>';
 }
@@ -9395,9 +9564,9 @@ async function loadSickRecords() {
       `<tr id="sick-row-${r.id}">
         <td>${r.session_date}</td>
         <td><span style="font-family:var(--font-mono);font-size:.78rem">${r.student_reg_no}</span></td>
-        <td>${r.student_name}</td>
-        <td>${r.module}</td>
-        <td>${r.class_level}</td>
+        <td>${safeText(r.student_name)}</td>
+        <td>${safeText(r.module)}</td>
+        <td>${safeText(r.class_level)}</td>
         <td style="font-size:.78rem;color:var(--muted)">${r.session_label}</td>
         <td>${periodBadge(r.exam_period)}</td>
         <td>
@@ -10029,7 +10198,7 @@ async function loadDueBack() {
           <td>${safeText(STANDING_LABELS[row.status] || row.status)}</td>
           <td>${safeText(row.class_level_name || '—')}</td>
           <td>${row.return_semester_number ? `Semester ${row.return_semester_number}` : '—'}</td>
-          <td><button class="btn btn-ghost btn-sm" onclick="startReadmission('${safeText(row.reg_no)}', ${row.class_level || 'null'}, ${row.programme || 'null'}, '${safeText(row.student_name)}', '${row.status}')">${row.status === 'postponed' ? 'Start their return' : 'Start readmission'}</button></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="startReadmission(${jsArg(row.reg_no)}, ${row.class_level || 'null'}, ${row.programme || 'null'}, ${jsArg(row.student_name)}, ${jsArg(row.status)})">${row.status === 'postponed' ? 'Start their return' : 'Start readmission'}</button></td>
         </tr>`).join('')
       : '<tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-people"></i></div>Nobody outstanding</div></td></tr>';
   } catch (e) { /* the list is a convenience */ }
@@ -10431,7 +10600,9 @@ function renderApplicationActions(application) {
   if (!application.state || ['admitted', 'rejected', 'cancelled'].includes(application.state)) {
     box.innerHTML = '<span style="font-size:.82rem;color:var(--muted);">This application is closed.</span>'
       + (application.state === 'admitted'
-         ? ' <button class="btn btn-ghost btn-sm" onclick="resetPortalPin()">New portal password</button>'
+         ? (state.canManageAccounts
+            ? ' <button class="btn btn-ghost btn-sm" onclick="resetPortalPin()">New portal password</button>'
+            : ' <span style="font-size:.78rem;color:var(--muted);">Portal password: from the ICT officer.</span>')
          : '');
     return;
   }
@@ -10469,7 +10640,7 @@ async function completeApplicationStep(event) {
   try {
     const application = await api('POST', `/applications/${id}/complete/`, { note });
     toast(application.state === 'admitted'
-      ? `Admitted — college ID ${application.college_id}`
+      ? `Admitted — college ID ${application.college_id}. Their portal password comes from the ICT officer.`
       : `Now with ${DESK_LABELS[application.state]}`, 'var(--green)');
     closeApplicationModal();
     if (application.portal_pin) {
@@ -11086,6 +11257,15 @@ async function doAdvance() {
 // ── INVENTORY ─────────────────────────────────────────────────────────────────
 function safeText(value) {
   return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+
+// A value passed to a function from an inline handler, e.g.
+//   onclick="deleteModule(${m.id}, ${jsArg(m.name)})"
+// JSON makes it a JavaScript string literal; safeText then keeps it inside the
+// attribute. Quote-escaping alone is not enough: the browser decodes &#39; and
+// &quot; back before the script runs.
+function jsArg(value) {
+  return safeText(JSON.stringify(String(value ?? '')));
 }
 
 function installWebIconReplacements() {
@@ -11848,7 +12028,7 @@ async function loadExpenseBudget() {
       <td>${money(r.committed)}</td>
       <td>${money(r.paid)}</td>
       <td>${r.left === null ? '—' : `<span class="${r.over_budget ? 'badge badge-red' : ''}">${money(r.left)}</span>`}</td>
-      <td><button class="btn btn-ghost btn-sm" onclick="setExpenseBudget(${r.category_id}, '${safeText(r.category).replace(/'/g, "\\'")}', '${r.budget ?? ''}')">Set budget</button></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="setExpenseBudget(${r.category_id}, ${jsArg(r.category)}, ${jsArg(r.budget ?? '')})">Set budget</button></td>
     </tr>`).join('') : '<tr><td colspan="7" style="color:var(--muted)">Add a category below.</td></tr>';
 }
 
@@ -11991,7 +12171,7 @@ async function openVetaModal(id) {
     if (a.state !== 'intake') actions.push(`<button class="btn btn-ghost btn-sm" onclick="vetaAction(event, 'send-back')">Send back…</button>`);
   }
   if (a.can_refuse) actions.push(`<button class="btn btn-danger btn-sm" onclick="vetaAction(event, 'refuse')">Refuse…</button>`);
-  if (a.state === 'admitted' && (state.offices.admission || state.offices.records || state.offices.principal)) {
+  if (a.state === 'admitted' && state.canManageAccounts) {
     actions.push(`<button class="btn btn-ghost btn-sm" onclick="vetaAction(event, 'reset-pin')">New portal password</button>`);
   }
   document.getElementById('veta-modal-actions').innerHTML = actions.join(' ')

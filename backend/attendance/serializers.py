@@ -300,6 +300,19 @@ class StudentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at']
 
+    def _may_set_password(self):
+        """A student's portal password is set by the ICT officer or the
+        Principal and nobody else — from anybody else it would be a way into
+        the student's account."""
+        from .roles import can_issue_student_passwords
+        request = self.context.get('request')
+        return bool(request and can_issue_student_passwords(request.user))
+
+    def validate_portal_pin(self, value):
+        if value and not self._may_set_password():
+            raise PermissionDenied('Student passwords are set by the ICT officer (or the Principal).')
+        return value
+
     def create(self, validated_data):
         portal_pin = validated_data.pop('portal_pin', None)
         student = super().create(validated_data)
@@ -641,7 +654,7 @@ class StudentResultSerializer(serializers.ModelSerializer):
             'supplementary_mark', 'end_exam_mark', 'supplementary_required',
             'failed_end_components',
             'result_status', 'grade', 'grade_point', 'face_grade_point', 'grade_description',
-            'authority_grade', 'authority_status',
+            'authority_grade', 'authority_supp_grade', 'authority_status',
             'ca_approved', 'final_approved',
             'updated_at',
         ]
@@ -784,8 +797,9 @@ class StudentResultSerializer(serializers.ModelSerializer):
         return self._outcome(obj)['grade_point']
 
     def get_face_grade_point(self, obj):
-        """What the result is worth as it stands — differs from grade_point
-        only for a supplementary still to be sat (progression.semester_gpa)."""
+        """What the result is worth as it stands. Since 8 October 2026 this is
+        always grade_point — a starred grade counts at its own letter, as
+        NACTVET counts it — and is kept for callers that read it."""
         outcome = self._outcome(obj)
         return outcome.get('face_points', outcome['grade_point'])
 
@@ -865,9 +879,19 @@ class BulkStudentSerializer(serializers.Serializer):
                 defaults={'name': name}
             )
             if created:
-                # Only ever set a PIN here for the student we just created — a
-                # too-short PIN just means "no PIN yet", it must never discard
-                # the (valid) student record that was just added.
+                # Somebody already on file keeps the password they have; a PIN
+                # column is honoured only from the ICT officer or the Principal
+                # — from anybody else it would be a way into the account.
+                from . import passwords
+                from .roles import can_issue_student_passwords
+                if portal_pin and not (user and can_issue_student_passwords(user)):
+                    pin_skipped += 1
+                    portal_pin = ''
+                passwords.copy_student_password(student)
+                student.refresh_from_db()
+                if portal_pin and student.portal_pin_hash:
+                    pin_skipped += 1          # already has a password: kept
+                    portal_pin = ''
                 if portal_pin:
                     if len(portal_pin) < 6:
                         pin_skipped += 1
@@ -890,11 +914,14 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     file = serializers.FileField(write_only=True)
     uploaded_by_name = serializers.SerializerMethodField()
     download_url = serializers.SerializerMethodField()
+    is_new = serializers.BooleanField(read_only=True)
+    size_label = serializers.CharField(read_only=True)
 
     class Meta:
         model = Announcement
-        fields = ['id', 'title', 'note', 'file', 'uploaded_by_name', 'download_url', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        fields = ['id', 'title', 'note', 'file', 'uploaded_by_name', 'download_url', 'created_at',
+                  'is_new', 'size_label']
+        read_only_fields = ['id', 'created_at', 'is_new', 'size_label']
 
     def validate_file(self, value):
         if not value.name.lower().endswith('.pdf'):

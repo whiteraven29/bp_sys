@@ -904,26 +904,25 @@ class PortalPinTests(AdmissionBase):
             admissions.complete_step(application, actor=self.officer)
         return profile, application
 
-    def test_an_admitted_student_leaves_with_a_password(self):
+    def ict_desk(self):
+        from rest_framework.test import APIClient
+        from .views import set_roles
+        ict = User.objects.create_user('ict4', password='pw')
+        set_roles(ict, ['ict_officer'], full_name='ICT')
+        client = APIClient(); client.force_authenticate(ict)
+        return client
+
+    def test_admission_hands_over_no_password(self):
+        # Only the ICT officer (or the Principal) sets or sees a password (said
+        # 8 October 2026): admitting a student issues none.
         profile, application = self.admit()
 
-        pin = application.portal_pin
-        self.assertTrue(pin, 'the admission should hand over a password')
-        enrollment = Student.objects.get(profile=profile)
-        self.assertTrue(enrollment.check_portal_pin(pin))
-        # And they are made to change it the first time they sign in.
-        self.assertTrue(enrollment.must_change_portal_password)
+        self.assertIsNone(application.portal_pin)
+        self.assertFalse(Student.objects.get(profile=profile).portal_pin_hash)
+        from . import passwords
+        self.assertIn(profile, list(passwords.students_without_password()))
 
-    def test_the_password_actually_signs_them_in(self):
-        profile, application = self.admit()
-
-        response = self.client.post('/login/', {'identifier': profile.nactvet_reg_no,
-                                                'secret': application.portal_pin})
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('student_id', self.client.session)
-
-    def test_the_desk_is_shown_the_password_once(self):
+    def test_the_admission_desk_is_shown_no_password(self):
         profile = self.applicant('NACTVET/PENDING/301')
         application = admissions.open_application(
             profile=profile, semester=self.sem1, programme=self.pst,
@@ -934,39 +933,61 @@ class PortalPinTests(AdmissionBase):
         admissions.complete_step(application, actor=self.officer)   # finance
 
         admitted = self.api.post(f'/api/applications/{application.id}/complete/', {}, format='json')
-        again = self.api.get(f'/api/applications/{application.id}/')
 
         self.assertEqual(admitted.status_code, 200, admitted.data)
-        self.assertTrue(admitted.data['portal_pin'])
-        # Only a hash is kept, so reading the application again shows nothing.
-        self.assertNotIn('portal_pin', again.data)
+        self.assertFalse(admitted.data.get('portal_pin'))
+
+    def test_the_ict_desk_issues_each_new_student_their_own_password(self):
+        first, _ = self.admit('NACTVET/PENDING/310')
+        second, _ = self.admit('NACTVET/PENDING/311')
+        desk = self.ict_desk()
+        self.assertEqual(desk.get('/api/student-passwords/issue/').data['count'], 2)
+
+        issued = desk.post('/api/student-passwords/issue/', {}, format='json').data['issued']
+
+        by_reg = {row['reg_no']: row['password'] for row in issued}
+        self.assertEqual(len(set(by_reg.values())), 2, 'never one password for the class')
+        response = self.client.post('/login/', {'identifier': first.nactvet_reg_no,
+                                                'secret': by_reg[first.nactvet_reg_no]})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('student_id', self.client.session)
+        self.assertTrue(Student.objects.get(profile=second).must_change_portal_password)
+        self.assertEqual(desk.get('/api/student-passwords/issue/').data['count'], 0)
 
     def test_a_returning_student_keeps_the_password_they_know(self):
-        profile, application = self.admit()
-        theirs = application.portal_pin
+        profile, _ = self.admit()
         enrollment = Student.objects.get(profile=profile)
         enrollment.set_portal_pin('TheirOwn#2026', require_change=False)
         enrollment.save()
 
-        issued = admissions.issue_portal_pin(profile)
+        issued = self.ict_desk().post('/api/student-passwords/issue/', {}, format='json').data['issued']
 
-        self.assertIsNone(issued)
+        self.assertEqual(issued, [])
         enrollment.refresh_from_db()
         self.assertTrue(enrollment.check_portal_pin('TheirOwn#2026'))
-        self.assertFalse(enrollment.check_portal_pin(theirs))
 
-    def test_a_lost_password_is_replaced_from_the_desk(self):
+    def test_a_lost_password_is_replaced_by_the_ict_officer_only(self):
         profile, application = self.admit()
-        was = application.portal_pin
+        refused = self.api.post(f'/api/applications/{application.id}/reset-pin/', {}, format='json')
+        self.assertEqual(refused.status_code, 403)          # not the admission desk
 
-        response = self.api.post(f'/api/applications/{application.id}/reset-pin/', {}, format='json')
-
+        # The ICT officer does it at the password desk, by registration number…
+        response = self.ict_desk().post('/api/student-passwords/reset/',
+                                        {'identifier': profile.nactvet_reg_no}, format='json')
         self.assertEqual(response.status_code, 200, response.data)
-        fresh = response.data['portal_pin']
-        self.assertNotEqual(fresh, was)
         enrollment = Student.objects.get(profile=profile)
-        self.assertTrue(enrollment.check_portal_pin(fresh))
-        self.assertFalse(enrollment.check_portal_pin(was))
+        self.assertTrue(enrollment.check_portal_pin(response.data['password']))
+
+        # …and the Principal may from the admitted application itself.
+        from rest_framework.test import APIClient
+        from .views import set_roles
+        boss = User.objects.create_user('boss4', password='pw')
+        set_roles(boss, ['principal'], full_name='Principal')
+        principal = APIClient(); principal.force_authenticate(boss)
+        again = principal.post(f'/api/applications/{application.id}/reset-pin/', {}, format='json')
+        self.assertEqual(again.status_code, 200, again.data)
+        enrollment.refresh_from_db()
+        self.assertTrue(enrollment.check_portal_pin(again.data['portal_pin']))
 
     def test_the_accountant_does_not_reset_passwords(self):
         from rest_framework.test import APIClient

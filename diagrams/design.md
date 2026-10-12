@@ -11,6 +11,7 @@ update the section and add a line to the **Change log** at the end.
 | 2 | Roles and offices (sections 9–15) | built 2 Oct (not committed); appointment letters wait on `questions.md` Q21–Q22 |
 | 3 | Expenses (section 16): request, query, office funds or petty cash | **updated 3 Oct** (not committed) |
 | 4 | The student record and what a repeater pays (sections 17–18) | **built 3 Oct** (not committed); open points Q25–Q29 |
+| 5 | PST results as NACTVET decides them (section 19) | **built 8 Oct** (not committed); 187 of 188 real students match |
 
 ---
 
@@ -598,6 +599,66 @@ Setup; a charge type marked *Charged to repeaters* is the direct cost.
 
 ---
 
+# Part 5 — PST results, as NACTVET decides them
+
+## 19. The decision, read from NACTVET's own sheets (8 October 2026)
+
+The evidence is in `diagrams/`: `RESULTS SEMESTER II 2025/` (six classes,
+including two repeat classes) and `SUPP RESULT/` (the supplementary sheets for
+levels 4, 5 and 6). Every row was run through the system — the authority
+upload, then the Results Summary — on a scratch database:
+
+| Class | Students | Match |
+|---|---|---|
+| Level 4 2024/25, first sitting · after supplementary | 41 · 30 | 41 · 30 |
+| Level 5 2024/25, first sitting · after supplementary | 29 · 23 | 29 · 23 |
+| Level 6 2024/25, first sitting · after supplementary | 35 · 4 | 35 · 4 |
+| Level 4 2023/24 (repeat sittings) · level 5 2022/23 | 4 · 1 | 4 · 1 |
+| Level 5 2023/24 repeat class | 21 | 20 (see Q30) |
+| **All** | **188** | **187** |
+
+Your own sheets agree too: level 4 semester 1 (29 of 29) and level 5
+semester 1 (Happiness Mbua: 1.3, discontinued, as NACTVET printed it).
+
+```text
+  every module's grade ── at its own letter: B*** is 3, D* is 1, a passed supp is C
+            │             GPA = Σ points × credits ÷ Σ credits, CUT to one decimal
+            ▼             (2.89 → 2.8; 1.99 → 1.9)
+   1. discontinued by the authority (FAIL), or a REPEATED module failed
+      again — starred or not: a repeat sitting has no supplementary ──► DISCO
+   2. a result missing, withheld (*W*) or nullified (*N*)          ──► wait
+   3. GPA below 2.0                                                ──► DISCO
+   4. more than half of the first sittings failed (field counts)   ──► REPEAT them
+   5. a starred first sitting (half or fewer)                      ──► SUPP
+   6. a module failed outright, or after its supplementary         ──► REPEAT it
+   7. otherwise                                 ──► PASS: First / Second / Pass
+                                                    (level 6: First 4.4+, Upper
+                                                    Second 3.5+, Lower Second
+                                                    2.7+, Pass 2.0+)
+
+  SUPPLEMENTARY SHEET (exam numbers …RSM…; the first sitting's are …TES…)
+     uploaded as "Supplementary sitting": only modules that were waiting for a
+     supplementary are taken, into their own field (the first sitting's grade
+     is kept). Plain grade (NACTVET writes C) = passed; still starred = failed
+     again → REPEAT, counted at its letter. Then the same steps 1–7: below 2.0
+     after the supplementary is DISCO (NS3970/0014/2021: F* again, 1.7, FAIL).
+```
+
+What changed from the rules of 3 October (change log): the GPA no
+longer counts a waiting supplementary as C, it is cut rather than rounded, it
+is checked **before** "more than half failed" (level 5 2024/25: three
+students with 3+ fails and GPA 1.9 were FAIL, two with 2.2–2.4 were REPEAT),
+and a starred repeat sitting is a discontinuation at once.
+
+Code: `progression.decide` — the one decision the semester review, the
+Results Summary, the student's portal and the declarations screen all read;
+`progression.semester_gpa` / `cut_gpa`; `grading.parse_authority_supp_grade`;
+`StudentResult.authority_supp_grade` (migration 0059); the upload's `sitting`.
+Tests: `test_authority_results.StarredGradesAtFaceValueTests` and the rewritten
+`MoreThanHalfFailedTests`, each tied to a sheet row where there is one.
+
+---
+
 ## Change log
 
 | Date | Change |
@@ -615,3 +676,6 @@ Setup; a charge type marked *Charged to repeaters* is the direct cost.
 | 2026-10-03 | PST results rule: failing a module again at its repeat sitting (FAIL, or failed after its supplementary) is a discontinuation, whatever the GPA; it replaces "owed until passed". `progression.failed_repeat_sittings`, in the same four places. 830 tests |
 | 2026-10-03 | PST results: GPA at face value (F is F, C is C) except a supplementary candidate's pending papers count as C (`progression.semester_gpa`); supplementaries only with that GPA ≥ 2.0, otherwise discontinued at once; a discontinuation closes the repeats owed for that semester, so a readmitted semester is sat afresh as first sittings. 834 tests |
 | 2026-10-03 | Part 4: Form Four index number (PST, required by records), gender required at the VETA desk too, students' health records on verified medical certificates, the Dean of Students role reading them; a repeater pays 200,000 per module and a 280,000 direct cost once a year. Part 3: expenses are requested, may be queried and answered, and come from office funds or petty cash (a float with top-ups). Migration 0058. 864 tests |
+| 2026-10-08 | Part 5: PST results checked against NACTVET's 2024/25 sheets in `diagrams/` (187 of 188 students match through the system). A starred grade counts at its own letter, the GPA is cut to one decimal and checked before "more than half failed"; a starred repeat sitting is a discontinuation at once; supplementary sheets upload as their own sitting (`authority_supp_grade`, migration 0059); level 6 classes First 4.4+ / Upper 3.5+ / Lower 2.7+ / Pass. One shared `progression.decide`. Field modules are "Pharmacy Practice", 5 credits. 869 tests |
+| 2026-10-08 | Security review fixed (report in `diagrams/security-review.md`, kept out of git). The ICT officer is the password desk for everybody, the Principal and students included: resets recorded (`PasswordReset`) and shown to the holder; tutors no longer set student passwords; sign-in lockout (`SignInFailure`); API session-only with CSRF for students and throttles (`attendance/security.py`); Django 5.2 LTS; libraries self-hosted. Migration 0060. 896 tests |
+| 2026-10-08 | Passwords are set or reset by the ICT officer and the Principal only, and only they see a temporary one: admission (PST and VETA) hands out none; the password desk issues every new student their own in one step (`passwords.issue_missing_student_passwords`). 896 tests |

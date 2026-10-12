@@ -25,7 +25,13 @@ nginx_sites_enabled: /etc/nginx/sites-enabled
 # threads 4, then run the playbook: it restarts EduTrack.
 gunicorn_bind: 127.0.0.1:8000
 gunicorn_workers: 3
-gunicorn_threads: 1
+# 3 workers × 4 threads = 12 requests at once for about the memory of three:
+# most of a request is waiting on Postgres, which threads share well. It was 1
+# thread (3 at once), so three slow exports stalled every page (security review L1).
+gunicorn_threads: 4
+# Each worker is replaced after this many requests (± a tenth), so a slow leak
+# never builds up.
+gunicorn_max_requests: 1000
 
 # The largest file anyone can upload (letters, announcement PDFs).
 upload_limit: 10M

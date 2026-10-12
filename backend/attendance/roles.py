@@ -235,6 +235,23 @@ def can_view_expenses(user):
     return is_accountant(user) or can_approve_expenses(user)
 
 
+def can_reset_passwords(user):
+    """Gives anybody a new password when they have forgotten theirs — staff,
+    the Principal included, and students. The ICT officer's desk, with the
+    Principal able to step in. Every reset is recorded and shown to the holder
+    (passwords.py)."""
+    return is_ict_officer(user) or is_principal(user) or is_break_glass(user)
+
+
+def can_issue_student_passwords(user):
+    """Sets a student's portal password — the first one too. The same two
+    offices as above and nobody else (said 8 October 2026): not the admission
+    or records desks, not tutors or Heads of Department. A password set by
+    anybody else is a way into somebody's account, and only these two ever see
+    a temporary password."""
+    return can_reset_passwords(user)
+
+
 def can_keep_health_records(user):
     """Writes a student's health record: the records office, which holds the
     certificate. The Principal may correct it."""

@@ -1,0 +1,13 @@
+{% comment %}One notice in the student portal's list. The PDF is fetched only when the
+   student taps Read, so the dashboard costs no mobile data for notices nobody
+   opens, and the phone's own viewer handles zoom and pages.{% endcomment %}
+<article class="ann-item">
+  <div class="ann-item-head">
+    <h3>{% if a.is_new %}<span class="ann-new">New</span>{% endif %}{{ a.title }}</h3>
+    <span class="meta">{{ a.created_at|date:"d M Y" }}</span>
+  </div>
+  {% if a.note %}<p class="ann-note">{{ a.note }}</p>{% endif %}
+  <a class="btn ann-read" href="{% url 'announcement-download' a.id %}" target="_blank" rel="noopener">
+    <i class="bi bi-file-earmark-pdf"></i> Read notice{% if a.size_label %}<span class="ann-size">PDF · {{ a.size_label }}</span>{% endif %}
+  </a>
+</article>

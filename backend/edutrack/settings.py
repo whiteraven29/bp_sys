@@ -11,8 +11,14 @@ def env_bool(name, default=False):
     }
 
 
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me-in-production')
+_INSECURE_KEY = 'django-insecure-change-me-in-production'
+SECRET_KEY = config('SECRET_KEY', default=_INSECURE_KEY)
 DEBUG = env_bool('DEBUG', default=False)
+# Anybody who knows the key can forge a session, so a live server must not run
+# on the default one: it refuses to start instead.
+if not DEBUG and (not SECRET_KEY or SECRET_KEY == _INSECURE_KEY):
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured('SECRET_KEY is not set. Put a long random value in the .env file.')
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
 INSTALLED_APPS = [
@@ -40,7 +46,22 @@ MIDDLEWARE = [
     'attendance.middleware.PasswordExpiryMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'attendance.security.SecurityHeadersMiddleware',
 ]
+
+# What costs nothing today (attendance/security.py). Stopping inline script as
+# well needs the pages' inline handlers moved out first.
+CONTENT_SECURITY_POLICY = config(
+    'CONTENT_SECURITY_POLICY',
+    default="object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'")
+
+# ── SIGNING IN ────────────────────────────────────────────────────────────────
+# Failures for one name, or from one address, within the window pause signing
+# in for it (attendance/passwords.py). Generous per address: a whole class signs
+# in through the college Wi-Fi.
+SIGN_IN_LOCK_MINUTES = config('SIGN_IN_LOCK_MINUTES', default=15, cast=int)
+SIGN_IN_FAILURES_PER_NAME = config('SIGN_IN_FAILURES_PER_NAME', default=10, cast=int)
+SIGN_IN_FAILURES_PER_IP = config('SIGN_IN_FAILURES_PER_IP', default=100, cast=int)
 
 # ── PASSWORD POLICY ───────────────────────────────────────────────────────────
 #
@@ -125,11 +146,50 @@ LOGOUT_REDIRECT_URL = '/login/'
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
+# And at most a working day: a browser left open on a shared office PC does not
+# stay signed in overnight.
+SESSION_COOKIE_AGE = config('SESSION_COOKIE_AGE', default=8 * 60 * 60, cast=int)
 
 # DRF
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
     'DEFAULT_PARSER_CLASSES': ['rest_framework.parsers.JSONParser', 'rest_framework.parsers.MultiPartParser'],
+    # The session only. DRF's default also accepts HTTP Basic passwords, which
+    # let anybody guess passwords straight at /api/ — no sign-in page, no
+    # lockout. A student's session request must carry the CSRF token too.
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'attendance.security.StudentSessionCSRF',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    # Signed-in staff or a signed-in student, never "anyone"; every view still
+    # checks the office or the person itself (attendance/security.py).
+    'DEFAULT_PERMISSION_CLASSES': ['attendance.security.SignedInOrStudentSession'],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'attendance.security.StaffRateThrottle',
+        'attendance.security.PortalRateThrottle',
+        'attendance.security.AnonymousRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'staff': config('THROTTLE_STAFF', default='600/min'),
+        'portal': config('THROTTLE_PORTAL', default='120/min'),
+        'anonymous': config('THROTTLE_ANONYMOUS', default='30/min'),
+    },
+    # nginx is the one proxy in front: the last X-Forwarded-For entry is the
+    # real address (the first is whatever the client sent).
+    'NUM_PROXIES': 1,
+}
+
+# Failed sign-ins, password resets and refused requests, to the service's log
+# (journalctl -u edutrack).
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {'plain': {'format': '%(asctime)s %(levelname)s %(name)s %(message)s'}},
+    'handlers': {'console': {'class': 'logging.StreamHandler', 'formatter': 'plain'}},
+    'loggers': {
+        'edutrack.security': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'django.security': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+    },
 }
 
 # CORS — allow frontend served from any origin during dev

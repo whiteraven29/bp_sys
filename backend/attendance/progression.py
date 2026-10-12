@@ -21,8 +21,14 @@ The rules the college gave, in the order they are applied:
     student carries on and is billed as normal, and the decision waits for the
     marks. The examination officer may confirm them as **provisional** to let
     the advance proceed.
-  * GPA below 2.0 discontinues the student. They return by readmission, into
-    the exact semester they failed, and are billed as a new student.
+  * GPA below 2.0 discontinues the student — the GPA at face value (a starred
+    grade at its own letter) and cut to one decimal, as NACTVET prints it, and
+    checked before anything else is decided (`decide`). They return by
+    readmission, into the exact semester they failed, and are billed as a new
+    student.
+  * More than half of the modules failed means repeating them, with no
+    supplementary; half or fewer go to supplementaries. A module failed at its
+    repeat sitting — starred or not — is a discontinuation.
   * GPA of 2.0 or better with a module failed after its supplementary means the
     student repeats **that module only**, and stays at the same level until it
     is passed. This holds at level 6 too.
@@ -37,6 +43,7 @@ of what happened, and the repeat row points at both.
 """
 
 import logging
+import math
 
 from django.db import transaction
 from django.db.models import Q
@@ -63,54 +70,119 @@ PASS_GPA = 2.0
 #: Modules the student did not pass at this sitting: waiting on a
 #: supplementary, or failed outright.
 FIRST_SITTING_FAILS = {'SUPP'} | FAILED_STATUSES
+#: A repeat sitting has no supplementary: a starred paper there is a fail.
+REPEAT_SITTING_FAILS = {'SUPP'} | FAILED_STATUSES
 
 
 def fails_more_than_half(rows):
     """The college's rule (said 3 October 2026): a student who fails more than
     half of a semester's modules — the field module counted like any other —
-    sits no supplementaries. They repeat the modules they failed, whatever
-    their GPA. 3 of 5 or 3 of 4 is more than half; 2 of 4 or 2 of 5 is not,
-    and those go to supplementaries as before.
+    sits no supplementaries. They repeat the modules they failed. 3 of 5 or 3
+    of 4 is more than half; 2 of 4 or 2 of 5 is not, and those go to
+    supplementaries. (A GPA below 2.0 is checked first: see `decide`.)
 
     `rows` are module rows (dicts with `status`, and `attempt` where known).
-    Only first sittings count: a repeat sitting keeps the rules it already has
-    — the module stays owed until it is passed.
+    Only first sittings count: a failed repeat sitting is a discontinuation on
+    its own (`failed_repeat_sittings`).
     """
     first = [row['status'] for row in rows if row.get('attempt') != Student.REPEAT]
     failed = sum(1 for status in first if status in FIRST_SITTING_FAILS)
     return bool(first) and failed * 2 > len(first)
 
 
-def semester_gpa(rows):
-    """The semester's GPA (said 3 October 2026): results count as they are — an
-    F is an F, a C is a C. The one exception is a student going to
-    supplementaries (half or fewer modules failed): a supplementary still to be
-    sat counts as C, so nobody shows as discontinued before sitting a paper
-    they may pass. A student who failed more than half goes straight to
-    repeat, so their failed modules count at face value.
+def cut_gpa(value):
+    """A GPA as NACTVET prints it: cut to one decimal, never rounded up —
+    2.89 is 2.8, and 1.99 is 1.9 (still below 2.0)."""
+    if value is None:
+        return None
+    return math.floor(float(value) * 10 + 1e-9) / 10
 
-    `rows` are module rows: `points`, `credits`, `status`, and where known
-    `face_points` and `attempt`.
+
+def semester_gpa(rows):
+    """The semester's GPA, as NACTVET works it out: every result at its own
+    letter — a starred grade too (B*** is 3, D* is 1) — weighted by credits,
+    and cut to one decimal. A passed supplementary is C. Checked against every
+    2024/25 result sheet in diagrams/ (187 of 188 students).
+
+    `rows` are module rows: `points` and `credits`.
     """
-    direct = fails_more_than_half(rows)
-    graded = []
-    for row in rows:
-        points = row.get('points')
-        if direct and row.get('status') == 'SUPP' and row.get('attempt') != Student.REPEAT:
-            points = row.get('face_points', points)
-        if points is not None:
-            graded.append((float(points), row['credits']))
+    graded = [(float(row['points']), row['credits']) for row in rows if row.get('points') is not None]
     total = sum(credits for _, credits in graded)
-    return round(sum(points * credits for points, credits in graded) / total, 2) if total else None
+    return cut_gpa(sum(points * credits for points, credits in graded) / total) if total else None
 
 
 def failed_repeat_sittings(rows):
-    """The college's rule (said 3 October 2026): failing a module at its repeat
-    sitting is a discontinuation, whatever the GPA. "Failed" is the final word
-    on that sitting — FAIL, or REPEAT after its supplementary; a supplementary
-    still to be sat is waited for. Returns the module codes."""
+    """The college's rule (said 3 October 2026, and on NACTVET's sheets): a
+    module failed at its repeat sitting is a discontinuation, whatever the
+    GPA. A repeat sitting has no supplementary, so a starred grade there is a
+    fail like any other. Returns the module codes."""
     return [row['code'] for row in rows
-            if row.get('attempt') == Student.REPEAT and row['status'] in FAILED_STATUSES]
+            if row.get('attempt') == Student.REPEAT and row['status'] in REPEAT_SITTING_FAILS]
+
+
+#: The remarks a semester can end in, as NACTVET words them (DISCO is its FAIL).
+PASS, SUPP, REPEAT, DISCO, INCOMPLETE = 'PASS', 'SUPP', 'REPEAT', 'DISCO', 'INCOMPLETE'
+#: Results the authority has not given yet, or has held back.
+WAITING_STATUSES = {'INCOMPLETE', 'WITHHELD', 'NULLIFIED'}
+
+
+def decide(rows):
+    """Where one semester's results leave a student — the one decision the
+    semester review, the Results Summary, the student's portal and the
+    declarations screen all read, so they never disagree.
+
+    In NACTVET's order (every 2024/25 result sheet in diagrams/ follows it):
+
+      1. discontinued by the authority, or a module failed at its repeat
+         sitting                                              → DISCO
+      2. a result still missing, withheld or nullified       → INCOMPLETE
+      3. GPA (face value, cut to one decimal) below 2.0      → DISCO
+      4. more than half of the first sittings failed         → REPEAT them
+      5. a supplementary to sit                              → SUPP
+      6. a module failed (outright, or after its supp)       → REPEAT it
+      7. otherwise                                           → PASS
+
+    Returns remark, gpa, and the module codes behind it: `supp`, `failed`
+    (to repeat), `direct` (supplementaries skipped because more than half
+    failed), `waiting`, `failed_again` and `discontinued`, with a sentence.
+    """
+    gpa = semester_gpa(rows)
+    supp = [row['code'] for row in rows if row['status'] == 'SUPP' and row.get('attempt') != Student.REPEAT]
+    failed = [row['code'] for row in rows if row['status'] in FAILED_STATUSES and row.get('attempt') != Student.REPEAT]
+    waiting = [row['code'] for row in rows if row['status'] in WAITING_STATUSES]
+    discontinued = [row['code'] for row in rows if row['status'] == 'DISCONTINUED']
+    failed_again = failed_repeat_sittings(rows)
+    out = {'gpa': gpa, 'supp': supp, 'failed': failed, 'direct': [], 'waiting': waiting,
+           'failed_again': failed_again, 'discontinued': discontinued}
+    shown = f'{gpa:.1f}' if gpa is not None else '—'
+
+    if not rows:
+        return {**out, 'remark': INCOMPLETE, 'reason': 'No modules sat this semester.'}
+    if discontinued:
+        return {**out, 'remark': DISCO,
+                'reason': f'Discontinued by the authority on {", ".join(discontinued)}.'}
+    if failed_again:
+        return {**out, 'remark': DISCO,
+                'reason': f'Failed {", ".join(failed_again)} at the repeat sitting — a failed '
+                          f'repeat is a discontinuation.'}
+    if waiting:
+        return {**out, 'remark': INCOMPLETE, 'reason': f'Waiting for results: {", ".join(waiting)}.'}
+    if gpa is None:
+        return {**out, 'remark': INCOMPLETE, 'reason': 'No graded module yet.'}
+    if gpa < PASS_GPA:
+        return {**out, 'remark': DISCO, 'reason': f'GPA {shown} is below {PASS_GPA:.1f}.'}
+    if fails_more_than_half(rows):
+        first = [row for row in rows if row.get('attempt') != Student.REPEAT]
+        direct, failed = supp, sorted(failed + supp)
+        return {**out, 'remark': REPEAT, 'supp': [], 'failed': failed, 'direct': direct,
+                'reason': f'Failed {len(failed)} of {len(first)} modules — more than half, so no '
+                          f'supplementary: repeats {", ".join(failed)}.'}
+    if supp:
+        return {**out, 'remark': SUPP,
+                'reason': f'GPA {shown}; supplementary in {", ".join(supp)}.'}
+    if failed:
+        return {**out, 'remark': REPEAT, 'reason': f'GPA {shown}; repeats {", ".join(failed)}.'}
+    return {**out, 'remark': PASS, 'reason': f'Passed every module with GPA {shown}.'}
 
 
 def direct_repeat_enrollments(semester, enrollments):
@@ -268,25 +340,10 @@ def results_summary(semester, class_level, *, programme=None):
     for key, rows_for_person in people.items():
         first = rows_for_person[0]
         rows = [module_row(enrollment, serializer) for enrollment in rows_for_person]
-        gpa = semester_gpa(rows)
-        supp = [row['code'] for row in rows if row['status'] == 'SUPP']
-        failed = [row['code'] for row in rows if row['status'] in FAILED_STATUSES]
-        waiting = [row['code'] for row in rows if row['status'] in {'INCOMPLETE', 'WITHHELD', 'NULLIFIED'}]
-        if any(row['status'] == 'DISCONTINUED' for row in rows) or failed_repeat_sittings(rows):
-            remark = 'DISCO'
-        elif waiting:
-            remark = 'INCOMPLETE'
-        elif fails_more_than_half(rows):
-            remark = 'REPEAT'                      # more than half failed: no supp
-            failed, supp = sorted(failed + supp), []
-        elif gpa is not None and gpa < PASS_GPA:
-            remark = 'DISCO'                       # below 2.0 even with supps as C
-        elif supp:
-            remark = 'SUPP'
-        elif failed:
-            remark = 'REPEAT'
-        else:
-            remark = 'PASS'
+        decision = decide(rows)
+        gpa, remark = decision['gpa'], decision['remark']
+        supp, waiting = decision['supp'], decision['waiting']
+        failed = sorted(set(decision['failed'] + decision['failed_again'] + decision['discontinued']))
         holding = withheld.get(first.profile_id) if first.profile_id else None
         students.append({
             'profile_id': first.profile_id, 'reg_no': first.nactvet_reg_no, 'name': first.name,
@@ -344,8 +401,8 @@ def evaluate(profile, semester, *, registration=None, enrollments=None,
     if enrollments is None:
         enrollments = list(enrollments_for(profile, semester))
     rows = [module_row(enrollment, serializer) for enrollment in enrollments]
-
-    gpa = semester_gpa(rows)
+    decision = decide(rows)
+    gpa = decision['gpa']
 
     class_level = None
     if registration is not None:
@@ -353,50 +410,23 @@ def evaluate(profile, semester, *, registration=None, enrollments=None,
     elif enrollments:
         class_level = max((e.module.class_level for e in enrollments), key=lambda lvl: lvl.order)
 
-    pending = [row['code'] for row in rows if row['status'] in PENDING_STATUSES]
-    failed = [row['code'] for row in rows if row['status'] in FAILED_STATUSES]
-    discontinued = [row['code'] for row in rows if row['status'] == 'DISCONTINUED']
-    waiting = [row['code'] for row in rows if row['status'] in PENDING_STATUSES - {'SUPP'}]
-
-    if not rows:
-        proposed, reason = SemesterReview.PENDING, 'No modules sat this semester.'
-    elif discontinued:
-        proposed = SemesterReview.DISCONTINUED
-        reason = f'Discontinued by the authority on {", ".join(discontinued)}.'
-    elif failed_repeat_sittings(rows):
-        proposed = SemesterReview.DISCONTINUED
-        reason = (f'Failed {", ".join(failed_repeat_sittings(rows))} again at the repeat '
-                  f'sitting — a failed repeat is a discontinuation.')
-    elif not waiting and fails_more_than_half(rows):
-        # More than half failed: no supplementaries, the failed modules are
-        # repeated. The results themselves are not touched; the review marks
-        # which modules are repeated, and confirming it raises the repeats.
-        for row in rows:
-            if row['status'] == 'SUPP' and row.get('attempt') != Student.REPEAT:
-                row['direct_repeat'] = True
-        direct = [row['code'] for row in rows if row.get('direct_repeat')]
-        failed = failed + direct
-        pending = [code for code in pending if code not in direct]
-        proposed = SemesterReview.REPEAT
-        reason = (f'Failed {len(failed)} of {len(rows)} modules — more than half, so no '
-                  f'supplementary: repeats {", ".join(sorted(failed))}.')
-    elif gpa is not None and gpa < PASS_GPA:
-        # Checked before waiting on supplementaries: the GPA already counts
-        # each one as C, the most it can earn, so a student below 2.0 does not
-        # qualify for supplementaries — passing them could not lift the GPA.
-        proposed = SemesterReview.DISCONTINUED
-        reason = f'GPA {gpa:.2f} is below {PASS_GPA:.1f}.'
-    elif pending:
-        proposed = SemesterReview.PENDING
+    # The decision itself is `decide`, shared with the Results Summary and the
+    # portal. Here it becomes a proposal the examination office confirms.
+    remark, reason = decision['remark'], decision['reason']
+    failed = sorted(set(decision['failed'] + decision['failed_again']))
+    pending = decision['supp'] + decision['waiting']
+    # More than half failed: the supplementaries are skipped and repeated. The
+    # results are not touched; the rows say which, and confirming the review
+    # raises the repeats.
+    for row in rows:
+        if row['code'] in decision['direct'] and row.get('attempt') != Student.REPEAT:
+            row['direct_repeat'] = True
+    proposed = {
+        DISCO: SemesterReview.DISCONTINUED, INCOMPLETE: SemesterReview.PENDING,
+        SUPP: SemesterReview.PENDING, REPEAT: SemesterReview.REPEAT, PASS: SemesterReview.CLEAR,
+    }[remark]
+    if remark == SUPP:
         reason = f'Waiting for results: {", ".join(pending)}.'
-    elif gpa is None:
-        proposed, reason = SemesterReview.PENDING, 'No graded module yet.'
-    elif failed:
-        proposed = SemesterReview.REPEAT
-        reason = f'GPA {gpa:.2f}; repeats {", ".join(failed)}.'
-    else:
-        proposed = SemesterReview.CLEAR
-        reason = f'Passed every module with GPA {gpa:.2f}.'
 
     # Finishing is decided at the end of the year, and only when nothing at all
     # is left outstanding — including a module failed in an earlier year.
@@ -410,7 +440,7 @@ def evaluate(profile, semester, *, registration=None, enrollments=None,
             reason = f'Passed this semester, still to pass {", ".join(sorted(left))}.'
         else:
             proposed = SemesterReview.COMPLETED
-            reason = f'Completed level 6 with GPA {gpa:.2f}.'
+            reason = f'Completed level 6 with GPA {gpa:.1f}.'
 
     return {
         'gpa': gpa,

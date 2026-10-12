@@ -286,8 +286,9 @@ def set_portal_pin(profile, pin, *, require_change=True):
 
 @transaction.atomic
 def admit(application, *, actor=None):
-    """The last desk: the college ID (the VETA pattern, the college's counter),
-    the enrollment, and a portal password handed over once."""
+    """The last desk: the college ID (the VETA pattern, the college's counter)
+    and the enrollment. The portal password comes from the ICT officer's
+    password desk, not from here (said 8 October 2026)."""
     intake = application.intake
     unpaid = unpaid_before_admission(application)
     if unpaid:
@@ -306,13 +307,9 @@ def admit(application, *, actor=None):
                   'admitted_by': actor,
                   'nva_level': 1 if intake.programme.structure == Programme.NVA else None},
     )
-    pin = None
-    if not profile.portal_pin_hash:
-        pin = admissions.generate_portal_pin()
-        set_portal_pin(profile, pin)
     application.state = CourseApplication.ADMITTED
     application.save(update_fields=['state', 'updated_at'])
-    application.issued_pin = pin          # shown once, on the admission slip
+    application.issued_pin = None         # the password desk gives it
     logger.info('Admitted %s to %s', profile.nactvet_reg_no, intake)
     return enrollment
 

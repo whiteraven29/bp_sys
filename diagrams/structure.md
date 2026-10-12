@@ -133,6 +133,7 @@ ICT officer's.
    │  nactvet_reg_no, attempt (normal / repeat), portal PIN
    │
    ├──► StudentResult      CA + final marks, or the authority grade
+   │                       (+ authority_supp_grade from the supplementary sheet)
    ├──► AttendanceRecord   per Session
    └──► profile ──► StudentProfile   one row per PERSON
                       nactvet_reg_no (unique), college_id, phone,
@@ -212,6 +213,10 @@ sign in.
           TrainingCoordinatorProfile (course coordinator, VETA courses)
           DeanOfStudentsProfile (reads health records)
   RoleChange   who was given / lost which role, by whom, when
+  PasswordReset  every password the ICT desk reset (staff or student), by whom
+  SignInFailure  failed sign-ins, briefly, for the lockout (shared by all workers)
+  attendance/security.py  the API's defaults: session-only auth, CSRF for students,
+                          "signed in" by default, throttles, security headers
 ```
 
 Older finance tables (`PaymentCategory`, `StudentFinanceObligation`,
@@ -288,8 +293,9 @@ are dropped once the production row counts are checked.
             └──────────────┬───────────────┘
                            ▼
                     StudentResult
-                           │  grading.py: points × credits ÷ credits = GPA
-                           │  a pending supplementary counts as C
+                           │  grading.py: points × credits ÷ credits = GPA,
+                           │  every grade at its own letter, cut to 1 decimal
+                           │  progression.decide: NACTVET's order (design §19)
                            ▼
               Results Summary (pass / supp / repeat / disco)
                            │  optional: withhold a semester

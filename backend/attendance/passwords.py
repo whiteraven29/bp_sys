@@ -19,6 +19,8 @@ from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
 
+from django.db import models
+
 from .models import PasswordStatus, Student, StudentProfile
 
 #: What the college is shown, in the order things get worse.
@@ -163,3 +165,174 @@ def profile_of(student):
         return student.profile
     return StudentProfile.objects.filter(
         nactvet_reg_no__iexact=student.nactvet_reg_no).first()
+
+
+# ── the password desk: resets, and who may sign in with what ─────────────────
+#
+# The ICT officer is where anybody goes when they have forgotten a password —
+# staff, the Principal, students. A reset hands over a temporary password that
+# must be changed at the next sign-in, is recorded (PasswordReset), and is
+# shown to the holder, so a reset they did not ask for does not go unnoticed.
+
+class PasswordResetError(ValueError):
+    """A reset the rules do not allow; the message says why."""
+
+
+def _record_reset(*, kind, actor, user=None, profile=None, ip=None, first=False):
+    from . import notifications
+    from .models import Notification, PasswordReset
+    row = PasswordReset.objects.create(kind=kind, user=user, profile=profile, done_by=actor, ip=ip)
+    by = (actor.get_full_name() or actor.username) if actor is not None else 'the office'
+    when = f'{timezone.localtime(row.done_at):%d %b %Y at %H:%M}'
+    notifications.notify(
+        [user] if user is not None else None, profile=profile, kind=Notification.PASSWORD_RESET,
+        title='Your portal password was issued' if first else 'Your password was reset',
+        body=(f'Issued by {by} on {when}. Choose your own the first time you sign in.' if first else
+              f'Reset by {by} on {when}. If you did not ask for this, tell the ICT officer.'))
+    return row
+
+
+def reset_staff_password(user, *, actor, given='', ip=None):
+    """A new password for a member of staff — the Principal's too: the ICT
+    officer is the desk for everybody. Returns the temporary password, which
+    must be changed at the next sign-in."""
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+    from .admissions import generate_portal_pin
+    from .roles import can_reset_passwords
+    if not can_reset_passwords(actor):
+        raise PasswordResetError('Passwords are reset by the ICT officer (or the Principal).')
+    given = (given or '').strip()
+    if given:
+        try:
+            validate_password(given, user)
+        except ValidationError as exc:
+            raise PasswordResetError(' '.join(exc.messages))
+    password = given or generate_portal_pin()
+    user.set_password(password)
+    user.save(update_fields=['password'])
+    mark_reset(user, by=actor)
+    _record_reset(kind='staff', actor=actor, user=user, ip=ip)
+    return password
+
+
+def reset_student_password(profile, *, actor, ip=None, first=False):
+    """A new portal password for a student — their first, or one they have
+    forgotten: every enrollment (PST) and the profile (VETA) get the same one.
+    Returns it, once."""
+    from .admissions import generate_portal_pin
+    from .roles import can_issue_student_passwords
+    if not can_issue_student_passwords(actor):
+        raise PasswordResetError('Student passwords are reset by the ICT officer.')
+    enrollments = list(Student.objects.filter(nactvet_reg_no__iexact=profile.nactvet_reg_no))
+    is_veta = bool(profile.portal_pin_hash) or profile.course_enrollments.exists()
+    if not enrollments and not is_veta:
+        raise PasswordResetError(f'{profile.name} has nothing to sign in to yet.')
+    pin = generate_portal_pin()
+    for enrollment in enrollments:
+        enrollment.set_portal_pin(pin, require_change=True)
+        enrollment.save(update_fields=['portal_pin_hash', 'must_change_portal_password', 'portal_pin_set_at'])
+    if is_veta:
+        from . import veta
+        veta.set_portal_pin(profile, pin, require_change=True)
+    _record_reset(kind='student', actor=actor, profile=profile, ip=ip, first=first)
+    return pin
+
+
+def students_without_password():
+    """Current students who have no portal password yet: PST students enrolled
+    this year, and admitted VETA course students. Newly admitted students land
+    here — the password desk gives them theirs."""
+    from .models import AcademicYear, CourseEnrollment
+    year = AcademicYear.objects.filter(is_active=True).first()
+    with_password = set(Student.objects.exclude(portal_pin_hash='').filter(profile_id__isnull=False)
+                        .values_list('profile_id', flat=True))
+    pst = StudentProfile.objects.none()
+    if year is not None:
+        pst = StudentProfile.objects.filter(
+            enrollments__module__semester__academic_year=year,
+            enrollments__withdrawn_at__isnull=True).exclude(id__in=with_password)
+    veta = StudentProfile.objects.filter(
+        id__in=CourseEnrollment.objects.values('profile_id'), portal_pin_hash='')
+    return (pst | veta).distinct().order_by('name')
+
+
+def issue_missing_student_passwords(*, actor, ip=None):
+    """Every student in `students_without_password` gets a password of their
+    own — never one shared by the class. Returns the list, the only time the
+    passwords can be read."""
+    issued = []
+    for profile in list(students_without_password()):
+        try:
+            pin = reset_student_password(profile, actor=actor, ip=ip, first=True)
+        except PasswordResetError:
+            continue
+        issued.append({'name': profile.name, 'reg_no': profile.nactvet_reg_no,
+                       'college_id': profile.college_id or '', 'password': pin})
+    return issued
+
+
+def student_for_sign_in(reg_no, secret):
+    """The enrollment a student signs in through, or None.
+
+    Only the person's newest password counts — the one set last on any of
+    their enrollments. An enrollment carrying some other password (an old one
+    never updated, or one somebody else typed in) does not open the portal.
+    Enrollments from before passwords were dated count as they always did."""
+    from django.contrib.auth.hashers import check_password
+    from django.db.models import F
+    rows = list(Student.objects.filter(nactvet_reg_no__iexact=str(reg_no).strip())
+                .exclude(portal_pin_hash='')
+                .order_by(F('portal_pin_set_at').desc(nulls_last=True), '-id'))
+    dated = [row for row in rows if row.portal_pin_set_at is not None]
+    candidates = [row for row in dated if row.portal_pin_hash == dated[0].portal_pin_hash] if dated else rows
+    for row in candidates:
+        if check_password(str(secret), row.portal_pin_hash):
+            return row
+    return None
+
+
+def copy_student_password(enrollment):
+    """A new enrollment for somebody who already has a portal password carries
+    that password — never a new one typed in by whoever enrolled them. Not
+    dated, so it never becomes their "newest"."""
+    if enrollment.portal_pin_hash:
+        return
+    existing = (Student.objects.filter(nactvet_reg_no__iexact=enrollment.nactvet_reg_no)
+                .exclude(pk=enrollment.pk).exclude(portal_pin_hash='')
+                .order_by(models.F('portal_pin_set_at').desc(nulls_last=True), '-id').first())
+    if existing is not None:
+        Student.objects.filter(pk=enrollment.pk).update(
+            portal_pin_hash=existing.portal_pin_hash,
+            must_change_portal_password=existing.must_change_portal_password)
+
+
+# ── slowing down password guessing ────────────────────────────────────────────
+
+def _failure_window():
+    return timezone.now() - timedelta(minutes=getattr(settings, 'SIGN_IN_LOCK_MINUTES', 15))
+
+
+def sign_in_blocked(identifier, ip):
+    """Whether signing in is paused for this name or this address: too many
+    failures in the last quarter of an hour. Checked before any password is."""
+    from .models import SignInFailure
+    since = _failure_window()
+    recent = SignInFailure.objects.filter(at__gte=since)
+    if identifier and recent.filter(identifier=identifier.strip().lower()).count() >= getattr(
+            settings, 'SIGN_IN_FAILURES_PER_NAME', 10):
+        return True
+    # Generous per address: a whole class signs in through the college Wi-Fi.
+    return bool(ip) and recent.filter(ip=ip).count() >= getattr(settings, 'SIGN_IN_FAILURES_PER_IP', 100)
+
+
+def record_sign_in_failure(identifier, ip):
+    from .models import SignInFailure
+    SignInFailure.objects.create(identifier=(identifier or '').strip().lower()[:150], ip=ip or None)
+    # Nothing older than a day is needed; trimmed here so the table stays small.
+    SignInFailure.objects.filter(at__lt=timezone.now() - timedelta(days=1)).delete()
+
+
+def clear_sign_in_failures(identifier):
+    from .models import SignInFailure
+    SignInFailure.objects.filter(identifier=(identifier or '').strip().lower()).delete()

@@ -29,6 +29,7 @@ what the system must hold on that day:
 | Q21, Q22 | for appointment letters | Roles not listed; acceptance; terms of office |
 | QV1–QV8, QV10 | before the long courses (January?) | The VETA long-course decisions in section H |
 | Q25–Q29 | before 12 October | Repeaters' direct cost, health records, petty cash (section I) |
+| Q30 | when convenient | One student in the level 5 repeat class (section J) |
 
 ---
 
@@ -444,3 +445,25 @@ is refused.
 **Still open:** do any of your students have index numbers in another form
 (older slips, foreign certificates, equivalence)? Those would need to be let
 through.
+
+---
+
+## J. Results against NACTVET's sheets (8 October 2026)
+
+The rules in `design.md` section 19 reproduce 187 of the 188 students on the
+2024/25 sheets in `diagrams/`. Answered on 8 October: a single starred paper is
+FAIL (discontinued) only when it is a **repeated** module — a repeat sitting
+has no supplementary.
+
+### Q30. NS2202/0071/2021 in the level 5 repeat class (2023/24) ◐
+
+B C B C\* A, GPA 2.5: NACTVET says **REPEAT** (PST05210). Its classmates with one
+starred paper are FAIL, so PST05210 was not a repeated module for this student
+— but a starred first sitting is otherwise SUPP, not REPEAT. The class's results
+were submitted on 1 October 2024 (the other classes in August): perhaps no
+supplementary follows a sitting held that late, so a fail there is a repeat.
+
+**Built as:** the general rule (the system would say SUPP for a first sitting,
+FAIL for a repeated one). Not changed for one student.
+
+**Still open:** do you know why this one was REPEAT?

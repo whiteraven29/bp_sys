@@ -48,6 +48,31 @@ class ExpenseError(ValueError):
     """Something about this expense the rules do not allow; the message says what."""
 
 
+#: What a receipt or quotation may be, by extension and by its first bytes.
+#: Anything else — an HTML page above all — could run in the approver's
+#: browser when it is opened.
+RECEIPT_TYPES = {
+    'pdf': (b'%PDF',), 'png': (b'\x89PNG',), 'jpg': (b'\xff\xd8\xff',), 'jpeg': (b'\xff\xd8\xff',),
+}
+RECEIPT_MAX_BYTES = 10 * 1024 * 1024
+
+
+def check_receipt(upload):
+    """A receipt is a PDF, JPG or PNG of at most 10 MB, and is what its name
+    says it is. Raises ExpenseError otherwise."""
+    if not upload:
+        return
+    ext = str(getattr(upload, 'name', '')).rsplit('.', 1)[-1].lower()
+    if ext not in RECEIPT_TYPES:
+        raise ExpenseError('A receipt or quotation is a PDF, JPG or PNG.')
+    if getattr(upload, 'size', 0) > RECEIPT_MAX_BYTES:
+        raise ExpenseError('A receipt must be 10 MB or smaller.')
+    head = upload.read(8)
+    upload.seek(0)
+    if not head.startswith(RECEIPT_TYPES[ext]):
+        raise ExpenseError(f'That file is not a real {ext.upper()}.')
+
+
 # ── where a category stands against its budget ───────────────────────────────
 
 #: Spending that counts against the budget: approved (committed) and paid.
@@ -194,6 +219,7 @@ def record(*, academic_year, category, description, payee, amount, incurred_on,
         raise ExpenseError(f'{category} is no longer in use.')
     if source not in dict(Expense.SOURCE_CHOICES):
         raise ExpenseError('Say where the money comes from: office funds or petty cash.')
+    check_receipt(attachment)
     expense = Expense.objects.create(
         source=source,
         academic_year=academic_year, category=category, description=description.strip()[:300],
@@ -304,6 +330,8 @@ def answer(expense, *, note, changes=None, actor=None, ip=None):
             raise ExpenseError('Office funds or petty cash.')
         if field == 'category' and not value.is_active:
             raise ExpenseError(f'{value} is no longer in use.')
+        if field == 'attachment':
+            check_receipt(value)
         if field in ('description', 'payee', 'supplier_reference'):
             value = str(value).strip()[:300 if field == 'description' else 200 if field == 'payee' else 100]
         if getattr(expense, field) != value:

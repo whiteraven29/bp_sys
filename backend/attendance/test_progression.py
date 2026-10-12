@@ -202,7 +202,7 @@ class EvaluateTests(ProgressionBase):
 
         outcome = progression.evaluate(profile, self.sem2)
 
-        self.assertEqual(outcome['gpa'], round((4 * 3 + 1 * 1) / 4, 2))
+        self.assertEqual(outcome['gpa'], 3.2)        # 13 / 4 = 3.25, cut to one decimal
 
 
 # ── confirming, and what confirming does ──────────────────────────────────────
@@ -613,10 +613,12 @@ class RepeatSittingTests(ProgressionBase):
         summary = progression.results_summary(next_sem1, self.level4)
         self.assertEqual([row['remark'] for row in summary['students']], ['DISCO'])
 
-    def test_a_supplementary_still_to_sit_at_the_repeat_is_waited_for(self):
+    def test_a_starred_paper_at_the_repeat_sitting_is_a_discontinuation_at_once(self):
+        # A repeat sitting has no supplementary (NACTVET, level 4 2023/24 and the
+        # level 5 repeat class): failing the end exam there ends it.
         profile, next_sem1, _ = self.repeat_sitting('REG/033', supp=None)
 
-        self.assertEqual(progression.evaluate(profile, next_sem1)['proposed'], SemesterReview.PENDING)
+        self.assertEqual(progression.evaluate(profile, next_sem1)['proposed'], SemesterReview.DISCONTINUED)
 
     def test_a_readmitted_semester_is_sat_afresh_as_first_sittings(self):
         """Discontinued, then readmitted: the semester is sat again from the

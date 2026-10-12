@@ -1,6 +1,7 @@
 import json
 from decimal import Decimal
 from functools import wraps
+import logging
 import re
 from io import BytesIO
 
@@ -40,8 +41,9 @@ from .roles import (
     is_dpfpa, is_estate_officer, is_exam_officer, is_head_of_department, is_ict_officer,
     is_principal, is_records_officer, is_secretary, runs_departments,
     is_coordinator, runs_veta_courses, can_approve_expenses, can_view_expenses,
-    is_dean, can_read_health_records,
+    is_dean, can_read_health_records, can_reset_passwords, can_issue_student_passwords,
 )
+from .security import neutralise_formulas
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
 from .models import (
     AcademicYear, Semester, ClassLevel, Module,
@@ -59,7 +61,7 @@ from .models import (
     OutstandingRepeat, SemesterReview, StudentStanding, StandingChange,
     AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck, Application,
     PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultWithholding,
-    StudentDocument, HealthRecord, ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile,
+    StudentDocument, HealthRecord, PasswordReset, ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile,
     ICTOfficerProfile, RoleChange, TrainingCoordinatorProfile, DeanOfStudentsProfile,
     Intake, CourseFee, CourseFeeInstalment, CourseModule, CourseApplication, CourseEnrollment,
     ExpenseCategory, ExpenseBudget, Expense,
@@ -91,6 +93,7 @@ from .serializers import (
 from .grading import grade_for_mark, gpa_classification, parse_authority_grade
 
 User = get_user_model()
+security_log = logging.getLogger('edutrack.security')
 
 STUDENT_PASSWORD_MESSAGE = (
     'Password must be at least 8 characters and include an uppercase letter, '
@@ -174,7 +177,7 @@ END_MARK_FIELDS = frozenset({
 })
 EXAM_OFFICE_FIELDS = frozenset({
     'ca_approved', 'final_approved', 'supplementary_mark',
-    'authority_grade', 'authority_status',
+    'authority_grade', 'authority_supp_grade', 'authority_status',
 })
 
 
@@ -439,10 +442,21 @@ def login_view(request):
     if request.method == 'POST':
         identifier = str(request.POST.get('identifier', '')).strip()
         secret = str(request.POST.get('secret', '')).strip()
+        ip = finance.client_ip(request)
+
+        # Too many failures for this name or from this address: no password is
+        # even tried until the quarter of an hour has passed.
+        if passwords.sign_in_blocked(identifier, ip):
+            security_log.warning('Sign-in paused for %r from %s (too many failures)', identifier, ip)
+            return render(request, 'login.html', {
+                'error': ('Too many failed attempts. Wait 15 minutes and try again, or see the '
+                          'ICT officer if you have forgotten your password.'),
+                'identifier': identifier}, status=429)
 
         # Try teacher/user authentication first
         user = authenticate(request, username=identifier, password=secret)
         if user is not None:
+            passwords.clear_sign_in_failures(identifier)
             login(request, user)
             next_url = request.GET.get('next', '')
             if next_url and url_has_allowed_host_and_scheme(
@@ -451,14 +465,10 @@ def login_view(request):
                 return redirect(next_url)
             return redirect('frontend')
 
-        # Otherwise try student login using registration number + portal PIN.
+        # Otherwise try student login using registration number + portal
+        # password — the person's newest password only (passwords.py).
         reg_no = identifier
-        student = None
-        students = Student.objects.filter(nactvet_reg_no__iexact=reg_no).select_related('module')
-        for st in students:
-            if st.check_portal_pin(secret):
-                student = st
-                break
+        student = passwords.student_for_sign_in(reg_no, secret)
 
         # A VETA course student has no PST enrollment to sign in with: they are
         # found by their registration number or college ID, with the password
@@ -470,10 +480,13 @@ def login_view(request):
                 course_profile = candidate
 
         if course_profile is not None:
+            passwords.clear_sign_in_failures(identifier)
             request.session.cycle_key()
             request.session['course_profile_id'] = course_profile.id
             return redirect('course-portal')
         if student is None:
+            passwords.record_sign_in_failure(identifier, ip)
+            security_log.info('Failed sign-in for %r from %s', identifier, ip)
             error = 'Invalid credentials.'
         elif passwords.student_is_locked(student):
             error = passwords.student_reading(student)['message']
@@ -489,6 +502,10 @@ def login_view(request):
                 # Six months up. The portal already stops at the change-password
                 # page when this flag is set.
                 passwords.require_student_change(student)
+            passwords.clear_sign_in_failures(identifier)
+            # A new session key at sign-in, as staff get from login(): a
+            # session id planted before signing in is useless after it.
+            request.session.cycle_key()
             request.session['student_id'] = student.id
             request.session['student_reg_no'] = student.nactvet_reg_no
             return redirect('student-dashboard')
@@ -692,35 +709,27 @@ def _result_statements(modules, class_level):
             statement.update(gpa=None, remark='WITHHELD', comment='')
             ordered.append(statement)
             continue
-        # Face value, except a supplementary still to sit counts as C for a
-        # student going to supplementaries (progression.semester_gpa).
-        semester_gpa = progression.semester_gpa(statement.get('sittings', []))
-        supp, failed = statement['supp'], statement['failed']
+        # The same decision the semester review and the Results Summary make
+        # (progression.decide), from the same rows.
         sittings = statement.pop('sittings', [])
-        statuses = [row['status'] for row in sittings]  # GPA above, from the same rows
-        failed_again = [m['code'] for m, sitting in zip(statement['modules'], sittings)
-                        if sitting.get('attempt') == Student.REPEAT
-                        and sitting['status'] in progression.FAILED_STATUSES]
-        if failed_again:
-            # A module failed again at its repeat sitting: discontinued.
-            remark, comment = 'DISCO', ', '.join(sorted(failed_again))
-        elif progression.fails_more_than_half(sittings) and not any(
-                status in ('INCOMPLETE', 'WITHHELD', 'NULLIFIED', 'DISCONTINUED') for status in statuses):
-            # More than half failed: the failed modules are repeated, with no
-            # supplementary, whatever the GPA (progression.fails_more_than_half).
-            remark, comment = 'REPEAT', ', '.join(sorted(supp + failed))
-        elif semester_gpa is not None and semester_gpa < progression.PASS_GPA:
-            # Below 2.0 even with each supplementary counted as C: no
-            # supplementary could lift it, so none is sat.
-            remark, comment = 'DISCO', ', '.join(sorted(failed + supp)) or 'GPA below 2.0'
-        elif supp:
+        decision = progression.decide([
+            {**sitting, 'code': module['code']}
+            for module, sitting in zip(statement['modules'], sittings)])
+        semester_gpa, remark = decision['gpa'], decision['remark']
+        if remark == progression.DISCO:
+            remark, comment = 'DISCO', ', '.join(sorted(set(
+                decision['failed_again'] + decision['discontinued'] + decision['failed']
+                + decision['supp']))) or 'GPA below 2.0'
+        elif remark == progression.REPEAT:
+            remark, comment = 'REPEAT', ', '.join(decision['failed'])
+        elif remark == progression.SUPP:
             # Nothing is decided until the supplementary is marked, so the
             # remark says what is outstanding rather than guessing at a class.
-            remark, comment = 'SUPP', ', '.join(sorted(supp))
-        elif failed:
-            remark, comment = 'REPEAT', ', '.join(sorted(failed))
-        else:
+            remark, comment = 'SUPP', ', '.join(sorted(decision['supp']))
+        elif remark == progression.PASS:
             remark, comment = gpa_classification(semester_gpa, class_level), 'PASS'
+        else:
+            remark, comment = 'INCOMPLETE', ', '.join(decision['waiting'])
         statement['gpa'] = semester_gpa
         statement['remark'] = remark
         statement['comment'] = comment
@@ -946,13 +955,11 @@ def student_dashboard(request):
         and module['result']
         and module['result']['grade_point'] is not None
     ]
+    total_credits = sum(credits for _, credits in published_points)
     gpa = (
-        round(
-            sum(float(points) * credits for points, credits in published_points)
-            / sum(credits for _, credits in published_points),
-            2,
-        )
-        if published_points else None
+        progression.cut_gpa(
+            sum(float(points) * credits for points, credits in published_points) / total_credits)
+        if total_credits else None
     )
     gpa_class = gpa_classification(
         gpa, student.module.class_level
@@ -1495,23 +1502,83 @@ def reset_staff_password(request, user_id):
     Whatever they are given is temporary: they are made to choose their own the
     next time they sign in, and the six months start from then.
     """
-    if not can_manage_accounts(request.user):
+    if not can_reset_passwords(request.user):
         return Response({'detail': 'Only the ICT officer or the Principal can '
                                    'reset a password.'}, status=status.HTTP_403_FORBIDDEN)
     user = User.objects.filter(pk=user_id).first()
     if user is None:
         return Response({'detail': 'Staff account not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-    given = str(request.data.get('password') or '').strip()
-    if given and len(given) < 6:
-        return Response({'detail': 'A password needs at least 6 characters.'},
-                        status=status.HTTP_400_BAD_REQUEST)
-    new_password = given or admissions.generate_portal_pin()
-    user.set_password(new_password)
-    user.save(update_fields=['password'])
-    passwords.mark_reset(user, by=request.user)
+    # The Principal's account too: the ICT officer is the desk for everybody.
+    # The reset is recorded and shown to the holder at their next sign-in.
+    try:
+        new_password = passwords.reset_staff_password(
+            user, actor=request.user, given=str(request.data.get('password') or ''),
+            ip=finance.client_ip(request))
+    except passwords.PasswordResetError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    security_log.info('%s reset the password of %s', request.user.username, user.username)
     return Response({'username': user.username, 'password': new_password,
                      'detail': f'{user.username} must choose their own password at the next sign-in.'})
+
+
+@api_view(['POST'])
+@login_required
+def reset_student_password(request):
+    """The ICT officer's desk for a student who has forgotten their portal
+    password: found by registration number or college ID, given a temporary
+    password (shown once), and made to choose their own at the next sign-in."""
+    if not can_reset_passwords(request.user):
+        raise PermissionDenied('Student passwords are reset by the ICT officer.')
+    wanted = str(request.data.get('identifier') or '').strip()
+    if not wanted:
+        return Response({'detail': 'Give the registration number or college ID.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    profile = StudentProfile.objects.filter(
+        Q(nactvet_reg_no__iexact=wanted) | Q(college_id__iexact=wanted) | Q(nva_number__iexact=wanted)).first()
+    if profile is None:
+        return Response({'detail': f'No student with the number {wanted}.'}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        pin = passwords.reset_student_password(profile, actor=request.user, ip=finance.client_ip(request))
+    except passwords.PasswordResetError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    security_log.info('%s reset the portal password of %s', request.user.username, profile.nactvet_reg_no)
+    return Response({'name': profile.name, 'reg_no': profile.nactvet_reg_no,
+                     'college_id': profile.college_id or '', 'password': pin,
+                     'detail': f'{profile.name} must choose their own password at the next sign-in.'})
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def issue_student_passwords(request):
+    """GET: the students with no portal password yet (newly admitted ones).
+    POST: give each of them their own temporary password — the list comes back
+    once, for printing on slips; nobody else ever sees it."""
+    if not can_reset_passwords(request.user):
+        raise PermissionDenied('Student passwords are set by the ICT officer (or the Principal).')
+    if request.method == 'GET':
+        waiting = passwords.students_without_password()
+        return Response({'count': waiting.count(), 'students': [
+            {'name': p.name, 'reg_no': p.nactvet_reg_no, 'college_id': p.college_id or ''}
+            for p in waiting[:500]]})
+    issued = passwords.issue_missing_student_passwords(actor=request.user, ip=finance.client_ip(request))
+    security_log.info('%s issued portal passwords to %d student(s)', request.user.username, len(issued))
+    return Response({'issued': issued})
+
+
+@api_view(['GET'])
+@login_required
+def password_resets(request):
+    """The record of every password the office has reset, newest first."""
+    if not can_reset_passwords(request.user):
+        raise PermissionDenied('For the ICT officer and the Principal.')
+    rows = PasswordReset.objects.select_related('user', 'profile', 'done_by')[:200]
+    return Response([{
+        'kind': row.kind, 'kind_display': row.get_kind_display(),
+        'who': (full_name_for(row.user) if row.user_id else row.profile.name if row.profile_id else '—'),
+        'account': (row.user.username if row.user_id else row.profile.nactvet_reg_no if row.profile_id else ''),
+        'done_by': full_name_for(row.done_by) if row.done_by_id else '',
+        'done_at': row.done_at, 'ip': row.ip,
+    } for row in rows])
 
 
 @api_view(['POST'])
@@ -2272,6 +2339,11 @@ class StudentDocumentViewSet(viewsets.ModelViewSet):
                 or can_edit_student_records(self.request.user)):
             return StudentDocument.objects.none()
         qs = StudentDocument.objects.select_related('profile', 'uploaded_by', 'verified_by')
+        # A medical certificate is health information: only the offices that
+        # read health records see it (records, the Dean, the Principal) — not
+        # finance or DPARC, who otherwise read a student's papers.
+        if not can_read_health_records(self.request.user):
+            qs = qs.exclude(kind=StudentDocument.MEDICAL)
         if visible_application_states(self.request.user) is not None:
             qs = qs.filter(profile__in=visible_profiles(self.request.user))
         profile_id = self.request.query_params.get('profile_id')
@@ -2323,6 +2395,9 @@ def student_document_download(request, pk):
     elif (request.user.is_authenticated and is_dean(request.user)
           and document.health_records.exists()):
         pass   # the certificate behind a health record, which the dean reads
+    elif (document.kind == StudentDocument.MEDICAL
+          and not (request.user.is_authenticated and can_read_health_records(request.user))):
+        raise Http404('No such document.')
     elif not (request.user.is_authenticated
               and (can_see_admissions(request.user) or can_edit_student_records(request.user))
               and visible_profiles(request.user).filter(pk=document.profile_id).exists()):
@@ -3095,15 +3170,18 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         """Give the student a fresh portal password — they have lost the one
         they were handed. Shown once, and they must change it at first sign-in."""
         application = self.get_object()
-        if not (is_admission_officer(request.user) or is_records_officer(request.user)
-                or is_principal(request.user)):
-            return Response({'detail': 'The records or admission office resets a password.'},
+        if not can_issue_student_passwords(request.user):
+            return Response({'detail': 'Portal passwords are set by the ICT officer (or the Principal).'},
                             status=status.HTTP_403_FORBIDDEN)
-        pin = admissions.issue_portal_pin(application.profile, force=True, actor=request.user)
-        if pin is None:
+        if not application.profile.enrollments.exists():
             return Response({'detail': 'This student has no enrollments yet, so there is '
                                        'nothing to sign in to.'},
                             status=status.HTTP_400_BAD_REQUEST)
+        try:
+            pin = passwords.reset_student_password(application.profile, actor=request.user,
+                                                   ip=finance.client_ip(request))
+        except passwords.PasswordResetError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({'portal_pin': pin, 'reg_no': application.profile.nactvet_reg_no})
 
     @action(detail=True, methods=['get', 'post'], url_path='requirements')
@@ -3368,6 +3446,10 @@ class ModuleViewSet(viewsets.ModelViewSet):
         # yet. Once a module has a tutor, moving/adding tutors is an admin
         # action — otherwise any teacher account could grant themselves access
         # to another module's students, attendance and CA marks at will.
+        # Claiming is for tutors: any other office (the accountant, estate,
+        # the secretary) would otherwise gain a class list and its CA marks.
+        if not (runs_departments(request.user) or TeacherProfile.objects.filter(user=request.user).exists()):
+            raise PermissionDenied('Only a tutor can claim a module.')
         if not runs_departments(request.user) and m.teachers.exists() and not m.teachers.filter(pk=request.user.pk).exists():
             raise PermissionDenied('This module already has a tutor. Ask the administrator to add you.')
         m.teachers.add(request.user)
@@ -3423,7 +3505,9 @@ class StudentViewSet(viewsets.ModelViewSet):
             allowed_module_ids = self.request.user.modules_taught.values_list('id', flat=True)
             if module is None or module.id not in allowed_module_ids:
                 raise PermissionDenied('Only tutors for this module can add students.')
-        serializer.save()
+        enrollment = serializer.save()
+        # Somebody already on file keeps the password they have (passwords.py).
+        passwords.copy_student_password(enrollment)
 
     def update(self, request, *args, **kwargs):
         if not runs_departments(request.user):
@@ -3517,8 +3601,10 @@ class StudentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='bulk_set_pin')
     def bulk_set_pin(self, request):
-        if not runs_departments(request.user):
-            raise PermissionDenied('Only the administrator can set student passwords in bulk.')
+        # Not the departments: a password set by whoever teaches the module is
+        # a way into the student's account. The password desk does it.
+        if not can_issue_student_passwords(request.user):
+            raise PermissionDenied('Student passwords are set by the ICT officer (or the Principal).')
         portal_pin = str(request.data.get('portal_pin', '')).strip()
         if len(portal_pin) < 6:
             return Response({'detail': 'Password/PIN must be at least 6 characters.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -3632,38 +3718,40 @@ def dashboard(request):
     students_count = int(per_class.aggregate(total=Sum('student_count'))['total'] or 0)
     sessions_today = Session.objects.filter(module__in=my_modules, date=today).count()
 
-    all_students = (
+    # Attendance from three aggregate queries, not one query per enrollment:
+    # at 500 students in six modules that loop was some 3,000 queries per load
+    # (security review L2).
+    held_by_module = dict(
+        Session.objects.filter(module__in=my_modules)
+        .values('module_id').annotate(n=Count('id')).values_list('module_id', 'n'))
+    enrollment_rows = list(
         Student.objects.studying().filter(module__in=my_modules)
-        .prefetch_related('attendance_records').select_related('module')
-    )
+        .annotate(effective=Count('attendance_records',
+                                  filter=Q(attendance_records__status__in=['P', 'S'])))
+        .values_list('module_id', 'module__class_level_id', 'effective'))
 
-    # Cache session counts per module to avoid N+1
-    _session_cache = {}
+    def _average(rows):
+        total, counted = 0, 0
+        for module_id, _level_id, effective in rows:
+            held = held_by_module.get(module_id, 0)
+            if held:
+                total += round((effective / held) * 100)
+                counted += 1
+        return round(total / counted) if counted else None
 
-    def _held(module_id):
-        if module_id not in _session_cache:
-            _session_cache[module_id] = Session.objects.filter(module_id=module_id).count()
-        return _session_cache[module_id]
-
-    total_pct, count = 0, 0
-    for st in all_students:
-        held = _held(st.module_id)
-        if held:
-            effective = st.attendance_records.filter(status__in=['P', 'S']).count()
-            total_pct += round((effective / held) * 100)
-            count += 1
-    avg_attendance = round(total_pct / count) if count else None
+    avg_attendance = _average(enrollment_rows)
 
     recent = []
     for sess in (
         Session.objects.filter(module__in=my_modules)
         .select_related('module__class_level', 'module__semester__academic_year')
-        .prefetch_related('records').order_by('-date', '-created_at')[:8]
+        .annotate(n_present=Count('records', filter=Q(records__status='P')),
+                  n_sick=Count('records', filter=Q(records__status='S')),
+                  n_absent=Count('records', filter=Q(records__status='A')))
+        .order_by('-date', '-created_at')[:8]
     ):
-        p = sess.records.filter(status='P').count()
-        s = sess.records.filter(status='S').count()
-        a = sess.records.filter(status='A').count()
-        t = p + s + a
+        p, s_, a = sess.n_present, sess.n_sick, sess.n_absent
+        t = p + s_ + a
         recent.append({
             'id': sess.id,
             'module': sess.module.name,
@@ -3674,37 +3762,21 @@ def dashboard(request):
             'date': str(sess.date),
             'label': sess.label,
             'topic': sess.topic,
-            'present': p, 'sick': s, 'absent': a,
-            'pct': round(((p + s) / t) * 100) if t else 0,
+            'present': p, 'sick': s_, 'absent': a,
+            'pct': round(((p + s_) / t) * 100) if t else 0,
         })
 
+    students_by_level = {row['module__class_level_id']: row['student_count'] for row in per_class}
+    modules_by_level = dict(my_modules.values('class_level_id').annotate(n=Count('id'))
+                            .values_list('class_level_id', 'n'))
     levels = []
-    for lvl in ClassLevel.objects.all():
-        lvl_mods = my_modules.filter(class_level=lvl)
-        if not lvl_mods.exists():
-            continue
-        # Distinct students in this class level by registration number
-        lvl_students_count = (
-            Student.objects.studying().filter(module__in=lvl_mods)
-            .values('nactvet_reg_no')
-            .distinct()
-            .count()
-        )
-        lp, lc = 0, 0
-        # Use students per level for attendance pct calculation
-        lvl_students = all_students.filter(module__in=lvl_mods)
-        for st in lvl_students:
-            held = _held(st.module_id)
-            if held:
-                effective = st.attendance_records.filter(status__in=['P', 'S']).count()
-                lp += round((effective / held) * 100)
-                lc += 1
+    for lvl in ClassLevel.objects.filter(id__in=modules_by_level):
         levels.append({
             'id': lvl.id,
             'name': lvl.name,
-            'modules': lvl_mods.count(),
-            'students': lvl_students_count,
-            'avg_pct': round(lp / lc) if lc else None,
+            'modules': modules_by_level[lvl.id],
+            'students': students_by_level.get(lvl.id, 0),
+            'avg_pct': _average([row for row in enrollment_rows if row[1] == lvl.id]),
         })
 
     return Response({
@@ -3992,7 +4064,7 @@ def inventory_template(request):
     instructions.append(['Choose one office and item type per row. Quantity is expanded into separate tags.'])
     instructions.append(['Example: prefix BPCH/CH, start 1, quantity 30 creates BPCH/CH/1 through BPCH/CH/30.'])
     instructions.append(['Validate the file in the system before confirming import.'])
-    output = BytesIO(); wb.save(output)
+    output = BytesIO(); neutralise_formulas(wb).save(output)
     response = HttpResponse(output.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = 'attachment; filename="college_inventory_template.xlsx"'
     return response
@@ -4267,7 +4339,7 @@ def inventory_report(request):
                        row.responsible_office, row.quantity, row.get_condition_display()])
     for cell in ws[1]:
         cell.font = Font(bold=True, color='FFFFFF'); cell.fill = PatternFill('solid', fgColor='1F4E78')
-    ws.freeze_panes = 'A2'; output = BytesIO(); wb.save(output)
+    ws.freeze_panes = 'A2'; output = BytesIO(); neutralise_formulas(wb).save(output)
     response = HttpResponse(output.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = f'attachment; filename="inventory_{report_type}_report.xlsx"'
     return response
@@ -5063,6 +5135,13 @@ class ResultViewSet(viewsets.ModelViewSet):
         and a repeating student has an enrollment for each attempt, so matching
         on the code alone could write a grade onto an old attempt — and an old
         result is never changed.
+
+        `sitting` says which sheet this is. NACTVET issues the semester twice:
+        the first sitting (exam numbers …TES…), then the supplementary sitting
+        (…RSM…), which re-lists every module. From the supplementary sheet only
+        the modules waiting for a supplementary are taken, into their own field
+        — the first sitting's grade is never overwritten — and a module that
+        was not a supplementary must carry the same grade as before.
         """
         if not can_manage_exams(request.user):
             raise PermissionDenied('The examination officer uploads authority grades.')
@@ -5074,8 +5153,14 @@ class ResultViewSet(viewsets.ModelViewSet):
         if semester is None:
             return Response({'detail': 'Say which semester these grades are for.'},
                             status=status.HTTP_400_BAD_REQUEST)
+        sitting = str(payload.get('sitting') or 'first')
+        if sitting not in ('first', 'supp'):
+            return Response({'detail': 'The sitting is "first" or "supp".'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        from .grading import parse_authority_supp_grade, result_outcome
+        serializer = StudentResultSerializer()
 
-        saved, errors = 0, []
+        saved, unchanged, errors = 0, 0, []
         with transaction.atomic():
             for row in rows:
                 reg_no = str(row.get('reg_no', '')).strip()
@@ -5092,9 +5177,31 @@ class ResultViewSet(viewsets.ModelViewSet):
                     errors.append(f'{reg_no} / {module_code}: not enrolled in {semester.label}')
                     continue
                 try:
-                    parsed = parse_authority_grade(raw, student.module.class_level)
+                    parse = parse_authority_supp_grade if sitting == 'supp' else parse_authority_grade
+                    parsed = parse(raw, student.module.class_level)
                 except ValueError as exc:
                     errors.append(f'{reg_no} / {module_code}: {exc}')
+                    continue
+                if sitting == 'supp':
+                    result = getattr(student, 'result', None)
+                    if result is None or not result.authority_grade:
+                        errors.append(f'{reg_no} / {module_code}: no first-sitting grade to follow')
+                        continue
+                    first = parse_authority_grade(result.authority_grade, student.module.class_level)
+                    if first['status'] != 'SUPP':
+                        # Re-listed, not re-sat: it must read as it did.
+                        if raw == result.authority_grade.upper():
+                            unchanged += 1
+                        else:
+                            errors.append(f'{reg_no} / {module_code}: {raw} on the supplementary '
+                                          f'sheet, but {result.authority_grade} was not a supplementary')
+                        continue
+                    result.authority_supp_grade = parsed['raw']
+                    result.authority_status = result_outcome(result, serializer)['status']
+                    result.final_approved = True
+                    result.save(update_fields=['authority_supp_grade', 'authority_status',
+                                               'final_approved', 'updated_at'])
+                    saved += 1
                     continue
                 result, _ = StudentResult.objects.get_or_create(student=student)
                 result.authority_grade = parsed['raw']
@@ -5102,7 +5209,7 @@ class ResultViewSet(viewsets.ModelViewSet):
                 result.final_approved = True
                 result.save(update_fields=['authority_grade', 'authority_status', 'final_approved', 'updated_at'])
                 saved += 1
-        return Response({'saved': saved, 'errors': errors})
+        return Response({'saved': saved, 'unchanged': unchanged, 'sitting': sitting, 'errors': errors})
 
     # ── Get or create results for every student in a module ────────────────────
     @action(detail=False, methods=['get'], url_path='module')
@@ -5140,10 +5247,10 @@ class ResultViewSet(viewsets.ModelViewSet):
             # they repeat, with no supplementary, so the declarations screen
             # offers them for a repeat, not a supplementary.
             'direct_repeat': progression.direct_repeat_enrollments(module.semester, list(students)),
-            # Repeat sittings failed again: a discontinuation, not another repeat.
+            # Repeat sittings failed again — starred too, as a repeat sitting
+            # has no supplementary: a discontinuation, not another repeat.
             'failed_repeat': [result.student_id for result in results
-                              if result.student.attempt == Student.REPEAT
-                              and progression.module_row(result.student)['status'] in progression.FAILED_STATUSES],
+                              if progression.failed_repeat_sittings([progression.module_row(result.student)])],
         })
 
     @action(detail=False, methods=['get'], url_path='cat-analysis')
@@ -5388,7 +5495,7 @@ class ResultViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = (
             f'attachment; filename="cat_{data["cat"]}_module_analysis_{timezone.localdate()}.xlsx"'
         )
-        wb.save(response)
+        neutralise_formulas(wb).save(response)
         return response
 
     # ── Bulk-save marks submitted from the frontend ────────────────────────────
@@ -5713,7 +5820,7 @@ def download_results(request):
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
     response['Content-Disposition'] = f'attachment; filename="{fname}"'
-    wb.save(response)
+    neutralise_formulas(wb).save(response)
     return response
 
 
@@ -5815,7 +5922,7 @@ def download_field_results(request):
     response['Content-Disposition'] = (
         f'attachment; filename="{safe_code}_field_results_{timezone.localdate()}.xlsx"'
     )
-    wb.save(response)
+    neutralise_formulas(wb).save(response)
     return response
 
 
@@ -5969,7 +6076,7 @@ def download_final_results(request):
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
     response['Content-Disposition'] = f'attachment; filename="{fname}"'
-    wb.save(response)
+    neutralise_formulas(wb).save(response)
     return response
 
 
@@ -6101,7 +6208,7 @@ def download_eligibility_excel(request):
         fname = f'module_eligibility_{timezone.localdate()}.xlsx'
         response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         response['Content-Disposition'] = f'attachment; filename="{fname}"'
-        wb.save(response)
+        neutralise_formulas(wb).save(response)
         return response
 
     headers = [
@@ -6172,7 +6279,7 @@ def download_eligibility_excel(request):
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
     response['Content-Disposition'] = f'attachment; filename="{fname}"'
-    wb.save(response)
+    neutralise_formulas(wb).save(response)
     return response
 
 
@@ -6546,7 +6653,7 @@ def download_final_eligibility_excel(request):
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = f'attachment; filename="final_eligibility_{timezone.localdate()}.xlsx"'
-    wb.save(response)
+    neutralise_formulas(wb).save(response)
     return response
 
 
@@ -7777,7 +7884,7 @@ class FormViewSet(viewsets.ModelViewSet):
         form = self.get_object()
         workbook = evaluations.export_workbook(form)
         buffer = BytesIO()
-        workbook.save(buffer)
+        neutralise_formulas(workbook).save(buffer)
         response = HttpResponse(
             buffer.getvalue(),
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

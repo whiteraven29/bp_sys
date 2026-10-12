@@ -232,70 +232,138 @@ class WithholdingTests(AuthorityBase):
         self.assertEqual(grades['PST04102'], 'Withheld')
 
 
-class SupplementaryCountsAsCTests(AuthorityBase):
-    """A supplementary still to be sat counts as C in the GPA, whatever the
-    first sitting was: passing it earns a C, failing it is a repeat. So nobody
-    shows as discontinued before sitting the paper that may pass them."""
+class StarredGradesAtFaceValueTests(AuthorityBase):
+    """NACTVET counts every grade at its own letter — a starred one too (B***
+    is 3, D* is 1) — and cuts the GPA to one decimal. Checked on every 2024/25
+    result sheet in diagrams/ (187 of 188 students)."""
 
     def gpa(self, profile):
         return progression.evaluate(profile, self.sem1)['gpa']
 
-    def test_any_starred_grade_counts_as_c(self):
+    def upload_supp(self, rows):
+        return self.exam.post('/api/results/authority-grades/', {
+            'rows': [{'reg_no': r, 'module_code': m, 'grade': g} for r, m, g in rows],
+            'semester_id': self.sem1.id, 'sitting': 'supp'}, format='json')
+
+    def test_a_starred_grade_counts_at_its_own_letter(self):
         level6 = ClassLevel.objects.create(name='NTA Level 6', order=6)
 
-        points = {grade: parse_authority_grade(grade, self.level4)['points'] for grade in ['B*', 'C*', 'D*', 'F***']}
+        points = {grade: parse_authority_grade(grade, self.level4)['points'] for grade in ['B***', 'C*', 'D*', 'F***']}
 
-        self.assertEqual(points, {'B*': 2, 'C*': 2, 'D*': 2, 'F***': 2})
-        self.assertEqual(parse_authority_grade('A*', level6)['points'], 2)
+        self.assertEqual(points, {'B***': 3, 'C*': 2, 'D*': 1, 'F***': 0})
+        self.assertEqual(parse_authority_grade('A*', level6)['points'], 5)
 
-    def test_a_pending_supplementary_does_not_make_a_student_discontinued(self):
-        # Two supplementaries of four modules — half, not more than half, so
-        # they are sat (more than half failed is a repeat; see the tests below).
+    def test_below_two_at_face_value_is_a_discontinuation_even_with_supplementaries(self):
+        # Half failed (two of four) would go to supplementaries — but at face
+        # value the GPA is 1.5, and NACTVET discontinues first.
         third, fourth = self.module('PST04103', 'Pharmacognosy'), self.module('PST04104', 'Pharmacology')
         profile, _ = self.student('NIT/30', 'Gift', self.anatomy, self.maths, third, fourth)
-        # C, C, D*, D* would be a GPA of 1.5 at face value — a discontinuation.
         self.upload(self.exam, [('NIT/30', 'PST04101', 'C'), ('NIT/30', 'PST04102', 'C'),
                                 ('NIT/30', 'PST04103', 'D*'), ('NIT/30', 'PST04104', 'D*')])
 
         outcome = progression.evaluate(profile, self.sem1)
 
-        self.assertEqual(outcome['gpa'], 2.0)
-        self.assertEqual(outcome['proposed'], SemesterReview.PENDING)
+        self.assertEqual(outcome['gpa'], 1.5)
+        self.assertEqual(outcome['proposed'], SemesterReview.DISCONTINUED)
         summary = self.exam.get(f'/api/results-summary/?semester_id={self.sem1.id}'
                                 f'&class_level_id={self.level4.id}').data
-        self.assertEqual(summary['students'][0]['remark'], 'SUPP')
+        self.assertEqual(summary['students'][0]['remark'], 'DISCO')
 
-    def test_passing_the_supplementary_keeps_the_c_and_failing_it_is_a_repeat(self):
+    def test_a_nactvet_row_reads_as_nactvet_read_it(self):
+        """Level 4, semester II 2024/25, NS2183/0046/2023: C C*** C F* B A over
+        credits 4, 20, 12, 12, 12, 5 — NACTVET: GPA 1.9, FAIL. Counting the
+        starred papers as C would have made it 2.3 and SUPP."""
+        codes = [('PST04208', 4, 'C'), ('PST04209', 20, 'C***'), ('PST04210', 12, 'C'),
+                 ('PST04211', 12, 'F*'), ('PST04212', 12, 'B'), ('PST04213', 5, 'A')]
+        modules = [Module.objects.create(name=c, code=c, teacher='T', class_level=self.level4,
+                                         semester=self.sem1, programme=self.pst, credits=credits)
+                   for c, credits, _ in codes]
+        profile, _ = self.student('NS2183/0046/2023', 'Sheet Row', *modules)
+        self.upload(self.exam, [('NS2183/0046/2023', c, g) for c, _, g in codes])
+
+        outcome = progression.evaluate(profile, self.sem1)
+
+        self.assertEqual((outcome['gpa'], outcome['proposed']), (1.9, SemesterReview.DISCONTINUED))
+
+    def test_the_gpa_is_cut_to_one_decimal(self):
+        self.assertEqual([progression.cut_gpa(v) for v in (2.89, 3.47, 1.996, 2.0, 4.0)],
+                         [2.8, 3.4, 1.9, 2.0, 4.0])
+
+    def test_the_supplementary_sheet_is_its_own_sitting(self):
         passed, _ = self.student('NIT/31', 'Hope')
         failed, _ = self.student('NIT/32', 'Imani')
-        self.upload(self.exam, [('NIT/31', 'PST04101', 'A'), ('NIT/31', 'PST04102', 'F*'),
-                                ('NIT/32', 'PST04101', 'A'), ('NIT/32', 'PST04102', 'F*')])
-        self.assertEqual((self.gpa(passed), self.gpa(failed)), (3.0, 3.0))       # (4 + 2) / 2 meanwhile
+        self.upload(self.exam, [('NIT/31', 'PST04101', 'A'), ('NIT/31', 'PST04102', 'C*'),
+                                ('NIT/32', 'PST04101', 'A'), ('NIT/32', 'PST04102', 'C*')])
+        self.assertEqual((self.gpa(passed), self.gpa(failed)), (3.0, 3.0))       # (4 + 2) / 2
 
-        # The authority's result after the supplementary.
-        self.upload(self.exam, [('NIT/31', 'PST04102', 'C'), ('NIT/32', 'PST04102', 'F')])
+        # NACTVET's supplementary sheet re-lists every module: the passed paper
+        # reads C, the one failed again is still starred.
+        response = self.upload_supp([('NIT/31', 'PST04101', 'A'), ('NIT/31', 'PST04102', 'C'),
+                                     ('NIT/32', 'PST04101', 'A'), ('NIT/32', 'PST04102', 'D***')])
 
-        self.assertEqual(self.gpa(passed), 3.0)
-        self.assertEqual(progression.evaluate(failed, self.sem1)['proposed'], SemesterReview.REPEAT)
+        self.assertEqual((response.data['saved'], response.data['unchanged']), (2, 2))
+        self.assertEqual(progression.evaluate(passed, self.sem1)['proposed'], SemesterReview.CLEAR)
+        outcome = progression.evaluate(failed, self.sem1)
+        self.assertEqual(outcome['proposed'], SemesterReview.REPEAT)
+        self.assertEqual(outcome['gpa'], 2.5)                                 # (4 + 1) / 2
+        # The first sitting's grade is never overwritten.
+        result = StudentResult.objects.get(student__profile=failed, student__module=self.maths)
+        self.assertEqual((result.authority_grade, result.authority_supp_grade), ('C*', 'D***'))
+
+    def test_a_supplementary_sheet_cannot_change_a_module_that_was_not_one(self):
+        profile, _ = self.student('NIT/34', 'Juma')
+        self.upload(self.exam, [('NIT/34', 'PST04101', 'A'), ('NIT/34', 'PST04102', 'C*')])
+
+        response = self.upload_supp([('NIT/34', 'PST04101', 'B'), ('NIT/34', 'PST04102', 'C')])
+
+        self.assertEqual(response.data['saved'], 1)
+        self.assertIn('was not a supplementary', response.data['errors'][0])
+        result = StudentResult.objects.get(student__profile=profile, student__module=self.anatomy)
+        self.assertEqual((result.authority_grade, result.authority_supp_grade), ('A', ''))
+
+    def test_below_two_after_the_supplementary_is_a_discontinuation(self):
+        # Level 4 supplementary sheet, NS3970/0014/2021: F* failed again, GPA 1.7, FAIL.
+        profile, _ = self.student('NIT/35', 'Kassim')
+        self.upload(self.exam, [('NIT/35', 'PST04101', 'B'), ('NIT/35', 'PST04102', 'C*')])
+        self.assertEqual(progression.evaluate(profile, self.sem1)['proposed'], SemesterReview.PENDING)  # 2.5, supp
+        self.upload_supp([('NIT/35', 'PST04102', 'F*')])
+
+        outcome = progression.evaluate(profile, self.sem1)
+
+        self.assertEqual((outcome['gpa'], outcome['proposed']), (1.5, SemesterReview.DISCONTINUED))
+
+    def test_level_six_classes_are_nactvets(self):
+        from .grading import gpa_classification
+        level6 = ClassLevel.objects.create(name='NTA Level 6', order=6)
+        # FIRST at 4.4 and UPPER SECOND at 4.2 are on the 2024/25 level 6 sheet;
+        # LOWER SECOND at 2.8 on its supplementary sheet.
+        self.assertEqual([gpa_classification(g, level6) for g in (4.4, 4.2, 3.5, 3.4, 2.8, 2.7, 2.6, 2.0)],
+                         ['First Class', 'Upper Second', 'Upper Second', 'Lower Second',
+                          'Lower Second', 'Lower Second', 'Pass', 'Pass'])
 
     def test_marks_entered_here_follow_the_same_rule(self):
+        from .grading import grade_for_mark
         profile, (anatomy, maths) = self.student('NIT/33', 'Jabiri')
         StudentResult.objects.create(student=anatomy, assign1=16, assign2=16, cat1_theory=16, cat2_theory=16,
                                      end_theory=80, ca_approved=True, final_approved=True)
-        # A failed end exam: supplementary, not yet sat.
-        StudentResult.objects.create(student=maths, assign1=16, assign2=16, cat1_theory=16, cat2_theory=16,
-                                     end_theory=30, ca_approved=True, final_approved=True)
+        # A failed end exam: supplementary, not yet sat — counted at its grade.
+        result = StudentResult.objects.create(student=maths, assign1=16, assign2=16, cat1_theory=16,
+                                              cat2_theory=16, end_theory=30, ca_approved=True,
+                                              final_approved=True)
 
         rows = {row['code']: row for row in progression.evaluate(profile, self.sem1)['modules']}
 
-        self.assertEqual((rows['PST04102']['status'], rows['PST04102']['points']), ('SUPP', 2))
+        total = progression._result_serializer().get_final_total(result)
+        self.assertEqual((rows['PST04102']['status'], rows['PST04102']['points']),
+                         ('SUPP', grade_for_mark(total, self.level4)[1]))
 
 
 class MoreThanHalfFailedTests(AuthorityBase):
     """The college's rule (3 October 2026): failing more than half of a
     semester's modules, the field module counted like any other, means no
-    supplementary — the failed modules are repeated, whatever the GPA. Half or
-    fewer go to supplementaries as before. The results are never changed."""
+    supplementary — the failed modules are repeated. Half or fewer go to
+    supplementaries. A GPA below 2.0 (face value) is checked first and
+    discontinues, as NACTVET does. The results are never changed."""
 
     def setUp(self):
         super().setUp()
@@ -308,25 +376,26 @@ class MoreThanHalfFailedTests(AuthorityBase):
 
     def test_three_of_five_failed_is_a_repeat_with_no_supplementary(self):
         profile, _ = self.student('NIT/50', 'Juma', *self.five)
-        self.grades('NIT/50', 'B', 'B', 'C*', 'D*', 'F')
+        self.grades('NIT/50', 'A', 'A', 'C*', 'D*', 'F')
 
         outcome = progression.evaluate(profile, self.sem1)
 
         self.assertEqual(outcome['proposed'], SemesterReview.REPEAT)
         self.assertIn('more than half', outcome['reason'])
-        # Straight to repeat, so results count as they are: C* is a C, D* a D.
-        self.assertEqual(outcome['gpa'], 1.8)                         # (3+3+2+1+0) / 5
+        self.assertEqual(outcome['gpa'], 2.2)                         # (4+4+2+1+0) / 5
         self.assertEqual(sorted(outcome['failed']), ['PST04103', 'PST04104', 'PST04105'])
         self.assertEqual(outcome['pending'], [])
 
-    def test_whatever_the_gpa(self):
+    def test_below_two_is_a_discontinuation_before_more_than_half_is_counted(self):
+        # NACTVET, level 5 semester II 2024/25: three or more failed with GPA 1.9
+        # is FAIL; with GPA 2.2–2.4 it is REPEAT.
         profile, _ = self.student('NIT/51', 'Kemi', *self.five)
         self.grades('NIT/51', 'B', 'B', 'F', 'F', 'F')          # GPA 1.2
 
         outcome = progression.evaluate(profile, self.sem1)
 
         self.assertEqual(outcome['gpa'], 1.2)
-        self.assertEqual(outcome['proposed'], SemesterReview.REPEAT)
+        self.assertEqual(outcome['proposed'], SemesterReview.DISCONTINUED)
 
     def test_two_of_five_still_go_to_supplementaries(self):
         profile, _ = self.student('NIT/52', 'Lulu', *self.five)
@@ -337,7 +406,7 @@ class MoreThanHalfFailedTests(AuthorityBase):
     def test_three_of_four_is_a_repeat_and_two_of_four_is_not(self):
         three, _ = self.student('NIT/53', 'Mosi', *self.five[:4])
         two, _ = self.student('NIT/54', 'Neema', *self.five[:4])
-        self.upload(self.exam, [('NIT/53', m.code, g) for m, g in zip(self.five, ['A', 'C*', 'D*', 'F'])]
+        self.upload(self.exam, [('NIT/53', m.code, g) for m, g in zip(self.five, ['A', 'C*', 'C*', 'C*'])]
                     + [('NIT/54', m.code, g) for m, g in zip(self.five, ['A', 'A', 'C*', 'D*'])])
 
         self.assertEqual(progression.evaluate(three, self.sem1)['proposed'], SemesterReview.REPEAT)
@@ -346,7 +415,7 @@ class MoreThanHalfFailedTests(AuthorityBase):
     def test_confirming_raises_the_repeats_and_leaves_the_results_alone(self):
         from .models import OutstandingRepeat
         profile, enrollments = self.student('NIT/55', 'Omari', *self.five)
-        self.grades('NIT/55', 'B', 'B', 'C*', 'D*', 'F')
+        self.grades('NIT/55', 'A', 'A', 'C*', 'D*', 'F')
         before = list(StudentResult.objects.filter(student__profile=profile)
                       .order_by('id').values_list('authority_grade', 'authority_status'))
 
@@ -362,7 +431,7 @@ class MoreThanHalfFailedTests(AuthorityBase):
 
     def test_the_summary_and_the_declarations_screen_agree(self):
         self.student('NIT/56', 'Pili', *self.five)
-        self.grades('NIT/56', 'B', 'B', 'C*', 'D*', 'F')
+        self.grades('NIT/56', 'A', 'A', 'C*', 'D*', 'F')
 
         summary = self.exam.get(f'/api/results-summary/?semester_id={self.sem1.id}'
                                 f'&class_level_id={self.level4.id}').data
@@ -373,13 +442,13 @@ class MoreThanHalfFailedTests(AuthorityBase):
         enrollment = Student.objects.get(nactvet_reg_no='NIT/56', module=self.five[2])
         self.assertEqual(module['direct_repeat'], [enrollment.id])
 
-    def test_going_to_supplementaries_counts_them_as_c(self):
+    def test_going_to_supplementaries_counts_them_at_their_own_letter(self):
         profile, _ = self.student('NIT/57', 'Rehema', *self.five)
         self.grades('NIT/57', 'B', 'B', 'B', 'D*', 'F*')
 
         outcome = progression.evaluate(profile, self.sem1)
 
-        self.assertEqual(outcome['gpa'], 2.6)                         # (3+3+3+2+2) / 5
+        self.assertEqual(outcome['gpa'], 2.0)                         # (3+3+3+1+0) / 5
         self.assertEqual(outcome['proposed'], SemesterReview.PENDING)
 
     def test_failed_outright_counts_as_it_is(self):
@@ -393,14 +462,13 @@ class MoreThanHalfFailedTests(AuthorityBase):
 
 
     def test_supplementaries_only_with_a_qualifying_gpa(self):
-        """Below 2.0 even with each supplementary counted as C (the most it can
-        earn): discontinued now, not left waiting on a paper that cannot help."""
+        """Below 2.0 at face value: discontinued now, not sent to supplementaries."""
         profile, _ = self.student('NIT/59', 'Tumaini', *self.five)
         self.grades('NIT/59', 'C', 'C', 'C', 'F', 'F*')
 
         outcome = progression.evaluate(profile, self.sem1)
 
-        self.assertEqual(outcome['gpa'], 1.6)                         # (2+2+2+0+2) / 5
+        self.assertEqual(outcome['gpa'], 1.2)                         # (2+2+2+0+0) / 5
         self.assertEqual(outcome['proposed'], SemesterReview.DISCONTINUED)
         summary = self.exam.get(f'/api/results-summary/?semester_id={self.sem1.id}'
                                 f'&class_level_id={self.level4.id}').data

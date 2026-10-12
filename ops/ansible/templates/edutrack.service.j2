@@ -18,6 +18,8 @@ ExecStart={{ backend_dir }}/venv/bin/gunicorn \
     --worker-class gthread \
     --threads {{ gunicorn_threads }} \
 {% endif %}
+    --max-requests {{ gunicorn_max_requests }} \
+    --max-requests-jitter {{ (gunicorn_max_requests | int) // 10 }} \
     --timeout 120
 Restart=always
 RestartSec=5

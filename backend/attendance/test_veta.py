@@ -164,7 +164,7 @@ class TheFourDesksTests(VetaBase):
         app, admitted = self.through_the_desks(intake)
         self.assertEqual(admitted.status_code, 200, admitted.data)
         self.assertEqual(admitted.data['state'], 'admitted')
-        self.assertTrue(admitted.data['portal_password'])
+        self.assertFalse(admitted.data.get('portal_password'))   # the ICT desk gives it
         self.assertEqual(admitted.data['college_id'], 'BPH/VETA/HCT/26/001')
         enrollment = CourseEnrollment.objects.get(application_id=app)
         self.assertEqual(enrollment.status, CourseEnrollment.STUDYING)
@@ -256,13 +256,19 @@ class TheCoursePortalTests(VetaBase):
     def test_the_student_signs_in_with_their_college_id_and_sees_the_course(self):
         _, intake = self.course_with_fees()
         _, admitted = self.through_the_desks(intake)
+        ict = User.objects.create_user('ict', password='pw')
+        set_roles(ict, ['ict_officer'], full_name='ICT')
+        desk = APIClient(); desk.force_authenticate(ict)
+        reset = desk.post('/api/student-passwords/reset/', {'identifier': admitted.data['college_id']},
+                          format='json')
+        self.assertEqual(reset.status_code, 200, reset.data)
+        password = reset.data['password']
         browser = Client()
-        signed = browser.post('/login/', {'identifier': admitted.data['college_id'],
-                                          'secret': admitted.data['portal_password']})
+        signed = browser.post('/login/', {'identifier': admitted.data['college_id'], 'secret': password})
         self.assertRedirects(signed, '/course-portal/', fetch_redirect_response=False)
         page = browser.get('/course-portal/')
         self.assertContains(page, 'Choose your own password')
-        changed = browser.post('/course-portal/', {'current_password': admitted.data['portal_password'],
+        changed = browser.post('/course-portal/', {'current_password': password,
                                                    'new_password': 'Kata#2026nywele'})
         self.assertContains(changed, 'Password changed')
         self.assertContains(changed, 'Hair Cutting')

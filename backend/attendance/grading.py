@@ -38,11 +38,16 @@ def gpa_classification(gpa, class_level):
     if gpa < 2:
         return 'Discontinuation'
     if is_level_six(class_level):
-        if gpa >= 4.5:
+        # NACTVET's diploma classes: First 4.4–5.0, Upper Second 3.5–4.3,
+        # Lower Second 2.7–3.4, Pass 2.0–2.6 (FIRST at 4.4 is on the 2024/25
+        # level 6 results; it was 4.5 here).
+        if gpa >= 4.4:
             return 'First Class'
         if gpa >= 3.5:
             return 'Upper Second'
-        return 'Lower Second'
+        if gpa >= 2.7:
+            return 'Lower Second'
+        return 'Pass'
     if gpa >= 3.5:
         return 'First Class'
     if gpa >= 3:
@@ -50,11 +55,11 @@ def gpa_classification(gpa, class_level):
     return 'Pass'
 
 
-#: A supplementary still to be sat counts as C in the GPA: passing it earns a C
-#: whatever the first sitting was, and failing it is a repeat, not a lower
-#: grade. Counting it lower would show a student as discontinued before they
-#: have sat the paper that may pass them.
-SUPP_POINTS = 2
+#: What a passed supplementary is worth: C, whatever the first sitting was.
+#: A paper still waiting for its supplementary is NOT counted as C — NACTVET
+#: counts it at its own letter (B*** is 3, D* is 1), and so does the system:
+#: on every 2024/25 result sheet in diagrams/, the GPA is the face value.
+SUPP_PASS_POINTS = 2
 
 
 def parse_authority_grade(value, class_level):
@@ -98,8 +103,8 @@ def parse_authority_grade(value, class_level):
     points = points_by_grade[grade]
     face_points = points            # what the grade is worth as it stands
     if failed_components:
+        # Counted at its own letter, like every other grade (see above).
         status, description = 'SUPP', 'Supplementary required by authority'
-        points = SUPP_POINTS
     elif grade in ('D', 'F'):
         # Below C is a fail, as it is for marks entered here: the module is
         # repeated. With stars it is a supplementary instead (above).
@@ -116,10 +121,29 @@ def parse_authority_grade(value, class_level):
     }
 
 
+def parse_authority_supp_grade(value, class_level):
+    """The authority's grade for a supplementary sitting.
+
+    The supplementary sheet re-issues the whole semester, so a paper that is
+    still starred there was failed again: it is repeated, and it counts at the
+    letter it carries. A plain grade is a pass (NACTVET writes C)."""
+    parsed = parse_authority_grade(value, class_level)
+    if parsed['status'] == 'SUPP' or (parsed['status'] == 'FAIL' and parsed['grade']):
+        parsed.update(status='REPEAT', description='Failed supplementary examination')
+    elif parsed['status'] == 'PASS':
+        parsed['description'] = 'Pass after supplementary'
+    return parsed
+
+
 def result_outcome(result, serializer):
     """Return the official module result derived from ordinary and supp exams."""
     if result.authority_grade:
-        parsed = parse_authority_grade(result.authority_grade, result.student.module.class_level)
+        level = result.student.module.class_level
+        parsed = parse_authority_grade(result.authority_grade, level)
+        if getattr(result, 'authority_supp_grade', '') and parsed['status'] == 'SUPP':
+            # The supplementary's own result replaces the first sitting's; the
+            # first sitting's grade stays on the record as it was.
+            parsed = parse_authority_supp_grade(result.authority_supp_grade, level)
         return {
             'end_exam_mark': None, 'supplementary_required': parsed['status'] == 'SUPP',
             'status': parsed['status'], 'grade': parsed['grade'],
@@ -150,12 +174,13 @@ def result_outcome(result, serializer):
 
     if supplementary_required:
         if result.supplementary_mark is None:
+            # Counted at the grade the first sitting earned, as NACTVET counts
+            # a starred paper (see SUPP_PASS_POINTS).
+            face = grade_for_mark(final_total, result.student.module.class_level)[1]
             return {
                 'end_exam_mark': end_exam_mark, 'supplementary_required': True,
-                'status': 'SUPP', 'grade': None, 'grade_point': SUPP_POINTS,
-                # The grade the first sitting earned, used instead of C when
-                # the student goes straight to repeat (more than half failed).
-                'face_points': grade_for_mark(final_total, result.student.module.class_level)[1],
+                'status': 'SUPP', 'grade': None, 'grade_point': face,
+                'face_points': face,
                 'grade_description': 'Supplementary required',
                 'official_total': final_total,
                 'failed_end_components': failed_components,
@@ -170,7 +195,7 @@ def result_outcome(result, serializer):
             }
         return {
             'end_exam_mark': end_exam_mark, 'supplementary_required': True,
-            'status': 'PASS', 'grade': 'C', 'grade_point': 2,
+            'status': 'PASS', 'grade': 'C', 'grade_point': SUPP_PASS_POINTS,
             'grade_description': 'Pass after supplementary (grade capped at C)',
             'official_total': final_total,
             'failed_end_components': failed_components,

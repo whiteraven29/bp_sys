@@ -12,7 +12,7 @@ thing is half done, say which half.
 - `[!]` blocked — what it is waiting for is written next to it
 
 Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py test attendance --settings=edutrack.test_settings`
-(864 passing, including `test_end_to_end`, `test_offices` and `test_records_health`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
+(896 passing, including `test_end_to_end`, `test_offices`, `test_records_health` and `test_security`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
 
 ---
 
@@ -50,6 +50,15 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    and the accountant answers, the accountant pays; office funds or petty cash (a float
    with top-ups, paid in cash, never beyond it); reasons for rejections, cancellations and
    over-budget approvals; receipts; audit trail; Executive Summary ▸ Spending.
+2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
+   git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
+   module claims, client-address spoofing, medical documents, Excel formulas; the ICT password
+   desk for everybody; Django 5.2 LTS; libraries self-hosted; nginx limits and gunicorn threads.
+   Open: a strict CSP (inline handlers), list pagination, background exports.
+2b. **PST results match NACTVET — built 8 Oct (not committed).** Checked on 188 real
+   students of 2024/25 (187 match; the one is Q30): starred grades at their own letter, GPA
+   cut to one decimal and checked first, a starred repeat sitting discontinues, supplementary
+   sheets upload as their own sitting, level 6 classes. `diagrams/design.md` section 19.
 2a. **Student record and repeaters — built 3 Oct (not committed).** Form Four index
    number (required for a PST first year), gender required at the VETA desk too, health
    records on verified medical certificates read by the new Dean of Students role; a

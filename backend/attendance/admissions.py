@@ -958,9 +958,10 @@ def admit(application, *, actor=None, note=''):
         reason=f'Admitted for {application.semester}.')
     enrolled = progression.enroll_registration(registration, actor=actor)
 
-    # They leave with a password for the portal. Returned on the application
-    # object rather than stored: after this moment only the hash exists.
-    application.portal_pin = issue_portal_pin(profile, actor=actor)
+    # No password here: the ICT officer (or the Principal) gives every student
+    # theirs at the password desk, and nobody else sees one (said 8 October
+    # 2026). A returning student keeps the one they have.
+    application.portal_pin = None
 
     ApplicationStep.objects.create(
         application=application, step=Application.ADMISSION, done_by=actor,

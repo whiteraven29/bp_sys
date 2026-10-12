@@ -192,16 +192,25 @@ class FirstYearEndToEndTests(TestCase):
         self.assertEqual(registration.kind, SemesterRegistration.NEW)
         self.assertTrue(Student.objects.filter(profile=self.profile, module=self.m1).exists())
 
-        # 5. The portal: the PIN signs them in; they invoice the TPH book.
+        # 5. The ICT officer gives them their portal password — nobody else
+        # sets or sees one; admission hands over none.
+        self.assertFalse(admitted.get('portal_pin'))
+        ict = User.objects.create_user('ict', password='pw')
+        set_roles(ict, ['ict_officer'], full_name='ICT')
+        desk = APIClient(); desk.force_authenticate(ict)
+        issued = self.ok(desk.post('/api/student-passwords/issue/', {}, format='json'))['issued']
+        pin = {row['reg_no']: row['password'] for row in issued}['NIT/PST/2026/0001']
+
+        # 6. The portal: the PIN signs them in; they invoice the TPH book.
         signed_in = self.client.post('/login/', {'identifier': 'NIT/PST/2026/0001',
-                                                 'secret': admitted['portal_pin']})
+                                                 'secret': pin})
         self.assertEqual(signed_in.status_code, 302)
         self.assertIn('student_id', self.client.session)
         # A new PIN is changed at the first sign-in before anything else.
         forced = self.client.get('/student-dashboard/')
         self.assertTemplateUsed(forced, 'student_password_change.html')
         changed = self.client.post('/api/change-password/', {
-            'current_password': admitted['portal_pin'], 'new_password': 'Rehema#2026'},
+            'current_password': pin, 'new_password': 'Rehema#2026'},
             content_type='application/json')
         self.assertEqual(changed.status_code, 200, changed.content)
         options = [row['group'] for row in self.client.get('/api/my-fees/invoice/options/').json()['payments']]

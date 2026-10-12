@@ -1,4 +1,4 @@
-from datetime import date as _date_type
+from datetime import date as _date_type, timedelta
 from decimal import Decimal
 
 from django.conf import settings
@@ -1037,6 +1037,10 @@ class StudentResult(models.Model):
     )
     authority_grade = models.CharField(max_length=20, blank=True, default='')
     authority_status = models.CharField(max_length=20, blank=True, default='')
+    # The authority's grade at the supplementary sitting, from its
+    # supplementary sheet. Kept apart so the first sitting's grade is never
+    # overwritten: still starred means the supplementary was failed too.
+    authority_supp_grade = models.CharField(max_length=20, blank=True, default='')
     assign1_absent        = models.BooleanField(default=False)
     assign2_absent        = models.BooleanField(default=False)
     cat1_theory_absent    = models.BooleanField(default=False)
@@ -1841,6 +1845,46 @@ class StudentDocument(models.Model):
     @property
     def is_verified(self):
         return self.verified_at is not None
+
+
+class PasswordReset(models.Model):
+    """Every time somebody was given a new password by the office — a member
+    of staff, the Principal, or a student. The ICT officer is the desk people
+    come to when they have forgotten theirs; this is the record of it, and the
+    holder is told at their next sign-in."""
+    STAFF = 'staff'
+    STUDENT = 'student'
+    KIND_CHOICES = [(STAFF, 'Staff account'), (STUDENT, 'Student portal')]
+
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True,
+                             related_name='password_resets')
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, null=True, blank=True,
+                                related_name='password_resets')
+    done_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                related_name='password_resets_done')
+    done_at = models.DateTimeField(auto_now_add=True)
+    ip = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-done_at']
+
+    def __str__(self):
+        who = self.user or self.profile
+        return f'{who} reset by {self.done_by} on {self.done_at:%Y-%m-%d %H:%M}'
+
+
+class SignInFailure(models.Model):
+    """A failed sign-in, kept briefly to slow down password guessing: too many
+    for one name, or from one address, and signing in waits (views.login_view).
+    Kept in the database, not a per-process cache, so every gunicorn worker
+    counts the same failures."""
+    identifier = models.CharField(max_length=150, db_index=True)
+    ip = models.GenericIPAddressField(null=True, blank=True, db_index=True)
+    at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-at']
 
 
 class HealthRecord(models.Model):
@@ -2842,11 +2886,28 @@ class Announcement(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    #: How long a notice is marked "New".
+    NEW_FOR_DAYS = 7
+
     class Meta:
         ordering = ['-created_at']
 
     def __str__(self):
         return self.title
+
+    @property
+    def is_new(self):
+        return bool(self.created_at) and timezone.now() - self.created_at < timedelta(days=self.NEW_FOR_DAYS)
+
+    @property
+    def size_label(self):
+        """The file's size, so a student on mobile data knows what a tap costs.
+        Blank when the file is missing rather than failing the page."""
+        try:
+            size = self.file.size
+        except (OSError, ValueError):
+            return ''
+        return f'{size / 1024:.0f} KB' if size < 1024 * 1024 else f'{size / 1024 / 1024:.1f} MB'
 
 
 # ── EVALUATION FORMS ──────────────────────────────────────────────────────────
@@ -3203,6 +3264,7 @@ class Notification(models.Model):
     EXPENSE_DECIDED = 'expense.decided'
     EXPENSE_QUERIED = 'expense.queried'
     HEALTH_RECORDED = 'health.recorded'
+    PASSWORD_RESET = 'password.reset'
     KIND_CHOICES = [
         (REQUEST_SUBMITTED, 'A student asked for something'),
         (REQUEST_FORWARDED, 'A request needs a decision'),
@@ -3215,6 +3277,7 @@ class Notification(models.Model):
         (EXPENSE_DECIDED, 'An expense was decided'),
         (EXPENSE_QUERIED, 'An expense was queried or answered'),
         (HEALTH_RECORDED, 'A student health record was added'),
+        (PASSWORD_RESET, 'Your password was reset by the office'),
     ]
 
     # Exactly one of these two is set: staff sign in as Django users, students
@@ -3637,7 +3700,10 @@ class Expense(models.Model):
     incurred_on = models.DateField()
     supplier_reference = models.CharField(max_length=100, blank=True,
                                           help_text="The supplier's invoice or quotation number.")
-    attachment = models.FileField(upload_to='expenses/%Y/%m/', blank=True)
+    # A receipt or quotation: a scan or a photograph. Anything else — an HTML
+    # page above all — could run in the approver's browser when opened.
+    attachment = models.FileField(upload_to='expenses/%Y/%m/', blank=True,
+                                  validators=[FileExtensionValidator(['pdf', 'jpg', 'jpeg', 'png'])])
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default=OFFICE)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=PENDING)

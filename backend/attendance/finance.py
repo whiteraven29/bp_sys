@@ -66,11 +66,20 @@ def audit(action, entity, *, actor=None, entity_id=None, profile=None,
 
 
 def client_ip(request):
+    """The address the request really came from.
+
+    nginx sets X-Real-IP to the connection's own address. X-Forwarded-For is
+    not trusted for this: its first entry is whatever the client sent, so it
+    could be used to dodge the sign-in lockout or to put a false address in
+    the audit trail. Only the last entry, the one nginx appended, is real."""
     if request is None:
         return None
+    real = request.META.get('HTTP_X_REAL_IP', '').strip()
+    if real:
+        return real
     forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
     if forwarded:
-        return forwarded.split(',')[0].strip()
+        return forwarded.split(',')[-1].strip()
     return request.META.get('REMOTE_ADDR')
 
 

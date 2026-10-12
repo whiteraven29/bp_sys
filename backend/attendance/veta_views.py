@@ -16,7 +16,7 @@ from rest_framework.decorators import api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from . import admissions, expenses, finance, veta
+from . import admissions, expenses, finance, passwords, veta
 from .models import (
     AcademicYear, BankAccount, ChargeType, CourseApplication, CourseEnrollment, CourseFee,
     CourseFeeInstalment, CourseModule, Expense, ExpenseCategory, Intake, NextOfKin, PettyCashTopUp, Programme,
@@ -24,6 +24,7 @@ from .models import (
 from .roles import (
     can_approve_expenses, can_manage_exams, can_view_expenses, is_accountant, is_admission_officer,
     is_break_glass, is_dparc, is_principal, is_records_officer, runs_veta_courses,
+    can_issue_student_passwords,
 )
 from .views import (
     active_academic_year, can_see_admissions, can_work_desk, full_name_for,
@@ -353,14 +354,14 @@ def course_application_action(request, pk, action=None):
                 raise PermissionDenied('Refusing is the admission office\'s decision.')
             veta.refuse(app, actor=user, note=note)
         elif action == 'reset-pin':
-            if app.state != CourseApplication.ADMITTED or not (
-                    is_admission_officer(user) or is_records_officer(user) or is_principal(user)):
-                raise PermissionDenied('The admission or records office resets a portal password.')
-            pin = veta.reset_portal_pin(app.profile)
+            if app.state != CourseApplication.ADMITTED or not can_issue_student_passwords(user):
+                raise PermissionDenied('Portal passwords are set by the ICT officer (or the Principal).')
+            # Through the password desk, so it is recorded and the student told.
+            pin = passwords.reset_student_password(app.profile, actor=user, ip=finance.client_ip(request))
             return Response({'portal_password': pin, 'username': app.profile.college_id or app.profile.nactvet_reg_no})
         else:
             raise Http404
-    except (veta.VetaError, admissions.AdmissionError) as exc:
+    except (veta.VetaError, admissions.AdmissionError, passwords.PasswordResetError) as exc:
         return _bad(exc)
     app.refresh_from_db()
     return Response(_application_row(app, user, full=True))
@@ -597,5 +598,12 @@ def expense_attachment(request, pk):
     expense = get_object_or_404(Expense, pk=pk)
     if not expense.attachment:
         raise Http404
-    return FileResponse(expense.attachment.open('rb'), as_attachment=False,
-                        filename=expense.attachment.name.rsplit('/', 1)[-1])
+    # Served as a download with a fixed type from the extension, never inline
+    # as whatever the file claims to be (expenses.check_receipt).
+    name = expense.attachment.name.rsplit('/', 1)[-1]
+    content_type = {'pdf': 'application/pdf', 'png': 'image/png', 'jpg': 'image/jpeg',
+                    'jpeg': 'image/jpeg'}.get(name.rsplit('.', 1)[-1].lower(), 'application/octet-stream')
+    response = FileResponse(expense.attachment.open('rb'), as_attachment=True, filename=name,
+                            content_type=content_type)
+    response['Content-Security-Policy'] = 'sandbox'
+    return response

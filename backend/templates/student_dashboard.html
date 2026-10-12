@@ -1,11 +1,11 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light">
 <title>Student Portal — EduTrack</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
+<link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet">
 <style>
   :root {
     /* Grey page, white panels, visible hairlines, square corners — structure
@@ -300,16 +300,23 @@
   .rem-when span { color: var(--muted); font-size: .72rem; }
   .rem-more { padding: 10px 16px; border-top: 1px solid var(--line); }
   .rem-more summary { cursor: pointer; font-size: .78rem; color: var(--blue); font-weight: 500; }
-  .ann-feed { display: grid; gap: 0; padding: 0; max-height: 700px; overflow-y: auto; }
+  /* A list that scrolls with the page — no box of its own to get stuck in —
+     and no PDF embedded: phones show an embedded PDF blank (Android) or as one
+     still page (iPhone), and every embed downloaded the whole file. */
+  .ann-feed { display: grid; gap: 0; padding: 0; }
   .ann-item { padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
   .ann-item:last-child { border-bottom: 0; }
   .ann-item-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
-  .ann-item-head h3 { margin: 0; font-size: .9rem; font-weight: 600; }
-  .ann-item-head .meta { flex-shrink: 0; }
-  .ann-note { margin: 4px 0 10px; color: var(--muted); font-size: .8rem; }
-  .ann-frame { display: block; width: 100%; height: 520px; margin-top: 10px; border: 1px solid var(--line); border-radius: 0; background: #fff; }
-  .ann-open { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--blue); font-size: .78rem; font-weight: 500; }
-  .ann-open:hover { text-decoration: underline; }
+  .ann-item-head h3 { margin: 0; font-size: .92rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+  .ann-item-head .meta { flex-shrink: 0; color: var(--muted); font-size: .74rem; }
+  .ann-new { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: var(--radius);
+             background: var(--green-fill); color: var(--on-fill); font-size: .66rem; font-weight: 700;
+             letter-spacing: .03em; text-transform: uppercase; vertical-align: 2px; }
+  .ann-note { margin: 4px 0 10px; color: var(--muted); font-size: .82rem; line-height: 1.45; }
+  .ann-read { margin-top: 8px; min-height: 40px; }
+  .ann-size { margin-left: 6px; font-size: .72rem; font-weight: 400; opacity: .85; }
+  .ann-older { border-top: 1px solid var(--line); }
+  .ann-older .ann-feed { margin: 8px -16px -10px; border-top: 1px solid var(--line); }
   .panel {
     border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
   }
@@ -520,7 +527,10 @@
     .module-card { padding: 14px; }
     .panel-head { padding: 10px 12px; }
     .ann-item { padding: 12px; }
-    .ann-frame { height: 400px; }
+    .ann-item-head { flex-direction: column; gap: 2px; }
+    /* A full-width button is an easy thumb target. */
+    .ann-read { display: flex; justify-content: center; width: 100%; }
+    .ann-older .ann-feed { margin: 8px -12px -10px; }
     .table-wrap { overflow-x: auto; }
     table { min-width: 620px; font-size: .78rem; }
     table th, table td { padding: 7px 9px; white-space: nowrap; }
@@ -666,15 +676,18 @@
         <section class="panel">
           <div class="panel-head"><h2><i class="bi bi-megaphone" style="margin-right:6px;"></i>Announcements</h2><span>Notices posted by the administration</span></div>
           <div class="ann-feed">
-            {% for a in announcements %}
-            <article class="ann-item">
-              <div class="ann-item-head"><h3>{{ a.title }}</h3><span class="meta">{{ a.created_at|date:"d M Y" }}</span></div>
-              {% if a.note %}<p class="ann-note">{{ a.note }}</p>{% endif %}
-              <iframe class="ann-frame" src="{% url 'announcement-download' a.id %}" title="{{ a.title }}"></iframe>
-              <a class="ann-open" href="{% url 'announcement-download' a.id %}" target="_blank" rel="noopener">Open full PDF <i class="bi bi-box-arrow-up-right"></i></a>
-            </article>
+            {% for a in announcements|slice:":5" %}
+              {% include "_announcement_item.html" %}
             {% empty %}<div class="empty">No announcements have been posted yet.</div>{% endfor %}
           </div>
+          {% if announcements|length > 5 %}
+          <details class="rem-more ann-older">
+            <summary>Show older notices ({{ announcements|length|add:"-5" }})</summary>
+            <div class="ann-feed">
+              {% for a in announcements|slice:"5:" %}{% include "_announcement_item.html" %}{% endfor %}
+            </div>
+          </details>
+          {% endif %}
         </section>
       </section>
 
@@ -1303,12 +1316,12 @@
       const list = Array.isArray(created) ? created : [created];
       if (message) {
         message.innerHTML = list.map(i =>
-          `<strong>${i.reference}</strong> — ${i.invoice_group || 'Student fees'}, `
+          `<strong>${escapeText(i.reference)}</strong> — ${i.invoice_group || 'Student fees'}, `
           + `${money(i.total)} across ${i.installment_count} instalment(s)`
           + (i.expires_on ? `, valid until ${i.expires_on}` : '')
           + (i.bank_account_number ? `, into ${i.bank_name} ${i.bank_account_number}` : '')
-          + ` · <a href="/invoice/${i.reference}/" target="_blank" rel="noopener">view</a>`
-          + ` · <a href="/invoice/${i.reference}/?download=1" target="_blank" rel="noopener">download</a>`
+          + ` · <a href="/invoice/${escapeText(i.reference)}/" target="_blank" rel="noopener">view</a>`
+          + ` · <a href="/invoice/${escapeText(i.reference)}/?download=1" target="_blank" rel="noopener">download</a>`
         ).join('<br>');
       }
       toast('Invoice ' + list[0].reference + ' ready');
@@ -1683,7 +1696,7 @@
     try {
       const rows = await api('GET', '/my-documents/');
       body.innerHTML = rows.length ? rows.map(doc => `<tr>
-          <td><a href="${doc.download_url}" target="_blank" rel="noopener">${doc.display_name}</a></td>
+          <td><a href="${doc.download_url}" target="_blank" rel="noopener">${escapeText(doc.display_name)}</a></td>
           <td>${DOCUMENT_KINDS[doc.kind] || doc.kind}</td>
           <td>${(doc.uploaded_at || '').slice(0, 10)}</td>
           <td>${doc.is_verified ? 'Checked by the college' : 'Waiting to be checked'}</td>
