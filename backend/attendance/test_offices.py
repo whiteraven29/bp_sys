@@ -29,7 +29,7 @@ from rest_framework.test import APIClient
 from . import finance
 from .models import (
     Application, ExamOfficerProfile, Notification, Postponement, PrincipalProfile,
-    ResultEntryWindow, RoleChange, StudentCharge, StudentResult,
+    ResultEntryWindow, RoleChange, StudentCharge, StudentProfile, StudentResult,
 )
 from .test_lifecycle import LifecycleBase
 from .views import set_roles
@@ -116,6 +116,7 @@ class TheExamOfficeWorksFromTheDepartmentsListsTests(OfficesBase):
     def test_the_departments_still_do(self):
         self.assertEqual(self.new_module(self.hod, 'PST04151').status_code, 201)
         self.assertEqual(self.new_module(self.dparc, 'PST04152').status_code, 201)
+        StudentProfile.objects.create(nactvet_reg_no='NIT/PST/2026/0901', name='Y')               # admitted
         self.assertEqual(self.hod.post('/api/students/', {
             'nactvet_reg_no': 'NIT/PST/2026/0901', 'name': 'Y', 'module': self.m1.id,
         }, format='json').status_code, 201)

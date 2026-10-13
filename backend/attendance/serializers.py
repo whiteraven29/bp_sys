@@ -268,6 +268,18 @@ class ModuleSerializer(serializers.ModelSerializer):
         return obj.sessions.filter(session_type=Session.PRACTICAL).count()
 
 
+def known_student(reg_no):
+    """Has the college taken this person in? New students come in through
+    Admissions (said 13 October 2026); adding someone to a module is only for
+    a student already on file — a correction, not a way round the desks."""
+    reg_no = (reg_no or '').strip()
+    return bool(reg_no) and (StudentProfile.objects.filter(nactvet_reg_no__iexact=reg_no).exists()
+                             or Student.objects.filter(nactvet_reg_no__iexact=reg_no).exists())
+
+
+NOT_ADMITTED = '{} has not been admitted. New students come in through Admissions.'
+
+
 class StudentSerializer(serializers.ModelSerializer):
     portal_pin = serializers.CharField(
         write_only=True, required=False, allow_blank=False, min_length=6
@@ -314,6 +326,8 @@ class StudentSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        if not known_student(validated_data.get('nactvet_reg_no')):
+            raise serializers.ValidationError({'nactvet_reg_no': NOT_ADMITTED.format(validated_data.get('nactvet_reg_no'))})
         portal_pin = validated_data.pop('portal_pin', None)
         student = super().create(validated_data)
         if portal_pin:
@@ -857,7 +871,7 @@ class BulkStudentSerializer(serializers.Serializer):
         if user and not runs_departments(user):
             allowed_module_ids = set(user.modules_taught.values_list('id', flat=True))
 
-        added, skipped, pin_skipped = 0, 0, 0
+        added, skipped, pin_skipped, not_admitted = 0, 0, 0, []
         for row in rows:
             reg_no = str(row.get('nactvet_reg_no', '')).strip().upper()
             name = str(row.get('name', '')).strip()
@@ -876,6 +890,10 @@ class BulkStudentSerializer(serializers.Serializer):
                 continue
             if allowed_module_ids is not None and module.id not in allowed_module_ids:
                 raise PermissionDenied('You may only add students to modules you tutor.')
+            if not known_student(reg_no):
+                not_admitted.append(reg_no)
+                skipped += 1
+                continue
             student, created = Student.objects.get_or_create(
                 nactvet_reg_no=reg_no, module=module,
                 defaults={'name': name}
@@ -907,7 +925,9 @@ class BulkStudentSerializer(serializers.Serializer):
                 # import) must never silently reset an active student's login
                 # PIN — use the dedicated "Set Password/PIN" action for that.
                 skipped += 1
-        return {'added': added, 'skipped': skipped, 'pin_skipped': pin_skipped}
+        return {'added': added, 'skipped': skipped, 'pin_skipped': pin_skipped,
+                'not_admitted': not_admitted,
+                **({'detail': NOT_ADMITTED.format(', '.join(not_admitted))} if not_admitted else {})}
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):

@@ -547,11 +547,14 @@
 
   /* admin-only hides nav buttons (flex) and block elements until body.is-admin is set */
   .admin-only { display: none !important; }
-  body.is-admin .admin-only { display: flex !important; }
-  body.is-admin .admin-only.card,
-  body.is-admin .admin-only.form-grid,
-  body.is-admin .admin-only.form-grid-3 { display: grid !important; }
-  body.is-admin .admin-only.card { display: block !important; }
+  body.is-admin .admin-only:not(.sec-off) { display: flex !important; }
+  body.is-admin .admin-only.card:not(.sec-off),
+  body.is-admin .admin-only.form-grid:not(.sec-off),
+  body.is-admin .admin-only.form-grid-3:not(.sec-off) { display: grid !important; }
+  body.is-admin .admin-only.card:not(.sec-off) { display: block !important; }
+  /* A card that belongs to another item of the same menu (one menu item, one
+     view): hidden whatever office the reader holds. */
+  .sec-off { display: none !important; }
   .finance-only { display: none !important; }
   body.is-finance .finance-only { display: flex !important; }
   body.is-finance .finance-only.card { display: block !important; }
@@ -610,7 +613,8 @@
      refuses the same actions (roles.py). */
   body:not(.can-manage-accounts) .account-manager-only { display: none !important; }
   body:not(.can-manage-departments) .dept-manager-only { display: none !important; }
-  body:not(.is-exam-office) .exam-office-only { display: none !important; }
+  body:not(.is-exam-office) .exam-office-only,
+  body:not(.is-exam-office) .admin-only.exam-office-only.card { display: none !important; }
   body.is-ict:not(.is-admin) .academic-only,
   body.is-coordinator-only .academic-only,
   body.is-dpfpa:not(.is-admin) .academic-only { display: none !important; }
@@ -856,10 +860,11 @@
         <button class="nav-sub-btn" data-adm-section="settings" data-roles="principal admission" onclick="showAdmissionSection('settings', this)">Window &amp; ID numbers</button>
       </div>
     </div>
-    <div class="nav-group" id="records-nav-group" data-roles="principal dparc records admission">
-      <button class="nav-btn" data-page="student-records" onclick="toggleRecordsMenu(event)"><span class="icon"><i class="bi bi-person-vcard"></i></span> Student Records <span class="nav-caret">›</span></button>
+    <div class="nav-group" id="students-nav-group" data-roles="principal dparc records admission runs">
+      <button class="nav-btn" data-page="students" onclick="toggleStudentsMenu(event)"><span class="icon"><i class="bi bi-mortarboard"></i></span> Students <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-rec-section="find" data-roles="principal dparc records" onclick="showRecordsSection('find', this)">Find a student</button>
+        <button class="nav-sub-btn" data-student-section="manage" data-roles="runs" onclick="showStudentSection('manage', this)">Enrollments</button>
         <button class="nav-sub-btn" data-rec-section="ids" data-roles="principal records admission" onclick="showRecordsSection('ids', this)">College ID import</button>
       </div>
     </div>
@@ -900,13 +905,6 @@
         <button class="nav-sub-btn" data-module-section="manage" onclick="showModuleSection('manage', this)">Manage Modules</button>
       </div>
     </div>
-    <div class="nav-group admin-only" data-roles="runs" id="students-nav-group">
-      <button class="nav-btn" data-page="students" onclick="toggleStudentsMenu(event)"><span class="icon"><i class="bi bi-mortarboard"></i></span> Students <span class="nav-caret">›</span></button>
-      <div class="nav-submenu">
-        <button class="nav-sub-btn active" data-student-section="register" onclick="showStudentSection('register', this)">Upload / Register</button>
-        <button class="nav-sub-btn" data-student-section="manage" onclick="showStudentSection('manage', this)">Manage Enrollments</button>
-      </div>
-    </div>
     <div class="nav-group academic-only" id="attendance-nav-group">
       <button class="nav-btn" data-page="attendance" onclick="toggleAttendanceMenu(event)"><span class="icon"><i class="bi bi-calendar-check"></i></span> Attendance <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
@@ -921,7 +919,9 @@
         <button class="nav-sub-btn" data-results-section="final" onclick="showResultsSection('final', this)">End of Semester</button>
         <button class="nav-sub-btn" data-results-section="field" onclick="showResultsSection('field', this)">Field Results</button>
         <button class="nav-sub-btn" data-results-section="analysis" onclick="showResultsSection('analysis', this)">CAT Analysis</button>
+        <button class="nav-sub-btn admin-only" data-results-section="authority" onclick="showResultsSection('authority', this)">Authority Grades</button>
         <button class="nav-sub-btn admin-only" data-results-section="summary" onclick="showResultsSection('summary', this)">Results Summary</button>
+        <button class="nav-sub-btn exam-office-only" data-results-section="windows" onclick="showResultsSection('windows', this)">Entry Windows</button>
       </div>
     </div>
     <button class="nav-btn" data-page="returning" data-roles="principal dparc exam superuser" onclick="showPage('returning',this); loadReturning()"><span class="icon"><i class="bi bi-arrow-repeat"></i></span> Returning Students</button>
@@ -1361,10 +1361,6 @@
             <thead><tr><th>Month</th><th>Received</th></tr></thead>
             <tbody id="exec-month-tbody"></tbody>
           </table></div>
-        </div>
-        <div class="card">
-          <div class="card-title">Spending</div>
-          <p class="help-note" id="exec-spending">Spending is not recorded in the system yet. The expenses register comes next: the accountant records each expense, and the Principal or DPFPA approves it. It will be summed here against the budget.</p>
         </div>
       </div>
 
@@ -1930,37 +1926,19 @@
 
     <!-- STUDENTS -->
     <div class="page" id="page-students">
-      <div class="page-title">Students</div>
-      <div class="page-sub">Manage student enrollment per module</div>
+      <div class="page-title">Enrollments</div>
+      <div class="page-sub">Who sits which module. New students come in through Admissions.</div>
 
-      <div class="student-subview active" id="student-section-register">
+      <div class="student-subview active" id="student-section-manage">
         <div class="card">
-          <div class="card-title">➕ Register New Student</div>
+          <div class="card-title">Add a student to a module <span class="tip" tabindex="0" role="note" aria-label="Help: add to a module" data-tip="A correction, for a student already admitted who is missing from one of their modules. New students come in through Admissions, which puts them in their modules itself.">?</span></div>
           <div class="form-grid">
             <div class="field"><label>Module *</label><select id="add-stu-module"><option value="">— select module —</option></select></div>
-            <div class="field"><label>NACTVET Reg. No. *</label><input id="add-stu-regno" placeholder="e.g. NTA/L4/0001" /></div>
-            <div class="field"><label>Student Name *</label><input id="add-stu-name" placeholder="e.g. John Doe" /></div>
-            <div class="field account-manager-only" style="flex-direction:column;"><label>Portal password (optional)</label><input id="add-stu-pin" type="password" minlength="6" placeholder="Or give it later at the Password desk" /></div>
+            <div class="field"><label>NACTVET Reg. No. *</label><input id="add-stu-regno" placeholder="e.g. NS0001/0046/2025" /></div>
+            <div class="field"><label>Student Name *</label><input id="add-stu-name" placeholder="As on their record" /></div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="addSingleStudent()">Add Student</button>
+          <button class="btn btn-primary btn-sm" onclick="addSingleStudent()">Add to the module</button>
         </div>
-        <div class="card">
-          <div class="card-title">📤 Bulk Upload via Excel</div>
-          <div class="form-grid">
-            <div class="field"><label>Module</label><select id="bulk-module"><option value="">— select module —</option></select>
-              <small style="display:block;color:var(--muted);margin-top:6px;">Leave blank to upload students for multiple modules using a module code/name column in the sheet.</small>
-            </div>
-          </div>
-          <div class="upload-zone" onclick="document.getElementById('excel-file').click()">
-            <input type="file" id="excel-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelUpload(event)">
-            <div class="uz-icon">📊</div>
-            <div class="uz-title">Click to upload Excel / CSV</div>
-              <div class="uz-sub">Columns: <strong>NACTVET Reg No</strong>, <strong>Name</strong>, and optional <strong>Portal PIN</strong></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="student-subview" id="student-section-manage">
         <div class="card">
           <div class="card-title">Filters</div>
           <div class="form-grid">
@@ -2086,12 +2064,12 @@
           export them, and the Performance page summarises them by module and over time.
           Entering and approving marks belongs to the examination officer.</div>
       </div>
-      <div class="page-title">Results — Continuous Assessment</div>
-      <div class="page-sub">Raw marks out of 100 — totals are calculated.</div>
+      <div class="page-title" id="res-page-title">Results — Continuous Assessment</div>
+      <div class="page-sub" id="res-page-sub">Raw marks out of 100 — totals are calculated.</div>
 
-      <div id="rw-banner"></div>
+      <div id="rw-banner" data-res-view="ca final field"></div>
 
-      <div class="card admin-only exam-office-only" id="result-window-card">
+      <div class="card admin-only exam-office-only" id="result-window-card" data-res-view="windows">
         <div class="card-title">Mark entry windows <span class="tip" tabindex="0" role="note" aria-label="Help: Outside an open window only the exam office can change marks. The CA window governs tutors; the end-of-semester one is the office deadline." data-tip="Outside an open window only the exam office can change marks. The CA window governs tutors; the end-of-semester one is the office deadline.">?</span>
           <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px">— when tutors may enter marks</span>
         </div>
@@ -2122,7 +2100,7 @@
       </div>
 
       <!-- Module selector -->
-      <div class="card">
+      <div class="card" data-res-view="ca final field analysis">
         <div class="card-title">Select Module</div>
         <div class="form-grid-3">
           <div class="field"><label>Semester</label><select id="res-flt-sem" onchange="onResFilterChange()"><option value="">All Semesters</option></select></div>
@@ -2130,7 +2108,7 @@
           <div class="field"><label>Module *</label><select id="res-flt-module" onchange="loadResultsModule()"><option value="">— select module —</option></select></div>
         </div>
       </div>
-      <div class="card" style="padding:14px 20px; display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap;">
+      <div class="card" data-res-view="ca final field" style="padding:14px 20px; display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap;">
         <div class="field" style="flex:1; min-width:260px; margin-bottom:0;">
           <label>Search Students</label>
           <input id="res-search" type="text" placeholder="Search by name or reg no" oninput="onResSearchChange()" style="width:100%;" />
@@ -2142,7 +2120,7 @@
           <div id="res-sitting-hint" style="font-size:.72rem;color:var(--orange);margin-top:3px;"></div>
         </div>
       </div>
-      <div class="card admin-only" id="authority-grade-card" style="display:none;">
+      <div class="card admin-only" id="authority-grade-card" data-res-view="authority">
         <div class="card-title">📥 Authority Grade Import</div>
         <p style="font-size:.78rem;color:var(--muted);margin-bottom:14px;">Download a level template, then enter the authority value beneath each module code. Stars are interpreted using the official grading key.</p>
         <div class="form-grid-3">
@@ -2160,7 +2138,7 @@
         </div>
       </div>
 
-      <div class="card admin-only" id="results-summary-card" style="display:none;">
+      <div class="card admin-only" id="results-summary-card" data-res-view="summary">
         <div class="card-title">Results summary <span class="tip" tabindex="0" role="note" aria-label="Help: results summary" data-tip="GPA = sum of (grade points × module credits) ÷ total credits of the graded modules. Points: A 4 (A 5 at level 6), B+ 4, B 3, C 2, D 1, F 0. An authority grade counts as the result whether or not marks were entered. Withhold hides a student's results for the semester on the portal; the results themselves stand.">?</span></div>
         <div class="form-grid-3">
           <div class="field"><label>Semester *</label><select id="sum-semester" onchange="loadResultsSummary()"></select></div>
@@ -2186,7 +2164,7 @@
         </div>
       </div>
 
-      <div class="card" id="cat-analysis-card" style="display:none;">
+      <div class="card" id="cat-analysis-card" data-res-view="analysis">
         <div class="card-title">
           <span class="print-icon" aria-hidden="true">📊</span> CAT Module Analysis
           <div style="display:flex;gap:8px;margin-left:auto;align-items:flex-end;flex-wrap:wrap;">
@@ -2215,7 +2193,7 @@
       </div>
 
       <!-- Module info + download (shown after module selected) -->
-      <div id="res-module-info" style="display:none">
+      <div id="res-module-info" data-res-view="ca final field" style="display:none">
         <div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 20px;">
           <div>
             <div style="font-weight:700;font-size:.95rem;" id="res-mod-name">—</div>
@@ -2338,7 +2316,7 @@
     <div class="page" id="page-eligibility">
       <div class="page-title">Exam Eligibility</div>
       <div class="page-sub">Who may sit CATs and end-of-semester exams.</div>
-      <div class="card">
+      <div class="card elig-list-view">
         <div class="card-title">Filters</div>
         <div class="form-grid-3">
           <div class="field"><label>Semester</label><select id="elig-flt-sem" onchange="onEligFilterChange()"><option value="">All Semesters</option></select></div>
@@ -2362,8 +2340,18 @@
               <option value="all">All Students</option>
             </select>
           </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="loadEligibility()">🔍 Apply</button>
+          <button class="btn btn-primary btn-sm" onclick="printEligibility()">🖨 Print</button>
+          <button class="btn btn-green btn-sm" onclick="downloadEligibilityExcel()">⬇ Download Excel</button>
+        </div>
+      </div>
+      <div class="card elig-final-view sec-off" id="elig-final-card">
+        <div class="card-title">Final eligibility list <span class="tip" tabindex="0" role="note" aria-label="Help: final eligibility" data-tip="The list for the end-of-semester examinations, every requirement checked — attendance, CA and fees — as one Excel workbook for the semester or the field modules.">?</span></div>
+        <div class="form-grid-3">
           <div class="field">
-            <label>Final Eligibility Export</label>
+            <label>For</label>
             <select id="final-elig-scope">
               <option value="semester_1">Semester 1</option>
               <option value="semester_2">Semester 2</option>
@@ -2371,20 +2359,15 @@
             </select>
           </div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-sm" onclick="loadEligibility()">🔍 Apply</button>
-          <button class="btn btn-primary btn-sm" onclick="printEligibility()">🖨 Print</button>
-          <button class="btn btn-green btn-sm" onclick="downloadEligibilityExcel()">⬇ Download Excel</button>
-          <button class="btn btn-green btn-sm" onclick="downloadFinalEligibilityExcel()">⬇ Final Eligibility</button>
-        </div>
+        <button class="btn btn-green btn-sm" onclick="downloadFinalEligibilityExcel()">⬇ Download final eligibility</button>
       </div>
-      <div class="stats-grid" id="elig-stats-grid">
+      <div class="stats-grid elig-list-view" id="elig-stats-grid">
         <div class="stat-card" style="--c:var(--accent)"><div class="label">Total Students</div><div class="value" id="elig-stat-total">—</div></div>
         <div class="stat-card" style="--c:var(--green)"><div class="label">Eligible</div><div class="value" id="elig-stat-eligible">—</div><div class="sublabel" id="elig-stat-eligible-note">All requirements met</div></div>
         <div class="stat-card" style="--c:var(--red)"><div class="label">Not Eligible</div><div class="value" id="elig-stat-ineligible">—</div><div class="sublabel" id="elig-stat-ineligible-note">Action required</div></div>
         <div class="stat-card" style="--c:var(--muted)"><div class="label" id="elig-stat-na-label">Pending Data</div><div class="value" id="elig-stat-na">—</div></div>
       </div>
-      <div class="card" id="elig-print-area">
+      <div class="card elig-list-view" id="elig-print-area">
         <div class="print-header" id="elig-print-header"></div>
         <div class="card-title" id="elig-table-title">📋 Eligibility List</div>
         <div class="table-wrap">
@@ -3923,7 +3906,7 @@ function showPage(name, btn) {
   document.querySelectorAll('.nav-group').forEach(g => {
     const keep =
       (g.id === 'modules-nav-group' && name === 'modules') ||
-      (g.id === 'students-nav-group' && name === 'students') ||
+      (g.id === 'students-nav-group' && (name === 'students' || name === 'student-records')) ||
       (g.id === 'attendance-nav-group' && (name === 'attendance' || name === 'reports')) ||
       (g.id === 'results-nav-group' && name === 'results') ||
       (g.id === 'declarations-nav-group' && name === 'declarations') ||
@@ -3943,7 +3926,7 @@ function showPage(name, btn) {
     const group = document.getElementById('students-nav-group');
     group.classList.add('open');
     group.querySelector('.nav-btn').classList.add('active');
-    const section = document.querySelector('.student-subview.active')?.id?.replace('student-section-', '') || 'register';
+    const section = document.querySelector('.student-subview.active')?.id?.replace('student-section-', '') || 'manage';
     document.querySelector(`[data-student-section="${section}"]`)?.classList.add('active');
   }
   if (name === 'attendance' || name === 'reports') {
@@ -4017,10 +4000,16 @@ function toggleModulesMenu(event) {
 }
 
 function toggleStudentsMenu(event) {
+  // One menu for the people the college has: their record (records office),
+  // their enrollments (the departments) and the college ID import.
   const group = document.getElementById('students-nav-group');
   group.classList.toggle('open');
-  if (!document.getElementById('page-students').classList.contains('active')) {
-    showStudentSection('register', group.querySelector('[data-student-section="register"]'));
+  if (!document.getElementById('page-students').classList.contains('active')
+      && !document.getElementById('page-student-records').classList.contains('active')) {
+    const me = state.offices || {};
+    if (me.records || me.principal || me.dparc) showRecordsSection('find', group.querySelector('[data-rec-section="find"]'));
+    else if (me.runs) showStudentSection('manage', group.querySelector('[data-student-section="manage"]'));
+    else showRecordsSection('ids', group.querySelector('[data-rec-section="ids"]'));
   }
   event.stopPropagation();
 }
@@ -4074,6 +4063,7 @@ function showStudentSection(section, btn) {
   document.getElementById('student-section-' + section).classList.add('active');
   document.querySelectorAll('.nav-sub-btn').forEach(el => el.classList.toggle('active', el.dataset.studentSection === section));
   showPage('students', document.querySelector('#students-nav-group .nav-btn'));
+  document.getElementById('students-nav-group').classList.add('open');
   if (btn) btn.classList.add('active');
 }
 
@@ -4083,26 +4073,41 @@ function showAttendanceSection(section, btn) {
   if (btn) btn.classList.add('active');
 }
 
+const RESULTS_SECTIONS = {
+  ca: ['Results — Continuous Assessment', 'Raw marks out of 100 — totals are calculated.'],
+  final: ['Results — End of Semester', 'End-of-semester marks, entered by the examination office.'],
+  field: ['Results — Field', 'One CA mark and one final mark for each field module.'],
+  analysis: ['CAT Analysis', 'How a class did in CAT 1 or CAT 2, module by module.'],
+  authority: ['Authority Grades', "NACTVET's grades, imported by level — continuing and repeaters."],
+  summary: ['Results Summary', 'A level\'s semester: GPA and remark for every student.'],
+  windows: ['Mark Entry Windows', 'When tutors may enter marks.'],
+};
+
 function showResultsSection(section, btn) {
+  if (!RESULTS_SECTIONS[section]) section = 'ca';
+  if (section === 'windows' && !document.body.classList.contains('is-exam-office')) section = 'ca';
   state.resultsSection = section;
   showPage('results', document.querySelector('#results-nav-group .nav-btn'));
   document.querySelectorAll('[data-results-section]').forEach(el => el.classList.toggle('active', el.dataset.resultsSection === section));
   if (btn) btn.classList.add('active');
+  // One menu item, one view: every card says which items it belongs to.
+  document.querySelectorAll('#page-results [data-res-view]').forEach(el =>
+    el.classList.toggle('sec-off', !el.dataset.resView.split(' ').includes(section)));
+  const [title, sub] = RESULTS_SECTIONS[section];
+  document.getElementById('res-page-title').textContent = title;
+  document.getElementById('res-page-sub').textContent = sub;
+  const crumb = document.getElementById('crumb-page');
+  if (crumb) crumb.textContent = title;
   const analysisCard = document.getElementById('cat-analysis-card');
-  if (analysisCard) analysisCard.style.display = section === 'analysis' ? 'block' : 'none';
   const caCard = document.getElementById('res-ca-print-area');
   const fieldCard = document.getElementById('field-results-card');
   const legend = document.getElementById('res-weight-legend');
   const endCard = document.getElementById('end-exam-card');
-  const authorityCard = document.getElementById('authority-grade-card');
   const showField = section === 'field' && resModuleInfo?.is_field_module;
   if (caCard) caCard.style.display = section === 'ca' ? 'block' : 'none';
   if (fieldCard) fieldCard.style.display = showField ? 'block' : 'none';
   if (legend) legend.style.display = section === 'ca' || showField ? 'block' : 'none';
   if (endCard) endCard.style.display = section === 'final' && resModuleInfo && !resModuleInfo.is_field_module && state.isStaff ? 'block' : 'none';
-  if (authorityCard) authorityCard.style.display = section === 'final' ? 'block' : 'none';
-  const summaryCard = document.getElementById('results-summary-card');
-  if (summaryCard) summaryCard.style.display = section === 'summary' ? 'block' : 'none';
   if (section === 'analysis') loadCatAnalysis();
   if (section === 'summary') {
     const sem = document.getElementById('sum-semester');
@@ -4141,6 +4146,7 @@ function showEligibilityBasis(basis, btn) {
   showPage('eligibility', document.querySelector('#eligibility-nav-group .nav-btn'));
   document.querySelectorAll('[data-eligibility-basis]').forEach(el => el.classList.toggle('active', el.dataset.eligibilityBasis === state.eligibilityBasis));
   if (btn) btn.classList.add('active');
+  showEligibilityView(false);
   onEligibilityModeChange();
 }
 
@@ -4336,7 +4342,7 @@ async function boot() {
     }
 
     populateAllSelects();
-    await refreshModuleDropdowns('', '', 'add-stu-module', 'bulk-module', 'stu-flt-module');
+    await refreshModuleDropdowns('', '', 'add-stu-module', 'stu-flt-module');
     buildSidebarModules();
     if (!state.isStaff && state.isAccountant) {
       showPage('finance', document.querySelector('[data-page="finance"]'));
@@ -5436,17 +5442,14 @@ async function addSingleStudent() {
   const moduleId = document.getElementById('add-stu-module').value;
   const regNo = document.getElementById('add-stu-regno').value.trim().toUpperCase();
   const name = document.getElementById('add-stu-name').value.trim();
-  const portalPin = document.getElementById('add-stu-pin').value.trim();
   if (!moduleId || !regNo || !name) { toast('Module, registration number and name are required', 'var(--red)'); return; }
-  if (portalPin && portalPin.length < 6) { toast('A portal password needs at least 6 characters', 'var(--red)'); return; }
   try {
-    const row = { nactvet_reg_no: regNo, name };
-    if (portalPin) row.portal_pin = portalPin;
-    await api('POST', '/students/bulk_create/', { module: parseInt(moduleId, 10), students: [row] });
-    toast('Student added!', 'var(--green)');
+    const result = await api('POST', '/students/bulk_create/', { module: parseInt(moduleId, 10), students: [{ nactvet_reg_no: regNo, name }] });
+    if (result.not_admitted?.length) { toast(result.detail, 'var(--red)'); return; }
+    if (!result.added) { toast('Already in that module', 'var(--orange)'); return; }
+    toast('Added to the module', 'var(--green)');
     document.getElementById('add-stu-regno').value = '';
     document.getElementById('add-stu-name').value = '';
-    document.getElementById('add-stu-pin').value = '';
     loadStudents();
   } catch(e) { toast(e?.detail || 'Error', 'var(--red)'); }
 }
@@ -5488,40 +5491,6 @@ async function deleteStudent(id, name) {
     toast('Student removed', 'var(--orange)');
     loadStudents();
   } catch(e) { toast(e?.detail || 'Error', 'var(--red)'); }
-}
-
-function handleExcelUpload(event) {
-  const file = event.target.files[0];
-  const moduleId = document.getElementById('bulk-module').value;
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    try {
-      const wb = XLSX.read(e.target.result, { type: 'binary' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { raw: false });
-      const students = rows.map(r => {
-        const keys = Object.keys(r);
-        const regKey = keys.find(k => /reg|nactvet|regno|id/i.test(k));
-        const nameKey = keys.find(k => /name/i.test(k));
-        const moduleKey = keys.find(k => /module|code/i.test(k));
-        const pinKey = keys.find(k => /portal.?pin|pin/i.test(k));
-        return {
-          nactvet_reg_no: (r[regKey] || '').toString().trim().toUpperCase(),
-          name: (r[nameKey] || '').toString().trim(),
-          module: moduleId ? parseInt(moduleId, 10) : (r[moduleKey] || '').toString().trim(),
-          portal_pin: pinKey ? (r[pinKey] || '').toString().trim() : '',
-        };
-      }).filter(s => s.nactvet_reg_no && s.name && (s.module || moduleId));
-      if (!students.length) { toast('No valid rows found', 'var(--red)'); return; }
-      const payload = moduleId ? { module: parseInt(moduleId, 10), students } : { students };
-      const result = await api('POST', '/students/bulk_create/', payload);
-      toast(`Added: ${result.added}, Skipped: ${result.skipped}`, 'var(--green)');
-      loadStudents();
-    } catch(err) { toast('Upload failed: ' + (err?.detail || err), 'var(--red)'); }
-    event.target.value = '';
-  };
-  reader.readAsBinaryString(file);
 }
 
 // ── ATTENDANCE PAGE ─────────────────────────────────────────────────────────────
@@ -6392,8 +6361,6 @@ function renderResultsPage() {
   document.getElementById('field-results-card').style.display = state.resultsSection === 'field' && fieldModule ? 'block' : 'none';
   document.getElementById('res-weight-legend').style.display = state.resultsSection === 'ca' || (state.resultsSection === 'field' && fieldModule) ? 'block' : 'none';
   document.getElementById('end-exam-card').style.display = !fieldModule && state.resultsSection === 'final' && state.isStaff ? 'block' : 'none';
-  document.getElementById('authority-grade-card').style.display = state.resultsSection === 'final' ? 'block' : 'none';
-  document.getElementById('results-summary-card').style.display = state.resultsSection === 'summary' ? 'block' : 'none';
 }
 
 function mkInput(resultId, field, value, absent=false) {
@@ -7239,10 +7206,16 @@ function downloadFinalEligibilityExcel() {
   window.location.href = `/api/eligibility/final/download/?scope=${encodeURIComponent(scope)}`;
 }
 
+function showEligibilityView(final) {
+  // The lists and the final export are different jobs: one shows at a time.
+  document.querySelectorAll('#page-eligibility .elig-list-view').forEach(el => el.classList.toggle('sec-off', final));
+  document.querySelectorAll('#page-eligibility .elig-final-view').forEach(el => el.classList.toggle('sec-off', !final));
+}
+
 function showFinalEligibilityExport(btn) {
   showPage('eligibility', document.querySelector('#eligibility-nav-group .nav-btn'));
   document.querySelectorAll('#eligibility-nav-group .nav-sub-btn').forEach(el => el.classList.toggle('active', el === btn));
-  document.getElementById('final-elig-scope')?.focus();
+  showEligibilityView(true);
 }
 
 // ── FINANCE PAGE ───────────────────────────────────────────────────────────────
@@ -9972,17 +9945,6 @@ const RECORD_SECTIONS = {
   ids: ['College ID import', 'Record the college ID numbers students already carry.'],
 };
 
-function toggleRecordsMenu(event) {
-  const group = document.getElementById('records-nav-group');
-  group.classList.toggle('open');
-  if (!document.getElementById('page-student-records').classList.contains('active')) {
-    const me = state.offices || {};
-    const first = (me.records || me.principal) ? 'find' : 'ids';
-    showRecordsSection(first, group.querySelector(`[data-rec-section="${first}"]`));
-  }
-  event.stopPropagation();
-}
-
 function showRecordsSection(section, btn) {
   if (!RECORD_SECTIONS[section]) section = 'find';
   document.querySelectorAll('#page-student-records [data-rec-section]').forEach(card =>
@@ -9992,8 +9954,8 @@ function showRecordsSection(section, btn) {
   const [title, sub] = RECORD_SECTIONS[section];
   document.getElementById('rec-page-title').textContent = title;
   document.getElementById('rec-page-sub').textContent = sub;
-  showPage('student-records', document.querySelector('#records-nav-group .nav-btn'));
-  document.getElementById('records-nav-group').classList.add('open');
+  showPage('student-records', document.querySelector('#students-nav-group .nav-btn'));
+  document.getElementById('students-nav-group').classList.add('open');
   if (btn) btn.classList.add('active');
 }
 

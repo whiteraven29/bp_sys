@@ -883,13 +883,19 @@ def student_dashboard(request):
     enrollments = list(enrollments)
     completed = {e.repeat_of.module.semester_id for e in enrollments
                  if e.attempt == Student.REPEAT and e.repeat_of_id}
+    # Read for the statement only: a repeater sees the modules they are
+    # repeating, not last time's (said 13 October 2026) — every list, total,
+    # GPA and eligibility below leaves these out.
+    statement_only = set()
     if completed:
-        enrollments += list(
+        earlier = list(
             Student.objects.filter(nactvet_reg_no=student.nactvet_reg_no, attempt=Student.NORMAL,
                                    module__semester_id__in=completed)
             .exclude(id__in=[e.id for e in enrollments])
             .select_related('module__class_level', 'module__semester__academic_year', 'profile')
             .prefetch_related('attendance_records__session', 'result', 'module__sessions'))
+        statement_only = {e.id for e in earlier}
+        enrollments += earlier
 
     # Semesters whose results the college is keeping from the student for now.
     withheld_semesters = set(ResultWithholding.objects.filter(
@@ -957,11 +963,12 @@ def student_dashboard(request):
         if withheld:
             has_final_result = False
 
-        if data['sessions_total']:
+        if data['sessions_total'] and enrollment.id not in statement_only:
             attendance_sum += data['attendance_pct']
             attendance_count += 1
 
         modules.append({
+            'statement_only': enrollment.id in statement_only,
             'module_name': data['module_name'],
             'module_code': data['module_code'],
             'teacher': enrollment.module.teacher,
@@ -990,6 +997,9 @@ def student_dashboard(request):
             'withheld': withheld,
         })
 
+    statement_modules = modules
+    modules = [module for module in modules if not module['statement_only']]
+    enrollments = [enrollment for enrollment in enrollments if enrollment.id not in statement_only]
     published_points = [
         (module['result']['grade_point'], module['credits'])
         for module in modules
@@ -1006,7 +1016,7 @@ def student_dashboard(request):
     gpa_class = gpa_classification(
         gpa, student.module.class_level
     )
-    result_statements = _result_statements(modules, student.module.class_level)
+    result_statements = _result_statements(statement_modules, student.module.class_level)
 
     overall_attendance = round(attendance_sum / attendance_count) if attendance_count else None
     total_present = sum(module['sessions_attended'] for module in modules)

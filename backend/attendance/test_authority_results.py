@@ -547,6 +547,20 @@ class RepeatersSheetTests(AuthorityBase):
         self.assertEqual(old['comment'], 'PASS')
         self.assertEqual(old['gpa'], 3.0)
 
+    def test_a_repeater_sees_only_the_module_they_are_repeating(self):
+        # Last time's first sittings are read for the statement, not listed as
+        # this year's modules (said 13 October 2026).
+        self.repeat.set_portal_pin('Portal#2026', require_change=False)
+        self.repeat.save()
+        session = self.client.session
+        session['student_id'] = self.repeat.id
+        session.save()
+        page = self.client.get('/student-dashboard/')
+        self.assertEqual([m['module_code'] for m in page.context['modules']], ['PST04103'])
+        self.assertEqual(page.context['module_count'], 1)
+        self.assertContains(page, 'Repeat</span>')
+        self.assertEqual([s['label'] for s in page.context['result_statements']], [self.old_sem1.label])
+
     def test_the_ca_and_final_sheets_are_downloaded_apart(self):
         from io import BytesIO
         from openpyxl import load_workbook

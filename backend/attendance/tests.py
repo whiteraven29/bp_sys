@@ -16,6 +16,7 @@ from rest_framework.test import APIClient
 
 from .models import (
     AcademicYear,
+    StudentProfile,
     AccountantProfile,
     Announcement,
     AttendanceRecord,
@@ -1590,6 +1591,7 @@ class AuditFixRegressionTests(TestCase):
 
     def test_bulk_create_keeps_the_student_when_the_pin_is_too_short(self):
         self.client.force_authenticate(self.admin)
+        StudentProfile.objects.create(nactvet_reg_no='REG-002', name='New Student')               # admitted
         response = self.client.post('/api/students/bulk_create/', {
             'module': self.module.id,
             'students': [{'nactvet_reg_no': 'REG-002', 'name': 'New Student', 'portal_pin': '123'}],

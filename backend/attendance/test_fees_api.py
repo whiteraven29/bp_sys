@@ -1572,6 +1572,7 @@ class BillingFollowsEnrollmentTests(TestCase):
         self.assertEqual(finance.balance_for(profile, self.year)['billed'], billed)
 
     def test_a_student_added_through_the_roster_import_is_billed_too(self):
+        StudentProfile.objects.create(nactvet_reg_no='BPH/2026/052', name='Imported Student')   # admitted
         response = self.api.post('/api/students/bulk_create/', {
             'module': self.module.id,
             'students': [{'nactvet_reg_no': 'BPH/2026/052', 'name': 'Imported Student'}],

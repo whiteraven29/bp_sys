@@ -12,7 +12,7 @@ thing is half done, say which half.
 - `[!]` blocked — what it is waiting for is written next to it
 
 Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py test attendance --settings=edutrack.test_settings`
-(956 passing, including `test_end_to_end`, `test_offices`, `test_records_health`, `test_security`, `test_returning`, `test_classlists` and `test_registers`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
+(968 passing, including `test_end_to_end`, `test_offices`, `test_records_health`, `test_security`, `test_returning`, `test_classlists`, `test_registers` and `test_one_view`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
 
 ---
 
@@ -71,6 +71,14 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    class list and CAT Excel, the student form page, the college profile on invoices (migration
    0063, only if still the old name), the fee and form seeds, unanswered forms' questions, the
    CAT initials (BPHIST). Not renamed: bank account holder names, email/website (questions Q33, Q34).
+2h. **One menu item, one view — 13 Oct (not committed).** Audited every sidebar item for every
+   office in the browser. Fixed: Results showed six cards in every item (an `admin-only` CSS rule
+   overrode the switcher) — now each card belongs to its items, with Authority Grades and Entry
+   Windows (exam office only) as items of their own; Eligibility ▸ Final Eligibility its own view;
+   a stale "spending not recorded" card under Executive Summary ▸ Finance removed. Students and
+   Student Records merged into one Students menu; Upload / Register removed and the server refuses
+   unadmitted registration numbers. Portal: password alert on the dashboard, services and profile
+   as options, a repeater sees only their repeat modules.
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

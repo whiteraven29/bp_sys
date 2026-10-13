@@ -115,6 +115,7 @@ class StudentTakeoverTests(SecurityBase):
 
     def test_the_principal_may_still_issue_a_first_password(self):
         principal = self.office('boss', 'principal')
+        StudentProfile.objects.create(nactvet_reg_no='NS0002/0002/2024', name='New One')        # admitted
         response = self.api(principal).post('/api/students/bulk_create/', {
             'module': self.maths.id,
             'students': [{'nactvet_reg_no': 'NS0002/0002/2024', 'name': 'New One', 'portal_pin': 'First#2026'}],

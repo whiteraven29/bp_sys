@@ -425,6 +425,23 @@
   }
   /* Profile facts as a bordered definition table, like the reference's
      "Student Basic Information" panel — not a grid of separate cards. */
+  /* Options a student chooses between (services, profile): one shows at a time. */
+  .choice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+  .choice { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 15px 16px; text-align: left;
+            border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text);
+            font: inherit; cursor: pointer; min-height: 104px; }
+  .choice:hover, .choice:focus-visible { border-color: var(--blue-fill); outline: none; }
+  .choice i { font-size: 1.25rem; color: var(--blue-fill); }
+  .choice strong { font-size: .9rem; font-weight: 600; }
+  .choice small { color: var(--muted); font-size: .76rem; line-height: 1.35; }
+  .option-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .option-bar button { padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+                       color: var(--text); font: inherit; font-size: .82rem; cursor: pointer; }
+  .option-bar button.on { background: var(--blue-fill); border-color: var(--blue-fill); color: var(--on-fill); }
+  .pane { display: none; }
+  .pane.on { display: block; }
+  .back-link { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 12px; padding: 0; border: 0; background: none;
+               color: var(--blue-fill); font: inherit; font-size: .84rem; cursor: pointer; }
   .profile-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; border: 1px solid var(--line); border-bottom: 0; background: var(--surface); }
   .profile-item { display: flex; align-items: baseline; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line); }
   .profile-item span { flex: 0 0 45%; color: var(--muted); font-size: .8rem; }
@@ -618,6 +635,12 @@
       <div class="notice" style="margin-bottom:14px;border-left-color:var(--{{ standing_banner.tone }});"><strong>{{ standing_banner.text }}</strong></div>
       {% endif %}
       <section class="view active" id="view-dashboard">
+        {% if password and password.state != 'ok' %}
+        <div class="notice" id="password-alert" style="margin:0 0 14px;{% if password.state == 'expired' or password.state == 'locked' %}border-left-color:var(--red);{% else %}border-left-color:var(--amber);{% endif %}">
+          <strong>{{ password.message }}</strong> Expires {{ password.expires_on|date:"d M Y" }}.
+          <button type="button" class="btn-mini" data-profile-option="password" style="margin-left:6px;">Change it now</button>
+        </div>
+        {% endif %}
         <div class="page-head"><div><p class="eyebrow">{{ academic_year }} · {{ active_semester }}</p><h1>Welcome, {{ student_name }}</h1><p class="page-copy">Here is your academic progress at a glance.</p></div></div>
         <div class="quick-facts">
           <div class="qf-item"><span>Overall attendance</span><strong title="Counts Present and all Sick days. Exam eligibility only counts Sick days backed by a submitted certificate — see the eligibility table for that figure.">{% if overall_attendance is not None %}{{ overall_attendance }}%{% else %}—{% endif %}</strong></div>
@@ -806,7 +829,7 @@
       <section class="view" id="view-modules">
         <div class="section-title"><p class="eyebrow">Academic</p><h2>Enrolled Modules</h2><p>All modules connected to your registration number in {{ academic_year }}.</p></div>
         <div class="module-list searchable-area">
-          {% for module in modules %}<article class="module-card searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.teacher }}"><div class="module-code">{{ module.module_code }}</div><h3>{{ module.module_name }}</h3><div class="meta">{{ module.semester }} · {{ module.class_level }} · {{ module.credits }} credits</div><div class="result-total"><span>Tutor</span><strong style="font-size:.78rem;">{{ module.teacher }}</strong></div><div class="counts"><div class="count"><strong>{{ module.sessions_total }}</strong><span>Total sessions</span></div><div class="count"><strong>{{ module.attendance_pct }}%</strong><span>Attendance</span></div><div class="count"><strong>{% if module.has_ca_result and module.result %}{{ module.result.total_ca|default_if_none:"—" }}{% else %}—{% endif %}</strong><span>CA /40</span></div></div></article>
+          {% for module in modules %}<article class="module-card searchable" data-search="{{ module.module_code }} {{ module.module_name }} {{ module.teacher }}"><div class="module-code">{{ module.module_code }}{% if module.attempt == 'repeat' %} <span class="status pending" title="A repeat sitting{% if module.completes %}: its result completes {{ module.completes.1 }}{% endif %}">Repeat</span>{% endif %}</div><h3>{{ module.module_name }}</h3><div class="meta">{{ module.semester }} · {{ module.class_level }} · {{ module.credits }} credits</div><div class="result-total"><span>Tutor</span><strong style="font-size:.78rem;">{{ module.teacher }}</strong></div><div class="counts"><div class="count"><strong>{{ module.sessions_total }}</strong><span>Total sessions</span></div><div class="count"><strong>{{ module.attendance_pct }}%</strong><span>Attendance</span></div><div class="count"><strong>{% if module.has_ca_result and module.result %}{{ module.result.total_ca|default_if_none:"—" }}{% else %}—{% endif %}</strong><span>CA /40</span></div></div></article>
           {% empty %}<div class="empty">No modules are registered.</div>{% endfor %}
         </div>
       </section>
@@ -1017,7 +1040,25 @@
              not need to queue at an office to start one.</p>
         </div>
 
-        <section class="panel" id="postpone-panel">
+        <div class="pane on" id="service-choices">
+          <div class="choice-grid">
+            <button type="button" class="choice" data-service="hostel"><i class="bi bi-house-door"></i><strong>Hostel place</strong><small id="hostel-choice-note">Ask for a bed in the college hostel.</small></button>
+            <button type="button" class="choice" data-service="postpone"><i class="bi bi-pause-circle"></i><strong>Postpone my studies</strong><small id="postpone-choice-note">Ask the Principal to postpone a semester or the year.</small></button>
+            {% for entry in service_forms %}
+            {% if entry.can_answer %}
+            <button type="button" class="choice searchable" data-search="{{ entry.form.title }} {{ entry.form.intro }}" data-open-form="{{ entry.form.slug }}" data-from-view="services"><i class="bi bi-file-earmark-text"></i><strong>{{ entry.form.title }}</strong><small>{% if entry.answered %}Request again{% else %}Make this request{% endif %}{% if entry.form.closes_on %} · closes {{ entry.form.closes_on|date:"d M Y" }}{% endif %}</small></button>
+            {% else %}
+            <button type="button" class="choice searchable" data-search="{{ entry.form.title }}" data-go="my-requests"><i class="bi bi-hourglass-split"></i><strong>{{ entry.form.title }}</strong><small>Already requested — see My Requests</small></button>
+            {% endif %}
+            {% endfor %}
+          </div>
+          {% if not service_forms %}
+          <p class="panel-note" style="border:0;padding:12px 2px 0;">No other services are open to your level just now. When the college opens one — a sick sheet, a letter — it appears here. Anything urgent still goes to the office in person.</p>
+          {% endif %}
+        </div>
+
+        <section class="panel pane" id="postpone-panel" data-service-pane="postpone">
+          <button type="button" class="back-link" data-service-back style="margin:12px 16px 0;"><i class="bi bi-arrow-left"></i> All services</button>
           <div class="panel-head"><h2>Postpone my studies <span class="tip" tabindex="0" role="note" aria-label="Help: postponement" data-tip="The Principal decides. Postponing semester 1 is the whole year — you come back to semester 1 next year; semester 2 brings you back to semester 2. Your fees for the period are reversed and what you paid is kept for your return.">?</span></h2><span id="postpone-state"></span></div>
           <div style="padding:14px 16px;">
             <div id="postpone-requests" style="font-size:.84rem;margin-bottom:10px;"></div>
@@ -1029,7 +1070,8 @@
           </div>
         </section>
 
-        <section class="panel" id="hostel-panel">
+        <section class="panel pane" id="hostel-panel" data-service-pane="hostel">
+          <button type="button" class="back-link" data-service-back style="margin:12px 16px 0;"><i class="bi bi-arrow-left"></i> All services</button>
           <div class="panel-head"><h2>Hostel <span class="tip" tabindex="0" role="note" aria-label="Help: hostel" data-tip="A day student can ask for a hostel place. If finance grants it, the hostel fee is added to your bill from the semester you applied in.">?</span></h2><span id="hostel-standing">—</span></div>
           <div style="padding:14px 16px;">
             <div id="hostel-applications" style="font-size:.84rem;margin-bottom:10px;"></div>
@@ -1041,32 +1083,6 @@
           </div>
         </section>
 
-        <section class="panel">
-          <div class="panel-head"><h2>What you can ask for</h2><span>Only services open to your level right now</span></div>
-          <div>
-            {% for entry in service_forms %}
-            <div class="form-card searchable" data-search="{{ entry.form.title }} {{ entry.form.intro }}">
-              <h3>{{ entry.form.title }}</h3>
-              {% if entry.form.intro %}<p>{{ entry.form.intro }}</p>{% endif %}
-              {% if entry.form.closes_on %}<p style="margin-bottom:10px"><span style="font-size:.8rem;color:var(--muted)">Requests close {{ entry.form.closes_on|date:"d M Y" }}.</span></p>{% endif %}
-              {% if entry.can_answer %}
-                <button type="button" class="btn" data-open-form="{{ entry.form.slug }}" data-from-view="services">
-                  {% if entry.answered %}Request again{% else %}Make this request{% endif %}
-                </button>
-              {% else %}
-                <span class="status pending">Already requested — see My Requests</span>
-              {% endif %}
-            </div>
-            {% empty %}
-            <div class="form-card">
-              <h3>No services are open</h3>
-              <p style="margin:0">Nothing is open to your level just now. When the college
-                 opens a service — a sick sheet, a letter, hostel accommodation — it appears
-                 here. Anything urgent still goes to the office in person.</p>
-            </div>
-            {% endfor %}
-          </div>
-        </section>
       </section>
 
       <section class="view" id="view-my-requests">
@@ -1183,59 +1199,70 @@
       </section>
 
       <section class="view" id="view-profile">
-        <div class="section-title"><p class="eyebrow">Account</p><h2>My Profile</h2><p>Your student identity and current academic context.</p></div>
-        <div class="profile-grid">
-          <div class="profile-item"><span>Full name</span><strong>{% if record %}{{ record.name }}{% else %}{{ student_name }}{% endif %}</strong></div>
-          <div class="profile-item"><span>NACTVET number</span><strong>{{ registration_number }}</strong></div>
-          {% if record %}
-          <div class="profile-item"><span>College ID</span><strong>{{ record.college_id|default:"—" }}</strong></div>
-          <div class="profile-item"><span>Gender</span><strong>{{ record.gender|default:"—" }}</strong></div>
-          <div class="profile-item"><span>Date of birth</span><strong>{{ record.date_of_birth|date:"d M Y"|default:"—" }}</strong></div>
-          <div class="profile-item"><span>Phone</span><strong>{{ record.phone|default:"—" }}</strong></div>
-          <div class="profile-item"><span>Programme</span><strong>{{ record.programme|default:"—" }}</strong></div>
-          <div class="profile-item"><span>Level</span><strong>{{ record.class_level|default:"—" }}</strong></div>
-          {% endif %}
-          <div class="profile-item"><span>Academic year</span><strong>{{ academic_year }}</strong></div>
-          <div class="profile-item"><span>Current semester</span><strong>{{ active_semester }}</strong></div>
-          <div class="profile-item"><span>Enrolled modules</span><strong>{{ module_count }}</strong></div>
-          <div class="profile-item"><span>Recorded sessions</span><strong>{{ total_sessions }}</strong></div>
+        <div class="section-title"><p class="eyebrow">Account</p><h2>My Profile</h2><p>Choose what you want to see. The records office keeps these details; take any correction to them.</p></div>
+        <div class="option-bar" role="tablist" aria-label="Profile">
+          <button type="button" class="on" data-profile-option="personal" role="tab" aria-selected="true">Personal info</button>
+          <button type="button" data-profile-option="academic" role="tab">Academic info</button>
+          {% if record %}<button type="button" data-profile-option="kin" role="tab">Next of kin</button>{% endif %}
+          <button type="button" data-profile-option="documents" role="tab">My documents</button>
+          <button type="button" data-profile-option="password" role="tab">Password</button>
         </div>
-        {% if record %}
-        <section class="panel" style="margin-top:18px;">
-          <h3 class="statement-title">Next of kin <span class="tip" tabindex="0" role="note" aria-label="Help: who keeps these details" data-tip="The records office keeps these details. If anything is wrong or missing, take it to them and they will correct it.">?</span></h3>
-          <div style="padding:14px 16px;">
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>Name</th><th>Relationship</th><th>Phone</th></tr></thead>
-                <tbody>
-                  {% for kin in record.next_of_kin %}
-                  <tr><td>{{ kin.name }}</td><td>{{ kin.relationship }}</td><td>{{ kin.phone }}</td></tr>
-                  {% empty %}
-                  <tr><td colspan="3" style="color:var(--muted);">None recorded yet.</td></tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-        {% if record.missing %}
-        <div class="notice" style="border-left-color:var(--amber);"><strong>Not recorded yet:</strong> {{ record.missing|join:", " }}. Take these to the records office.</div>
-        {% endif %}
-        {% endif %}
-        {% if password %}
-        <div class="notice" style="{% if password.state == 'expired' or password.state == 'locked' %}border-left-color:var(--red);{% elif password.state == 'expiring' %}border-left-color:var(--amber);{% endif %}">
-          <strong>{{ password.message }}</strong> Expires {{ password.expires_on }}.
-          <span class="tip" tabindex="0" role="note" aria-label="Help: passwords last six months" data-tip="Every password lasts six months. After it expires you have two weeks to change it; after that the office resets it.">?</span>
-        </div>
-        {% endif %}
-        <div class="account-form">
-          <div class="account-field"><label>Current password</label><input id="current-pin" type="password" autocomplete="current-password" placeholder="Current portal password"></div>
-          <div class="account-field"><label>New password</label><input id="new-pin" type="password" autocomplete="new-password" minlength="8" placeholder="8+ characters with Aa, 1 and symbol"></div>
-          <button class="account-button" type="button" id="change-pin-btn">Update password</button>
-        </div>
-        <div class="notice">Something wrong in your details? Contact the records office.</div>
 
-        <section class="panel" style="margin-top:18px;">
+        <div class="pane on" data-profile-pane="personal">
+          <div class="profile-grid">
+            <div class="profile-item"><span>Full name</span><strong>{% if record %}{{ record.name }}{% else %}{{ student_name }}{% endif %}</strong></div>
+            <div class="profile-item"><span>NACTVET number</span><strong>{{ registration_number }}</strong></div>
+            {% if record %}
+            <div class="profile-item"><span>College ID</span><strong>{{ record.college_id|default:"—" }}</strong></div>
+            <div class="profile-item"><span>Gender</span><strong>{{ record.gender|default:"—" }}</strong></div>
+            <div class="profile-item"><span>Date of birth</span><strong>{{ record.date_of_birth|date:"d M Y"|default:"—" }}</strong></div>
+            <div class="profile-item"><span>Phone</span><strong>{{ record.phone|default:"—" }}</strong></div>
+            <div class="profile-item"><span>Form Four index</span><strong>{{ record.form_four_index|default:"—" }}</strong></div>
+            {% endif %}
+          </div>
+          {% if record.missing %}
+          <div class="notice" style="border-left-color:var(--amber);"><strong>Not recorded yet:</strong> {{ record.missing|join:", " }}. Take these to the records office.</div>
+          {% endif %}
+          <div class="notice">Something wrong in your details? Contact the records office.</div>
+        </div>
+
+        <div class="pane" data-profile-pane="academic">
+          <div class="profile-grid">
+            {% if record %}
+            <div class="profile-item"><span>Programme</span><strong>{{ record.programme|default:"—" }}</strong></div>
+            <div class="profile-item"><span>Level</span><strong>{{ record.class_level|default:"—" }}</strong></div>
+            {% endif %}
+            <div class="profile-item"><span>Academic year</span><strong>{{ academic_year }}</strong></div>
+            <div class="profile-item"><span>Current semester</span><strong>{{ active_semester }}</strong></div>
+            <div class="profile-item"><span>Enrolled modules</span><strong>{{ module_count }}</strong></div>
+            <div class="profile-item"><span>Recorded sessions</span><strong>{{ total_sessions }}</strong></div>
+          </div>
+        </div>
+
+        {% if record %}
+        <div class="pane" data-profile-pane="kin">
+          <section class="panel">
+            <h3 class="statement-title">Next of kin <span class="tip" tabindex="0" role="note" aria-label="Help: who keeps these details" data-tip="The records office keeps these details. If anything is wrong or missing, take it to them and they will correct it.">?</span></h3>
+            <div style="padding:14px 16px;">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Name</th><th>Relationship</th><th>Phone</th></tr></thead>
+                  <tbody>
+                    {% for kin in record.next_of_kin %}
+                    <tr><td>{{ kin.name }}</td><td>{{ kin.relationship }}</td><td>{{ kin.phone }}</td></tr>
+                    {% empty %}
+                    <tr><td colspan="3" style="color:var(--muted);">None recorded yet.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
+        {% endif %}
+
+        <div class="pane" data-profile-pane="documents">
+        <section class="panel">
           <h3 class="statement-title">My documents <span class="tip" tabindex="0" role="note" aria-label="Help: uploading documents" data-tip="Upload a clear photo or scan. The records office checks it against the original. Only you and the college can open these.">?</span></h3>
           <div style="padding:14px 16px;">
             <div class="table-wrap">
@@ -1263,6 +1290,17 @@
             </div>
           </div>
         </section>
+        </div>
+
+        <div class="pane" data-profile-pane="password">
+          {% if password %}<p style="margin:0 0 4px;color:var(--muted);font-size:.82rem;">Your password was set {{ password.changed_on|date:"d M Y" }} and lasts until {{ password.expires_on|date:"d M Y" }}.
+            <span class="tip" tabindex="0" role="note" aria-label="Help: passwords last six months" data-tip="Every password lasts six months. After it expires you have two weeks to change it; after that the ICT officer resets it.">?</span></p>{% endif %}
+          <div class="account-form">
+            <div class="account-field"><label>Current password</label><input id="current-pin" type="password" autocomplete="current-password" placeholder="Current portal password"></div>
+            <div class="account-field"><label>New password</label><input id="new-pin" type="password" autocomplete="new-password" minlength="8" placeholder="8+ characters with Aa, 1 and symbol"></div>
+            <button class="account-button" type="button" id="change-pin-btn">Update password</button>
+          </div>
+        </div>
       </section>
     </main>
   </div>
@@ -1636,6 +1674,32 @@
     item.addEventListener('click', () => showView(item.dataset.gotoView)));
   document.querySelectorAll('[data-invoice-group]').forEach(item =>
     item.addEventListener('click', () => generateInvoiceFor(item.dataset.invoiceGroup, item)));
+  // Request a Service: the options first, then one at a time.
+  function showService(name) {
+    document.getElementById('service-choices')?.classList.toggle('on', !name);
+    document.querySelectorAll('[data-service-pane]').forEach(pane => pane.classList.toggle('on', pane.dataset.servicePane === name));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  document.querySelectorAll('.choice[data-service]').forEach(item =>
+    item.addEventListener('click', () => showService(item.dataset.service)));
+  document.querySelectorAll('[data-service-back]').forEach(item => item.addEventListener('click', () => showService(null)));
+  document.querySelector('.nav-item[data-view="services"]')?.addEventListener('click', () => showService(null));
+
+  // My Profile: one option at a time.
+  function showProfileOption(name) {
+    if (!document.querySelector(`[data-profile-pane="${name}"]`)) name = 'personal';
+    document.querySelectorAll('.option-bar [data-profile-option]').forEach(button => {
+      button.classList.toggle('on', button.dataset.profileOption === name);
+      button.setAttribute('aria-selected', String(button.dataset.profileOption === name));
+    });
+    document.querySelectorAll('[data-profile-pane]').forEach(pane => pane.classList.toggle('on', pane.dataset.profilePane === name));
+  }
+  document.querySelectorAll('[data-profile-option]').forEach(item => item.addEventListener('click', () => {
+    if (!item.closest('.option-bar')) showView('profile');
+    showProfileOption(item.dataset.profileOption);
+    if (item.dataset.profileOption === 'password') document.getElementById('current-pin')?.focus();
+  }));
+
   document.querySelectorAll('[data-open-form]').forEach(item =>
     item.addEventListener('click', () => openForm(item.dataset.openForm, item.dataset.fromView)));
   document.getElementById('form-submit-btn')?.addEventListener('click', submitForm);
@@ -1747,6 +1811,9 @@
           ${row.decision_note ? `<span style="color:var(--muted);">(${escapeText(row.decision_note)})</span>` : ''}</div>`).join('');
       document.getElementById('hostel-form').style.display =
         (data.can_apply && data.residence !== 'hostel' && !waiting) ? '' : 'none';
+      const note = document.getElementById('hostel-choice-note');
+      if (note) note.textContent = data.residence === 'hostel' ? 'You have a hostel place.'
+        : waiting ? 'Applied — waiting for an answer.' : 'Ask for a bed in the college hostel.';
     } catch (error) { standing.textContent = ''; }
   }
 
@@ -1780,6 +1847,8 @@
       // Only a student who is studying can ask; one request at a time.
       const form = document.getElementById('postpone-form');
       form.style.display = (waiting || form.dataset.canAsk !== 'yes') ? 'none' : '';
+      const note = document.getElementById('postpone-choice-note');
+      if (note && waiting) note.textContent = 'Asked — waiting for the Principal.';
       box.querySelectorAll('[data-withdraw]').forEach(button => button.addEventListener('click', async () => {
         try {
           await api('POST', '/my-postponement/', { withdraw: button.dataset.withdraw });
