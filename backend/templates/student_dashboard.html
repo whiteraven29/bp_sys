@@ -1048,7 +1048,7 @@
             {% if entry.can_answer %}
             <button type="button" class="choice searchable" data-search="{{ entry.form.title }} {{ entry.form.intro }}" data-open-form="{{ entry.form.slug }}" data-from-view="services"><i class="bi bi-file-earmark-text"></i><strong>{{ entry.form.title }}</strong><small>{% if entry.answered %}Request again{% else %}Make this request{% endif %}{% if entry.form.closes_on %} · closes {{ entry.form.closes_on|date:"d M Y" }}{% endif %}</small></button>
             {% else %}
-            <button type="button" class="choice searchable" data-search="{{ entry.form.title }}" data-go="my-requests"><i class="bi bi-hourglass-split"></i><strong>{{ entry.form.title }}</strong><small>Already requested — see My Requests</small></button>
+            <button type="button" class="choice searchable" data-search="{{ entry.form.title }}" data-go="my-requests"><i class="bi bi-hourglass-split"></i><strong>{{ entry.form.title }}</strong><small>{% if entry.waiting %}Asked — waiting for the college's answer. See My Requests.{% else %}Already requested — see My Requests{% endif %}</small></button>
             {% endif %}
             {% endfor %}
           </div>

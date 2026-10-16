@@ -12,7 +12,7 @@ thing is half done, say which half.
 - `[!]` blocked — what it is waiting for is written next to it
 
 Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py test attendance --settings=edutrack.test_settings`
-(968 passing, including `test_end_to_end`, `test_offices`, `test_records_health`, `test_security`, `test_returning`, `test_classlists`, `test_registers` and `test_one_view`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
+(973 passing, including `test_end_to_end`, `test_offices`, `test_records_health`, `test_security`, `test_returning`, `test_classlists`, `test_registers` and `test_one_view`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
 
 ---
 
@@ -79,6 +79,10 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    Student Records merged into one Students menu; Upload / Register removed and the server refuses
    unadmitted registration numbers. Portal: password alert on the dashboard, services and profile
    as options, a repeater sees only their repeat modules.
+2i. **One service request at a time — 16 Oct (not committed).** A student could send the same
+   request again while the first was waiting. Now refused on the server (row-locked, so a double
+   tap cannot slip through) until the college approves or declines it — forwarded counts as
+   waiting; the portal tile says "Asked — waiting for the college's answer".
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

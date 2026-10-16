@@ -15,7 +15,7 @@ from datetime import date
 from django.db import transaction
 
 from .models import (
-    AcademicYear, Form, FormAnswer, FormQuestion, FormResponse, FormSubmissionReceipt,
+    AcademicYear, Form, FormAnswer, FormQuestion, FormResponse, FormSubmissionReceipt, StudentProfile,
 )
 
 TEXT_TYPES = {FormQuestion.SHORT_TEXT, FormQuestion.LONG_TEXT}
@@ -100,16 +100,28 @@ def pending_mandatory_forms(profile, today=None):
     return pending
 
 
+def waiting_request_ids(profile):
+    """The services this student has asked for and the college has not yet
+    answered — still with the secretary, or passed to the Principal / HoD."""
+    if profile is None:
+        return set()
+    return set(FormResponse.objects.filter(profile=profile, form__kind=Form.REQUEST)
+               .exclude(status__in=FormResponse.ANSWERED_STATUSES).values_list('form_id', flat=True))
+
+
 def forms_for_student(profile, today=None, kind=None):
     """The open forms, each marked with whether this student has answered it.
 
     Answered forms are still listed rather than hidden — a student who has
     filled one in wants to see that it is done, not wonder whether it saved.
+    A service asked for and not yet answered cannot be asked for again until
+    the college answers it (said 16 October 2026).
     """
     answered = answered_form_ids(profile)
+    waiting = waiting_request_ids(profile)
     return [
-        {'form': form, 'answered': form.id in answered,
-         'can_answer': form.allow_multiple or form.id not in answered}
+        {'form': form, 'answered': form.id in answered, 'waiting': form.id in waiting,
+         'can_answer': (form.allow_multiple or form.id not in answered) and form.id not in waiting}
         for form in open_forms(today, class_level=level_of(profile), kind=kind)
     ]
 
@@ -313,9 +325,18 @@ def submit(form, answers, *, profile=None, class_level=None, academic_year=None,
     if profile is not None and not form.applies_to(class_level or level_of(profile)):
         raise ValueError('That form is not open for responses.')
 
+    if profile is not None:
+        # One at a time: the row lock makes a second tap wait for the first,
+        # which then finds the request it has just made.
+        StudentProfile.objects.select_for_update().filter(id=profile.id).first()
     if profile is not None and not form.allow_multiple:
         if FormSubmissionReceipt.objects.filter(form=form, profile=profile).exists():
             raise ValueError('You have already answered this form.')
+    if (profile is not None and form.kind == Form.REQUEST
+            and FormResponse.objects.filter(form=form, profile=profile)
+                .exclude(status__in=FormResponse.ANSWERED_STATUSES).exists()):
+        raise ValueError('You have already asked for this and the college has not answered yet. '
+                         'Follow it under My Requests; you can ask again once it is answered.')
 
     questions = list(answerable_questions(form).select_related('section'))
     by_id = {question.id: question for question in questions}

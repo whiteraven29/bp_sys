@@ -293,3 +293,44 @@ class SendingTheAnswerBackTests(WorkflowTestBase):
         self._send(made, self.secretary.api)
         attachment = made.attachments.get()
         self.assertEqual(self.portal.get(f'/api/request-documents/{attachment.id}/').status_code, 200)
+
+
+class OneRequestAtATimeTests(WorkflowTestBase):
+    """A student asks for a service once; they may ask again only after the
+    college has answered (said 16 October 2026)."""
+
+    def ask(self):
+        return self.portal.post('/api/my-forms/letter/submit/',
+                                {'answers': {str(self.question.id): 'CRDB Bank'}},
+                                content_type='application/json')
+
+    def test_a_second_request_while_the_first_waits_is_refused(self):
+        self.assertEqual(self.ask().status_code, 201)
+        again = self.ask()
+        self.assertEqual(again.status_code, 400)
+        self.assertIn('not answered yet', again.json()['detail'])
+        self.assertEqual(FormResponse.objects.filter(form=self.form).count(), 1)
+
+    def test_still_refused_while_it_is_with_the_principal(self):
+        made = self._ask()
+        self.secretary.api.post(f'/api/service-requests/{made.id}/forward/', {'note': 'ok'}, format='json')
+        self.assertEqual(self.ask().status_code, 400)
+
+    def test_once_answered_they_may_ask_again(self):
+        made = self._ask()
+        made.status = FormResponse.DECLINED
+        made.save()
+        self.assertEqual(self.ask().status_code, 201)
+
+    def test_the_portal_says_it_is_waiting(self):
+        self._ask()
+        entry = evaluations.services_for_student(self.asha)[0]
+        self.assertEqual((entry['waiting'], entry['can_answer']), (True, False))
+        self.assertContains(self.portal.get('/student-dashboard/'), "Asked — waiting for the college")
+
+    def test_another_service_is_not_held_up(self):
+        other = Form.objects.create(title='Sick sheet', slug='sick', kind=Form.REQUEST, is_active=True,
+                                    allow_multiple=True)
+        self._ask()
+        entries = {e['form'].slug: e for e in evaluations.services_for_student(self.asha)}
+        self.assertTrue(entries['sick']['can_answer'])
