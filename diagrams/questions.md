@@ -502,3 +502,256 @@ SCIENCE; the template says SCIENCES. Not changed in the database.
 
 **To do (Principal or DPARC):** rename the department to *Pharmaceutical
 Sciences* in Departments, if that is the official name.
+
+## L. The inventory, reviewed (16 October 2026)
+
+### Q35. Which inventory gaps to close, and in what order? ✅
+
+**Answered 17 October 2026 and built:** disposed is not live; DPFPA approves disposals; history is not
+edited; repairs and inspections update the asset (repaired → good; a defect at inspection changes the
+condition; a closed inspection is locked); value data kept; the laboratory has a Lab Technician and its
+own stock book; custody is chosen from staff and handed over. What follows is the review as written.
+
+Read from the code; one fixed already (a batch split by a transfer or a repair
+lost its item type). The rest need decisions:
+
+1. **A disposed asset stays live.** Marking it disposed changes nothing on the
+   asset: it is still counted, listed at its location, and can be transferred,
+   repaired or inspected. Only a whole record can be disposed — not 3 of 30 chairs.
+2. **Nobody approves a disposal.** The estate officer proposes and marks it
+   disposed alone. Should the Principal or DPFPA approve, as with expenses?
+3. **History can be rewritten.** Transfers, repairs, disposals and inspections can
+   be edited or deleted; editing a transfer does not move the asset back, and
+   deleting an asset with history fails with a server error.
+4. **Repairs and inspections change nothing.** A repair does not mark the asset
+   under repair or restore its condition; an inspection's *missing*, *damaged* or
+   *relocated* does not update the asset or raise any follow-up; a closed
+   inspection can still be changed.
+5. **The register lacks value.** No purchase date, cost, supplier, serial number,
+   funding source or warranty — needed for valuation, insurance and audit — and
+   no link from an expense (a purchase) to the asset bought.
+6. **No consumables.** Laboratory reagents, stationery and cleaning materials have
+   no stock in / stock out.
+7. **Custody is free text.** "Responsible person/office" is typed, not a staff
+   account: nobody acknowledges what is in their care, and nothing is handed over
+   when a member of staff leaves.
+
+## M. The pharmaceutical laboratory — for later (17 October 2026)
+
+Not built yet. What exists today (17 October): the Lab Technician role and a basic
+stock book — items (reagent, glassware, consumable, small apparatus), received /
+issued / written off, never edited; balance, reorder level and "Low", batch and
+expiry with "Expired"; Excel; DPFPA and the Principal read it. Everything below is
+the proposed design and the decisions it waits on.
+
+### What the records should hold, by type
+
+| Type | Examples | Recorded beyond name, quantity and unit |
+|---|---|---|
+| Chemicals & reagents | acids, solvents, indicators, buffers | grade; batch/lot; expiry; **date opened** (shorter life once opened); storage condition (room / 2–8 °C / flammables / corrosives); hazard class; safety data sheet on file; shelf location |
+| Pharmaceutical substances | powders for compounding, tablets and syrups for dispensing practicals | as chemicals, plus strength and form; anything **controlled** (narcotic, psychotropic) in a separate register — each issue signed by technician and tutor, reconciled after the practical |
+| Glassware & small apparatus | beakers, pipettes, burettes, cylinders, mortars | counted in pieces; **issued and returned per practical** (a kit of 20 out, 20 back); breakage expected |
+| Lab equipment | analytical balance, pH meter, microscope, water bath, fridge, spectrophotometer | stays on the estate officer's asset register (custody, repairs, disposal already there); the lab adds **calibration due date and record**, usage log, service history; the technician reads the lab's assets |
+| Consumables | filter paper, gloves, empty capsules, labels, cotton wool | in and out with a reorder level (as the stock book does now) |
+| Storage & waste | fridges, flammables cabinet, chemical waste | daily fridge **temperature log** (min/max; out of range flagged); hazardous waste disposal log (what, how much, how, when) |
+
+### What to monitor — a "Lab watch" panel
+
+For the lab technician; read by DPFPA and the Principal.
+
+- running low (at or under the reorder level), before a practical needs it;
+- expiring within 90 and 30 days, and expired still in stock; issue the earliest
+  expiry first (the system suggests the batch);
+- calibration due or overdue;
+- kits issued to a practical and not returned;
+- fridge readings out of range, or not taken that day;
+- breakages this term — by module, level and student;
+- use against plan: what each practical consumed, and its cost per student — for
+  DPFPA's budget, and to show waste;
+- the termly stock count: recorded against counted, and the reason for each
+  difference.
+
+Notifications as well as the panel: low stock and expiry to the lab technician;
+overdue calibration and repeated breakage to the HoD.
+
+### When a student breaks something — the proposed flow
+
+1. **The technician records an incident** at the end of the practical: the
+   student(s) by registration number, item and quantity, module and date, the tutor
+   present, how it happened (accident or carelessness), and whether anyone was hurt
+   — an injury is a safety incident and goes to the Dean of Students.
+2. **The stock follows on its own:** the item is written off with "broken —
+   incident #…", so the stock book and the incident agree.
+3. **The tutor present confirms it.** The student sees it on the portal and may
+   contest it; an appeal goes to the Dean of Students.
+4. **The charge follows the college's rule, set once:** replacement cost (the last
+   price paid is known) or a fixed price list; possibly a first accidental breakage
+   of cheap glassware waived, negligence or a repeat always charged; a group's
+   breakage split equally unless one person is named.
+5. **The money goes through finance, never cash in the lab:** deducted from the
+   student's caution money (the balance refunded at completion), or raised by the
+   accountant as an extra charge (Students ▸ Extra Charges exists) — on the
+   student's statement either way.
+6. **Equipment is different:** a broken microscope or balance is an estate asset —
+   repair or disposal through the estate officer (disposal approved by DPFPA); any
+   charge on a high-value item decided by the Principal or DPFPA, never automatic.
+7. **Repeated breakage** by one student is flagged to the Dean and the HoD.
+
+### Suggested order to build
+
+1. Breakage incidents and their charges.
+2. Item types with their extra fields, and the Lab watch panel (with notifications).
+3. Calibration records and fridge temperature logs; the lab's view of its equipment.
+4. Kits issued and returned per practical; issues linked to the module (the field
+   exists in the stock book, not yet on the screen).
+5. Use against plan (cost per practical), the termly stock count, and restocking
+   linked to the expenses register.
+
+### Q36. On what basis is a breakage charged? ◐
+
+Replacement cost (the last price paid), or a fixed price list per item? Is a first
+accidental breakage of low-value glassware waived?
+
+### Q37. Caution money ◐
+
+Does the fee structure collect caution money? If so, are breakages deducted from it
+and the balance refunded at completion — or is every breakage a new charge on the
+student's account?
+
+### Q38. Who confirms a breakage, and who hears an appeal? ◐
+
+The tutor present at the practical (suggested) or the HoD? Appeals to the Dean of
+Students? And a group's breakage: split equally, unless one person is named?
+
+### Q39. Controlled substances in the lab ◐
+
+Does the lab hold any narcotic or psychotropic substances (or other controlled
+items) for practicals? If yes, they need their own register with double signatures
+and reconciliation; if no, that part waits.
+
+### Q40. Equipment and calibration ◐
+
+Which equipment needs calibration, how often, and by whom (in-house or an outside
+service)? Should the lab technician see the laboratory's assets from the estate
+register (read-only), or take custody of them?
+
+### Q41. Kits and usage ◐
+
+Are glassware kits issued per group per practical and counted back? Is there a
+planned quantity per practical (per student) to compare against, so cost per
+practical can be reported? How often is the full stock count — each term?
+
+## N. Opening a year before the results are out; ending before Level 6 (17 October 2026)
+
+**Chosen: option B** — opening the new year is separate from deciding each continuing
+student. Today (verified in the code) the year advance refuses to run while any
+student lacks a confirmed review, "completed" exists only at a programme's top level,
+late results cancel a next-level place but do not reverse its fees, and a continuing
+student who never reports keeps an open application. The design: open 2026/27 on
+time; students still waiting for results are placed **provisionally** at the level
+they would reach; when NACTVET's grades are uploaded a "provisional — results now
+in" list settles them (passes in one click; repeat or discontinued cancels the place,
+reverses those fees, and sends them to Expected back); a cut-off date warns about
+anyone still provisional. Separately, a student may **finish after Level 4 or 5**
+with that level's award, through the same finishing route as Level 6; and students
+who never report are dealt with when the window closes. Suggested build order:
+(1) open the year without blocking, with automatic provisional placement; (2) the
+settlement list and fee reversal; (3) exit at a level and the did-not-report list;
+(4) provisional tags everywhere and the cut-off warnings.
+
+Each question carries the recommended answer; "agree" accepts it.
+
+### Q42. Opening the year — who, and are new students admitted first? ◐
+
+Principal or DPARC opens it, as with the advance now (recommended). New students
+may be admitted into 2026/27 before it is opened, and are enrolled when the modules
+arrive (recommended — as now).
+
+### Q43. Placing students without results ◐
+
+- Placed provisionally **automatically** when the year opens, the list shown first
+  (recommended) — or confirmed by the Principal/DPARC?
+- At the level they would reach if they pass (recommended).
+- Results partly in and already showing a failure: wait for the full results; until
+  then attend the next level only if nothing is failed yet (recommended).
+- Results out but a supplementary still to come: the same provisional placement
+  (recommended).
+
+### Q44. Fees while provisional ◐
+
+- Full year billed, reversed if they do not progress (recommended) — or the first
+  instalment only until confirmed?
+- Not progressing: next-level fees reversed, what was paid kept as credit, repeater
+  costs raised on readmission (recommended — as postponement does).
+- The same fee clearance for CATs and exams as everyone else (recommended).
+
+### Q45. Where "provisional" shows ◐
+
+Admission desk, class lists, CAT numbers, attendance register, results sheets and
+the student's portal (recommended: all). Portal wording suggested: "Your place in
+Level 5 depends on your Level 4 results."
+
+### Q46. Settling when the results arrive ◐
+
+- Confirmed by the Principal or DPARC (recommended — as reviews now).
+- Passes confirmed in one bulk click; repeat and discontinued one by one
+  (recommended).
+- Told: Principal and DPARC to act; the student when their place is confirmed or
+  changed (recommended).
+- Discontinued while provisional: off the next level, fees reversed, under Expected
+  back for readmission (recommended).
+
+### Q47. The cut-off ◐
+
+- The date by which every provisional student must be settled — set each year (e.g.
+  before CAT 1, or before final exam registration)?
+- After it: a daily warning, and no end-of-semester exams while still provisional,
+  since NACTVET will not count them (recommended).
+- Marks earned while provisional by a student who turns out to repeat: kept on
+  record, not counted (recommended — as now).
+
+### Q48. Finishing before Level 6 — which levels, what award ◐
+
+- Exit allowed after Level 4 and after Level 5 (recommended — NACTVET awards each).
+- The award wording to print: NTA 4 Basic Technician Certificate, NTA 5 Technician
+  Certificate, NTA 6 Ordinary Diploma (in Pharmaceutical Sciences) — confirm the
+  official names.
+
+### Q49. Asking to finish, and who approves ◐
+
+- Asked by the student on the portal or by records on paper (recommended: both).
+- Approved by the Principal (recommended — as postponement) — or records alone, the
+  Principal told?
+- Asked between the level's review and the close of the admission window
+  (recommended).
+- Only once the level is passed with nothing owed: no repeats, no supplementary, not
+  provisional (recommended).
+- Owing money: may exit, but not cleared or given documents until paid
+  (recommended — as finishing now).
+
+### Q50. After finishing at a level ◐
+
+- The same route as Level 6: finance checks every year and prints the statement,
+  clears; the Principal declares cleared; portal closed, record kept (recommended).
+- Does the system produce a completion letter or transcript for the level, or is
+  that done outside it?
+- Caution money and refunds at a Level 4/5 exit: the same as at Level 6?
+
+### Q51. Coming back after finishing at a level ◐
+
+- Returns for the next level as a continuing student on the same record — in any
+  later year, or within a time limit?
+- One-time fees (admission, ID card, caution money) not charged again while the
+  record is on file (recommended)?
+- No exit accepted until the results are final, so a late supplementary cannot undo
+  one (recommended).
+
+### Q52. Students who do not report ◐
+
+- When the admission window closes, who works through the list of continuing
+  students who never came — the Principal, DPARC or the admission office?
+- The choices for each: finished at this level (if passed), postponed, discontinued
+  for not reporting, still expected (late). Is "discontinued for not reporting"
+  wanted?
+- Reminders before the window closes: a portal notification (exists); a text
+  message would need an SMS service the system does not have.

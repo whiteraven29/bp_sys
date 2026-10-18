@@ -1205,6 +1205,7 @@
           <button type="button" data-profile-option="academic" role="tab">Academic info</button>
           {% if record %}<button type="button" data-profile-option="kin" role="tab">Next of kin</button>{% endif %}
           <button type="button" data-profile-option="documents" role="tab">My documents</button>
+          <button type="button" data-profile-option="health" role="tab">Health</button>
           <button type="button" data-profile-option="password" role="tab">Password</button>
         </div>
 
@@ -1290,6 +1291,31 @@
             </div>
           </div>
         </section>
+        </div>
+
+        <div class="pane" data-profile-pane="health">
+          <section class="panel">
+            <h3 class="statement-title">My health records <span class="tip" tabindex="0" role="note" aria-label="Help: health records" data-tip="Only the records office, the Dean of Students and the Principal read these — for your welfare and what the college should allow for. Nobody else.">?</span></h3>
+            <div style="padding:14px 16px;">
+              <div class="table-wrap"><table>
+                <thead><tr><th>Condition</th><th>Hospital / facility</th><th>Dated</th><th>Status</th></tr></thead>
+                <tbody id="my-health"><tr><td colspan="4" style="color:var(--muted);">Nothing recorded.</td></tr></tbody>
+              </table></div>
+            </div>
+          </section>
+          <section class="panel" style="margin-top:14px;">
+            <h3 class="statement-title">Report a health problem</h3>
+            <div style="padding:14px 16px;">
+              <p style="margin:0 0 10px;color:var(--muted);font-size:.82rem;">Upload the document the hospital gave you — a medical certificate or report, signed and stamped. The records office checks it against the original before it is recorded, so bring the original when asked.</p>
+              <div class="account-form" style="margin-top:0;grid-template-columns:repeat(2,minmax(0,1fr));">
+                <div class="account-field"><label>Health problem</label><input id="hp-condition" maxlength="200" placeholder="As the document names it"></div>
+                <div class="account-field"><label>Hospital or health facility</label><input id="hp-facility" maxlength="160" placeholder="e.g. Singida Regional Referral Hospital"></div>
+                <div class="account-field"><label>Date on the document</label><input id="hp-issued" type="date"></div>
+                <div class="account-field"><label>The document (PDF, JPG or PNG)</label><input id="hp-file" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
+                <button class="account-button" type="button" id="hp-submit">Send to the records office</button>
+              </div>
+            </div>
+          </section>
         </div>
 
         <div class="pane" data-profile-pane="password">
@@ -1792,6 +1818,50 @@
   });
 
   loadMyDocuments();
+
+  // Health: what the college has on file, and a report with the hospital's
+  // document for the records office to check.
+  async function loadMyHealth() {
+    const body = document.getElementById('my-health');
+    if (!body) return;
+    try {
+      const data = await api('GET', '/my-health/');
+      const rows = [
+        ...data.reports.map(r => `<tr><td>${escapeText(r.condition)}</td><td>${escapeText(r.facility)}</td><td>${escapeText(r.issued_on)}</td>
+          <td>${r.status === 'waiting' ? '<span class="status pending">With the records office</span>'
+               : `<span class="status fail">Not accepted</span><div style="font-size:.74rem;color:var(--muted);margin-top:3px;">${escapeText(r.decision_note)}</div>`}</td></tr>`),
+        ...data.records.map(r => `<tr><td>${escapeText(r.condition)}</td><td>${escapeText(r.facility || '—')}</td><td>${escapeText(r.issued_on || '—')}</td>
+          <td>${r.is_current ? '<span class="status pass">On file</span>' : '<span class="status">No longer applies</span>'}</td></tr>`),
+      ];
+      body.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="4" style="color:var(--muted);">Nothing recorded.</td></tr>';
+    } catch (error) { /* the portal works without it */ }
+  }
+
+  document.getElementById('hp-submit')?.addEventListener('click', async () => {
+    const value = id => document.getElementById(id).value.trim();
+    const file = document.getElementById('hp-file').files?.[0];
+    if (!value('hp-condition') || !value('hp-facility') || !value('hp-issued') || !file) {
+      toast('Fill in the problem, the hospital, the date on the document, and choose the document.'); return;
+    }
+    const body = new FormData();
+    body.append('condition', value('hp-condition'));
+    body.append('facility', value('hp-facility'));
+    body.append('issued_on', value('hp-issued'));
+    body.append('file', file);
+    try {
+      const response = await fetch('/api/my-health/', {
+        method: 'POST', body, headers: { 'X-CSRFToken': getCookie('csrftoken') }, credentials: 'same-origin',
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw data || { detail: 'Could not send it.' };
+      ['hp-condition', 'hp-facility', 'hp-issued', 'hp-file'].forEach(id => document.getElementById(id).value = '');
+      toast('Sent. The records office will check it against the original.');
+      loadMyHealth();
+      loadMyDocuments();
+    } catch (error) { toast(error?.detail || 'Could not send it.'); }
+  });
+
+  loadMyHealth();
 
   // The hostel: where the college has the student living this year, and a
   // request for a place for a day student.

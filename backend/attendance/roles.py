@@ -30,7 +30,7 @@ views.check_result_entry). Holding a senior office adds no power over marks.
 from .models import (
     AccountantProfile, AdmissionOfficerProfile, DeanOfStudentsProfile, DeputyAcademicProfile,
     DeputyFinanceProfile, EstateOfficerProfile, ExamOfficerProfile, HeadOfDepartmentProfile, ICTOfficerProfile,
-    PrincipalProfile, RecordsOfficerProfile, SecretaryProfile, TeacherProfile,
+    LabTechnicianProfile, PrincipalProfile, RecordsOfficerProfile, SecretaryProfile, TeacherProfile,
     TrainingCoordinatorProfile,
 )
 
@@ -48,7 +48,7 @@ OFFICE_MODELS = (
     PrincipalProfile, DeputyAcademicProfile, DeputyFinanceProfile, HeadOfDepartmentProfile,
     ExamOfficerProfile, ICTOfficerProfile, AccountantProfile, AdmissionOfficerProfile,
     RecordsOfficerProfile, EstateOfficerProfile, SecretaryProfile, TrainingCoordinatorProfile,
-    DeanOfStudentsProfile,
+    DeanOfStudentsProfile, LabTechnicianProfile,
 )
 
 
@@ -106,6 +106,27 @@ def is_accountant(user):
 
 def is_estate_officer(user):
     return _holds(EstateOfficerProfile, user)
+
+
+def is_lab_technician(user):
+    return _holds(LabTechnicianProfile, user)
+
+
+def can_approve_disposals(user):
+    """Writing college property off: DPFPA, to whom the estate officer
+    reports, approves or rejects what the estate officer proposes (said 17
+    October 2026)."""
+    return is_dpfpa(user) or is_break_glass(user)
+
+
+def can_keep_lab_stock(user):
+    """The laboratory's stock book: the lab technician's."""
+    return is_lab_technician(user)
+
+
+def can_read_lab_stock(user):
+    """Read by the lab technician, and by DPFPA and the Principal."""
+    return is_lab_technician(user) or is_dpfpa(user) or is_principal(user) or is_break_glass(user)
 
 
 def is_secretary(user):
@@ -273,10 +294,11 @@ def can_read_health_records(user):
 
 
 def follows_postponements(user):
-    """Reads the postponement list. The Principal decides; DPARC is told."""
-    return is_principal(user) or is_dparc(user)
+    """Reads the postponement list. The Principal decides; DPARC and the Dean
+    of Students are told."""
+    return is_principal(user) or is_dparc(user) or is_dean(user)
 
 
 #: Roles anybody who manages accounts may give. Every other role is an
 #: appointment, given by the Principal.
-OPEN_ROLES = frozenset({'tutor', 'secretary'})
+OPEN_ROLES = frozenset({'tutor', 'secretary', 'lab_technician'})

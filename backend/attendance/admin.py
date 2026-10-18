@@ -9,7 +9,7 @@ from .models import (
     PrincipalProfile,
     HeadOfDepartmentProfile,
     ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile, ICTOfficerProfile, RoleChange,
-    TrainingCoordinatorProfile, DeanOfStudentsProfile,
+    TrainingCoordinatorProfile, DeanOfStudentsProfile, LabTechnicianProfile,
 )
 
 
@@ -81,7 +81,7 @@ class HeadOfDepartmentProfileAdmin(admin.ModelAdmin):
 # HealthRecord is deliberately not registered: a student's health is for the
 # records office, the Dean of Students and the Principal, not the ICT account.
 @admin.register(ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile, ICTOfficerProfile,
-                TrainingCoordinatorProfile, DeanOfStudentsProfile)
+                TrainingCoordinatorProfile, DeanOfStudentsProfile, LabTechnicianProfile)
 class OfficeProfileAdmin(admin.ModelAdmin):
     list_display = ['full_name', 'user', 'is_active']
     list_filter = ['is_active']

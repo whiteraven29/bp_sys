@@ -12,7 +12,7 @@ thing is half done, say which half.
 - `[!]` blocked — what it is waiting for is written next to it
 
 Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py test attendance --settings=edutrack.test_settings`
-(973 passing, including `test_end_to_end`, `test_offices`, `test_records_health`, `test_security`, `test_returning`, `test_classlists`, `test_registers` and `test_one_view`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
+(1001 passing, including `test_end_to_end`, `test_offices`, `test_records_health`, `test_security`, `test_returning`, `test_classlists`, `test_registers`, `test_one_view` and `test_inventory_lifecycle`; committed up to `75cd214`, the offices change not committed yet; nothing of this release deployed yet).
 
 ---
 
@@ -83,6 +83,22 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    request again while the first was waiting. Now refused on the server (row-locked, so a double
    tap cannot slip through) until the college approves or declines it — forwarded counts as
    waiting; the portal tile says "Asked — waiting for the college's answer".
+2j. **Health reports, the Dean told, inventory review — 16 Oct (not committed).** Students report
+   a health problem with the hospital's document from the portal; records checks the original and
+   records it or says why not; every health record names the hospital and the document's date
+   (migration 0064). Health records moved under the Students menu. The Dean of Students is notified
+   of requests, postponements and hostel applications, and reads requests and postponements. Inventory
+   reviewed: split batches kept their item type (fixed); the rest listed for a decision in
+   `diagrams/questions.md` Q35.
+2k. **College property through its life, and the laboratory — 17 Oct (not committed).** Assets have a
+   status (in use, under repair, missing, disposal proposed, disposed), a custodian chosen from staff and
+   value data (cost, purchase date, supplier, serial, funding, warranty). Disposed assets leave the
+   register; DPFPA approves disposals (Executive Summary ▸ Asset disposals), the estate officer carries
+   them out; part of a batch can be disposed. History is not edited; assets are not deleted. Repairs
+   mark the item under repair and complete as good / unserviceable. Inspections apply their results on
+   closing (the review) and are then locked. Custody & Handover moves what one person holds to another.
+   Lab Technician role (open, given by ICT) with the laboratory stock book: receive, issue, write off,
+   balances, low stock, expiry; DPFPA and the Principal read it. Migration 0065; `attendance/inventory.py`.
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password
@@ -407,6 +423,12 @@ desks as records officer, accountant, admission officer and examination officer.
       mid-year; request → department approval → finance review → payment → recorded
 - [ ] Income and expense summary for the year (`flows.md` → `expense workflow`)
 - [ ] Library: none exists. Issuing and returning books, staff borrow too, only lost items charged
+- [ ] Opening a year before the results are out (option B: provisional placement, settlement list, fee reversal,
+      cut-off) and finishing after Level 4/5 with that level's award; did-not-report list. Waiting on answers to
+      Q42–Q52 (`diagrams/questions.md` section N)
+- [ ] Pharmaceutical lab, beyond the basic stock book: item types (chemicals, controlled substances, glassware kits,
+      equipment calibration, fridge temperatures, waste), a Lab watch panel, breakage incidents charged through
+      finance. Design and open questions in `diagrams/questions.md` section M (Q36–Q41)
 - [!] Remove the old finance tables and routes (`PaymentCategory`, `StudentFinanceObligation`,
       `StudentPayment`, `StudentFinanceClearance`, the FinanceStudent routes) —
       **waiting on the production row counts**, because dropping them is destructive

@@ -26,6 +26,7 @@ from rest_framework.test import APIClient
 
 from . import admissions, finance
 from .models import (
+    Notification,
     AcademicYear, Application, ChargeType, ClassLevel, Department, HostelApplication, Module,
     PaymentSchedule, Programme, Semester, SemesterRegistration, Student, StudentCharge,
     StudentProfile, StudentResidence,
@@ -289,6 +290,19 @@ class HostelApplicationTests(ScheduleBase):
         self.assertEqual(self.by_due_date(self.profile), [1_145_000, 550_000, 200_000, 600_000, 400_000])
         mine = self.client.get('/api/my-hostel/').data
         self.assertEqual(mine['residence'], 'hostel')
+
+    def test_the_accountant_and_the_dean_are_told(self):
+        from .views import set_roles
+        dean = User.objects.create_user('dean', password='pw')
+        set_roles(dean, ['dean'], full_name='Dean')
+        self.apply()
+        applied = Notification.objects.filter(kind=Notification.HOSTEL_APPLIED)
+        self.assertEqual({n.user_id for n in applied}, {self.accountant.id, dean.id})
+        application = HostelApplication.objects.get(profile=self.profile)
+        self.accounts.post(f'/api/hostel-applications/{application.id}/decide/', {'decision': 'approve'},
+                           format='json')
+        decided = Notification.objects.filter(kind=Notification.HOSTEL_DECIDED)
+        self.assertEqual({(n.user_id, n.profile_id) for n in decided}, {(dean.id, None), (None, self.profile.id)})
 
     def test_a_place_granted_in_semester_2_is_charged_semester_2_only(self):
         self.sem1.is_active = False

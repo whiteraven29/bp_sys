@@ -16,6 +16,7 @@ from rest_framework.test import APIClient
 
 from .models import (
     AcademicYear,
+    PrincipalProfile,
     StudentProfile,
     AccountantProfile,
     Announcement,
@@ -45,6 +46,8 @@ class InventoryManagementTests(TestCase):
         self.admin = User.objects.create_superuser('inventory-admin', 'admin@example.com', 'password123')
         self.officer = User.objects.create_user('estate', password='password123')
         EstateOfficerProfile.objects.create(user=self.officer, full_name='Estate Officer')
+        self.principal = User.objects.create_user('principal-inv', password='password123')
+        PrincipalProfile.objects.create(user=self.principal, full_name='The Principal')
         self.location = InventoryLocation.objects.create(name='Test Inventory Office')
         self.category = AssetCategory.objects.create(name='Test Equipment')
         self.item_type = InventoryItemType.objects.create(
@@ -75,7 +78,7 @@ class InventoryManagementTests(TestCase):
         payload = {
             'asset_tag': 'TAG-1', 'name': 'Desktop', 'description': 'Office desktop',
             'category': self.category.id, 'location': self.location.id,
-            'responsible_office': 'ICT Office', 'quantity': 1, 'condition': 'good',
+            'custodian': self.officer.id, 'quantity': 1, 'condition': 'good',
         }
         self.assertEqual(self.client.post('/api/assets/', payload, format='json').status_code, 201)
         payload['asset_tag'] = 'tag-1'
@@ -84,20 +87,21 @@ class InventoryManagementTests(TestCase):
     def test_description_is_optional_and_transfer_updates_current_assignment(self):
         self.client.force_authenticate(self.officer)
         payload = {'asset_tag': 'NO-DESC', 'name': 'Projector', 'category': self.category.id,
-                   'location': self.location.id, 'responsible_office': 'ICT Office',
+                   'location': self.location.id, 'custodian': self.officer.id,
                    'quantity': 1, 'condition': 'good'}
         created = self.client.post('/api/assets/', payload, format='json')
         self.assertEqual(created.status_code, 201)
         destination = InventoryLocation.objects.create(name='Destination Office')
         moved = self.client.post('/api/asset-transfers/', {
             'asset': created.data['id'], 'to_location': destination.id,
-            'new_responsible_office': 'Principal Office', 'reason': 'Official allocation',
+            'new_custodian': self.principal.id, 'reason': 'Official allocation',
             'transferred_at': '2026-08-04',
         }, format='json')
-        self.assertEqual(moved.status_code, 201)
+        self.assertEqual(moved.status_code, 201, moved.data)
         asset = Asset.objects.get(pk=created.data['id'])
         self.assertEqual(asset.location, destination)
-        self.assertEqual(asset.responsible_office, 'Principal Office')
+        self.assertEqual(asset.custodian, self.principal)
+        self.assertEqual(asset.responsible_office, 'The Principal')
         self.assertEqual(AssetTransfer.objects.get(asset=asset).from_location, self.location)
 
     def test_partial_batch_transfer_creates_traceable_split_tag(self):
@@ -110,7 +114,7 @@ class InventoryManagementTests(TestCase):
         destination = InventoryLocation.objects.create(name='Level 5 Test Classroom')
         response = self.client.post('/api/asset-transfers/', {
             'asset': batch.id, 'quantity': 1, 'to_location': destination.id,
-            'new_responsible_office': 'Level 5', 'reason': 'Replacement chair',
+            'new_custodian': self.officer.id, 'reason': 'Replacement chair',
             'transferred_at': '2026-08-04',
         }, format='json')
         self.assertEqual(response.status_code, 201)
@@ -121,6 +125,24 @@ class InventoryManagementTests(TestCase):
         self.assertEqual(split.location, destination)
         self.assertEqual(response.data['resulting_asset_tag'], split.asset_tag)
 
+    def test_a_split_batch_keeps_its_item_type(self):
+        # A part of a batch moved, or sent for repair, is still the same kind of
+        # item: it used to lose its type and drop out of the by-type figures.
+        self.client.force_authenticate(self.officer)
+        batch = Asset.objects.create(
+            asset_tag='BPCH/CH/BATCH', name='Office Chair', category=self.category, item_type=self.item_type,
+            location=self.location, responsible_office='Office', quantity=10, condition='good',
+            created_by=self.officer, updated_by=self.officer)
+        destination = InventoryLocation.objects.create(name='Split Test Reading Room')
+        self.client.post('/api/asset-transfers/', {
+            'asset': batch.id, 'quantity': 2, 'to_location': destination.id, 'new_custodian': self.officer.id,
+            'reason': 'Reading room', 'transferred_at': '2026-10-16'}, format='json')
+        self.client.post('/api/asset-maintenance/', {
+            'asset': batch.id, 'quantity': 1, 'issue': 'Broken leg', 'reported_date': '2026-10-16'}, format='json')
+        splits = Asset.objects.filter(asset_tag__startswith='BPCH/CH/BATCH/')
+        self.assertEqual(splits.count(), 2)
+        self.assertEqual(set(splits.values_list('item_type_id', flat=True)), {self.item_type.id})
+
     def test_template_contains_required_headers_and_valid_file_imports_atomically(self):
         self.client.force_authenticate(self.officer)
         template = self.client.get('/api/inventory/template/')
@@ -128,8 +150,9 @@ class InventoryManagementTests(TestCase):
         wb = load_workbook(BytesIO(template.content))
         self.assertEqual(wb['Assets']['A1'].value, 'Office/Location *')
         ws = wb['Assets']
-        ws.append([self.location.name, 'Level 4', f'{self.item_type.name} — {self.category.name}',
-                   'TEST/CH', 1, 20, 'Good', 'Student chairs'])
+        ws.append([self.location.name, 'Estate Officer (estate)', f'{self.item_type.name} — {self.category.name}',
+                   'TEST/CH', 1, 20, 'Good', 'Student chairs', '2026-01-15', 45000, 'Kariakoo Furniture',
+                   'College funds'])
         output = BytesIO(); wb.save(output); output.seek(0)
         output.name = 'inventory.xlsx'
         checked = self.client.post('/api/inventory/import/', {'file': output, 'confirm': 'false'}, format='multipart')
@@ -139,7 +162,9 @@ class InventoryManagementTests(TestCase):
         imported = self.client.post('/api/inventory/import/', {'file': output, 'confirm': 'true'}, format='multipart')
         self.assertEqual(imported.status_code, 201)
         self.assertEqual(Asset.objects.filter(asset_tag__startswith='TEST/CH/').count(), 20)
-        self.assertEqual(Asset.objects.get(asset_tag='TEST/CH/1').quantity, 1)
+        first = Asset.objects.get(asset_tag='TEST/CH/1')
+        self.assertEqual((first.quantity, first.custodian, first.unit_cost, first.funding_source),
+                         (1, self.officer, 45000, Asset.COLLEGE_FUNDS))
 
     def test_invalid_excel_row_imports_nothing(self):
         self.client.force_authenticate(self.officer)
@@ -160,7 +185,7 @@ class InventoryManagementTests(TestCase):
         )
         self.client.force_authenticate(self.officer)
         response = self.client.post('/api/inventory/office-register/', {
-            'location': self.location.id, 'responsible_office': 'Registry',
+            'location': self.location.id, 'custodian': self.officer.id,
             'items': [
                 {'item_type': self.item_type.id, 'tag_prefix': 'BPCH/CH', 'start_number': 1, 'quantity': 3, 'condition': 'good'},
                 {'item_type': desk.id, 'tag_prefix': 'BPCH/DK', 'start_number': 10, 'quantity': 2, 'condition': 'fair'},
@@ -180,7 +205,7 @@ class InventoryManagementTests(TestCase):
         )
         self.client.force_authenticate(self.officer)
         response = self.client.post('/api/inventory/office-register/', {
-            'location': other_office.id, 'responsible_office': 'Second Office',
+            'location': other_office.id, 'custodian': self.officer.id,
             'items': [{'item_type': self.item_type.id, 'tag_prefix': 'BPCH/CH', 'quantity': 3, 'condition': 'good'}],
         }, format='json')
         self.assertEqual(response.status_code, 201)
@@ -197,7 +222,7 @@ class InventoryManagementTests(TestCase):
             'asset_tag_prefix': 'BPCH/CH', 'start_number': 1, 'count': 30,
             'name': 'Chair', 'description': 'Office chair',
             'category': self.category.id, 'location': self.location.id,
-            'responsible_office': 'Administration Office', 'condition': 'good',
+            'custodian': self.officer.id, 'condition': 'good',
         }, format='json')
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data['created'], 30)
@@ -215,7 +240,7 @@ class InventoryManagementTests(TestCase):
         response = self.client.post('/api/inventory/bulk-create/', {
             'asset_tag_prefix': 'BPCH/CH', 'start_number': 1, 'count': 3,
             'name': 'Chair', 'category': self.category.id, 'location': self.location.id,
-            'responsible_office': 'Administration Office', 'condition': 'good',
+            'custodian': self.officer.id, 'condition': 'good',
         }, format='json')
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Asset.objects.filter(asset_tag__in=['BPCH/CH/1', 'BPCH/CH/3']).count(), 0)

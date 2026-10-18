@@ -450,6 +450,21 @@ class TrainingCoordinatorProfile(models.Model):
         return self.full_name
 
 
+class LabTechnicianProfile(models.Model):
+    """The laboratory technician: keeps the laboratory's stock — reagents,
+    glassware, consumables — what came in, what was issued for practicals,
+    what was written off (said 17 October 2026). An open role, given by
+    whoever keeps the accounts."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='lab_technician_profile',
+    )
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
 class DeanOfStudentsProfile(models.Model):
     """The Dean of Students: student welfare. Reads the health records the
     records office keeps, for reference when a student needs care or
@@ -541,6 +556,27 @@ class Asset(models.Model):
         (POOR, 'Poor'), (UNSERVICEABLE, 'Unserviceable'),
     ]
 
+    # Where the asset is in its life (said 17 October 2026). Only ACTIVE is free
+    # to move, repair, inspect or dispose of; DISPOSED has left the register.
+    ACTIVE = 'active'
+    UNDER_REPAIR = 'under_repair'
+    MISSING = 'missing'
+    PENDING_DISPOSAL = 'pending_disposal'
+    DISPOSED = 'disposed'
+    STATUS_CHOICES = [
+        (ACTIVE, 'In use'), (UNDER_REPAIR, 'Under repair'), (MISSING, 'Missing'),
+        (PENDING_DISPOSAL, 'Disposal proposed'), (DISPOSED, 'Disposed'),
+    ]
+    COLLEGE_FUNDS = 'college'
+    GOVERNMENT = 'government'
+    DONATION = 'donation'
+    PROJECT = 'project'
+    OTHER_FUNDS = 'other'
+    FUNDING_CHOICES = [
+        (COLLEGE_FUNDS, 'College funds'), (GOVERNMENT, 'Government / grant'), (DONATION, 'Donation'),
+        (PROJECT, 'Project'), (OTHER_FUNDS, 'Other'),
+    ]
+
     asset_tag = models.CharField(max_length=100, unique=True, verbose_name='Asset number/tag')
     name = models.CharField(max_length=200, verbose_name='Asset name')
     description = models.TextField(blank=True)
@@ -548,8 +584,23 @@ class Asset(models.Model):
     item_type = models.ForeignKey(InventoryItemType, on_delete=models.PROTECT, null=True, blank=True, related_name='assets')
     location = models.ForeignKey(InventoryLocation, on_delete=models.PROTECT, related_name='assets')
     responsible_office = models.CharField(max_length=200, verbose_name='Person/office responsible')
+    # The member of staff it is in the care of, chosen from the accounts; the
+    # text above is kept for the office and for records from before.
+    custodian = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                  related_name='assets_in_custody')
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     condition = models.CharField(max_length=20, choices=CONDITION_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=ACTIVE)
+    # What it is worth, and where it came from.
+    purchase_date = models.DateField(null=True, blank=True)
+    unit_cost = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True,
+                                    validators=[MinValueValidator(0)], help_text='Cost of one item, TZS.')
+    supplier = models.CharField(max_length=200, blank=True)
+    serial_number = models.CharField(max_length=120, blank=True)
+    funding_source = models.CharField(max_length=20, choices=FUNDING_CHOICES, blank=True)
+    warranty_until = models.DateField(null=True, blank=True)
+    expense = models.ForeignKey('Expense', on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='assets', help_text='The expense that bought it.')
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='assets_created')
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='assets_updated')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -560,6 +611,10 @@ class Asset(models.Model):
 
     def __str__(self):
         return f'{self.asset_tag} – {self.name}'
+
+    @property
+    def total_value(self):
+        return (self.unit_cost or 0) * self.quantity
 
 
 class AssetImport(models.Model):
@@ -579,6 +634,8 @@ class AssetTransfer(models.Model):
     quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     resulting_asset = models.ForeignKey(Asset, on_delete=models.PROTECT, null=True, blank=True, related_name='split_from_transfers')
     new_responsible_office = models.CharField(max_length=200)
+    new_custodian = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                      related_name='asset_transfers_received')
     reason = models.TextField()
     transferred_at = models.DateField()
     recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='asset_transfers_recorded')
@@ -593,6 +650,9 @@ class AssetMaintenance(models.Model):
     IN_PROGRESS = 'in_progress'
     COMPLETED = 'completed'
     STATUS_CHOICES = [(REPORTED, 'Reported'), (IN_PROGRESS, 'In progress'), (COMPLETED, 'Completed')]
+    REPAIRED = 'repaired'
+    BEYOND_REPAIR = 'beyond_repair'
+    OUTCOME_CHOICES = [(REPAIRED, 'Repaired'), (BEYOND_REPAIR, 'Beyond repair')]
     asset = models.ForeignKey(Asset, on_delete=models.PROTECT, related_name='maintenance_records')
     quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     issue = models.TextField()
@@ -600,6 +660,7 @@ class AssetMaintenance(models.Model):
     provider = models.CharField(max_length=200, blank=True)
     cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=REPORTED)
+    outcome = models.CharField(max_length=20, choices=OUTCOME_CHOICES, blank=True)
     reported_date = models.DateField()
     completed_date = models.DateField(null=True, blank=True)
     recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='asset_maintenance_recorded')
@@ -619,6 +680,11 @@ class InventoryInspection(models.Model):
     notes = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=OPEN)
     recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='inventory_inspections_recorded')
+    # Closing is the review: the results are applied to the register then, and
+    # the inspection cannot be changed afterwards.
+    closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name='+')
+    closed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -635,6 +701,10 @@ class InventoryInspectionItem(models.Model):
     asset = models.ForeignKey(Asset, on_delete=models.PROTECT, related_name='inspection_items')
     result = models.CharField(max_length=20, choices=RESULT_CHOICES)
     note = models.TextField(blank=True)
+    # A defect found: the condition the asset is in now. Relocated: where it was found.
+    new_condition = models.CharField(max_length=20, choices=Asset.CONDITION_CHOICES, blank=True)
+    found_location = models.ForeignKey(InventoryLocation, on_delete=models.PROTECT, null=True, blank=True,
+                                       related_name='+')
 
     class Meta:
         unique_together = ('inspection', 'asset')
@@ -642,21 +712,106 @@ class InventoryInspectionItem(models.Model):
 
 
 class AssetDisposal(models.Model):
+    """Writing an asset off. The estate officer proposes; DPFPA approves or
+    rejects it; only an approved disposal is carried out and recorded, and
+    then the asset leaves the register (said 17 October 2026)."""
     PROPOSED = 'proposed'
+    APPROVED = 'approved'
+    REJECTED = 'rejected'
     DISPOSED = 'disposed'
-    STATUS_CHOICES = [(PROPOSED, 'Proposed'), (DISPOSED, 'Disposed')]
-    asset = models.OneToOneField(Asset, on_delete=models.PROTECT, related_name='disposal')
+    STATUS_CHOICES = [(PROPOSED, 'Waiting for DPFPA'), (APPROVED, 'Approved — to be carried out'),
+                      (REJECTED, 'Rejected'), (DISPOSED, 'Disposed')]
+    OPEN_STATES = (PROPOSED, APPROVED)
+    asset = models.ForeignKey(Asset, on_delete=models.PROTECT, related_name='disposals')
+    quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     reason = models.TextField()
     method = models.CharField(max_length=160, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=PROPOSED)
     proposed_date = models.DateField()
     disposal_date = models.DateField(null=True, blank=True)
     reference = models.CharField(max_length=160, blank=True)
+    proceeds = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+                                   help_text='What the college received for it, if sold.')
     recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='asset_disposals_recorded')
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=300, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-proposed_date', '-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['asset'], condition=models.Q(status__in=['proposed', 'approved']),
+                                    name='one_open_disposal_per_asset'),
+        ]
+
+
+class AssetHandover(models.Model):
+    """What one member of staff had in their care, handed to another — when
+    they leave, or change office (said 17 October 2026)."""
+    from_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                  related_name='asset_handovers_given')
+    to_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='asset_handovers_received')
+    assets = models.ManyToManyField(Asset, related_name='handovers')
+    note = models.CharField(max_length=300, blank=True)
+    handed_at = models.DateField()
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-handed_at', '-created_at']
+
+
+class LabItem(models.Model):
+    """Something the laboratory keeps in stock: a reagent, glassware, a
+    consumable. Its balance is what came in less what went out."""
+    REAGENT = 'reagent'
+    GLASSWARE = 'glassware'
+    CONSUMABLE = 'consumable'
+    APPARATUS = 'apparatus'
+    CATEGORY_CHOICES = [(REAGENT, 'Reagent / chemical'), (GLASSWARE, 'Glassware'),
+                        (CONSUMABLE, 'Consumable'), (APPARATUS, 'Small apparatus')]
+    name = models.CharField(max_length=200, unique=True)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default=CONSUMABLE)
+    unit = models.CharField(max_length=30, help_text='e.g. ml, g, pieces, boxes')
+    reorder_level = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                        help_text='Warn when the balance falls to this.')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class LabStockMovement(models.Model):
+    """One entry in the laboratory's stock book. Never edited: a mistake is put
+    right by another entry."""
+    RECEIVED = 'received'
+    ISSUED = 'issued'
+    WRITTEN_OFF = 'written_off'
+    KIND_CHOICES = [(RECEIVED, 'Received'), (ISSUED, 'Issued'), (WRITTEN_OFF, 'Written off')]
+    item = models.ForeignKey(LabItem, on_delete=models.PROTECT, related_name='movements')
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    moved_on = models.DateField()
+    # Received
+    supplier = models.CharField(max_length=200, blank=True)
+    unit_cost = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    batch_number = models.CharField(max_length=80, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
+    # Issued: for which practical, to whom
+    module = models.ForeignKey('Module', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    issued_to = models.CharField(max_length=200, blank=True)
+    note = models.CharField(max_length=300, blank=True, help_text='Why — required for a write-off.')
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-moved_on', '-created_at']
 
 
 class Module(models.Model):
@@ -1977,6 +2132,11 @@ class HealthRecord(models.Model):
     certificate = models.ForeignKey(
         StudentDocument, on_delete=models.PROTECT, related_name='health_records',
         help_text='The verified medical certificate in the student\'s documents.')
+    # What makes the document a valid one (said 16 October 2026): the hospital
+    # or health facility that issued it and the date it bears.
+    facility = models.CharField(max_length=160, blank=True,
+                                help_text='The hospital or health facility that issued the document.')
+    issued_on = models.DateField(null=True, blank=True, help_text='The date on the document.')
     recorded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='health_records_kept')
     recorded_at = models.DateTimeField(auto_now_add=True)
@@ -1992,6 +2152,41 @@ class HealthRecord(models.Model):
 
     def __str__(self):
         return f'{self.profile.nactvet_reg_no} · {self.condition}'
+
+
+class HealthReport(models.Model):
+    """A student telling the college about a health problem, with the
+    hospital's document uploaded from the portal (said 16 October 2026).
+
+    It waits for the records office, which checks the document against the
+    original: recorded, it becomes a HealthRecord (and the Dean of Students is
+    told); rejected, the student is told why. Kept either way.
+    """
+    WAITING = 'waiting'
+    RECORDED = 'recorded'
+    REJECTED = 'rejected'
+    STATUS_CHOICES = [(WAITING, 'Waiting for the records office'), (RECORDED, 'Recorded'),
+                      (REJECTED, 'Not accepted')]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='health_reports')
+    condition = models.CharField(max_length=200)
+    facility = models.CharField(max_length=160)
+    issued_on = models.DateField()
+    document = models.ForeignKey(StudentDocument, on_delete=models.PROTECT, related_name='health_reports')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=WAITING)
+    record = models.OneToOneField(HealthRecord, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name='report')
+    decision_note = models.CharField(max_length=300, blank=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                   blank=True, related_name='+')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · {self.condition} ({self.get_status_display()})'
 
 
 class PasswordStatus(models.Model):
@@ -3336,6 +3531,12 @@ class Notification(models.Model):
     EXPENSE_DECIDED = 'expense.decided'
     EXPENSE_QUERIED = 'expense.queried'
     HEALTH_RECORDED = 'health.recorded'
+    HEALTH_REPORTED = 'health.reported'
+    HEALTH_ANSWERED = 'health.answered'
+    HOSTEL_APPLIED = 'hostel.applied'
+    HOSTEL_DECIDED = 'hostel.decided'
+    DISPOSAL_PROPOSED = 'disposal.proposed'
+    DISPOSAL_DECIDED = 'disposal.decided'
     PASSWORD_RESET = 'password.reset'
     KIND_CHOICES = [
         (REQUEST_SUBMITTED, 'A student asked for something'),
@@ -3349,6 +3550,12 @@ class Notification(models.Model):
         (EXPENSE_DECIDED, 'An expense was decided'),
         (EXPENSE_QUERIED, 'An expense was queried or answered'),
         (HEALTH_RECORDED, 'A student health record was added'),
+        (HEALTH_REPORTED, 'A student reported a health problem'),
+        (HEALTH_ANSWERED, 'A health report was answered'),
+        (HOSTEL_APPLIED, 'A student applied for the hostel'),
+        (HOSTEL_DECIDED, 'A hostel application was decided'),
+        (DISPOSAL_PROPOSED, 'An asset disposal needs approval'),
+        (DISPOSAL_DECIDED, 'An asset disposal was decided'),
         (PASSWORD_RESET, 'Your password was reset by the office'),
     ]
 

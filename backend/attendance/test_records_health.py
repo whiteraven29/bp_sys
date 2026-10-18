@@ -15,7 +15,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
 from . import admissions
-from .models import Application, HealthRecord, Notification, StudentDocument, StudentProfile
+from .models import Application, HealthRecord, HealthReport, Notification, StudentDocument, StudentProfile
 from .test_admissions import AdmissionBase, User, next_index
 from .views import set_roles
 
@@ -57,7 +57,8 @@ class RecordsBase(AdmissionBase):
     def add(self, certificate, client=None, condition='Asthma'):
         return (client or self.records).post('/api/health-records/', {
             'profile_id': self.profile.id, 'certificate_id': certificate.id,
-            'condition': condition, 'notes': 'Keeps an inhaler; excuse from heavy practicals.'},
+            'condition': condition, 'notes': 'Keeps an inhaler; excuse from heavy practicals.',
+            'facility': 'Singida Regional Referral Hospital', 'issued_on': '2026-09-30'},
             format='json')
 
 
@@ -192,3 +193,85 @@ class DeanRoleTests(RecordsBase):
                                     {'roles': ['tutor', 'dean']}, format='json')
         self.assertEqual(given.status_code, 200, given.data)
         self.assertIn('dean', given.data['roles'])
+
+
+class StudentHealthReportTests(RecordsBase):
+    """The student uploads the hospital's document from the portal; records
+    checks it against the original (said 16 October 2026)."""
+
+    def setUp(self):
+        super().setUp()
+        from .models import Student
+        enrollment = Student.objects.get(profile=self.profile)
+        enrollment.set_portal_pin('Portal#2026', require_change=False)
+        enrollment.save()
+        session = self.client.session
+        session['student_id'] = enrollment.id
+        session.save()
+
+    def report(self, **overrides):
+        data = {'condition': 'Asthma', 'facility': 'Singida Regional Referral Hospital',
+                'issued_on': '2026-09-30',
+                'file': SimpleUploadedFile('letter.pdf', b'%PDF-1.4 hospital', content_type='application/pdf')}
+        data.update(overrides)
+        data = {k: v for k, v in data.items() if v is not None}
+        return self.client.post('/api/my-health/', data)
+
+    def test_the_student_reports_it_and_records_is_asked_to_check(self):
+        sent = self.report()
+        self.assertEqual(sent.status_code, 201, sent.data)
+        report = HealthReport.objects.get(profile=self.profile)
+        self.assertEqual((report.status, report.facility), (HealthReport.WAITING, 'Singida Regional Referral Hospital'))
+        self.assertEqual((report.document.kind, report.document.is_verified, report.document.uploaded_by_student),
+                         ('medical', False, True))
+        told = {n.user_id for n in Notification.objects.filter(kind=Notification.HEALTH_REPORTED)}
+        self.assertEqual(told, {self.records_user.id, self.principal_user.id})
+        self.assertFalse(HealthRecord.objects.exists())                       # nothing on file yet
+        self.assertEqual(sent.data['reports'][0]['status'], 'waiting')
+
+    def test_a_valid_document_names_the_hospital_has_a_date_and_is_a_file(self):
+        self.assertIn('hospital', self.report(facility='').data['detail'])
+        self.assertIn('date', self.report(issued_on='').data['detail'])
+        self.assertIn('future', self.report(issued_on='2099-01-01').data['detail'])
+        self.assertIn('Upload', self.report(file=None).data['detail'])
+        bad = SimpleUploadedFile('virus.exe', b'MZ', content_type='application/octet-stream')
+        self.assertEqual(self.report(file=bad).status_code, 400)
+        self.assertFalse(HealthReport.objects.exists())
+
+    def test_records_checks_it_and_records_it(self):
+        self.report()
+        report = HealthReport.objects.get()
+        done = self.records.post(f'/api/health-reports/{report.id}/accept/', {'notes': 'Inhaler'}, format='json')
+        self.assertEqual(done.status_code, 200, done.data)
+        record = HealthRecord.objects.get(profile=self.profile)
+        self.assertEqual((record.facility, str(record.issued_on), record.notes),
+                         ('Singida Regional Referral Hospital', '2026-09-30', 'Inhaler'))
+        self.assertTrue(record.certificate.is_verified)
+        self.assertTrue(Notification.objects.filter(kind=Notification.HEALTH_RECORDED, user=self.dean_user).exists())
+        self.assertTrue(Notification.objects.filter(kind=Notification.HEALTH_ANSWERED, profile=self.profile).exists())
+        self.assertEqual(self.records.post(f'/api/health-reports/{report.id}/accept/', {}, format='json').status_code, 400)
+
+    def test_not_accepted_needs_a_reason_the_student_reads(self):
+        self.report()
+        report = HealthReport.objects.get()
+        self.assertEqual(self.records.post(f'/api/health-reports/{report.id}/reject/', {}, format='json').status_code, 400)
+        self.records.post(f'/api/health-reports/{report.id}/reject/', {'reason': 'Not stamped by the hospital'},
+                          format='json')
+        mine = self.client.get('/api/my-health/').data
+        self.assertEqual((mine['reports'][0]['status'], mine['reports'][0]['decision_note']),
+                         ('rejected', 'Not stamped by the hospital'))
+        self.assertFalse(HealthRecord.objects.exists())
+
+    def test_only_the_records_office_checks(self):
+        self.report()
+        report = HealthReport.objects.get()
+        self.assertEqual(self.dean.get('/api/health-reports/').status_code, 403)
+        self.assertEqual(self.dean.post(f'/api/health-reports/{report.id}/accept/', {}, format='json').status_code, 400)
+        self.assertEqual(HealthReport.objects.get().status, HealthReport.WAITING)
+
+    def test_records_writing_it_down_also_names_the_hospital(self):
+        cert = self.certificate()
+        refused = self.records.post('/api/health-records/', {
+            'profile_id': self.profile.id, 'certificate_id': cert.id, 'condition': 'Asthma'}, format='json')
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('hospital', refused.data['detail'])

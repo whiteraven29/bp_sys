@@ -334,3 +334,17 @@ class OneRequestAtATimeTests(WorkflowTestBase):
         self._ask()
         entries = {e['form'].slug: e for e in evaluations.services_for_student(self.asha)}
         self.assertTrue(entries['sick']['can_answer'])
+
+
+class TheDeanIsToldTests(WorkflowTestBase):
+    def test_the_dean_hears_of_every_request_and_its_answer(self):
+        from .views import set_roles
+        dean = User.objects.create_user('dean', password='pw')
+        set_roles(dean, ['dean'], full_name='Dean')
+        made = self._ask()
+        self.principal.api.post(f'/api/service-requests/{made.id}/decide/', {'status': 'approved'}, format='json')
+        told = set(Notification.objects.filter(user=dean).values_list('kind', flat=True))
+        self.assertEqual(told, {Notification.REQUEST_SUBMITTED, Notification.REQUEST_DECIDED})
+        reader = APIClient(); reader.force_authenticate(dean)
+        self.assertEqual(reader.get('/api/service-requests/').status_code, 200)
+        self.assertEqual(reader.post(f'/api/service-requests/{made.id}/forward/', {}, format='json').status_code, 403)

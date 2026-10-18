@@ -17,6 +17,7 @@ from .models import (
     StudentFinanceClearance, Announcement,
     EstateOfficerProfile, InventoryLocation, AssetCategory, InventoryItemType, Asset,
     AssetTransfer, AssetMaintenance, InventoryInspection, InventoryInspectionItem, AssetDisposal,
+    AssetHandover, LabItem, LabStockMovement,
     ChargeType, FeeStructure, FeeInstallment, StudentProfile, StudentCharge,
     Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
     BankAccount, CollegeProfile,
@@ -115,15 +116,29 @@ class AssetSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     location_name = serializers.CharField(source='location.name', read_only=True)
     condition_display = serializers.CharField(source='get_condition_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    funding_source_display = serializers.CharField(source='get_funding_source_display', read_only=True)
+    custodian_name = serializers.SerializerMethodField()
+    total_value = serializers.DecimalField(max_digits=16, decimal_places=2, read_only=True)
+
+    #: Changed only by what happens to the asset — a transfer, a handover, a
+    #: repair, an inspection, a disposal — never by editing it (17 October 2026).
+    LIFE_FIELDS = ('location', 'quantity', 'custodian', 'responsible_office', 'condition', 'status')
 
     class Meta:
         model = Asset
         fields = [
             'id', 'asset_tag', 'name', 'description', 'category', 'category_name', 'item_type',
-            'location', 'location_name', 'responsible_office', 'quantity',
-            'condition', 'condition_display', 'created_at', 'updated_at',
+            'location', 'location_name', 'responsible_office', 'custodian', 'custodian_name', 'quantity',
+            'condition', 'condition_display', 'status', 'status_display',
+            'purchase_date', 'unit_cost', 'total_value', 'supplier', 'serial_number', 'funding_source',
+            'funding_source_display', 'warranty_until', 'expense', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'status', 'responsible_office', 'created_at', 'updated_at']
+
+    def get_custodian_name(self, obj):
+        from .inventory import custodian_label
+        return custodian_label(obj.custodian) if obj.custodian_id else ''
 
     def validate_asset_tag(self, value):
         qs = Asset.objects.filter(asset_tag__iexact=value.strip())
@@ -132,6 +147,24 @@ class AssetSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError('This asset number/tag is already registered.')
         return value.strip()
+
+    def validate(self, attrs):
+        from . import inventory
+        if self.instance is None:
+            try:
+                attrs['custodian'] = inventory._staff(attrs.get('custodian'))
+            except inventory.InventoryError as exc:
+                raise serializers.ValidationError({'custodian': str(exc)})
+            attrs['responsible_office'] = inventory.custodian_label(attrs['custodian'])
+            attrs['status'] = Asset.ACTIVE
+        if attrs.get('warranty_until') and attrs.get('purchase_date') and attrs['warranty_until'] < attrs['purchase_date']:
+            raise serializers.ValidationError({'warranty_until': 'The warranty cannot end before the purchase.'})
+        return attrs
+
+    def update(self, instance, validated_data):
+        for field in self.LIFE_FIELDS:
+            validated_data.pop(field, None)
+        return super().update(instance, validated_data)
 
 
 class AssetTransferSerializer(serializers.ModelSerializer):
@@ -144,47 +177,35 @@ class AssetTransferSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssetTransfer
         fields = ['id', 'asset', 'asset_tag', 'asset_name', 'from_location', 'from_location_name',
-                  'to_location', 'to_location_name', 'quantity', 'resulting_asset', 'resulting_asset_tag', 'new_responsible_office', 'reason',
-                  'transferred_at', 'created_at']
-        read_only_fields = ['id', 'from_location', 'resulting_asset', 'created_at']
-
-    def validate(self, attrs):
-        asset = attrs.get('asset', getattr(self.instance, 'asset', None))
-        quantity = attrs.get('quantity', getattr(self.instance, 'quantity', 1))
-        if asset and quantity > asset.quantity:
-            raise serializers.ValidationError({'quantity': f'Only {asset.quantity} item(s) are available in this batch.'})
-        return attrs
+                  'to_location', 'to_location_name', 'quantity', 'resulting_asset', 'resulting_asset_tag',
+                  'new_responsible_office', 'new_custodian', 'reason', 'transferred_at', 'created_at']
+        read_only_fields = ['id', 'from_location', 'resulting_asset', 'new_responsible_office', 'created_at']
 
 
 class AssetMaintenanceSerializer(serializers.ModelSerializer):
     asset_tag = serializers.CharField(source='asset.asset_tag', read_only=True)
     asset_name = serializers.CharField(source='asset.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    outcome_display = serializers.CharField(source='get_outcome_display', read_only=True)
 
     class Meta:
         model = AssetMaintenance
         fields = ['id', 'asset', 'asset_tag', 'asset_name', 'quantity', 'issue', 'action_taken', 'provider',
-                  'cost', 'status', 'status_display', 'reported_date', 'completed_date', 'created_at']
-        read_only_fields = ['id', 'created_at']
-
-    def validate(self, attrs):
-        asset = attrs.get('asset', getattr(self.instance, 'asset', None))
-        quantity = attrs.get('quantity', getattr(self.instance, 'quantity', 1))
-        if asset and quantity > asset.quantity:
-            raise serializers.ValidationError({'quantity': f'Only {asset.quantity} item(s) are registered in this batch.'})
-        if attrs.get('status') == AssetMaintenance.COMPLETED and not attrs.get('completed_date', getattr(self.instance, 'completed_date', None)):
-            raise serializers.ValidationError({'completed_date': 'Completion date is required when maintenance is completed.'})
-        return attrs
+                  'cost', 'status', 'status_display', 'outcome', 'outcome_display', 'reported_date',
+                  'completed_date', 'created_at']
+        read_only_fields = ['id', 'status', 'outcome', 'action_taken', 'cost', 'completed_date', 'created_at']
 
 
 class InventoryInspectionItemSerializer(serializers.ModelSerializer):
     asset_tag = serializers.CharField(source='asset.asset_tag', read_only=True)
     asset_name = serializers.CharField(source='asset.name', read_only=True)
     result_display = serializers.CharField(source='get_result_display', read_only=True)
+    found_location_name = serializers.CharField(source='found_location.name', read_only=True, default='')
 
     class Meta:
         model = InventoryInspectionItem
-        fields = ['id', 'inspection', 'asset', 'asset_tag', 'asset_name', 'result', 'result_display', 'note']
+        fields = ['id', 'inspection', 'asset', 'asset_tag', 'asset_name', 'result', 'result_display', 'note',
+                  'new_condition', 'found_location', 'found_location_name']
         read_only_fields = ['id']
 
 
@@ -192,32 +213,89 @@ class InventoryInspectionSerializer(serializers.ModelSerializer):
     location_name = serializers.CharField(source='location.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     item_count = serializers.IntegerField(source='items.count', read_only=True)
+    closed_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = InventoryInspection
         fields = ['id', 'location', 'location_name', 'inspection_date', 'inspector_name',
-                  'notes', 'status', 'status_display', 'item_count', 'created_at']
-        read_only_fields = ['id', 'created_at']
+                  'notes', 'status', 'status_display', 'item_count', 'closed_at', 'closed_by_name', 'created_at']
+        read_only_fields = ['id', 'status', 'closed_at', 'created_at']
+
+    def get_closed_by_name(self, obj):
+        from .inventory import custodian_label
+        return custodian_label(obj.closed_by) if obj.closed_by_id else ''
 
 
 class AssetDisposalSerializer(serializers.ModelSerializer):
     asset_tag = serializers.CharField(source='asset.asset_tag', read_only=True)
     asset_name = serializers.CharField(source='asset.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    book_value = serializers.DecimalField(source='asset.total_value', max_digits=16, decimal_places=2, read_only=True)
+    proposed_by_name = serializers.SerializerMethodField()
+    decided_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = AssetDisposal
-        fields = ['id', 'asset', 'asset_tag', 'asset_name', 'reason', 'method', 'status',
-                  'status_display', 'proposed_date', 'disposal_date', 'reference', 'created_at']
+        fields = ['id', 'asset', 'asset_tag', 'asset_name', 'quantity', 'reason', 'method', 'status',
+                  'status_display', 'proposed_date', 'disposal_date', 'reference', 'proceeds', 'book_value',
+                  'proposed_by_name', 'decided_by_name', 'decided_at', 'decision_note', 'created_at']
+        read_only_fields = ['id', 'status', 'disposal_date', 'reference', 'proceeds', 'decided_at',
+                            'decision_note', 'created_at']
+
+    def get_proposed_by_name(self, obj):
+        from .inventory import custodian_label
+        return custodian_label(obj.recorded_by)
+
+    def get_decided_by_name(self, obj):
+        from .inventory import custodian_label
+        return custodian_label(obj.decided_by) if obj.decided_by_id else ''
+
+
+class AssetHandoverSerializer(serializers.ModelSerializer):
+    from_name = serializers.SerializerMethodField()
+    to_name = serializers.SerializerMethodField()
+    asset_count = serializers.IntegerField(source='assets.count', read_only=True)
+
+    class Meta:
+        model = AssetHandover
+        fields = ['id', 'from_user', 'from_name', 'to_user', 'to_name', 'asset_count', 'note', 'handed_at',
+                  'created_at']
+
+    def get_from_name(self, obj):
+        from .inventory import custodian_label
+        return custodian_label(obj.from_user) if obj.from_user_id else 'Not recorded (older register)'
+
+    def get_to_name(self, obj):
+        from .inventory import custodian_label
+        return custodian_label(obj.to_user)
+
+
+class LabItemSerializer(serializers.ModelSerializer):
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+
+    class Meta:
+        model = LabItem
+        fields = ['id', 'name', 'category', 'category_display', 'unit', 'reorder_level', 'is_active']
+        read_only_fields = ['id']
+
+
+class LabStockMovementSerializer(serializers.ModelSerializer):
+    item_name = serializers.CharField(source='item.name', read_only=True)
+    unit = serializers.CharField(source='item.unit', read_only=True)
+    kind_display = serializers.CharField(source='get_kind_display', read_only=True)
+    module_code = serializers.CharField(source='module.code', read_only=True, default='')
+    recorded_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LabStockMovement
+        fields = ['id', 'item', 'item_name', 'unit', 'kind', 'kind_display', 'quantity', 'moved_on', 'supplier',
+                  'unit_cost', 'batch_number', 'expiry_date', 'module', 'module_code', 'issued_to', 'note',
+                  'recorded_by_name', 'created_at']
         read_only_fields = ['id', 'created_at']
 
-    def validate(self, attrs):
-        if attrs.get('status') == AssetDisposal.DISPOSED:
-            if not attrs.get('disposal_date', getattr(self.instance, 'disposal_date', None)):
-                raise serializers.ValidationError({'disposal_date': 'Disposal date is required when marked disposed.'})
-            if not attrs.get('method', getattr(self.instance, 'method', '')):
-                raise serializers.ValidationError({'method': 'Disposal method is required when marked disposed.'})
-        return attrs
+    def get_recorded_by_name(self, obj):
+        from .inventory import custodian_label
+        return custodian_label(obj.recorded_by)
 
 
 class ModuleSerializer(serializers.ModelSerializer):

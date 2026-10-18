@@ -24,6 +24,7 @@ from rest_framework.test import APIClient
 
 from . import admissions, finance, lifecycle
 from .models import (
+    Notification,
     AcademicYear, Application, ChargeType, FeeStructure, Invoice, Module, Payment, Postponement,
     SemesterRegistration, Student, StudentCharge, StudentProfile, StudentResult, StudentStanding,
 )
@@ -99,6 +100,18 @@ class PostponementTests(LifecycleBase):
         self.enrollment.refresh_from_db()
         self.assertIsNotNone(self.enrollment.withdrawn_at)
         self.assertTrue(StudentResult.objects.filter(student=self.enrollment, cat1_theory=10).exists())
+
+    def test_the_dean_of_students_is_told(self):
+        dean = User.objects.create_user('dean', password='pw')
+        set_roles(dean, ['dean'], full_name='Dean')
+        self.ask_from_portal()
+        request = Postponement.objects.get(profile=self.profile)
+        self.principal.post(f'/api/postponements/{request.id}/decide/', {'decision': 'approve'}, format='json')
+        told = set(Notification.objects.filter(user=dean).values_list('kind', flat=True))
+        self.assertEqual(told, {Notification.POSTPONEMENT_REQUESTED, Notification.POSTPONEMENT_DECIDED})
+        # The Dean reads the list; deciding stays the Principal's.
+        reader = APIClient(); reader.force_authenticate(dean)
+        self.assertEqual(reader.get('/api/postponements/').status_code, 200)
 
     def test_the_year_s_fees_are_reversed_and_what_was_paid_is_credit(self):
         self.ask_from_portal()

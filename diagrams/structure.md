@@ -32,6 +32,7 @@ When the structure changes, update this file in the same change.
   │                      results summary                           │
   │      classlists.py   a level's class list, CAT exam numbers    │
   │      registers.py    the printed class attendance register     │
+  │      inventory.py    college property's life; the lab stock    │
   │      lifecycle.py    postponement, finishing, clearance        │
   │      roles.py        what each office may do                   │
   │      veta.py         VETA courses: intakes, desks, fees        │

@@ -82,7 +82,8 @@ class OneMenuItemOneViewTests(TestCase):
         self.assertEqual(self.html.count('id="students-nav-group"'), 1)
         group = self.html.split('id="students-nav-group"')[1].split('</div>\n    </div>')[0]
         self.assertEqual(re.findall(r'>([^<>]+)</button>', group),
-                         ['Find a student', 'Enrollments', 'College ID import'])
+                         ['Find a student', 'Enrollments', 'College ID import', 'Health records'])
+        self.assertNotIn('data-page="health"', self.html)        # not a menu item of its own
         self.assertNotIn('Upload / Register', self.html)
         self.assertNotIn('Bulk Upload via Excel', self.html)
 
@@ -145,5 +146,5 @@ class PortalOptionsTests(TestCase):
     def test_the_profile_is_options(self):
         profile = self.page().split('id="view-profile"')[1].split('</main>')[0]
         options = re.findall(r'data-profile-option="([a-z]+)"', profile)
-        self.assertEqual(options, ['personal', 'academic', 'kin', 'documents', 'password'])
+        self.assertEqual(options, ['personal', 'academic', 'kin', 'documents', 'health', 'password'])
         self.assertEqual(profile.count('class="pane on"'), 1)

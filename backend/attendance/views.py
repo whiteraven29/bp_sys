@@ -12,7 +12,7 @@ from django.contrib.auth import login, logout, authenticate, update_session_auth
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
-from django.db.models import Count, Exists, F, OuterRef, Q, Sum
+from django.db.models import Count, DecimalField, Exists, F, OuterRef, Q, Sum
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
@@ -31,7 +31,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import admissions, analytics, classlists, registers, evaluations, finance, lifecycle, notifications, passwords, progression, veta, health
+from . import admissions, analytics, classlists, inventory, registers, evaluations, finance, lifecycle, notifications, passwords, progression, veta, health
 from .roles import (
     OPEN_ROLES, can_advance_semester, can_appoint, can_confirm_reviews, can_decide_requests,
     can_handle_requests, can_manage_accounts, can_manage_departments, can_manage_exams,
@@ -41,8 +41,8 @@ from .roles import (
     is_dpfpa, is_estate_officer, is_exam_officer, is_head_of_department, is_ict_officer,
     is_principal, is_records_officer, is_secretary, runs_departments,
     is_coordinator, runs_veta_courses, can_approve_expenses, can_view_expenses,
-    is_dean, can_read_health_records, can_reset_passwords, can_issue_student_passwords,
-    can_record_returning_students,
+    is_dean, can_read_health_records, can_keep_health_records, can_reset_passwords, can_issue_student_passwords,
+    can_record_returning_students, can_approve_disposals, can_keep_lab_stock, can_read_lab_stock,
 )
 from .security import neutralise_formulas
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
@@ -62,8 +62,8 @@ from .models import (
     OutstandingRepeat, SemesterReview, StudentStanding, StandingChange,
     AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck, Application,
     PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultWithholding,
-    StudentDocument, HealthRecord, PasswordReset, ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile,
-    ICTOfficerProfile, RoleChange, TrainingCoordinatorProfile, DeanOfStudentsProfile,
+    StudentDocument, HealthRecord, HealthReport, PasswordReset, AssetHandover, LabItem, LabStockMovement, ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile,
+    ICTOfficerProfile, RoleChange, TrainingCoordinatorProfile, DeanOfStudentsProfile, LabTechnicianProfile,
     Intake, CourseFee, CourseFeeInstalment, CourseModule, CourseApplication, CourseEnrollment,
     ExpenseCategory, ExpenseBudget, Expense,
     Form, FormSection, FormQuestion, FormAnswer, FormResponse, FormSubmissionReceipt,
@@ -78,7 +78,8 @@ from .serializers import (
     StudentFinanceClearanceSerializer, AnnouncementSerializer,
     InventoryLocationSerializer, AssetCategorySerializer, InventoryItemTypeSerializer, AssetSerializer,
     AssetTransferSerializer, AssetMaintenanceSerializer, InventoryInspectionSerializer,
-    InventoryInspectionItemSerializer, AssetDisposalSerializer,
+    InventoryInspectionItemSerializer, AssetDisposalSerializer, AssetHandoverSerializer,
+    LabItemSerializer, LabStockMovementSerializer,
     BankAccountSerializer, CollegeProfileSerializer,
     ChargeTypeSerializer, FeeStructureSerializer, StudentChargeSerializer,
     InvoiceSerializer, PaymentSerializer, RecordPaymentSerializer,
@@ -1263,6 +1264,7 @@ ROLE_PROFILES = {
     'ict_officer': ICTOfficerProfile,
     'coordinator': TrainingCoordinatorProfile,
     'dean': DeanOfStudentsProfile,
+    'lab_technician': LabTechnicianProfile,
 }
 #: The roles that open Django's own admin site. The ICT officer's role makes
 #: the account a Django superuser (every table in /admin/); nothing inside the
@@ -1271,13 +1273,14 @@ STAFF_ROLES = ('ict_officer',)
 #: Which title an account is listed under when it holds more than one.
 ROLE_ORDER = ('principal', 'dparc', 'dpfpa', 'hod', 'coordinator', 'dean', 'exam_officer', 'ict_officer',
               'admission_officer', 'records_officer', 'accountant', 'estate_officer',
-              'secretary', 'tutor')
+              'lab_technician', 'secretary', 'tutor')
 ROLE_LABELS = {
     'tutor': 'Tutor', 'accountant': 'Accountant', 'estate_officer': 'Estate Officer',
     'secretary': 'Secretary', 'principal': 'Principal', 'hod': 'Head of Department',
     'exam_officer': 'Exam Officer', 'ict_officer': 'ICT Officer',
     'dparc': 'DPARC', 'dpfpa': 'DPFPA', 'coordinator': 'Course Coordinator', 'dean': 'Dean of Students',
     'records_officer': 'Records Officer', 'admission_officer': 'Admission Officer',
+    'lab_technician': 'Lab Technician',
 }
 
 
@@ -2340,6 +2343,8 @@ def health_records(request):
         try:
             record = health.add_record(profile, condition=request.data.get('condition'),
                                        certificate=certificate, notes=request.data.get('notes') or '',
+                                       facility=request.data.get('facility') or '',
+                                       issued_on=request.data.get('issued_on') or None,
                                        actor=request.user)
         except health.HealthRecordError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -2356,6 +2361,65 @@ def health_records(request):
     if request.query_params.get('current') in ('1', 'true'):
         qs = qs.filter(is_current=True)
     return Response([health.record_row(record) for record in qs[:500]])
+
+
+@api_view(['GET'])
+@login_required
+def health_reports(request):
+    """Health problems students reported from the portal with the hospital's
+    document, waiting for the records office to check (health.py)."""
+    if not can_keep_health_records(request.user):
+        raise PermissionDenied('The records office checks health reports.')
+    rows = HealthReport.objects.select_related('profile', 'document')
+    wanted = request.query_params.get('status', HealthReport.WAITING)
+    if wanted:
+        rows = rows.filter(status=wanted)
+    return Response([health.report_row(report) for report in rows[:300]])
+
+
+@api_view(['POST'])
+@login_required
+def health_report_action(request, pk, action):
+    """Record a reported health problem, or say why it is not accepted."""
+    report = get_object_or_404(HealthReport, pk=pk)
+    try:
+        if action == 'accept':
+            report = health.accept_report(report, actor=request.user,
+                                          condition=str(request.data.get('condition') or '').strip() or None,
+                                          notes=str(request.data.get('notes') or ''))
+        elif action == 'reject':
+            report = health.reject_report(report, actor=request.user, reason=request.data.get('reason'))
+        else:
+            return Response({'detail': 'Accept or reject.'}, status=status.HTTP_400_BAD_REQUEST)
+    except health.HealthRecordError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(health.report_row(report))
+
+
+@api_view(['GET', 'POST'])
+def student_own_health(request):
+    """The student's own health records and reports, and a new report with
+    the hospital's document (said 16 October 2026)."""
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Sign in to the student portal first.'}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == 'POST':
+        try:
+            health.report_condition(profile, condition=request.data.get('condition'),
+                                    facility=request.data.get('facility'),
+                                    issued_on=request.data.get('issued_on'),
+                                    upload=request.data.get('file'))
+        except health.HealthRecordError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    records = HealthRecord.objects.filter(profile=profile)
+    return Response({
+        'records': [{'condition': r.condition, 'facility': r.facility, 'issued_on': r.issued_on,
+                     'notes': r.notes, 'is_current': r.is_current, 'recorded_at': r.recorded_at}
+                    for r in records],
+        'reports': [health.report_row(r) for r in
+                    HealthReport.objects.filter(profile=profile).exclude(status=HealthReport.RECORDED)
+                    .select_related('profile', 'document')],
+    }, status=status.HTTP_201_CREATED if request.method == 'POST' else status.HTTP_200_OK)
 
 
 @api_view(['POST'])
@@ -2776,8 +2840,10 @@ def student_hostel(request):
         if applications.filter(status=HostelApplication.PENDING).exists():
             return Response({'detail': 'Your application is already waiting for an answer.'},
                             status=status.HTTP_400_BAD_REQUEST)
-        HostelApplication.objects.create(profile=profile, academic_year=year, semester=semester,
-                                         reason=str(request.data.get('reason') or '')[:500])
+        application = HostelApplication.objects.create(
+            profile=profile, academic_year=year, semester=semester,
+            reason=str(request.data.get('reason') or '')[:500])
+        notifications.hostel_applied(application)
     return Response({
         'academic_year': year.name,
         'residence': residence.residence if residence else '',
@@ -2828,6 +2894,7 @@ def decide_hostel_application(request, pk):
         application.decided_at = timezone.now()
         application.decision_note = note
         application.save(update_fields=['status', 'decided_by', 'decided_at', 'decision_note'])
+        notifications.hostel_decided(application)
     return Response(_hostel_application_row(application))
 
 
@@ -4094,31 +4161,57 @@ class InventoryLocationViewSet(viewsets.ModelViewSet):
     queryset = InventoryLocation.objects.all()
     serializer_class = InventoryLocationSerializer
     permission_classes = [IsEstateOfficer]
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']
 
 
 class AssetCategoryViewSet(viewsets.ModelViewSet):
     queryset = AssetCategory.objects.all()
     serializer_class = AssetCategorySerializer
     permission_classes = [IsEstateOfficer]
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']
 
 
 class InventoryItemTypeViewSet(viewsets.ModelViewSet):
     queryset = InventoryItemType.objects.select_related('category')
     serializer_class = InventoryItemTypeSerializer
     permission_classes = [IsEstateOfficer]
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']
+
+
+class IsEstateOrPropertyReader(BasePermission):
+    """The estate officer keeps the register; DPFPA and the Principal read it."""
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return can_read_inventory(request.user)
+        return is_estate_officer(request.user)
+
+
+def _inventory_error(exc):
+    return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AssetViewSet(viewsets.ModelViewSet):
+    """The register. An asset is registered and its description corrected
+    here; where it is, who holds it, how many and in what condition change
+    only through what happens to it (inventory.py). Nothing is deleted."""
     serializer_class = AssetSerializer
-    permission_classes = [IsEstateOfficer]
+    permission_classes = [IsEstateOrPropertyReader]
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']
 
     def get_queryset(self):
-        qs = Asset.objects.select_related('category', 'location')
+        qs = Asset.objects.select_related('category', 'location', 'custodian')
+        wanted = self.request.query_params.get('status')
+        if wanted:
+            qs = qs.filter(status=wanted)
+        elif self.request.query_params.get('include_disposed') not in ('1', 'true'):
+            qs = qs.exclude(status=Asset.DISPOSED)
         search = self.request.query_params.get('search', '').strip()
         if search:
             qs = qs.filter(Q(asset_tag__icontains=search) | Q(name__icontains=search) |
-                           Q(description__icontains=search) | Q(responsible_office__icontains=search))
-        for field in ('category', 'location', 'condition'):
+                           Q(description__icontains=search) | Q(responsible_office__icontains=search) |
+                           Q(serial_number__icontains=search))
+        for field in ('category', 'location', 'condition', 'custodian'):
             value = self.request.query_params.get(field)
             if value:
                 qs = qs.filter(**{field: value})
@@ -4131,97 +4224,317 @@ class AssetViewSet(viewsets.ModelViewSet):
         serializer.save(updated_by=self.request.user)
 
 
-class AssetTransferViewSet(viewsets.ModelViewSet):
+class AssetTransferViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
+                           viewsets.GenericViewSet):
+    """Moving an asset. Recorded, never edited."""
     queryset = AssetTransfer.objects.select_related('asset', 'from_location', 'to_location', 'resulting_asset')
     serializer_class = AssetTransferSerializer
-    permission_classes = [IsEstateOfficer]
+    permission_classes = [IsEstateOrPropertyReader]
 
-    def perform_create(self, serializer):
-        asset = serializer.validated_data['asset']
-        to_location = serializer.validated_data['to_location']
-        if asset.location_id == to_location.id:
-            raise PermissionDenied('Choose a different destination location.')
-        with transaction.atomic():
-            quantity = serializer.validated_data.get('quantity', 1)
-            responsible = serializer.validated_data['new_responsible_office']
-            from_location = asset.location
-            if quantity < asset.quantity:
-                suffix = 1
-                while Asset.objects.filter(asset_tag=f'{asset.asset_tag}/{suffix:03d}').exists():
-                    suffix += 1
-                moved_asset = Asset.objects.create(
-                    asset_tag=f'{asset.asset_tag}/{suffix:03d}', name=asset.name,
-                    description=asset.description, category=asset.category, location=to_location,
-                    responsible_office=responsible, quantity=quantity, condition=asset.condition,
-                    created_by=self.request.user, updated_by=self.request.user,
-                )
-                asset.quantity -= quantity
-                asset.updated_by = self.request.user
-                asset.save(update_fields=['quantity', 'updated_by', 'updated_at'])
-            else:
-                moved_asset = asset
-                asset.location = to_location
-                asset.responsible_office = responsible
-                asset.updated_by = self.request.user
-                asset.save(update_fields=['location', 'responsible_office', 'updated_by', 'updated_at'])
-            serializer.save(from_location=from_location, resulting_asset=moved_asset, recorded_by=self.request.user)
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            record = inventory.transfer(
+                data['asset'], to_location=data['to_location'], quantity=data.get('quantity', 1),
+                custodian=data.get('new_custodian'), reason=data.get('reason', ''),
+                transferred_at=data['transferred_at'], actor=request.user)
+        except inventory.InventoryError as exc:
+            return _inventory_error(exc)
+        return Response(self.get_serializer(record).data, status=status.HTTP_201_CREATED)
 
 
-class AssetMaintenanceViewSet(viewsets.ModelViewSet):
+def _date(value):
+    from datetime import date as _d
+    try:
+        return _d.fromisoformat(str(value or '').strip())
+    except ValueError:
+        return None
+
+
+class AssetMaintenanceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
+                              viewsets.GenericViewSet):
+    """Repairs: reported, started, completed — each a step, not an edit."""
     queryset = AssetMaintenance.objects.select_related('asset')
     serializer_class = AssetMaintenanceSerializer
-    permission_classes = [IsEstateOfficer]
+    permission_classes = [IsEstateOrPropertyReader]
 
-    def perform_create(self, serializer):
-        asset = serializer.validated_data['asset']
-        quantity = serializer.validated_data.get('quantity', 1)
-        with transaction.atomic():
-            if quantity < asset.quantity:
-                suffix = 1
-                while Asset.objects.filter(asset_tag=f'{asset.asset_tag}/{suffix:03d}').exists():
-                    suffix += 1
-                maintenance_asset = Asset.objects.create(
-                    asset_tag=f'{asset.asset_tag}/{suffix:03d}', name=asset.name,
-                    description=asset.description, category=asset.category, location=asset.location,
-                    responsible_office=asset.responsible_office, quantity=quantity,
-                    condition=asset.condition, created_by=self.request.user, updated_by=self.request.user,
-                )
-                asset.quantity -= quantity
-                asset.updated_by = self.request.user
-                asset.save(update_fields=['quantity', 'updated_by', 'updated_at'])
-                serializer.save(asset=maintenance_asset, recorded_by=self.request.user)
-            else:
-                serializer.save(recorded_by=self.request.user)
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            record = inventory.report_repair(data['asset'], quantity=data.get('quantity', 1), issue=data.get('issue'),
+                                             reported_date=data['reported_date'], provider=data.get('provider', ''),
+                                             actor=request.user)
+        except inventory.InventoryError as exc:
+            return _inventory_error(exc)
+        return Response(self.get_serializer(record).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def start(self, request, pk=None):
+        try:
+            record = inventory.start_repair(self.get_object(), provider=str(request.data.get('provider') or ''),
+                                            actor=request.user)
+        except inventory.InventoryError as exc:
+            return _inventory_error(exc)
+        return Response(self.get_serializer(record).data)
+
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        try:
+            record = inventory.complete_repair(
+                self.get_object(), outcome=str(request.data.get('outcome') or ''),
+                action_taken=str(request.data.get('action_taken') or ''),
+                completed_date=_date(request.data.get('completed_date')),
+                cost=request.data.get('cost') or 0, provider=str(request.data.get('provider') or ''),
+                actor=request.user)
+        except (inventory.InventoryError, ArithmeticError) as exc:
+            return _inventory_error(exc)
+        return Response(self.get_serializer(record).data)
 
 
-class InventoryInspectionViewSet(viewsets.ModelViewSet):
-    queryset = InventoryInspection.objects.select_related('location').prefetch_related('items')
+class InventoryInspectionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
+                                 viewsets.GenericViewSet):
+    """A location checked. Opened, results recorded, then closed — the review
+    that applies them to the register — and locked."""
+    queryset = InventoryInspection.objects.select_related('location', 'closed_by').prefetch_related('items')
     serializer_class = InventoryInspectionSerializer
-    permission_classes = [IsEstateOfficer]
+    permission_classes = [IsEstateOrPropertyReader]
 
     def perform_create(self, serializer):
-        serializer.save(recorded_by=self.request.user)
+        serializer.save(recorded_by=self.request.user, status=InventoryInspection.OPEN)
+
+    @action(detail=True, methods=['get'])
+    def checklist(self, request, pk=None):
+        inspection = self.get_object()
+        items = {item.asset_id: item for item in inspection.items.select_related('found_location')}
+        assets = (inventory.inspection_assets(inspection) if inspection.status == InventoryInspection.OPEN
+                  else Asset.objects.filter(id__in=items.keys()))
+        return Response([{
+            'asset': asset.id, 'asset_tag': asset.asset_tag, 'name': asset.name,
+            'condition': asset.condition, 'status': asset.status, 'status_display': asset.get_status_display(),
+            'result': items[asset.id].result if asset.id in items else '',
+            'new_condition': items[asset.id].new_condition if asset.id in items else '',
+            'found_location': items[asset.id].found_location_id if asset.id in items else None,
+            'note': items[asset.id].note if asset.id in items else '',
+        } for asset in assets.order_by('asset_tag')])
+
+    @action(detail=True, methods=['post'])
+    def close(self, request, pk=None):
+        try:
+            inspection = inventory.close_inspection(self.get_object(), actor=request.user)
+        except inventory.InventoryError as exc:
+            return _inventory_error(exc)
+        return Response(self.get_serializer(inspection).data)
 
 
-class InventoryInspectionItemViewSet(viewsets.ModelViewSet):
-    queryset = InventoryInspectionItem.objects.select_related('inspection', 'asset')
+class InventoryInspectionItemViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):
+    """One result, recorded (or recorded again) while the inspection is open."""
+    queryset = InventoryInspectionItem.objects.select_related('inspection', 'asset', 'found_location')
     serializer_class = InventoryInspectionItemSerializer
-    permission_classes = [IsEstateOfficer]
+    permission_classes = [IsEstateOrPropertyReader]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            item = inventory.record_result(data['inspection'], data['asset'], result=data['result'],
+                                           new_condition=data.get('new_condition', ''),
+                                           found_location=data.get('found_location'), note=data.get('note', ''))
+        except inventory.InventoryError as exc:
+            return _inventory_error(exc)
+        return Response(self.get_serializer(item).data, status=status.HTTP_201_CREATED)
+
+    def get_serializer(self, *args, **kwargs):
+        serializer = super().get_serializer(*args, **kwargs)
+        # The pair is unique; recording a result again replaces it (while open).
+        if hasattr(serializer, 'validators'):
+            serializer.validators = []
+        return serializer
 
 
-class AssetDisposalViewSet(viewsets.ModelViewSet):
-    queryset = AssetDisposal.objects.select_related('asset')
+class AssetDisposalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
+                           viewsets.GenericViewSet):
+    """Writing property off: the estate officer proposes, DPFPA approves or
+    rejects, the estate officer records it carried out."""
+    queryset = AssetDisposal.objects.select_related('asset', 'recorded_by', 'decided_by')
     serializer_class = AssetDisposalSerializer
-    permission_classes = [IsEstateOfficer]
+    permission_classes = [IsEstateOrPropertyReader]
 
-    def perform_create(self, serializer):
-        serializer.save(recorded_by=self.request.user)
+    def get_permissions(self):
+        if self.action == 'decide':
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        wanted = self.request.query_params.get('status')
+        return qs.filter(status=wanted) if wanted else qs
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            disposal = inventory.propose_disposal(data['asset'], quantity=data.get('quantity', 1),
+                                                  reason=data.get('reason'), method=data.get('method', ''),
+                                                  proposed_date=data['proposed_date'], actor=request.user)
+        except inventory.InventoryError as exc:
+            return _inventory_error(exc)
+        return Response(self.get_serializer(disposal).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def decide(self, request, pk=None):
+        if not can_approve_disposals(request.user):
+            raise PermissionDenied('DPFPA approves disposals.')
+        decision = str(request.data.get('decision') or '')
+        if decision not in ('approve', 'reject'):
+            return Response({'detail': 'Approve or reject.'}, status=status.HTTP_400_BAD_REQUEST)
+        disposal = get_object_or_404(AssetDisposal, pk=pk)
+        try:
+            disposal = inventory.decide_disposal(disposal, approve=decision == 'approve',
+                                                 note=str(request.data.get('note') or ''), actor=request.user)
+        except inventory.InventoryError as exc:
+            return _inventory_error(exc)
+        return Response(self.get_serializer(disposal).data)
+
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        try:
+            disposal = inventory.complete_disposal(
+                self.get_object(), disposal_date=_date(request.data.get('disposal_date')),
+                method=str(request.data.get('method') or ''), reference=str(request.data.get('reference') or ''),
+                proceeds=request.data.get('proceeds') or 0, actor=request.user)
+        except (inventory.InventoryError, ArithmeticError) as exc:
+            return _inventory_error(exc)
+        return Response(self.get_serializer(disposal).data)
+
+
+@api_view(['GET'])
+@login_required
+def inventory_staff(request):
+    """The members of staff an asset can be in the care of."""
+    if not can_read_inventory(request.user):
+        raise PermissionDenied('For the estate officer.')
+    return Response(inventory.staff_directory())
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def asset_handovers(request):
+    """GET: the handovers made. POST {from_user (blank: an older record with no
+    custodian), to_user, assets?: [ids], note, handed_at}: hand over."""
+    if request.method == 'GET':
+        if not can_read_inventory(request.user):
+            raise PermissionDenied('For the estate officer.')
+        rows = AssetHandover.objects.select_related('from_user', 'to_user').prefetch_related('assets')[:200]
+        return Response(AssetHandoverSerializer(rows, many=True).data)
+    if not is_estate_officer(request.user):
+        raise PermissionDenied('The estate officer records a handover.')
+    from_id = str(request.data.get('from_user') or '')
+    from_user = get_user_model().objects.filter(pk=from_id).first() if from_id.isdigit() else None
+    if from_id and from_user is None:
+        return Response({'detail': 'Choose who is handing over.'}, status=status.HTTP_400_BAD_REQUEST)
+    asset_ids = request.data.get('assets')
+    try:
+        record = inventory.handover(from_user=from_user, to_user=request.data.get('to_user'),
+                                    assets=[int(a) for a in asset_ids] if asset_ids else None,
+                                    note=str(request.data.get('note') or ''),
+                                    handed_at=_date(request.data.get('handed_at')), actor=request.user)
+    except (inventory.InventoryError, ValueError, TypeError) as exc:
+        return _inventory_error(exc)
+    return Response(AssetHandoverSerializer(record).data, status=status.HTTP_201_CREATED)
+
+
+# ── THE LABORATORY ────────────────────────────────────────────────────────────
+
+class IsLabKeeper(BasePermission):
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return can_read_lab_stock(request.user)
+        return can_keep_lab_stock(request.user)
+
+
+class LabItemViewSet(viewsets.ModelViewSet):
+    queryset = LabItem.objects.all()
+    serializer_class = LabItemSerializer
+    permission_classes = [IsLabKeeper]
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']
+
+    def list(self, request, *args, **kwargs):
+        return Response(inventory.lab_balances())
+
+
+class LabStockMovementViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):
+    """The lab's stock book: received, issued, written off. Never edited."""
+    serializer_class = LabStockMovementSerializer
+    permission_classes = [IsLabKeeper]
+
+    def get_queryset(self):
+        qs = LabStockMovement.objects.select_related('item', 'module', 'recorded_by')
+        for field in ('item', 'kind'):
+            value = self.request.query_params.get(field)
+            if value:
+                qs = qs.filter(**{field: value})
+        return qs[:500]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            movement = inventory.record_lab_movement(
+                data['item'], kind=data['kind'], quantity=data['quantity'], moved_on=data['moved_on'],
+                actor=request.user, supplier=data.get('supplier', ''), unit_cost=data.get('unit_cost'),
+                batch_number=data.get('batch_number', ''), expiry_date=data.get('expiry_date'),
+                module=data.get('module'), issued_to=data.get('issued_to', ''), note=data.get('note', ''))
+        except inventory.InventoryError as exc:
+            return _inventory_error(exc)
+        return Response(self.get_serializer(movement).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@login_required
+def lab_report(request):
+    if not can_read_lab_stock(request.user):
+        raise PermissionDenied('For the lab technician, DPFPA and the Principal.')
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Stock'
+    ws.append(['Item', 'Category', 'Unit', 'Balance', 'Reorder level', 'Low', 'Soonest expiry'])
+    for row in inventory.lab_balances():
+        ws.append([row['name'], row['category_display'], row['unit'], float(row['balance']),
+                   float(row['reorder_level']), 'LOW' if row['low'] else '', row['soonest_expiry']])
+    book = wb.create_sheet('Stock book')
+    book.append(['Date', 'Item', 'Kind', 'Quantity', 'Unit', 'Supplier', 'Unit cost', 'Batch', 'Expiry',
+                 'Module', 'Issued to', 'Note', 'Recorded by'])
+    for m in LabStockMovement.objects.select_related('item', 'module', 'recorded_by'):
+        book.append([m.moved_on, m.item.name, m.get_kind_display(), float(m.quantity), m.item.unit, m.supplier,
+                     float(m.unit_cost) if m.unit_cost is not None else None, m.batch_number, m.expiry_date,
+                     m.module.code if m.module_id else '', m.issued_to, m.note, inventory.custodian_label(m.recorded_by)])
+    for sheet in (ws, book):
+        for cell in sheet[1]:
+            cell.font = Font(bold=True, color='FFFFFF'); cell.fill = PatternFill('solid', fgColor='1F4E78')
+        sheet.freeze_panes = 'A2'
+    output = BytesIO(); neutralise_formulas(wb).save(output)
+    response = HttpResponse(output.getvalue(),
+                            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="laboratory_stock.xlsx"'
+    return response
 
 
 INVENTORY_HEADERS = [
-    'Office/Location *', 'Responsible Person/Office *', 'Item Type *',
+    'Office/Location *', 'Custodian (staff) *', 'Item Type *',
     'Tag Prefix *', 'Starting Number *', 'Quantity *', 'Condition *', 'Description',
+    'Purchase Date', 'Unit Cost (TZS)', 'Supplier', 'Funding Source',
 ]
+
+
+def _staff_choice(user_row):
+    return f"{user_row['name']} ({user_row['username']})"
 
 
 @api_view(['GET'])
@@ -4236,7 +4549,7 @@ def inventory_template(request):
         cell.font = Font(bold=True, color='FFFFFF')
         cell.fill = PatternFill('solid', fgColor='C0392B')
     ws.freeze_panes = 'A2'
-    widths = [30, 32, 32, 22, 18, 14, 20, 38]
+    widths = [30, 32, 32, 22, 18, 14, 20, 38, 16, 16, 26, 20]
     for idx, width in enumerate(widths, 1):
         ws.column_dimensions[chr(64 + idx)].width = width
     lists = wb.create_sheet('Lists')
@@ -4248,6 +4561,15 @@ def inventory_template(request):
     for row, value in enumerate(locations, 1): lists.cell(row, 2, value)
     for row, value in enumerate(conditions, 1): lists.cell(row, 3, value)
     for row, value in enumerate(item_types, 1): lists.cell(row, 4, value)
+    staff = [_staff_choice(row) for row in inventory.staff_directory()]
+    funding = [label for _, label in Asset.FUNDING_CHOICES]
+    for row, value in enumerate(staff, 1): lists.cell(row, 5, value)
+    for row, value in enumerate(funding, 1): lists.cell(row, 6, value)
+    if staff:
+        dv = DataValidation(type='list', formula1=f"'Lists'!$E$1:$E${len(staff)}")
+        ws.add_data_validation(dv); dv.add('B2:B5000')
+    dv = DataValidation(type='list', formula1=f"'Lists'!$F$1:$F${len(funding)}")
+    ws.add_data_validation(dv); dv.add('L2:L5000')
     if locations:
         dv = DataValidation(type='list', formula1=f"'Lists'!$B$1:$B${len(locations)}")
         ws.add_data_validation(dv); dv.add('A2:A5000')
@@ -4257,7 +4579,8 @@ def inventory_template(request):
     dv = DataValidation(type='list', formula1=f"'Lists'!$C$1:$C${len(conditions)}")
     ws.add_data_validation(dv); dv.add('G2:G5000')
     instructions = wb.create_sheet('Instructions', 0)
-    instructions.append(['COLLEGE INVENTORY IMPORT TEMPLATE — Version 1'])
+    instructions.append(['COLLEGE INVENTORY IMPORT TEMPLATE — Version 2'])
+    instructions.append(['The custodian is a member of staff chosen from the list; purchase date, cost, supplier and funding are optional but make the register worth something.'])
     instructions.append(['Every column marked * is required. Do not rename or reorder headings.'])
     instructions.append(['Choose one office and item type per row. Quantity is expanded into separate tags.'])
     instructions.append(['Example: prefix BPCH/CH, start 1, quantity 30 creates BPCH/CH/1 through BPCH/CH/30.'])
@@ -4283,13 +4606,21 @@ def _parse_inventory_upload(upload):
     item_types = {f'{x.name} — {x.category.name}'.casefold(): x for x in InventoryItemType.objects.filter(is_active=True).select_related('category')}
     conditions = {label.casefold(): value for value, label in Asset.CONDITION_CHOICES}
     existing = {x.casefold() for x in Asset.objects.values_list('asset_tag', flat=True)}
+    staff, staff_names = {}, {}
+    for row in inventory.staff_directory():
+        staff_names[row['id']] = row['name']
+        staff[_staff_choice(row).casefold()] = row['id']
+        staff[row['username'].casefold()] = row['id']
+    funding = {label.casefold(): value for value, label in Asset.FUNDING_CHOICES}
     seen, rows, errors = set(), [], []
-    fields = ['location', 'responsible_office', 'item_type', 'tag_prefix', 'start_number', 'quantity', 'condition', 'description']
-    for number, values in enumerate(ws.iter_rows(min_row=2, max_col=8, values_only=True), 2):
+    fields = ['location', 'custodian', 'item_type', 'tag_prefix', 'start_number', 'quantity', 'condition', 'description',
+              'purchase_date', 'unit_cost', 'supplier', 'funding_source']
+    optional = {'description', 'purchase_date', 'unit_cost', 'supplier', 'funding_source'}
+    for number, values in enumerate(ws.iter_rows(min_row=2, max_col=len(fields), values_only=True), 2):
         if not any(v not in (None, '') for v in values): continue
         data = dict(zip(fields, values))
         for key, value in data.items():
-            if key == 'description':
+            if key in optional:
                 continue
             if value is None or str(value).strip() == '': errors.append({'row': number, 'field': key, 'message': 'Required.'})
         location = locations.get(str(data['location'] or '').strip().casefold())
@@ -4298,6 +4629,25 @@ def _parse_inventory_upload(upload):
         if data['location'] and not location: errors.append({'row': number, 'field': 'location', 'message': 'Choose a location from the template list.'})
         if data['item_type'] and not item_type: errors.append({'row': number, 'field': 'item_type', 'message': 'Choose an item type from the template list.'})
         if data['condition'] and not condition: errors.append({'row': number, 'field': 'condition', 'message': 'Choose a condition from the template list.'})
+        custodian = staff.get(str(data['custodian'] or '').strip().casefold())
+        if data['custodian'] and not custodian: errors.append({'row': number, 'field': 'custodian', 'message': 'Choose a member of staff from the template list.'})
+        value = {}
+        if data['purchase_date'] not in (None, ''):
+            bought = data['purchase_date'] if hasattr(data['purchase_date'], 'year') else _date(data['purchase_date'])
+            if bought is None: errors.append({'row': number, 'field': 'purchase_date', 'message': 'Write the date as YYYY-MM-DD.'})
+            else: value['purchase_date'] = bought.date() if hasattr(bought, 'date') and callable(bought.date) else bought
+        if data['unit_cost'] not in (None, ''):
+            try:
+                cost = Decimal(str(data['unit_cost']).replace(',', ''))
+                if cost < 0: raise ArithmeticError
+                value['unit_cost'] = cost
+            except (ArithmeticError, ValueError):
+                errors.append({'row': number, 'field': 'unit_cost', 'message': 'A cost in TZS, e.g. 85000.'})
+        if data['supplier']: value['supplier'] = str(data['supplier']).strip()[:200]
+        if data['funding_source'] not in (None, ''):
+            source = funding.get(str(data['funding_source']).strip().casefold())
+            if source is None: errors.append({'row': number, 'field': 'funding_source', 'message': 'Choose a funding source from the list.'})
+            else: value['funding_source'] = source
         try:
             quantity = int(data['quantity'])
             start = int(data['start_number'])
@@ -4305,7 +4655,7 @@ def _parse_inventory_upload(upload):
         except (TypeError, ValueError):
             quantity, start = 0, 0; errors.append({'row': number, 'field': 'quantity', 'message': 'Use quantity 1–500 and a positive starting number.'})
         prefix = str(data['tag_prefix'] or '').strip().rstrip('/')
-        if item_type and location and condition and quantity:
+        if item_type and location and condition and quantity and custodian:
             for sequence in range(start, start + quantity):
                 tag = f'{prefix}/{sequence}'
                 if tag.casefold() in existing or tag.casefold() in seen:
@@ -4314,8 +4664,8 @@ def _parse_inventory_upload(upload):
                 rows.append({'asset_tag': tag, 'name': item_type.name,
                              'description': str(data['description'] or item_type.description).strip(),
                              'category': item_type.category, 'item_type': item_type, 'location': location,
-                             'responsible_office': str(data['responsible_office'] or '').strip(),
-                             'quantity': 1, 'condition': condition})
+                             'custodian_id': custodian, 'responsible_office': staff_names[custodian],
+                             'quantity': 1, 'condition': condition, 'status': Asset.ACTIVE, **value})
     if not rows: errors.append({'row': 0, 'field': 'File', 'message': 'No item rows were found.'})
     return rows, errors
 
@@ -4337,6 +4687,10 @@ def inventory_import(request):
             Asset.objects.create(**row, created_by=request.user, updated_by=request.user)
         AssetImport.objects.create(uploaded_by=request.user, file_name=upload.name, imported_rows=len(rows))
     return Response({'valid': True, 'imported': len(rows)}, status=201)
+
+
+#: What an asset is worth and where it came from; optional when registering.
+VALUE_FIELDS = ('purchase_date', 'unit_cost', 'supplier', 'serial_number', 'funding_source', 'warranty_until', 'expense')
 
 
 @api_view(['POST'])
@@ -4369,9 +4723,10 @@ def inventory_bulk_create(request):
         'description': request.data.get('description', ''),
         'category': request.data.get('category'),
         'location': request.data.get('location'),
-        'responsible_office': request.data.get('responsible_office'),
+        'custodian': request.data.get('custodian'),
         'condition': request.data.get('condition'),
         'quantity': 1,
+        **{field: request.data.get(field) for field in VALUE_FIELDS if request.data.get(field) not in (None, '')},
     }
     validated = []
     for tag in tags:
@@ -4400,12 +4755,14 @@ def inventory_office_register(request):
     if not is_estate_officer(request.user):
         return Response({'detail': 'Estate Officer access required.'}, status=403)
     location_id = request.data.get('location')
-    responsible = str(request.data.get('responsible_office', '')).strip()
+    custodian = request.data.get('custodian')
     rows = request.data.get('items')
     if not InventoryLocation.objects.filter(pk=location_id, is_active=True).exists():
         return Response({'location': ['Choose an active office/location.']}, status=400)
-    if not responsible:
-        return Response({'responsible_office': ['Enter the responsible person or office.']}, status=400)
+    try:
+        inventory._staff(custodian)
+    except inventory.InventoryError as exc:
+        return Response({'custodian': [str(exc)]}, status=400)
     if not isinstance(rows, list) or not rows:
         return Response({'items': ['Add at least one item type.']}, status=400)
 
@@ -4447,8 +4804,9 @@ def inventory_office_register(request):
                 prepared.append({
                     'asset_tag': tag, 'name': item_type.name, 'description': item_type.description,
                     'category': item_type.category_id, 'item_type': item_type.id,
-                    'location': location_id, 'responsible_office': responsible,
+                    'location': location_id, 'custodian': custodian,
                     'quantity': 1, 'condition': condition,
+                    **{field: row.get(field) for field in VALUE_FIELDS if row.get(field) not in (None, '')},
                 })
         if len(generated) > 1000:
             errors.append({'row': 0, 'field': 'items', 'message': 'One office submission may create at most 1,000 asset records.'})
@@ -4478,8 +4836,12 @@ def inventory_summary(request):
     manager reports, and for the estate manager. Read-only."""
     if not can_read_inventory(request.user):
         return Response({'detail': 'For the estate manager and DPFPA.'}, status=403)
-    assets = Asset.objects.all()
+    # Disposed property has left the register; it is in the disposals report.
+    assets = Asset.objects.exclude(status=Asset.DISPOSED)
     condition_names = dict(Asset.CONDITION_CHOICES)
+    status_names = dict(Asset.STATUS_CHOICES)
+    value = assets.aggregate(total=Sum(F('unit_cost') * F('quantity'), output_field=DecimalField()))['total'] or 0
+    unvalued = assets.filter(unit_cost__isnull=True).count()
 
     def grouped(field, label):
         return [{'name': label(row[field]), 'records': row['records'], 'items': row['items'] or 0}
@@ -4492,8 +4854,13 @@ def inventory_summary(request):
         'by_condition': grouped('condition', lambda key: condition_names.get(key, key)),
         'by_category': grouped('category__name', lambda key: key),
         'by_location': grouped('location__name', lambda key: key),
+        'by_status': grouped('status', lambda key: status_names.get(key, key)),
+        'value': value, 'unvalued_records': unvalued,
         'maintenance_open': AssetMaintenance.objects.exclude(status=AssetMaintenance.COMPLETED).count(),
         'disposals_proposed': AssetDisposal.objects.filter(status=AssetDisposal.PROPOSED).count(),
+        'disposals_approved': AssetDisposal.objects.filter(status=AssetDisposal.APPROVED).count(),
+        'missing': assets.filter(status=Asset.MISSING).count(),
+        'under_repair': assets.filter(status=Asset.UNDER_REPAIR).count(),
     })
 
 
@@ -4525,16 +4892,32 @@ def inventory_report(request):
                 ws.append([inspection.inspection_date, inspection.location.name, inspection.inspector_name,
                            inspection.get_status_display(), '', '', 'No items checked', ''])
     elif report_type == 'disposals':
-        ws.title = 'Disposals'; ws.append(['Asset Tag', 'Asset', 'Status', 'Reason', 'Method', 'Proposed', 'Disposed', 'Reference'])
-        for row in AssetDisposal.objects.select_related('asset'):
-            ws.append([row.asset.asset_tag, row.asset.name, row.get_status_display(), row.reason, row.method,
-                       row.proposed_date, row.disposal_date, row.reference])
+        ws.title = 'Disposals'; ws.append(['Asset Tag', 'Asset', 'Quantity', 'Status', 'Reason', 'Method', 'Proposed',
+                                           'Proposed by', 'Decided by', 'Decided', 'Decision note', 'Disposed',
+                                           'Reference', 'Book value', 'Proceeds'])
+        for row in AssetDisposal.objects.select_related('asset', 'recorded_by', 'decided_by'):
+            ws.append([row.asset.asset_tag, row.asset.name, row.quantity, row.get_status_display(), row.reason,
+                       row.method, row.proposed_date, inventory.custodian_label(row.recorded_by),
+                       inventory.custodian_label(row.decided_by) if row.decided_by_id else '',
+                       row.decided_at.date() if row.decided_at else None, row.decision_note, row.disposal_date,
+                       row.reference, float(row.asset.total_value), float(row.proceeds)])
+    elif report_type == 'handovers':
+        ws.title = 'Handovers'; ws.append(['Date', 'From', 'To', 'Asset Tag', 'Asset', 'Note'])
+        for record in AssetHandover.objects.select_related('from_user', 'to_user').prefetch_related('assets'):
+            for asset in record.assets.all():
+                ws.append([record.handed_at, inventory.custodian_label(record.from_user) if record.from_user_id else '',
+                           inventory.custodian_label(record.to_user), asset.asset_tag, asset.name, record.note])
     else:
         report_type = 'assets'; ws.title = 'Asset Register'
-        ws.append(['Asset Tag', 'Asset Name', 'Description', 'Category', 'Location', 'Responsible Office', 'Quantity', 'Condition'])
-        for row in Asset.objects.select_related('category', 'location'):
+        ws.append(['Asset Tag', 'Asset Name', 'Description', 'Category', 'Location', 'Custodian', 'Quantity',
+                   'Condition', 'Status', 'Serial No.', 'Purchased', 'Unit Cost', 'Total Value', 'Supplier',
+                   'Funding', 'Warranty Until'])
+        for row in Asset.objects.exclude(status=Asset.DISPOSED).select_related('category', 'location', 'custodian'):
             ws.append([row.asset_tag, row.name, row.description, row.category.name, row.location.name,
-                       row.responsible_office, row.quantity, row.get_condition_display()])
+                       row.responsible_office, row.quantity, row.get_condition_display(), row.get_status_display(),
+                       row.serial_number, row.purchase_date,
+                       float(row.unit_cost) if row.unit_cost is not None else None, float(row.total_value),
+                       row.supplier, row.get_funding_source_display(), row.warranty_until])
     for cell in ws[1]:
         cell.font = Font(bold=True, color='FFFFFF'); cell.fill = PatternFill('solid', fgColor='1F4E78')
     ws.freeze_panes = 'A2'; output = BytesIO(); neutralise_formulas(wb).save(output)

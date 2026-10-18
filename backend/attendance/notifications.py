@@ -17,8 +17,8 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from .models import (
-    DeputyAcademicProfile, DeputyFinanceProfile, HeadOfDepartmentProfile, Notification,
-    PrincipalProfile, SecretaryProfile,
+    AccountantProfile, DeanOfStudentsProfile, DeputyAcademicProfile, DeputyFinanceProfile,
+    HeadOfDepartmentProfile, Notification, PrincipalProfile, SecretaryProfile,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,17 @@ def expense_approvers():
 
 def dparc():
     return _users_holding(DeputyAcademicProfile)
+
+
+def deans():
+    """The Dean of Students, who deals with students' welfare day to day: told
+    about every request, postponement and hostel application (said 16 October
+    2026). Told, not asked — the offices that decide still decide."""
+    return _users_holding(DeanOfStudentsProfile)
+
+
+def accountants():
+    return _users_holding(AccountantProfile)
 
 
 def deciders():
@@ -114,6 +125,10 @@ def request_submitted(service_request):
            title=f'{service_request.form.title}',
            body=f'{student} has asked for this. Check it and pass it on for a decision.',
            link='forms:requests')
+    notify(deans(), kind=Notification.REQUEST_SUBMITTED,
+           title=f'{service_request.form.title}: {student}',
+           body='A student has asked for this. For your follow-up; the secretary handles it.',
+           link='forms:requests')
 
 
 def request_forwarded(service_request):
@@ -141,6 +156,10 @@ def request_decided(service_request):
                     else 'Nothing further to prepare.')),
            link='forms:requests')
 
+    notify(deans(), kind=Notification.REQUEST_DECIDED,
+           title=f'{service_request.form.title} — {verdict}',
+           body=f'{student}. {by} {verdict} it.', link='forms:requests')
+
     notify(profile=service_request.profile, kind=Notification.REQUEST_DECIDED,
            title=f'{service_request.form.title} — {verdict}',
            body=service_request.decision_note or f'Your request has been {verdict}.',
@@ -157,7 +176,7 @@ def document_sent(service_request, attachment):
 def postponement_requested(postponement):
     """A student asked to postpone, or records wrote down a paper request.
     The Principal decides it; DPARC follows the list."""
-    notify(principal_and_dparc(), kind=Notification.POSTPONEMENT_REQUESTED,
+    notify(principal_and_dparc() + deans(), kind=Notification.POSTPONEMENT_REQUESTED,
            title=f'Postponement: {postponement.profile.name}',
            body=f'{postponement.semester.label}. Waiting on the Principal\'s decision.',
            link='status:postponements')
@@ -166,7 +185,7 @@ def postponement_requested(postponement):
 def postponement_decided(postponement):
     """The Principal decided. DPARC is told, and so is the student."""
     verdict = 'approved' if postponement.status == postponement.APPROVED else 'declined'
-    notify(dparc(), kind=Notification.POSTPONEMENT_DECIDED,
+    notify(dparc() + deans(), kind=Notification.POSTPONEMENT_DECIDED,
            title=f'Postponement {verdict}: {postponement.profile.name}',
            body=postponement.semester.label, link='status:postponements')
     if verdict == 'approved' and postponement.return_year_id:
@@ -176,3 +195,25 @@ def postponement_decided(postponement):
         body = postponement.decision_note
     notify(profile=postponement.profile, kind=Notification.POSTPONEMENT_DECIDED,
            title=f'Your postponement was {verdict}', body=body or '')
+
+
+def hostel_applied(application):
+    """A student asked for a hostel place. The accountant decides; the Dean of
+    Students is told."""
+    title = f'Hostel application: {application.profile.name}'
+    body = f'{application.profile.nactvet_reg_no} · {application.semester.label}' + (
+        f' — “{application.reason}”' if application.reason else '')
+    notify(accountants(), kind=Notification.HOSTEL_APPLIED, title=title,
+           body=body + '. Waiting for your decision.', link='finance:hostel')
+    notify(deans(), kind=Notification.HOSTEL_APPLIED, title=title, body=body + '.')
+
+
+def hostel_decided(application):
+    """The accountant decided. The Dean of Students and the student are told."""
+    verdict = application.get_status_display().lower()
+    notify(deans(), kind=Notification.HOSTEL_DECIDED,
+           title=f'Hostel place {verdict}: {application.profile.name}',
+           body=application.decision_note or application.semester.label)
+    notify(profile=application.profile, kind=Notification.HOSTEL_DECIDED,
+           title=f'Your hostel application was {verdict}',
+           body=application.decision_note or '', link='services')

@@ -26,6 +26,8 @@ router.register('asset-maintenance', views.AssetMaintenanceViewSet, basename='as
 router.register('inventory-inspections', views.InventoryInspectionViewSet, basename='inventory-inspection')
 router.register('inventory-inspection-items', views.InventoryInspectionItemViewSet, basename='inventory-inspection-item')
 router.register('asset-disposals', views.AssetDisposalViewSet, basename='asset-disposal')
+router.register('lab-items', views.LabItemViewSet, basename='lab-item')
+router.register('lab-movements', views.LabStockMovementViewSet, basename='lab-movement')
 
 # Fees ledger. Supersedes the payment-categories / student-payments /
 # finance-clearances routes above, which stay registered until the old finance
@@ -82,6 +84,8 @@ urlpatterns = [
     # Expenses
     path('health-records/', views.health_records, name='health-records'),
     path('health-records/<int:pk>/close/', views.health_record_close, name='health-record-close'),
+    path('health-reports/', views.health_reports, name='health-reports'),
+    path('health-reports/<int:pk>/<str:action>/', views.health_report_action, name='health-report-action'),
     path('expense-categories/', veta_views.expense_categories, name='expense-categories'),
     path('expense-budgets/', veta_views.expense_budgets, name='expense-budgets'),
     path('expenses/', veta_views.expense_list, name='expenses'),
@@ -91,6 +95,9 @@ urlpatterns = [
     path('student-passwords/reset/', views.reset_student_password, name='student-password-reset'),
     path('password-resets/', views.password_resets, name='password-resets'),
     path('returning-students/', views.returning_students, name='returning-students'),
+    path('inventory/staff/', views.inventory_staff, name='inventory-staff'),
+    path('inventory/handovers/', views.asset_handovers, name='inventory-handovers'),
+    path('lab/report/', views.lab_report, name='lab-report'),
     path('class-list/', views.class_list, name='class-list'),
     path('cat-number-format/', views.cat_number_format, name='cat-number-format'),
     path('cat-numbers/', views.cat_numbers, name='cat-numbers'),
@@ -146,6 +153,7 @@ urlpatterns = [
     path('hostel-applications/<int:pk>/decide/', views.decide_hostel_application, name='hostel-application-decide'),
     path('student-records/<int:profile_id>/', views.student_record, name='student-record'),
     path('my-documents/', views.student_own_documents, name='student-own-documents'),
+    path('my-health/', views.student_own_health, name='student-own-health'),
     path('finance/issue-invoice/', views.finance_issue_invoice, name='finance-issue-invoice'),
     path('finance/collections/', views.finance_collections, name='finance-collections'),
     path('finance/college/', views.college_profile, name='finance-college'),
