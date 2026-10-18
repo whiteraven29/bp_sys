@@ -62,7 +62,7 @@ from .models import (
     OutstandingRepeat, SemesterReview, StudentStanding, StandingChange,
     AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck, Application,
     PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultWithholding,
-    StudentDocument, HealthRecord, HealthReport, PasswordReset, AssetHandover, LabItem, LabStockMovement, ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile,
+    StudentDocument, HealthRecord, HealthReport, ExitRequest, PasswordReset, AssetHandover, LabItem, LabStockMovement, ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile,
     ICTOfficerProfile, RoleChange, TrainingCoordinatorProfile, DeanOfStudentsProfile, LabTechnicianProfile,
     Intake, CourseFee, CourseFeeInstalment, CourseModule, CourseApplication, CourseEnrollment,
     ExpenseCategory, ExpenseBudget, Expense,
@@ -788,6 +788,9 @@ def _student_record_for_portal(profile):
             for kin in profile.next_of_kin.order_by('position')
         ],
         'missing': admissions.missing_details(profile),
+        'address': profile.address, 'sponsor_name': profile.sponsor_name, 'sponsor_phone': profile.sponsor_phone,
+        'education': _education_rows(profile),
+        'passport_url': f'/api/my-passport/?v={int(profile.passport_updated_at.timestamp()) if profile.passport_updated_at else 0}' if profile.passport else '',
     }
 
 
@@ -1829,6 +1832,9 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
         if not current:
             return Response({'detail': 'No active semester found.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Reviews are built (proposals only, nothing confirmed) so a student
+        # whose results are not out is placed provisionally, not left blocked.
+        progression.build_reviews(current, actor=request.user)
         plan = progression.plan_advance(current)
         target_label = ('Semester 2 of the same year' if current.number == Semester.SEM1
                         else f'Semester 1 of {current.academic_year.next_name}')
@@ -1846,6 +1852,7 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
             'to': target_label,
             'moves': plan['moves'],
             'blocked': plan['blocked'],
+            'waiting': plan.get('waiting', []),
             'can_advance': not plan['blocked'],
             'modules': {
                 'source': source.label if source else None,
@@ -1876,6 +1883,7 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
             if not cur:
                 return Response({'detail': 'No active semester found.'}, status=status.HTTP_400_BAD_REQUEST)
 
+            progression.build_reviews(cur, actor=request.user)
             plan = progression.plan_advance(cur)
             if plan['blocked']:
                 return Response({
@@ -2288,6 +2296,10 @@ def _record_details_from(request, profile):
         date_of_birth=data.get('date_of_birth') if 'date_of_birth' in data else None,
         next_of_kin=data.get('next_of_kin'),
         form_four_index=data.get('form_four_index'),
+        address=data.get('address'),
+        sponsor_name=data.get('sponsor_name'),
+        sponsor_phone=data.get('sponsor_phone'),
+        education=data.get('education') if isinstance(data.get('education'), list) else None,
         actor=request.user,
     )
 
@@ -2305,7 +2317,67 @@ def _student_record_payload(profile):
                          'relationship': kin.relationship} for kin in profile.next_of_kin.all()],
         'missing': admissions.missing_details(profile),
         'documents': StudentDocument.objects.filter(profile=profile).count(),
+        'address': profile.address, 'sponsor_name': profile.sponsor_name, 'sponsor_phone': profile.sponsor_phone,
+        'education': _education_rows(profile),
+        'passport_url': (f'/api/student-records/{profile.id}/passport/?v={int(profile.passport_updated_at.timestamp()) if profile.passport_updated_at else 0}'
+                         if profile.passport else ''),
     }
+
+
+def _education_rows(profile):
+    return [{'level': row.level, 'level_display': row.get_level_display(), 'institution': row.institution,
+             'start_year': row.start_year, 'end_year': row.end_year, 'index_number': row.index_number}
+            for row in profile.education.all()]
+
+
+def _passport_response(profile):
+    if not profile.passport:
+        raise Http404('No passport photo.')
+    try:
+        handle = profile.passport.open('rb')
+    except (OSError, ValueError):
+        raise Http404('No passport photo.')
+    content_type = admissions.passport_type(handle.read(8)) or 'application/octet-stream'
+    handle.seek(0)
+    response = FileResponse(handle, content_type=content_type)
+    response['Cache-Control'] = 'private, max-age=3600'
+    response['X-Content-Type-Options'] = 'nosniff'
+    return response
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def student_passport(request, profile_id):
+    """The passport photo: read by those who read the record, set by records."""
+    profile = get_object_or_404(visible_profiles(request.user), pk=profile_id)
+    if request.method == 'GET':
+        if not (can_see_admissions(request.user) or can_edit_student_records(request.user)
+                or can_read_health_records(request.user)):
+            raise PermissionDenied('The records, admission or finance office only.')
+        return _passport_response(profile)
+    if not (is_records_officer(request.user) or is_principal(request.user)):
+        raise PermissionDenied('The records office sets the photo.')
+    try:
+        admissions.set_passport(profile, request.data.get('file'), actor=request.user)
+    except admissions.AdmissionError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(_student_record_payload(profile))
+
+
+@api_view(['GET', 'POST'])
+def student_own_passport(request):
+    """The student's own photo, from the portal."""
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Sign in to the student portal first.'}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == 'GET':
+        return _passport_response(profile)
+    try:
+        admissions.set_passport(profile, request.data.get('file'))
+    except admissions.AdmissionError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'passport_url': f'/api/my-passport/?v={int(profile.passport_updated_at.timestamp()) if profile.passport_updated_at else 0}'},
+                    status=status.HTTP_201_CREATED)
 
 
 @api_view(['GET', 'POST'])
@@ -2978,6 +3050,153 @@ def _postponement_row(postponement):
         'created_at': postponement.created_at,
     }
 
+
+
+# ── PROVISIONAL PLACES ────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@login_required
+def provisional_places(request):
+    """Students placed provisionally while their results were out, and what
+    their results say now (progression.refresh_provisional)."""
+    user = request.user
+    if not (can_read_exams(user) or can_confirm_reviews(user)):
+        raise PermissionDenied('For the examination office, the Principal and DPARC.')
+    rows = progression.refresh_provisional()
+    return Response({'rows': rows, 'can_settle': can_confirm_reviews(user), 'can_set_cutoff': can_manage_exams(user),
+                     'cutoffs': [{'semester_id': sem.id, 'semester': sem.label, 'cutoff': sem.provisional_cutoff}
+                                 for sem in Semester.objects.filter(is_active=True)]})
+
+
+@api_view(['POST'])
+@login_required
+def provisional_settle_passes(request):
+    if not can_confirm_reviews(request.user):
+        raise PermissionDenied('The Principal or DPARC confirms.')
+    with transaction.atomic():
+        settled = progression.settle_passes(actor=request.user)
+    return Response({'settled': settled})
+
+
+@api_view(['POST'])
+@login_required
+def provisional_cutoff(request):
+    """The examination officer sets the date by which a semester's provisional
+    students must be settled."""
+    if not can_manage_exams(request.user):
+        raise PermissionDenied('The examination officer sets the cut-off.')
+    semester = Semester.objects.filter(id=str(request.data.get('semester_id') or '0')).first() \
+        if str(request.data.get('semester_id') or '').isdigit() else None
+    if semester is None:
+        return Response({'detail': 'Choose the semester.'}, status=status.HTTP_400_BAD_REQUEST)
+    value = request.data.get('cutoff')
+    semester.provisional_cutoff = _date(value) if value else None
+    if value and semester.provisional_cutoff is None:
+        return Response({'detail': 'Give the date as YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
+    semester.save(update_fields=['provisional_cutoff'])
+    return Response({'semester_id': semester.id, 'cutoff': semester.provisional_cutoff})
+
+
+# ── FINISHING AFTER LEVEL 5 ───────────────────────────────────────────────────
+
+def _exit_row(request_row):
+    return {'id': request_row.id, 'reg_no': request_row.profile.nactvet_reg_no, 'name': request_row.profile.name,
+            'level': request_row.class_level.name, 'reason': request_row.reason, 'status': request_row.status,
+            'status_display': request_row.get_status_display(), 'created_at': request_row.created_at,
+            'decided_by': full_name_for(request_row.decided_by) if request_row.decided_by_id else '',
+            'decided_at': request_row.decided_at, 'decision_note': request_row.decision_note}
+
+
+@api_view(['GET', 'POST'])
+def student_own_exit(request):
+    """From the portal: may I finish after Level 5, and my requests. POST
+    {reason} asks; {withdraw: id} withdraws one still waiting."""
+    profile = _student_profile(request)
+    if profile is None:
+        return Response({'detail': 'Sign in to the student portal first.'}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == 'POST':
+        try:
+            if request.data.get('withdraw'):
+                withdraw = str(request.data.get('withdraw'))
+                if not withdraw.isdigit():
+                    return Response({'detail': 'Which request?'}, status=status.HTTP_400_BAD_REQUEST)
+                mine = get_object_or_404(ExitRequest, pk=withdraw, profile=profile)
+                lifecycle.withdraw_exit(mine)
+            else:
+                lifecycle.request_exit(profile, reason=str(request.data.get('reason') or ''))
+        except lifecycle.LifecycleError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    review, why_not = lifecycle.exit_review(profile)
+    return Response({
+        'can_ask': review is not None, 'why_not': why_not,
+        'level': review.class_level.name if review else '',
+        'requests': [_exit_row(row) for row in ExitRequest.objects.filter(profile=profile)
+                     .select_related('profile', 'class_level', 'decided_by')],
+    }, status=status.HTTP_201_CREATED if request.method == 'POST' else status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@login_required
+def exit_requests(request):
+    """The Principal's list (DPARC, the Dean and records follow it)."""
+    user = request.user
+    if not (is_principal(user) or is_dparc(user) or is_dean(user) or is_records_officer(user) or is_break_glass(user)):
+        raise PermissionDenied('For the Principal.')
+    rows = ExitRequest.objects.select_related('profile', 'class_level', 'decided_by')
+    wanted = request.query_params.get('status', ExitRequest.PENDING)
+    if wanted:
+        rows = rows.filter(status=wanted)
+    return Response({'rows': [_exit_row(row) for row in rows[:300]],
+                     'can_decide': is_principal(user) or is_break_glass(user)})
+
+
+@api_view(['POST'])
+@login_required
+def decide_exit_request(request, pk):
+    if not (is_principal(request.user) or is_break_glass(request.user)):
+        raise PermissionDenied('Only the Principal approves finishing early.')
+    decision = str(request.data.get('decision') or '')
+    if decision not in ('approve', 'decline'):
+        return Response({'detail': 'Approve or decline.'}, status=status.HTTP_400_BAD_REQUEST)
+    row = get_object_or_404(ExitRequest, pk=pk)
+    try:
+        row = lifecycle.decide_exit(row, approve=decision == 'approve', actor=request.user,
+                                    note=str(request.data.get('note') or ''))
+    except lifecycle.LifecycleError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(_exit_row(row))
+
+
+# ── CONTINUING STUDENTS WHO DID NOT REPORT ────────────────────────────────────
+
+def _may_decide_not_reported(user):
+    return is_admission_officer(user) or is_principal(user) or is_break_glass(user)
+
+
+@api_view(['GET'])
+@login_required
+def not_reported_list(request):
+    if not _may_decide_not_reported(request.user):
+        raise PermissionDenied('The admission office decides about students who did not report.')
+    semester = _semester_from_request(request)
+    if semester is None:
+        return Response({'detail': 'No semester given and none is active.'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'semester': semester.label, 'decide_from': admissions.decide_from(semester),
+                     'rows': admissions.not_reported(semester)})
+
+
+@api_view(['POST'])
+@login_required
+def mark_not_reported(request, pk):
+    if not _may_decide_not_reported(request.user):
+        raise PermissionDenied('The admission office decides about students who did not report.')
+    application = get_object_or_404(Application, pk=pk)
+    try:
+        admissions.mark_not_reported(application, decision=str(request.data.get('decision') or ''),
+                                     actor=request.user, note=str(request.data.get('note') or ''))
+    except admissions.AdmissionError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'ok': True})
 
 def _postponements():
     return Postponement.objects.select_related('profile__standing', 'semester', 'return_year',
@@ -4078,6 +4297,8 @@ def dashboard(request):
         'is_principal': is_principal(request.user),
         'is_head_of_department': is_head_of_department(request.user),
         'can_manage_exams': can_manage_exams(request.user),
+        'provisional_overdue': (len(progression.provisional_past_cutoff())
+                                if (can_confirm_reviews(request.user) or can_manage_exams(request.user)) else 0),
         # Whether this account has classes of its own, and which hat it is
         # currently wearing. Only somebody who both teaches and holds an admin
         # role is ever offered the switch.
@@ -5260,6 +5481,16 @@ CA_ELIGIBILITY_THRESHOLD = 20
 
 
 def ca_eligibility_for_student(student):
+    """CA towards the end-of-semester exam — and, for a student placed
+    provisionally whose earlier results are still unsettled, no exam until
+    they are: NACTVET would not count it (said 18 October 2026)."""
+    total_ca, eligible, note = _ca_eligibility(student)
+    if eligible and student.profile_id and progression.is_provisional(student.profile):
+        return total_ca, False, 'Provisional place: the results of the level before are not settled yet'
+    return total_ca, eligible, note
+
+
+def _ca_eligibility(student):
     result = getattr(student, 'result', None)
     if student.module.is_field_module:
         if result is None or result.field_ca is None:
@@ -5800,8 +6031,19 @@ class ResultViewSet(viewsets.ModelViewSet):
                 result.final_approved = True
                 result.save(update_fields=['authority_grade', 'authority_status', 'final_approved', 'updated_at'])
                 saved += 1
+        settle = 0
+        if saved:
+            provisional = progression.provisional_reviews().filter(semester=semester)
+            if provisional.exists():
+                settle = sum(1 for row in progression.refresh_provisional(provisional) if row['results_in'])
+                if settle:
+                    notifications.notify(
+                        notifications.principal_and_dparc(), kind=Notification.PROVISIONAL_RESULTS_IN,
+                        title=f'Results in: {settle} provisional student(s) to settle',
+                        body=f'{semester.label} grades uploaded. Semester Review ▸ Provisional places.',
+                        link='review:provisional')
         return Response({'saved': saved, 'unchanged': unchanged, 'sitting': sitting, 'errors': errors,
-                         'not_sitting': not_sitting})
+                         'not_sitting': not_sitting, 'provisional_to_settle': settle})
 
     # ── Get or create results for every student in a module ────────────────────
     @action(detail=False, methods=['get'], url_path='module')

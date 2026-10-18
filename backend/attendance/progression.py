@@ -52,7 +52,7 @@ from django.utils import timezone
 from . import finance
 from .grading import is_level_six
 from .models import (
-    AcademicYear, ChargeType, ClassLevel, Module, OutstandingRepeat, Semester,
+    AcademicYear, ChargeType, ClassLevel, Module, Notification, OutstandingRepeat, Semester,
     SemesterRegistration, SemesterReview, StandingChange, Student,
     StudentStanding,
 )
@@ -641,6 +641,10 @@ def confirm_review(review, outcome, *, actor, reason='', enrollments=None,
     valid = {key for key, _ in SemesterReview.OUTCOME_CHOICES}
     if outcome not in valid:
         raise ProgressionError(f'{outcome!r} is not an outcome.')
+    # A provisional student is already placed in the next semester: confirming
+    # their pass changes nothing on their standing; a repeat or discontinuation
+    # takes the place away below (said 18 October 2026).
+    was_provisional = review.confirmed == SemesterReview.PROVISIONAL
     if outcome == SemesterReview.PENDING:
         raise ProgressionError(
             'Pending is not a decision. Wait for the results, or confirm the '
@@ -684,6 +688,8 @@ def confirm_review(review, outcome, *, actor, reason='', enrollments=None,
                      semester=review.semester, class_level=review.class_level,
                      programme=review.programme, known=known_standings,
                      reason=review.confirmed_reason or review.proposed_reason)
+    elif was_provisional and outcome in (SemesterReview.CLEAR, SemesterReview.COMPLETED):
+        pass                                          # the place they were given stands
     elif outcome in (SemesterReview.CLEAR, SemesterReview.PROVISIONAL):
         standing = standing_for(review.profile, class_level=review.class_level,
                                 programme=review.programme, known=known_standings)
@@ -697,6 +703,16 @@ def confirm_review(review, outcome, *, actor, reason='', enrollments=None,
                 actor=actor, semester=review.semester, class_level=review.class_level,
                 programme=review.programme, reason=review.confirmed_reason,
                 known=known_standings)
+    if was_provisional and outcome != SemesterReview.PROVISIONAL:
+        from . import notifications
+        if outcome in (SemesterReview.CLEAR, SemesterReview.COMPLETED):
+            title, body = 'Your place is confirmed', f'Your {review.semester.label} results are in: your place stands.'
+        else:
+            title = 'Your results changed your place'
+            body = (f'Your {review.semester.label} results: {review.get_confirmed_display().lower()}. '
+                    'The admission office will tell you what comes next.')
+        notifications.notify(profile=review.profile, kind=Notification.PROVISIONAL_SETTLED,
+                             title=title, body=body)
     return review
 
 
@@ -819,43 +835,53 @@ def defer_later_registrations(review, *, actor=None):
     enrollments and marks made while the student was still expected stay exactly
     as they are. Returns what was cancelled, so the officer is told.
     """
-    later = SemesterRegistration.objects.filter(profile=review.profile).exclude(
-        status=SemesterRegistration.CANCELLED,
-    ).select_related('semester__academic_year').filter(
-        Q(semester__academic_year__name__gt=review.semester.academic_year.name)
-        | Q(semester__academic_year=review.semester.academic_year,
-            semester__number__gt=review.semester.number),
-    )
     reason = (f'{review.semester.label}: module(s) failed after the supplementary. '
               f'No further semester until they are passed.')[:300]
-    cancelled = []
-    for registration in later:
+    return call_off_later(review.profile, review.semester, reason=reason, actor=actor,
+                          fee_reason=f'Place withdrawn after the {review.semester.label} results')
+
+
+def call_off_later(profile, semester, *, reason, actor=None, fee_reason=None):
+    """Cancel every place after `semester` — registrations (enrollments
+    withdrawn, marks kept) and applications still at a desk — and reverse
+    their fees, what was paid kept as credit (said 18 October 2026). Shared by
+    a late result that takes a place away and a student finishing early."""
+    from .models import Application, ApplicationStep
+    from . import finance
+    later_q = (Q(semester__academic_year__name__gt=semester.academic_year.name)
+               | Q(semester__academic_year=semester.academic_year, semester__number__gt=semester.number))
+    cancelled, reversed_from = [], {}
+
+    def note_year(year, number):
+        reversed_from[year.id] = (year, min(number, reversed_from.get(year.id, (year, 9))[1]))
+
+    for registration in (SemesterRegistration.objects.filter(profile=profile)
+                         .exclude(status=SemesterRegistration.CANCELLED)
+                         .select_related('semester__academic_year').filter(later_q)):
         registration.status = SemesterRegistration.CANCELLED
-        registration.cancelled_reason = reason
+        registration.cancelled_reason = reason[:300]
         registration.save(update_fields=['status', 'cancelled_reason'])
-        withdraw_enrollments(review.profile, registration.semester, reason=reason)
+        withdraw_enrollments(profile, registration.semester, reason=reason)
         cancelled.append(registration)
-        logger.info('Took %s off %s after a late result',
-                    review.profile.nactvet_reg_no, registration.semester)
+        note_year(registration.semester.academic_year, registration.semester.number)
+        logger.info('Took %s off %s: %s', profile.nactvet_reg_no, registration.semester, reason)
 
     # The same student may not have reached registration yet: the year end
-    # handed them to admissions, and they are waiting at a desk for the level
-    # this result has just taken away. That application is withdrawn too.
-    from .models import Application, ApplicationStep
-    waiting = Application.objects.filter(
-        profile=review.profile, state__in=sorted(Application.OPEN_STATES)).filter(
-        Q(semester__academic_year__name__gt=review.semester.academic_year.name)
-        | Q(semester__academic_year=review.semester.academic_year,
-            semester__number__gt=review.semester.number))
-    for application in waiting:
+    # handed them to admissions, and they are waiting at a desk.
+    for application in (Application.objects.filter(profile=profile, state__in=sorted(Application.OPEN_STATES))
+                        .select_related('semester__academic_year').filter(later_q)):
         ApplicationStep.objects.create(application=application, step=application.state,
                                        done_by=actor, note=f'Withdrawn: {reason}'[:300])
         application.state = Application.CANCELLED
-        application.decided_reason = reason
+        application.decided_reason = reason[:300]
         application.save(update_fields=['state', 'decided_reason', 'updated_at'])
         cancelled.append(application)
-        logger.info('Withdrew %s\'s application for %s after a late result',
-                    review.profile.nactvet_reg_no, application.semester)
+        note_year(application.semester.academic_year, application.semester.number)
+        logger.info("Withdrew %s's application for %s: %s", profile.nactvet_reg_no, application.semester, reason)
+
+    for year, from_number in reversed_from.values():
+        finance.reset_fees(profile, year, from_semester_number=from_number, actor=actor,
+                           reason=(fee_reason or reason)[:200])
     return cancelled
 
 
@@ -1226,19 +1252,30 @@ def plan_advance(semester):
     repeats = repeats_by_profile(profiles)
     levels_of = {}
 
+    waiting = []
     for profile, registration in people:
         review = reviews.get(profile.id)
         standing = standing_for(profile, known=standings)
+        provisional = False
         if review is None or not review.is_confirmed:
-            blocked.append({
-                'profile_id': profile.id, 'reg_no': profile.nactvet_reg_no,
-                'name': profile.name,
-                'reason': 'no confirmed review' if review is None
-                          else f'review still {review.get_proposed_display().lower()}',
-            })
-            continue
+            # Results not out (said 18 October 2026): the year opens anyway and
+            # the student is placed provisionally where they would be if they
+            # pass. A decision the results have already made still waits for
+            # the Principal or DPARC to confirm it.
+            placement = provisional_placement(review, semester, standing, levels_of)
+            row = {'profile_id': profile.id, 'reg_no': profile.nactvet_reg_no, 'name': profile.name}
+            if placement == 'waiting':
+                waiting.append({**row, 'reason': 'results so far show a failed module — waits for the rest'
+                                if review and _has_failure(review)
+                                else 'finishing the programme waits for the results'})
+                continue
+            if placement != 'provisional':
+                blocked.append({**row, 'reason': 'no review yet' if review is None
+                                else f'review says {review.get_proposed_display().lower()} — confirm it'})
+                continue
+            provisional = True
 
-        outcome = review.confirmed
+        outcome = SemesterReview.PROVISIONAL if provisional else review.confirmed
         level = review.class_level or standing.class_level
         programme = review.programme or standing.programme
         move = {
@@ -1246,6 +1283,7 @@ def plan_advance(semester):
             'outcome': outcome, 'from_level': level.name if level else None,
             'programme': programme.code if programme else None,
             'programme_id': programme.id if programme else None,
+            'provisional': provisional or outcome == SemesterReview.PROVISIONAL,
         }
 
         if standing.status == StudentStanding.POSTPONED:
@@ -1287,9 +1325,121 @@ def plan_advance(semester):
                     move.update(action='promoted', registers=True, to_level=up.name,
                                 to_level_id=up.id, to_semester=Semester.SEM1, kind=SemesterRegistration.CONTINUING,
                                 detail=f'{level.name} → {up.name} — to admissions')
+        if move['provisional']:
+            move['detail'] = f"{move.get('detail', '')} — provisional, results awaited".lstrip(' —')
         moves.append(move)
 
-    return {'moves': moves, 'blocked': blocked}
+    return {'moves': moves, 'blocked': blocked, 'waiting': waiting}
+
+
+def _has_failure(review):
+    return any(row.get('status') in FAILED_STATUSES for row in (review.modules or []))
+
+
+def provisional_placement(review, semester, standing, levels_cache=None):
+    """How a student whose review is not confirmed goes into the next
+    semester: 'provisional' (placed where a pass takes them), 'waiting' (left
+    out until the results are complete) or 'blocked' (a decision to confirm)."""
+    if review is None or review.proposed != SemesterReview.PENDING:
+        return 'blocked'
+    if _has_failure(review):
+        return 'waiting'
+    if semester.number == Semester.SEM2:
+        level = review.class_level or (standing.class_level if standing else None)
+        programme = review.programme or (standing.programme if standing else None)
+        if _next_level_cached(programme, level, levels_cache if levels_cache is not None else {}) is None:
+            return 'waiting'           # nobody finishes the programme provisionally
+    return 'provisional'
+
+
+# ── provisional places, and settling them when the results arrive ─────────────
+
+PROVISIONAL_REASON = 'Results not out when {target} opened: placed provisionally.'
+
+
+def provisional_reviews():
+    """Every review confirmed provisional and not settled since."""
+    return (SemesterReview.objects.filter(confirmed=SemesterReview.PROVISIONAL)
+            .select_related('profile', 'semester__academic_year', 'class_level', 'programme')
+            .order_by('semester__academic_year__name', 'semester__number', 'profile__name'))
+
+
+def provisional_profile_ids():
+    return set(SemesterReview.objects.filter(confirmed=SemesterReview.PROVISIONAL)
+               .values_list('profile_id', flat=True))
+
+
+def is_provisional(profile):
+    return SemesterReview.objects.filter(profile=profile, confirmed=SemesterReview.PROVISIONAL).exists()
+
+
+def _placement(review):
+    """Where a provisional student was put: their registration after the
+    review's semester, or the application still at the desks for it."""
+    from .models import Application
+    later = (Q(semester__academic_year__name__gt=review.semester.academic_year.name)
+             | Q(semester__academic_year=review.semester.academic_year, semester__number__gt=review.semester.number))
+    placed = (SemesterRegistration.objects.filter(profile=review.profile)
+              .exclude(status=SemesterRegistration.CANCELLED).filter(later)
+              .select_related('class_level', 'semester')
+              .order_by('semester__academic_year__name', 'semester__number').first())
+    applied = None if placed else (
+        Application.objects.filter(profile=review.profile, state__in=sorted(Application.OPEN_STATES))
+        .filter(later).select_related('semester', 'class_level').first())
+    return placed, applied, (placed.semester if placed else applied.semester if applied else None)
+
+
+def refresh_provisional(reviews=None):
+    """Read each provisional student's results again: what they say now."""
+    rows = []
+    for review in (reviews if reviews is not None else provisional_reviews()):
+        registration = SemesterRegistration.objects.filter(
+            profile=review.profile, semester=review.semester).exclude(
+            status=SemesterRegistration.CANCELLED).first()
+        fresh = evaluate(review.profile, review.semester, registration=registration)
+        review.modules = fresh['modules']
+        review.gpa = fresh['gpa']
+        review.proposed = fresh['proposed']
+        review.proposed_reason = fresh['reason'][:300]
+        review.save(update_fields=['modules', 'gpa', 'proposed', 'proposed_reason', 'updated_at'])
+        placed, applied, target_semester = _placement(review)
+        rows.append({
+            'review_id': review.id, 'profile_id': review.profile_id, 'reg_no': review.profile.nactvet_reg_no,
+            'name': review.profile.name, 'semester': review.semester.label,
+            'level': review.class_level.name if review.class_level_id else '',
+            'placed_in': (f'{placed.class_level.name}, {placed.semester.label}' if placed
+                          else f'{applied.class_level.name}, {applied.semester.label} — at admissions' if applied
+                          else 'not placed'),
+            'proposed': review.proposed, 'proposed_display': review.get_proposed_display(),
+            'reason': review.proposed_reason, 'gpa': review.gpa,
+            'results_in': review.proposed != SemesterReview.PENDING,
+            'cutoff': target_semester.provisional_cutoff if target_semester else None,
+        })
+    return rows
+
+
+def settle_passes(*, actor):
+    """Confirm every provisional student whose results now show a pass. The
+    others — repeat, discontinued — are confirmed one by one."""
+    settled = 0
+    for row in refresh_provisional():
+        if row['proposed'] in (SemesterReview.CLEAR, SemesterReview.COMPLETED):
+            review = SemesterReview.objects.get(pk=row['review_id'])
+            confirm_review(review, review.proposed, actor=actor)
+            settled += 1
+    return settled
+
+
+def provisional_past_cutoff(today=None):
+    """Provisional students whose new semester's cut-off has passed. Read
+    only — no results are recalculated (it runs on every dashboard)."""
+    today = today or timezone.localdate()
+    overdue = []
+    for review in provisional_reviews():
+        target = _placement(review)[2]
+        if target and target.provisional_cutoff and target.provisional_cutoff < today:
+            overdue.append(review)
+    return overdue
 
 
 @transaction.atomic
@@ -1319,8 +1469,16 @@ def apply_advance(semester, target, *, actor=None):
     for profile, _registration in people:
         review = reviews.get(profile.id)
         if review is None or not review.is_confirmed:
-            raise ProgressionError(
-                f'{profile.nactvet_reg_no} has no confirmed review for {semester}.')
+            placement = provisional_placement(review, semester, standing_for(profile, known=standings), levels_of)
+            if placement == 'waiting':
+                summary['waiting'] = summary.get('waiting', 0) + 1
+                continue
+            if placement != 'provisional':
+                raise ProgressionError(
+                    f'{profile.nactvet_reg_no} has no confirmed review for {semester}.')
+            confirm_review(review, SemesterReview.PROVISIONAL, actor=actor,
+                           reason=PROVISIONAL_REASON.format(target=target), known_standings=standings)
+            summary['provisional'] = summary.get('provisional', 0) + 1
         standing = standing_for(profile, known=standings)
         outcome = review.confirmed
         level = review.class_level or standing.class_level

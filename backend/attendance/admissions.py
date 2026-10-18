@@ -42,7 +42,7 @@ from django.utils import timezone
 
 from . import finance, progression
 from .models import (
-    AdmissionRequirement, AdmissionWindow, Application, ApplicationStep, ChargeType, ClassLevel,
+    AcademicYear, AdmissionRequirement, AdmissionWindow, Application, ApplicationStep, ChargeType, ClassLevel,
     CollegeIdFormat, Module, NextOfKin, Programme, RequirementCheck, Semester, SemesterRegistration,
     SemesterReview, Student, StudentProfile, StudentStanding,
 )
@@ -250,7 +250,8 @@ def is_veta_only(profile):
 
 @transaction.atomic
 def record_details(profile, *, name=None, phone=None, gender=None, date_of_birth=None,
-                   next_of_kin=None, form_four_index=None, actor=None):
+                   next_of_kin=None, form_four_index=None, address=None, sponsor_name=None,
+                   sponsor_phone=None, education=None, actor=None):
     """The records desk writes down who the student is.
 
     Name, phone, gender, date of birth, the Form Four index number and two next
@@ -271,6 +272,10 @@ def record_details(profile, *, name=None, phone=None, gender=None, date_of_birth
         profile.gender = gender; fields.append('gender')
     if date_of_birth is not None:
         profile.date_of_birth = date_of_birth or None; fields.append('date_of_birth')
+    for field, value, limit in (('address', address, 300), ('sponsor_name', sponsor_name, 200),
+                                ('sponsor_phone', sponsor_phone, 30)):
+        if value is not None:
+            setattr(profile, field, str(value).strip()[:limit]); fields.append(field)
     if fields:
         profile.save(update_fields=fields)
         # Enrollments carry a copy of the name for the class lists.
@@ -288,7 +293,84 @@ def record_details(profile, *, name=None, phone=None, gender=None, date_of_birth
             defaults={'name': kin['name'].strip(), 'phone': (kin.get('phone') or '').strip(),
                       'relationship': relationship},
         )
+    for row in education or []:
+        record_education(profile, **{key: row.get(key) for key in
+                                     ('level', 'institution', 'start_year', 'end_year', 'index_number')})
     logger.info('Details recorded for %s', profile.nactvet_reg_no)
+    return profile
+
+
+def _year(value, label):
+    if value in (None, ''):
+        return None
+    from django.utils import timezone
+    try:
+        year = int(str(value).strip())
+    except ValueError:
+        raise AdmissionError(f'{label}: a year, e.g. 2019.')
+    if not 1950 <= year <= timezone.localdate().year + 1:
+        raise AdmissionError(f'{label}: {year} is not a year the form would show.')
+    return year
+
+
+def record_education(profile, *, level, institution=None, start_year=None, end_year=None, index_number=None):
+    """One row of the enrolment form's schooling: O-level, A-level or college.
+    An empty institution removes the row."""
+    from .models import StudentEducation
+    if level not in dict(StudentEducation.LEVEL_CHOICES):
+        raise AdmissionError('O-level, A-level or college.')
+    institution = (institution or '').strip()
+    if not institution:
+        StudentEducation.objects.filter(profile=profile, level=level).delete()
+        return None
+    label = dict(StudentEducation.LEVEL_CHOICES)[level]
+    start, end = _year(start_year, f'{label} start year'), _year(end_year, f'{label} end year')
+    if start and end and end < start:
+        raise AdmissionError(f'{label}: the end year is before the start year.')
+    row, _ = StudentEducation.objects.update_or_create(
+        profile=profile, level=level,
+        defaults={'institution': institution[:200], 'start_year': start, 'end_year': end,
+                  'index_number': (index_number or '').strip()[:30]})
+    return row
+
+
+# ── the passport photo ────────────────────────────────────────────────────────
+
+#: The browser sends a 300×300 JPEG, tens of kilobytes; anything far larger is
+#: not what the page made.
+MAX_PASSPORT_BYTES = 512 * 1024
+PASSPORT_SIGNATURES = {b'\xff\xd8\xff': 'image/jpeg', b'\x89PNG\r\n\x1a\n': 'image/png'}
+
+
+def passport_type(head):
+    for signature, content_type in PASSPORT_SIGNATURES.items():
+        if head.startswith(signature):
+            return content_type
+    return None
+
+
+def set_passport(profile, upload, *, actor=None):
+    """A student's passport photo, from the portal or the records desk. Only a
+    real JPEG or PNG, small; the one it replaces is deleted."""
+    from django.utils import timezone
+    if not upload:
+        raise AdmissionError('Choose a photo.')
+    if upload.size > MAX_PASSPORT_BYTES:
+        raise AdmissionError('That photo is too large — choose it again so the page can make it smaller.')
+    upload.seek(0)
+    content_type = passport_type(upload.read(8))
+    upload.seek(0)
+    if content_type is None:
+        raise AdmissionError('A passport photo is a JPG or PNG picture.')
+    old = profile.passport.name if profile.passport else ''
+    extension = 'jpg' if content_type == 'image/jpeg' else 'png'
+    profile.passport.save(f'{profile.id}-{timezone.now():%Y%m%d%H%M%S}.{extension}', upload, save=False)
+    profile.passport_updated_at = timezone.now()
+    profile.save(update_fields=['passport', 'passport_updated_at'])
+    if old and old != profile.passport.name:
+        profile.passport.storage.delete(old)
+    logger.info('Passport photo for %s set by %s', profile.nactvet_reg_no,
+                getattr(actor, 'username', 'the student'))
     return profile
 
 
@@ -406,6 +488,11 @@ def academic_summary(application):
         results = 'New to the college — no results yet.'
     elif review is None:
         results = 'No semester review on record.'
+    elif review.confirmed == SemesterReview.PROVISIONAL:
+        # Placed while the results were out (said 18 October 2026): finance
+        # bills the level they were placed in, and nobody reads it as a pass.
+        results = (f'{review.semester.label}: results not complete — placed provisionally; '
+                   f'settled by the examination office once the grades are in.')
     elif not review.is_confirmed:
         results = (f'{review.semester.label}: not confirmed yet by the examination office '
                    f'({review.get_proposed_display().lower()}).')
@@ -1116,3 +1203,90 @@ def due_back(semester):
             continue
         waiting.append(standing)
     return waiting
+
+
+# ── continuing students who never reported ────────────────────────────────────
+
+#: How long the admission office waits before deciding about a continuing
+#: student who has not come (said 18 October 2026): three months from the day
+#: admission opened.
+NOT_REPORTED_AFTER_MONTHS = 3
+
+
+def decide_from(semester):
+    """The day the admission office decides about this semester's no-shows."""
+    window = window_for(semester)
+    if window is None:
+        return None
+    opened = window.opens_on
+    month = opened.month - 1 + NOT_REPORTED_AFTER_MONTHS
+    year, month = opened.year + month // 12, month % 12 + 1
+    import calendar
+    day = min(opened.day, calendar.monthrange(year, month)[1])
+    return opened.replace(year=year, month=month, day=day)
+
+
+def not_reported(semester, *, today=None):
+    """Continuing students handed to admissions for this semester who have not
+    come through the desks."""
+    from django.utils import timezone
+    today = today or timezone.localdate()
+    due = decide_from(semester)
+    rows = []
+    for application in (Application.objects.filter(semester=semester, kind=Application.CONTINUING,
+                                                   state__in=sorted(Application.OPEN_STATES))
+                        .select_related('profile', 'class_level', 'programme').order_by('profile__name')):
+        last_check = application.steps.filter(note__startswith=STILL_EXPECTED).order_by('-done_at').first()
+        rows.append({
+            'application_id': application.id, 'reg_no': application.profile.nactvet_reg_no,
+            'name': application.profile.name, 'level': application.class_level.name,
+            'programme': application.programme.code if application.programme_id else '',
+            'desk': application.get_state_display(), 'opened': application.created_at.date(),
+            'decide_from': due, 'can_decide': bool(due and today >= due),
+            'still_expected_on': last_check.done_at.date() if last_check else None,
+        })
+    return rows
+
+
+STILL_EXPECTED = 'Still expected'
+
+
+@transaction.atomic
+def mark_not_reported(application, *, decision, actor=None, note='', today=None):
+    """The admission office's decision, three months after admission opened:
+    still expected (left open, the check recorded), or did not report — the
+    application cancelled, its fees reversed, and the student due back in a
+    later year at the level they were going to."""
+    from django.utils import timezone
+    today = today or timezone.localdate()
+    application = Application.objects.select_for_update().select_related(
+        'profile', 'semester__academic_year', 'class_level', 'programme').get(pk=application.pk)
+    if application.kind != Application.CONTINUING or application.state not in Application.OPEN_STATES:
+        raise AdmissionError('Only a continuing student still at the desks can be decided here.')
+    due = decide_from(application.semester)
+    if due is None or today < due:
+        raise AdmissionError(f'Decide from {due:%d %b %Y}: three months after admission opened.'
+                             if due else 'The admission window for this semester is not set.')
+    note = (note or '').strip()
+    if decision == 'expected':
+        ApplicationStep.objects.create(application=application, step=application.state, done_by=actor,
+                                       note=f'{STILL_EXPECTED}{": " + note if note else ""}'[:300])
+        return application
+    if decision != 'not_reported':
+        raise AdmissionError('Still expected, or did not report.')
+    reason = f'Did not report for {application.semester}{": " + note if note else ""}'[:300]
+    ApplicationStep.objects.create(application=application, step=application.state, done_by=actor, note=reason)
+    application.state = Application.CANCELLED
+    application.decided_reason = reason
+    application.save(update_fields=['state', 'decided_reason', 'updated_at'])
+    finance.reset_fees(application.profile, application.semester.academic_year,
+                       from_semester_number=application.semester.number, actor=actor, reason=reason)
+    from . import progression
+    nxt = AcademicYear.objects.filter(name=application.semester.academic_year.next_name).first()
+    if nxt is None:
+        nxt, _ = AcademicYear.objects.get_or_create(name=application.semester.academic_year.next_name)
+    progression.set_standing(application.profile, StudentStanding.NOT_REPORTED, actor=actor,
+                             semester=application.semester, class_level=application.class_level,
+                             programme=application.programme, return_year=nxt,
+                             return_semester_number=application.semester.number, reason=reason)
+    return application

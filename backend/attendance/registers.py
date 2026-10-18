@@ -309,12 +309,15 @@ def _signing_page(document, module, students, first, last):
               valign=WD_CELL_VERTICAL_ALIGNMENT.BOTTOM)
 
     # One row per student.
+    from .progression import provisional_profile_ids
+    provisional = provisional_profile_ids()
     for number, row in enumerate(table.rows[4:], 1):
         _row(row, ROW)
         _cell(row.cells[0], f'{number}.', size=6.5)
         if number <= len(students):
             student = students[number - 1]
-            name = student.name + (' (Repeat)' if student.attempt == Student.REPEAT else '')
+            name = student.name + (' (Repeat)' if student.attempt == Student.REPEAT else '') + (
+                ' (Provisional)' if student.profile_id in provisional else '')
             _cell(row.cells[1], name, size=7)
             _cell(row.cells[2], student.nactvet_reg_no, size=7)
     return table

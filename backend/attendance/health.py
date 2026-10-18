@@ -50,6 +50,21 @@ def deans():
             DeanOfStudentsProfile.objects.filter(is_active=True).select_related('user')]
 
 
+MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+#: What a PDF, a JPG and a PNG start with: the name alone is not trusted.
+DOCUMENT_SIGNATURES = (b'%PDF', b'\xff\xd8\xff', b'\x89PNG\r\n\x1a\n')
+
+
+def _looks_like_a_document(upload):
+    try:
+        upload.seek(0)
+        head = upload.read(8)
+        upload.seek(0)
+    except (AttributeError, OSError, ValueError):
+        return False
+    return any(head.startswith(signature) for signature in DOCUMENT_SIGNATURES)
+
+
 def keepers():
     """Who checks a student's health report: the records office (the Principal
     may, and is told too)."""
@@ -115,6 +130,10 @@ def report_condition(profile, *, condition, facility, issued_on, upload):
     facility, issued_on = _valid_document_details(facility, issued_on)
     if not upload:
         raise HealthRecordError("Upload the hospital's document — a scan or a clear photo (PDF, JPG or PNG).")
+    if getattr(upload, 'size', 0) > MAX_DOCUMENT_BYTES:
+        raise HealthRecordError('That file is over 10 MB. Scan it smaller or as a PDF.')
+    if not _looks_like_a_document(upload):
+        raise HealthRecordError('That file is not a PDF, JPG or PNG.')
     document = StudentDocument(profile=profile, kind=StudentDocument.MEDICAL, file=upload,
                                original_name=getattr(upload, 'name', '')[:255], uploaded_by_student=True,
                                note=f'Health report: {condition}'[:200])

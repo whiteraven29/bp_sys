@@ -64,6 +64,8 @@ def class_list(semester, class_level, *, programme=None):
         key = enrollment.profile_id or enrollment.nactvet_reg_no.strip().upper()
         repeats.setdefault(key, []).append(enrollment.module.code)
 
+    from .progression import provisional_profile_ids
+    provisional = provisional_profile_ids()
     rows = []
     for key, person in people.items():
         profile = person['profile']
@@ -77,6 +79,7 @@ def class_list(semester, class_level, *, programme=None):
             'programme': person['programme'].code if person['programme'] else '',
             'status': REPEATER if (person['repeating'] or repeated) else FIRST_SITTING,
             'modules_repeated': repeated,
+            'provisional': bool(profile) and profile.id in provisional,
             '_enrollment': person.get('enrollment'),
         })
     return sorted(rows, key=lambda row: (row['name'].upper(), row['reg_no']))

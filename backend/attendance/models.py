@@ -63,6 +63,11 @@ class Semester(models.Model):
     academic_year = models.ForeignKey(AcademicYear, on_delete=models.CASCADE, related_name='semesters')
     number = models.PositiveSmallIntegerField(choices=NUMBER_CHOICES)
     is_active = models.BooleanField(default=False)
+    # Set by the examination officer (said 18 October 2026): by this date every
+    # student placed in this semester provisionally — the results of the
+    # semester before not out yet — should be settled. After it the offices
+    # are warned every day.
+    provisional_cutoff = models.DateField(null=True, blank=True)
 
     # Attendance cutoff dates — teachers cannot record attendance after each date
     cat1_cutoff = models.DateField(null=True, blank=True, verbose_name='CAT 1 Attendance Cutoff')
@@ -1275,6 +1280,14 @@ class StudentProfile(models.Model):
     # S0123/0045/2021. Asked of every PST student; a VETA course asks only that
     # the applicant can read and write, so theirs may stay blank.
     form_four_index = models.CharField(max_length=20, blank=True, verbose_name='Form Four index No.')
+    # From the enrolment form (said 18 October 2026): where the student lives,
+    # who pays (the guarantor/sponsor), and their passport photo — a small
+    # square JPEG or PNG, resized in the browser before it is sent.
+    address = models.CharField(max_length=300, blank=True)
+    sponsor_name = models.CharField(max_length=200, blank=True, verbose_name='Guarantor / sponsor')
+    sponsor_phone = models.CharField(max_length=30, blank=True)
+    passport = models.FileField(upload_to='passports/%Y/', blank=True)
+    passport_updated_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1287,6 +1300,29 @@ class StudentProfile(models.Model):
 
     def __str__(self):
         return f'{self.nactvet_reg_no} – {self.name}'
+
+
+class StudentEducation(models.Model):
+    """Where a student studied before the college, as the enrolment form asks:
+    O-level, A-level and any college, each with its years."""
+    O_LEVEL = 'o_level'
+    A_LEVEL = 'a_level'
+    COLLEGE = 'college'
+    LEVEL_CHOICES = [(O_LEVEL, 'Secondary school (O-level)'), (A_LEVEL, 'Secondary school (A-level)'),
+                     (COLLEGE, 'College')]
+    profile = models.ForeignKey('StudentProfile', on_delete=models.CASCADE, related_name='education')
+    level = models.CharField(max_length=10, choices=LEVEL_CHOICES)
+    institution = models.CharField(max_length=200)
+    start_year = models.PositiveSmallIntegerField(null=True, blank=True)
+    end_year = models.PositiveSmallIntegerField(null=True, blank=True)
+    index_number = models.CharField(max_length=30, blank=True)
+
+    class Meta:
+        ordering = ['profile', 'level']
+        constraints = [models.UniqueConstraint(fields=['profile', 'level'], name='one_education_row_per_level')]
+
+    def __str__(self):
+        return f'{self.get_level_display()}: {self.institution}'
 
 
 class NextOfKin(models.Model):
@@ -1412,6 +1448,7 @@ class StudentStanding(models.Model):
     DISCONTINUED = 'discontinued'
     COMPLETED = 'completed'
     ARCHIVED = 'archived'
+    NOT_REPORTED = 'not_reported'
     STATUS_CHOICES = [
         (ACTIVE, 'Studying'),
         (REPEATING, 'Repeating failed modules'),
@@ -1419,10 +1456,11 @@ class StudentStanding(models.Model):
         (DISCONTINUED, 'Discontinued — may return on readmission'),
         (COMPLETED, 'Finished studies, awaiting clearance'),
         (ARCHIVED, 'Cleared and archived'),
+        (NOT_REPORTED, 'Did not report — may return'),
     ]
 
     #: Statuses whose students are expected back on a stated semester.
-    AWAY = {POSTPONED, DISCONTINUED}
+    AWAY = {POSTPONED, DISCONTINUED, NOT_REPORTED}
     #: Only an archived student is refused the portal. A discontinued or
     #: postponed one still needs to see their results, their balance, and the
     #: services they use to ask for readmission.
@@ -2556,6 +2594,45 @@ class ResultWithholding(models.Model):
         return f'{self.profile_id} · {self.semester_id} · {"released" if self.released_at else "withheld"}'
 
 
+class ExitRequest(models.Model):
+    """A student asking to finish after Level 5 with that level's award (said
+    18 October 2026): asked from the portal, decided by the Principal. Approved,
+    the next level is called off — its application or registration cancelled,
+    its fees reversed, nothing refunded — and the student finishes through the
+    same route as Level 6: finance clearance, then the Principal's declaration.
+    The award itself is NACTVET's. They may come back for the next level in any
+    later year."""
+    PENDING = 'pending'
+    APPROVED = 'approved'
+    DECLINED = 'declined'
+    WITHDRAWN = 'withdrawn'
+    STATUS_CHOICES = [(PENDING, 'Waiting for the Principal'), (APPROVED, 'Approved'),
+                      (DECLINED, 'Declined'), (WITHDRAWN, 'Withdrawn')]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='exit_requests')
+    class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, related_name='+',
+                                    help_text='The level they finish at.')
+    review = models.ForeignKey('SemesterReview', on_delete=models.PROTECT, related_name='+',
+                               help_text="The level's last review, which passed it.")
+    reason = models.CharField(max_length=500, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['profile'], condition=models.Q(status='pending'),
+                                    name='one_waiting_exit_request'),
+        ]
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · finish after {self.class_level} ({self.status})'
+
+
 class Postponement(models.Model):
     """A student stopping for a while, with the Principal's leave.
 
@@ -3535,6 +3612,10 @@ class Notification(models.Model):
     HEALTH_ANSWERED = 'health.answered'
     HOSTEL_APPLIED = 'hostel.applied'
     HOSTEL_DECIDED = 'hostel.decided'
+    PROVISIONAL_RESULTS_IN = 'provisional.results'
+    PROVISIONAL_SETTLED = 'provisional.settled'
+    EXIT_REQUESTED = 'exit.requested'
+    EXIT_DECIDED = 'exit.decided'
     DISPOSAL_PROPOSED = 'disposal.proposed'
     DISPOSAL_DECIDED = 'disposal.decided'
     PASSWORD_RESET = 'password.reset'
@@ -3554,6 +3635,10 @@ class Notification(models.Model):
         (HEALTH_ANSWERED, 'A health report was answered'),
         (HOSTEL_APPLIED, 'A student applied for the hostel'),
         (HOSTEL_DECIDED, 'A hostel application was decided'),
+        (PROVISIONAL_RESULTS_IN, 'Results are in for students placed provisionally'),
+        (PROVISIONAL_SETTLED, 'A provisional place was confirmed or changed'),
+        (EXIT_REQUESTED, 'A student asked to finish after a level'),
+        (EXIT_DECIDED, 'A request to finish after a level was decided'),
         (DISPOSAL_PROPOSED, 'An asset disposal needs approval'),
         (DISPOSAL_DECIDED, 'An asset disposal was decided'),
         (PASSWORD_RESET, 'Your password was reset by the office'),

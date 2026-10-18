@@ -99,6 +99,29 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    closing (the review) and are then locked. Custody & Handover moves what one person holds to another.
    Lab Technician role (open, given by ICT) with the laboratory stock book: receive, issue, write off,
    balances, low stock, expiry; DPFPA and the Principal read it. Migration 0065; `attendance/inventory.py`.
+2l. **Opening the year while results are out (option B), finishing after Level 5, did not report —
+   18 Oct (not committed).** The advance no longer stops for missing results: a student with nothing
+   failed so far is placed provisionally (*Provisional* on the desks, lists, registers and portal; no
+   end-of-semester exam until settled); a failure already in, or Level 6, waits. Semester Review ▸
+   Provisional places: the exam officer's cut-off, what the results now say, *Settle the passes*
+   (Principal / DPARC). A late failure is a repeat of **its own semester** (2025/26); the provisional
+   place, registration, applications and fees are called off, marks kept but not counted; a
+   supplementary still to come keeps the student provisional. Finishing after Level 5: portal only,
+   the Principal decides, no refund, return any later year. Admissions ▸ Did not report from three
+   months after the window opened. New endpoints swept for access (`test_security_new.py`); health
+   uploads checked by content. Migration 0066; `test_provisional.py`.
+   - [x] Built and tested (1023 tests), checked in the browser
+2m. **Enrolment form details and passport photo — 18 Oct (not committed).** From the paper Student
+   Enrolment Form: address, guarantor / sponsor and phone, schools before (O-level, A-level, college:
+   school, years, index number) — kept by records, read on the application and the portal profile.
+   Passport photo: the student uploads it (My Profile ▸ Personal info) or records / the Principal at
+   Find a student; resized in the browser to 300×300 JPEG, the server takes only real JPG / PNG up to
+   512 KB, served only through the app; small on the dashboard, large on the profile, on the staff
+   record and the application. Manuals with screenshots for the admission office, examination officer,
+   accountant and students (`ops/guides/manuals/index.html`, also published as a private claude.ai page).
+   Migration 0067; `test_passport.py`.
+   - [x] Built and tested (1034 tests), checked in the browser at desktop and phone width
+   - [ ] Names stay one field (First Middle Surname); the form's declarations and signatures stay on paper
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

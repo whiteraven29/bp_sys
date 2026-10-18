@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EduTrack Desk Manuals</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a field handbook — a masthead, one office at a time chosen from a tab rail,
+   numbered procedures with the screen beside the words, notes in the margin column. */
+:root {
+  --paper: #f5f7f6;
+  --sheet: #ffffff;
+  --ink: #17242b;
+  --muted: #56656d;
+  --rule: #d5dedb;
+  --accent: #0f6b5c;        /* pharmacy green */
+  --accent-ink: #ffffff;
+  --accent-soft: #e2f1ec;
+  --blue: #1c5fb8;          /* EduTrack's own blue, for screen names */
+  --warn: #9a4f06;
+  --warn-soft: #fbefdf;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10181b; --sheet: #172226; --ink: #e4ecea; --muted: #9db0b0; --rule: #2a3a3f;
+    --accent: #4fc2a8; --accent-ink: #0b1a17; --accent-soft: #173830; --blue: #7fb2f2;
+    --warn: #f0b066; --warn-soft: #3a2a17; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10181b; --sheet: #172226; --ink: #e4ecea; --muted: #9db0b0; --rule: #2a3a3f;
+  --accent: #4fc2a8; --accent-ink: #0b1a17; --accent-soft: #173830; --blue: #7fb2f2;
+  --warn: #f0b066; --warn-soft: #3a2a17; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font: 16px/1.6 var(--body); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.mast { padding-block: 36px 20px; }
+.kicker { font: 600 .78rem/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 700 clamp(2rem, 5vw, 3.1rem)/1.05 var(--display); margin: 10px 0 12px; text-wrap: balance; letter-spacing: -.01em; }
+.lede { max-width: 66ch; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 16px; font-size: .86rem; color: var(--muted); }
+.meta b { color: var(--ink); font-weight: 700; }
+
+nav.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); border-bottom: 1px solid var(--rule); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--paper); }
+.tabrow { display: flex; gap: 4px; overflow-x: auto; padding-block: 10px; scrollbar-width: thin; }
+.tab { flex: 0 0 auto; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); font: 700 .92rem/1 var(--body); padding: 11px 16px; border-radius: 999px; cursor: pointer; }
+.tab:hover { border-color: var(--accent); }
+.tab[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.tab:focus-visible, .shot:focus-visible, button:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+
+main { padding-block: 28px 64px; }
+.manual > header { display: grid; gap: 10px; margin-bottom: 26px; }
+h2 { font: 700 clamp(1.5rem, 3.4vw, 2.1rem)/1.15 var(--display); margin: 0; text-wrap: balance; }
+.role { font-size: 1.05rem; max-width: 70ch; margin: 0; }
+.new { background: var(--accent-soft); border-radius: 10px; padding: 16px 20px; max-width: 80ch; }
+.new strong.label { display: block; font: 600 .74rem/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+.new ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+
+.step { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 18px 32px; padding-block: 26px; border-top: 1px solid var(--rule); align-items: start; }
+.step.wide { grid-template-columns: minmax(0, 1fr); }
+.step.phone { grid-template-columns: minmax(0, 6fr) minmax(0, 3fr) minmax(0, 3fr); }
+.step h3 { font: 700 1.2rem/1.25 var(--display); margin: 0 0 8px; display: flex; gap: 12px; align-items: baseline; text-wrap: balance; }
+.num { font: 500 .85rem/1 var(--mono); color: var(--accent); border: 1.5px solid var(--accent); border-radius: 6px; padding: 4px 6px; flex-shrink: 0; transform: translateY(-2px); }
+.step p, .step li { max-width: 62ch; }
+.step p { margin: 0 0 10px; }
+.step ol, .step ul { margin: 0 0 10px; padding-left: 22px; display: grid; gap: 5px; }
+.ui { font-weight: 700; color: var(--blue); white-space: nowrap; }
+.path { font-weight: 700; color: var(--blue); }
+code { font: 500 .86em var(--mono); background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+.warn { background: var(--warn-soft); color: var(--ink); border-left: 4px solid var(--warn); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 6px 0 10px; max-width: 62ch; }
+.warn b { color: var(--warn); }
+
+figure { margin: 0; min-width: 0; }
+.shot { display: block; width: 100%; padding: 0; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--sheet); cursor: zoom-in; box-shadow: 0 1px 2px rgb(0 0 0 / .06), 0 8px 24px -12px rgb(0 0 0 / .18); }
+.shot img { display: block; width: 100%; height: auto; }
+figcaption { font-size: .84rem; color: var(--muted); margin-top: 8px; }
+
+.route { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 12px; font-size: .9rem; }
+.route span { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 4px 9px; font-weight: 700; }
+.route i { font-style: normal; color: var(--muted); }
+
+table.faq { width: 100%; border-collapse: collapse; font-size: .95rem; }
+.tablewrap { overflow-x: auto; }
+table.faq th, table.faq td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+table.faq th { width: 38%; font-weight: 700; }
+
+footer { border-top: 1px solid var(--rule); padding-block: 22px 40px; color: var(--muted); font-size: .86rem; }
+
+dialog { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1400px); max-height: 94vh; }
+dialog::backdrop { background: rgb(8 14 16 / .82); }
+dialog img { display: block; max-width: 100%; max-height: 88vh; border-radius: 6px; }
+dialog p { color: #e8efed; font-size: .9rem; margin: 8px 2px 0; }
+dialog button { position: absolute; top: 8px; right: 8px; background: #0f1a1d; color: #fff; border: 1px solid #44575c; border-radius: 6px; padding: 6px 10px; font: 700 .85rem var(--body); cursor: pointer; }
+
+@media (max-width: 820px) {
+  .step, .step.phone { grid-template-columns: minmax(0, 1fr); }
+  .step.phone figure { max-width: 300px; }
+}
+@media (prefers-reduced-motion: no-preference) { .manual { animation: rise .25s ease-out; } @keyframes rise { from { transform: translateY(6px); } to { transform: none; } } }
+</style>
+
+<header class="mast wrap">
+  <div class="kicker">Blue Pharma Institute of Science and Technology · EduTrack</div>
+  <h1>Desk manuals for 2026/27</h1>
+  <p class="lede">How each office works in EduTrack this year, step by step, with the real screens. Pick your office below. The screens show example students (Grace, Amina, Baraka, Pendo, Eliya, Nuru), not real records.</p>
+  <div class="meta"><span>Version <b>18 October 2026</b></span><span>Admissions opened <b>12 October 2026</b></span><span>Questions: <b>the ICT officer</b></span></div>
+</header>
+
+<nav class="tabs" aria-label="Choose your office">
+  <div class="wrap tabrow" role="tablist">
+    <button class="tab" role="tab" id="tab-admission" data-tab="admission" aria-selected="true">Admission office</button>
+    <button class="tab" role="tab" id="tab-exam" data-tab="exam" aria-selected="false">Examination officer</button>
+    <button class="tab" role="tab" id="tab-accounts" data-tab="accounts" aria-selected="false">Accountant</button>
+    <button class="tab" role="tab" id="tab-students" data-tab="students" aria-selected="false">Students</button>
+    <button class="tab" role="tab" id="tab-records" data-tab="records" aria-selected="false">Records &amp; Principal</button>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<!-- ───────────────────────── ADMISSION OFFICE ───────────────────────── -->
+<section class="manual" id="admission" role="tabpanel" aria-labelledby="tab-admission">
+  <header>
+    <div class="kicker">Manual 1 of 4</div>
+    <h2>Admission office</h2>
+    <p class="role">You take students on, pass them desk to desk, admit them, and decide on continuing students who never came back.</p>
+    <div class="new"><strong class="label">New this year</strong>
+      <ul>
+        <li>The year opened before NACTVET's results came. Some continuing students are marked <span class="ui">Provisional</span>. Treat them like everyone else at your desk.</li>
+        <li>New menu item <span class="path">Admissions ▸ Did not report</span>, for continuing students who never came.</li>
+        <li>The application now shows the student's passport photo, address, guarantor / sponsor and the schools they attended.</li>
+      </ul>
+    </div>
+  </header>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">01</span>Start at My desk</h3>
+      <p>Sign in. EduTrack opens <span class="path">Admissions ▸ My desk</span>.</p>
+      <ul>
+        <li><b>This semester</b> counts every application by desk.</li>
+        <li><b>On my desk</b> lists only what is waiting on you. Press <span class="ui">Work it</span> to open one.</li>
+      </ul>
+      <p>A first year who has no NACTVET number yet is held under a temporary number such as <code>TEMP/2026/0001</code>. Replace it when the authority issues the real one (step 03).</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/adm_desk.jpg" data-cap="Admissions ▸ My desk"><img src="img/adm_desk.jpg" alt="My desk: counts per desk and two first-year applications waiting" loading="lazy"></button>
+      <figcaption>My desk: two first years waiting on the admission office.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">02</span>Take a new student on</h3>
+      <p>Open <span class="path">Admissions ▸ New application</span>.</p>
+      <ol>
+        <li><b>Kind:</b> First year (or Continuing / Readmission for someone already on file).</li>
+        <li><b>Registration number:</b> leave blank for a first year. EduTrack gives a temporary one.</li>
+        <li><b>Full name:</b> exactly as on the certificate, first, middle, surname.</li>
+        <li><b>Programme</b> and <b>Level</b>, then the <b>Form Four index No.</b> written like <code>S0123/0045/2021</code>.</li>
+        <li>Press <span class="ui">Open the application</span>.</li>
+      </ol>
+      <p>A first year goes through these desks, in order:</p>
+      <div class="route"><span>Admission (intake)</span><i>→</i><span>Records</span><i>→</i><span>Finance</span><i>→</i><span>Admission</span><i>→</i><span>Admitted</span></div>
+      <p>A continuing student starts at finance:</p>
+      <div class="route"><span>Finance</span><i>→</i><span>Records</span><i>→</i><span>Admission</span><i>→</i><span>Admitted</span></div>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/adm_new.jpg" data-cap="Admissions ▸ New application"><img src="img/adm_new.jpg" alt="The New application form" loading="lazy"></button>
+      <figcaption>New application. Only the starred fields are needed to open it.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">03</span>Work an application</h3>
+      <p>The application window shows, top to bottom:</p>
+      <ul>
+        <li><b>Where it is</b> and what the student <b>owes</b>. <b>To register</b> says <i>paid</i> or <i>not paid</i>.</li>
+        <li><b>Results and what they pay for</b>: last semester's outcome, the bill, the modules.</li>
+        <li><b>Student details</b>, kept by records, with the <b>passport photo</b> on the right. Check that the photo is the person in front of you.</li>
+        <li><b>The NACTVET number</b>: type it when the authority issues it, then <span class="ui">Save the number</span>.</li>
+        <li><b>Documents</b> handed in, and a <b>note for the record</b>.</li>
+      </ul>
+      <p>Then choose one:</p>
+      <ul>
+        <li><span class="ui">Clear this desk →</span> passes it to the next desk. At the last desk it <b>admits</b> the student and gives the college ID.</li>
+        <li><span class="ui">Send back…</span> returns it to an earlier desk, with a reason.</li>
+        <li><span class="ui">Refuse</span> ends it, with a reason.</li>
+      </ul>
+      <p>Admission does not give out portal passwords. The ICT officer issues them after the admission days.</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/adm_application_photo.jpg" data-cap="The application window, with the passport photo"><img src="img/adm_application_photo.jpg" alt="Application window showing student details, address, sponsor, schools and passport photo" loading="lazy"></button>
+      <figcaption>Amina's application at the records desk: address, sponsor, O-level school and her photo.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">04</span>Continuing students, and "Provisional"</h3>
+      <p>When the Principal opened the year, every continuing student who had failed nothing so far was sent to <b>Finance</b> automatically, at the level a pass takes them to.</p>
+      <p>Those whose NACTVET results were not out yet carry a <span class="ui">Provisional</span> tag. Admit them as usual. The examination office settles them when the results arrive, and EduTrack fixes their place by itself if they failed.</p>
+      <p>Students whose results already showed a failure were <b>not</b> placed. When their results are complete and confirmed, press <span class="ui">Send continuing students to finance</span> on My desk.</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/acc_desk.jpg" data-cap="A provisional student at the finance desk"><img src="img/acc_desk.jpg" alt="Desk list with Pendo Provisional tagged Provisional" loading="lazy"></button>
+      <figcaption>Pendo is placed in Level 5 provisionally. The tag follows her on every list.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">05</span>Did not report</h3>
+      <p>Open <span class="path">Admissions ▸ Did not report</span> and choose the semester. It lists continuing students whose application is still open.</p>
+      <p>You may decide <b>three months after admission opened</b>. For 2026/27 Semester 1 (opened 12 October 2026) that is from <b>12 January 2027</b>. Before then the page shows the date it opens, and no buttons.</p>
+      <ul>
+        <li><span class="ui">Still expected</span>: they told you they are coming. Nothing changes; the date you checked is kept.</li>
+        <li><span class="ui">Did not report</span>: EduTrack asks for a short note, then cancels the place and reverses its fees. The student's standing becomes <i>Did not report</i>.</li>
+      </ul>
+      <p>A student marked <i>Did not report</i> may come back in any later year. They appear under <span class="path">Expected back</span>.</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/adm_noshow.jpg" data-cap="Admissions ▸ Did not report"><img src="img/adm_noshow.jpg" alt="Did not report list with Still expected and Did not report buttons" loading="lazy"></button>
+      <figcaption>Three months have passed in this example, so the buttons are open.</figcaption></figure>
+  </div>
+
+  <div class="step wide">
+    <div>
+      <h3><span class="num">06</span>The rest of your menu</h3>
+      <div class="tablewrap"><table class="faq">
+        <tr><th>All applications</th><td>Every application this semester, at any desk.</td></tr>
+        <tr><th>Expected back</th><td>Postponed, discontinued and returning students due this semester. <span class="ui">Start their return</span> opens their application.</td></tr>
+        <tr><th>Items check</th><td>TPH book, calculator, rim paper and insurance. A missing item becomes a debt. It never stops admission.</td></tr>
+        <tr><th>Class lists</th><td>A level's students this semester, first sittings and repeaters, with the Provisional tag. Download as Excel.</td></tr>
+        <tr><th>Window &amp; ID numbers</th><td>The admission window's dates, the college ID format, and the required items.</td></tr>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── EXAMINATION OFFICER ───────────────────────── -->
+<section class="manual" id="exam" role="tabpanel" aria-labelledby="tab-exam" hidden>
+  <header>
+    <div class="kicker">Manual 2 of 4</div>
+    <h2>Examination officer</h2>
+    <p class="role">You upload NACTVET's grades, prepare the semester review, and watch over the students placed while their results were out.</p>
+    <div class="new"><strong class="label">New this year</strong>
+      <ul>
+        <li><span class="path">Semester Review ▸ Provisional places</span>: who went on without results, and what their results say once uploaded.</li>
+        <li>You set the <b>cut-off</b>: the date by which the late results must be in.</li>
+        <li>A late result always belongs to the semester it was sat in. A student who failed 2025/26 Semester 2 is a 2025/26 repeater, never a 2026/27 failure.</li>
+      </ul>
+    </div>
+  </header>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">01</span>See who is provisional</h3>
+      <p>Open <span class="path">Semester Review ▸ Provisional places</span>. Each row shows:</p>
+      <ul>
+        <li><b>Results of</b>: the semester the missing results belong to, for example <i>NTA Level 4 · Sem 2 · 2025/2026</i>.</li>
+        <li><b>Placed in</b>: where the student was put, for example <i>NTA Level 5, Sem 1 · 2026/2027</i>.</li>
+        <li><b>Results now say</b>: <i>Results not out</i> until you upload them, then the outcome they give.</li>
+      </ul>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/exam_provisional.jpg" data-cap="Semester Review ▸ Provisional places"><img src="img/exam_provisional.jpg" alt="Provisional places with one student waiting for PST04201 and the cut-off date" loading="lazy"></button>
+      <figcaption>Pendo is waiting for one module, PST04201. The cut-off is set to 15 December 2026.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">02</span>Set the cut-off</h3>
+      <p>Under <b>Cut-off</b>, pick the date for the new semester and press <span class="ui">Save</span>. Choose a date before the end-of-semester exam registration.</p>
+      <p>After that date, the Principal, DPARC and you see a warning on the dashboard for every student still provisional.</p>
+      <div class="warn"><b>Rule:</b> a provisional student may attend and sit CATs, but is <b>not eligible for the end-of-semester exam</b> until settled. NACTVET would not count it.</div>
+    </div>
+    <div></div>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">03</span>Upload the late results</h3>
+      <p>When NACTVET's sheet arrives, open <span class="path">Results ▸ Authority Grades</span>.</p>
+      <ol>
+        <li><b>Semester:</b> the semester the exam was <b>sat in</b>, for example <i>Sem 2 · 2025/2026</i>. Not the semester running now.</li>
+        <li><b>Class level</b>, then <b>Sheet</b>: <i>Continuing</i> or <i>Repeaters</i>.</li>
+        <li><b>Sitting:</b> <i>First sitting</i>, or <i>Supplementary sitting</i> for a supplementary sheet.</li>
+        <li><span class="ui">Upload Authority Grades</span>.</li>
+      </ol>
+      <p>The Principal and DPARC are told that results for provisional students are in. Provisional places now shows what each one's results say.</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/exam_authority.jpg" data-cap="Results ▸ Authority Grades"><img src="img/exam_authority.jpg" alt="Authority Grade Import form" loading="lazy"></button>
+      <figcaption>Authority Grades: choose the semester the exam was sat in.</figcaption></figure>
+  </div>
+
+  <div class="step wide">
+    <div>
+      <h3><span class="num">04</span>What happens to each student</h3>
+      <div class="tablewrap"><table class="faq">
+        <tr><th>Passed everything</th><td>The Principal or DPARC presses <span class="ui">Settle the passes</span>. The place is confirmed. Nothing else changes: no new bill, no new application.</td></tr>
+        <tr><th>A supplementary still to come</th><td>The student stays provisional. Upload the supplementary sheet with Sitting = <i>Supplementary</i>. A pass then settles them as above.</td></tr>
+        <tr><th>Failed: repeat or discontinued</th><td>Settled one by one by the Principal or DPARC. The failure is recorded against <b>2025/26</b>, the semester it was sat in. The 2026/27 place, its registration and its fees are called off. Marks earned in 2026/27 stay on record but do not count. The student then follows the normal repeat or readmission route.</td></tr>
+        <tr><th>Results still not out at the cut-off</th><td>The warning appears. Chase NACTVET. The student cannot sit the end-of-semester exam.</td></tr>
+      </table></div>
+      <p style="margin-top:14px">The semester review works as before: you prepare it with <span class="ui">Read the results again</span>, and the Principal or DPARC confirms. You do not confirm reviews or settle provisional places yourself.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── ACCOUNTANT ───────────────────────── -->
+<section class="manual" id="accounts" role="tabpanel" aria-labelledby="tab-accounts" hidden>
+  <header>
+    <div class="kicker">Manual 3 of 4</div>
+    <h2>Accountant</h2>
+    <p class="role">You hold the finance desk of admissions, record what students pay, and clear them for registration and exams.</p>
+    <div class="new"><strong class="label">New this year</strong>
+      <ul>
+        <li>Provisional students are billed the full fees of the level they were placed in, like everyone else.</li>
+        <li>If their late results show a failure, EduTrack reverses that level's fees by itself. Money already paid stays as credit.</li>
+        <li>No refund when a student finishes after Level 5. Did not report reverses the fees of the place.</li>
+      </ul>
+    </div>
+  </header>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">01</span>Your desk</h3>
+      <p>Open <span class="path">Admissions ▸ My desk</span>. Every application waiting at Finance is listed with what the student owes. A <span class="ui">Provisional</span> tag marks a student placed before their results came.</p>
+      <p>Press <span class="ui">Work it</span> to open one.</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/acc_desk.jpg" data-cap="The finance desk"><img src="img/acc_desk.jpg" alt="Finance desk with four applications" loading="lazy"></button>
+      <figcaption>Four students at Finance: three continuing, one first year.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">02</span>Clear a student for registration</h3>
+      <ol>
+        <li><b>Where they will live:</b> a first year must be marked <span class="ui">Day</span> or <span class="ui">Hostel</span> first. The bill depends on it.</li>
+        <li><b>To register:</b> <i>not paid</i> lists the charges that block registration and what is outstanding on them.</li>
+        <li>When the slip is recorded (step 04) and it reads <i>paid</i>, press <span class="ui">Clear this desk →</span>.</li>
+      </ol>
+      <p>A student the college has agreed to let through unpaid: add an override under <span class="path">Students ▸ Waivers &amp; Overrides</span>. Required items (TPH book, calculator, rim paper, insurance) are debts and never block.</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/acc_application_new.jpg" data-cap="A first year at the finance desk"><img src="img/acc_application_new.jpg" alt="First-year application at finance, not paid, residence not stated" loading="lazy"></button>
+      <figcaption>Baraka: residence not stated yet, 580,000 outstanding on the charges that block registration.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">03</span>A provisional student</h3>
+      <p>The window shows <span class="ui">Provisional</span> beside the semester. The results line reads <i>results not complete, placed provisionally</i>.</p>
+      <p>Bill and clear them like anyone else at that level. You do not need to do anything when the results arrive:</p>
+      <ul>
+        <li><b>Passed:</b> nothing changes.</li>
+        <li><b>Failed:</b> the placed level's fees are waived automatically, with an audit entry. What they paid is kept as credit for their repeat or return. The repeat charges are raised on the repeat route.</li>
+      </ul>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/acc_application_provisional.jpg" data-cap="A provisional student at the finance desk"><img src="img/acc_application_provisional.jpg" alt="Provisional student's application window" loading="lazy"></button>
+      <figcaption>Pendo: billed the full Level 5 fees while her Level 4 results are out.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">04</span>Record a payment</h3>
+      <p>Open <span class="path">Payments ▸ Record a Payment</span>.</p>
+      <ol>
+        <li>Type the <b>reference on the slip</b>, for example <code>BPH-40014</code>, and press <span class="ui">Look up</span>.</li>
+        <li>Check the student and what the invoice covers, then <span class="ui">Record a payment against this invoice</span>.</li>
+        <li>Enter the <b>amount received</b>, the <b>date on the slip</b>, <b>Paid through</b> (CRDB bank deposit), the bank reference, the EFD receipt number and who paid.</li>
+      </ol>
+      <p>Mobile money is not accepted. A slip paid in the holiday without an invoice: choose <b>Paid into</b> = the account on the slip. The same bank reference twice is stopped. Confirm only when one slip really pays for two students.</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/acc_record_payment.jpg" data-cap="Payments ▸ Record a Payment"><img src="img/acc_record_payment.jpg" alt="Invoice BPH-40014 looked up with its instalments, and the payment form" loading="lazy"></button>
+      <figcaption>Invoice BPH-40014: Baraka's tuition fee in five instalments.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">05</span>Balances &amp; Clearance</h3>
+      <p><span class="path">Students ▸ Balances &amp; Clearance</span> lists what every student was billed, paid and owes, and what they are cleared for: <b>Reg.</b>, <b>CAT 1</b>, <b>CAT 2</b>, <b>Final</b>, <b>Results</b>. Press <span class="ui">Statement</span> for one student's full account.</p>
+      <div class="tablewrap"><table class="faq">
+        <tr><th>Finishing after Level 5</th><td>No refund. After the Principal approves, the student is listed under <span class="path">Postpone &amp; Finish ▸ Finishing</span>: print the statement and clear them when nothing is owed.</td></tr>
+        <tr><th>Did not report</th><td>Admission marks it. The fees of that place are reversed automatically.</td></tr>
+      </table></div>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/acc_balances.jpg" data-cap="Students ▸ Balances & Clearance"><img src="img/acc_balances.jpg" alt="Balances and clearance table" loading="lazy"></button>
+      <figcaption>Registration is blocked until the first instalment is in.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ───────────────────────── STUDENTS ───────────────────────── -->
+<section class="manual" id="students" role="tabpanel" aria-labelledby="tab-students" hidden>
+  <header>
+    <div class="kicker">Manual 4 of 4</div>
+    <h2>Students: your portal</h2>
+    <p class="role">Your attendance, results, fees, requests and profile, on a phone or a computer.</p>
+    <div class="new"><strong class="label">New this year</strong>
+      <ul>
+        <li>Add your <b>passport photo</b>. It shows small on your dashboard and large on your profile.</li>
+        <li>Your profile now shows your address, your guarantor / sponsor and the schools you attended.</li>
+        <li>Level 5 students may ask to <b>finish after Level 5</b>.</li>
+      </ul>
+    </div>
+  </header>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">01</span>Sign in and read your dashboard</h3>
+      <p>Open the college's EduTrack address. Type your <b>NACTVET registration number</b> and your password. Your first password comes from the ICT officer. You will be asked to choose your own.</p>
+      <p>The dashboard shows your photo by <i>Welcome</i>, your attendance, fee reminders with their due dates, and notices from the college. A coloured note at the top tells you anything you must act on.</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/stu_dashboard.jpg" data-cap="The student dashboard on a computer"><img src="img/stu_dashboard.jpg" alt="Student dashboard with a small passport photo" loading="lazy"></button>
+      <figcaption>The dashboard on a computer, with the photo beside Welcome.</figcaption></figure>
+  </div>
+
+  <div class="step phone">
+    <div>
+      <h3><span class="num">02</span>Add your passport photo</h3>
+      <ol>
+        <li>Open <span class="path">My Profile ▸ Personal info</span>.</li>
+        <li>Press <span class="ui">Upload photo</span> (later: <span class="ui">Change photo</span>).</li>
+        <li>Choose a recent passport-size photo: your face clear, a plain background, no cap or sunglasses.</li>
+      </ol>
+      <p>A photo from your phone's camera is fine. The page makes it small before sending, so it uses little data. Only you and the college offices can see it.</p>
+      <p>Check <b>Personal info</b>, <b>Academic info</b> (schools before) and <b>Next of kin</b>. If something is wrong, take the correction to the records office.</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/stu_mobile_dashboard.jpg" data-cap="Dashboard on a phone"><img src="img/stu_mobile_dashboard.jpg" alt="Dashboard on a phone with a small round photo" loading="lazy"></button>
+      <figcaption>Phone: small photo on the dashboard.</figcaption></figure>
+    <figure><button class="shot" type="button" data-full="img/stu_mobile_profile.jpg" data-cap="My Profile on a phone"><img src="img/stu_mobile_profile.jpg" alt="My Profile on a phone with the large photo and Change photo button" loading="lazy"></button>
+      <figcaption>Phone: large photo on My Profile.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">03</span>If you see "Provisional"</h3>
+      <p>The note <i>"Provisional — your place in NTA Level 5 depends on your NTA Level 4 results"</i> means NACTVET has not released your last results yet, so you were placed in the next level early.</p>
+      <ul>
+        <li>Attend, pay your fees and sit your CATs as normal.</li>
+        <li>You cannot sit the <b>end-of-semester exam</b> until your results confirm your place.</li>
+        <li><b>You passed:</b> the note goes away and nothing else changes.</li>
+        <li><b>You have a supplementary:</b> you sit it, and stay provisional until it is marked.</li>
+        <li><b>You failed:</b> you repeat what you failed from last year. Your new place is cancelled and its fees are reversed. What you paid is kept for you.</li>
+      </ul>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/stu_profile.jpg" data-cap="My Profile on a computer"><img src="img/stu_profile.jpg" alt="My Profile with the Provisional note and the large photo" loading="lazy"></button>
+      <figcaption>The Provisional note stays at the top of every page until you are settled.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">04</span>Finish after Level 5</h3>
+      <p>Only for a student who has <b>passed Level 5</b>, owes no module, has no result pending, and is not yet registered for Level 6.</p>
+      <ol>
+        <li>Open <span class="path">Request a Service ▸ Finish after Level 5</span>.</li>
+        <li>Say why, if you wish, and press <span class="ui">Ask the Principal</span>.</li>
+        <li>While it waits you can <span class="ui">Withdraw</span> it. The Principal approves or declines with a reason, and you get a notification.</li>
+      </ol>
+      <p>Your award is NACTVET's Level 5 award. Fees already paid are <b>not refunded</b>. You may come back for Level 6 in any later year.</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/stu_exit_form.jpg" data-cap="Request a Service ▸ Finish after Level 5"><img src="img/stu_exit_form.jpg" alt="Finish after Level 5 request form" loading="lazy"></button>
+      <figcaption>Eliya asks to finish after Level 5.</figcaption></figure>
+  </div>
+
+  <div class="step wide">
+    <div>
+      <h3><span class="num">05</span>Good to know</h3>
+      <div class="tablewrap"><table class="faq">
+        <tr><th>Forgot your password</th><td>See the ICT officer. Only the ICT officer and the Principal reset passwords.</td></tr>
+        <tr><th>You cannot come this semester</th><td>Ask to postpone under Request a Service, or tell the admission office. A continuing student who does not come for three months loses the place, and may come back in a later year.</td></tr>
+        <tr><th>Paying fees</th><td>Generate the invoice under Payments and pay at CRDB with its reference. Mobile money is not accepted. Bring the original slip to the accounts office.</td></tr>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── RECORDS & PRINCIPAL ───────────────────────── -->
+<section class="manual" id="records" role="tabpanel" aria-labelledby="tab-records" hidden>
+  <header>
+    <div class="kicker">Also</div>
+    <h2>Records office and the Principal</h2>
+    <p class="role">The steps of this year's changes that belong to records and to the Principal (or DPARC).</p>
+  </header>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">R1</span>Records: the enrolment form and the photo</h3>
+      <p>Open <span class="path">Students ▸ Find a student</span>, search by name or number, press <span class="ui">Open</span>.</p>
+      <ul>
+        <li><span class="ui">Upload passport photo…</span> when the student has not added one. Any JPG or PNG; the page makes it 300 × 300 before sending.</li>
+        <li>From the paper <b>Student Enrolment Form</b>: <b>Address</b>, <b>Guarantor / sponsor</b> and phone, and <b>Schools and colleges before</b> (O-level, A-level, college: school, from and to years, index number).</li>
+        <li>Press <span class="ui">Save details</span>. A wrong year is refused and nothing of that save is kept.</li>
+      </ul>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/rec_editor.jpg" data-cap="Find a student ▸ Open"><img src="img/rec_editor.jpg" alt="Student record editor with photo, address, sponsor and schools" loading="lazy"></button>
+      <figcaption>Amina's record with her photo and her O-level school.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">P1</span>Principal / DPARC: open the year</h3>
+      <p><span class="path">Semester Review ▸ Review &amp; advance</span>, then advance. The preview tells you:</p>
+      <ul>
+        <li>how many move up, and how many of them go <b>provisionally</b>;</li>
+        <li>who <b>waits</b> for their results (a failure already in, or finishing Level 6).</li>
+      </ul>
+      <p>Missing results no longer stop the year. Only a decision you have not confirmed does.</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/principal_advance_preview.jpg" data-cap="Advance the semester"><img src="img/principal_advance_preview.jpg" alt="Advance preview with provisional and waiting students" loading="lazy"></button>
+      <figcaption>Three move up, one of them provisionally. Faraji waits.</figcaption></figure>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="num">P2</span>Principal: settle, and decide exits</h3>
+      <p><span class="path">Semester Review ▸ Provisional places</span>: after the exam officer uploads the results, <span class="ui">Settle the passes</span> confirms every pass at once. Settle failures one by one.</p>
+      <p><span class="path">Postpone &amp; Finish ▸ Finishing after Level 5</span>: <span class="ui">Approve</span> or <span class="ui">Decline…</span> with a reason. Approval finishes the student at Level 5, cancels their Level 6 application, and sends them to the finishing route. Only the Principal decides; DPARC can read the list.</p>
+    </div>
+    <figure><button class="shot" type="button" data-full="img/principal_exits.jpg" data-cap="Postpone & Finish ▸ Finishing after Level 5"><img src="img/principal_exits.jpg" alt="Finishing after Level 5 list with Approve and Decline" loading="lazy"></button>
+      <figcaption>Eliya's request waiting for the Principal.</figcaption></figure>
+  </div>
+</section>
+</main>
+
+<footer class="wrap">EduTrack · Blue Pharma Institute of Science and Technology, Singida · Manuals for the 2026/27 release of 18 October 2026. The screens use example students.</footer>
+
+<dialog id="viewer" aria-label="Screenshot, full size">
+  <button type="button" id="viewer-close">Close</button>
+  <img id="viewer-img" alt="">
+  <p id="viewer-cap"></p>
+</dialog>
+
+<script>
+(function () {
+  const tabs = [...document.querySelectorAll('.tab')];
+  const panels = [...document.querySelectorAll('.manual')];
+  function show(id, push) {
+    if (!panels.some(p => p.id === id)) id = 'admission';
+    tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === id)));
+    panels.forEach(p => { p.hidden = p.id !== id; });
+    if (push) { try { history.replaceState(null, '', '#' + id); } catch (e) {} }
+    try { localStorage.setItem('manual-tab', id); } catch (e) {}
+  }
+  tabs.forEach(t => t.addEventListener('click', () => { show(t.dataset.tab, true); window.scrollTo({ top: document.querySelector('nav.tabs').offsetTop, behavior: 'auto' }); }));
+  let start = (location.hash || '').slice(1);
+  if (!start) { try { start = localStorage.getItem('manual-tab') || ''; } catch (e) {} }
+  show(start, false);
+  window.addEventListener('hashchange', () => show(location.hash.slice(1), false));
+
+  const dlg = document.getElementById('viewer');
+  document.querySelectorAll('.shot').forEach(b => b.addEventListener('click', () => {
+    document.getElementById('viewer-img').src = b.dataset.full;
+    document.getElementById('viewer-img').alt = b.querySelector('img').alt;
+    document.getElementById('viewer-cap').textContent = b.dataset.cap;
+    if (dlg.showModal) dlg.showModal();
+  }));
+  document.getElementById('viewer-close').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+})();
+</script>
+
+</html>

@@ -661,13 +661,17 @@ settlement list and fee reversal; (3) exit at a level and the did-not-report lis
 
 Each question carries the recommended answer; "agree" accepts it.
 
-### Q42. Opening the year — who, and are new students admitted first? ◐
+### Q42. Opening the year — who, and are new students admitted first? ✅
 
 Principal or DPARC opens it, as with the advance now (recommended). New students
 may be admitted into 2026/27 before it is opened, and are enrolled when the modules
 arrive (recommended — as now).
 
-### Q43. Placing students without results ◐
+**Answer (18 October 2026):** yes (the recommendation).
+
+*In the system:* the Principal or DPARC opens it (Semester Review ▸ Review & advance); new students are admitted into 2026/27 as before.
+
+### Q43. Placing students without results ✅
 
 - Placed provisionally **automatically** when the year opens, the list shown first
   (recommended) — or confirmed by the Principal/DPARC?
@@ -677,7 +681,11 @@ arrive (recommended — as now).
 - Results out but a supplementary still to come: the same provisional placement
   (recommended).
 
-### Q44. Fees while provisional ◐
+**Answer (18 October 2026):** yes.
+
+*In the system:* placed automatically when the year opens, at the level a pass takes them; the preview lists them first. A failure already in, or Level 6, waits instead; a supplementary still to come keeps them provisional (`progression.provisional_placement`).
+
+### Q44. Fees while provisional ✅
 
 - Full year billed, reversed if they do not progress (recommended) — or the first
   instalment only until confirmed?
@@ -685,13 +693,21 @@ arrive (recommended — as now).
   costs raised on readmission (recommended — as postponement does).
 - The same fee clearance for CATs and exams as everyone else (recommended).
 
-### Q45. Where "provisional" shows ◐
+**Answer (18 October 2026):** yes.
+
+*In the system:* full fees billed; if they do not progress the next level's fees are reversed (`finance.reset_fees` via `call_off_later`), what was paid stays as credit; the same clearance rules as everyone else.
+
+### Q45. Where "provisional" shows ✅
 
 Admission desk, class lists, CAT numbers, attendance register, results sheets and
 the student's portal (recommended: all). Portal wording suggested: "Your place in
 Level 5 depends on your Level 4 results."
 
-### Q46. Settling when the results arrive ◐
+**Answer (18 October 2026):** your call.
+
+*In the system:* all of them: the admission desk and application, class lists, CAT numbers, the attendance register and roster, results sheets and Excel downloads, and the portal ("Provisional — your place in NTA Level 5 depends on your NTA Level 4 results").
+
+### Q46. Settling when the results arrive ✅
 
 - Confirmed by the Principal or DPARC (recommended — as reviews now).
 - Passes confirmed in one bulk click; repeat and discontinued one by one
@@ -701,7 +717,11 @@ Level 5 depends on your Level 4 results."
 - Discontinued while provisional: off the next level, fees reversed, under Expected
   back for readmission (recommended).
 
-### Q47. The cut-off ◐
+**Answer (18 October 2026):** your call.
+
+*In the system:* the Principal or DPARC settles (Semester Review ▸ Provisional places): passes in one click, failures one by one; the Principal and DPARC are told when results arrive, the student when the place is confirmed or taken away. A late failure is recorded against **its own semester** (a 2025/26 repeat, never a 2026/27 failure).
+
+### Q47. The cut-off ✅
 
 - The date by which every provisional student must be settled — set each year (e.g.
   before CAT 1, or before final exam registration)?
@@ -710,14 +730,22 @@ Level 5 depends on your Level 4 results."
 - Marks earned while provisional by a student who turns out to repeat: kept on
   record, not counted (recommended — as now).
 
-### Q48. Finishing before Level 6 — which levels, what award ◐
+**Answer (18 October 2026):** "the cutoff date will be decided by the exam officer".
+
+*In the system:* the examination officer saves it per semester under Provisional places; after it the Principal, DPARC and the exam officer see a warning; no end-of-semester exam while provisional; marks earned there are kept, not counted.
+
+### Q48. Finishing before Level 6 — which levels, what award ✅
 
 - Exit allowed after Level 4 and after Level 5 (recommended — NACTVET awards each).
 - The award wording to print: NTA 4 Basic Technician Certificate, NTA 5 Technician
   Certificate, NTA 6 Ordinary Diploma (in Pharmaceutical Sciences) — confirm the
   official names.
 
-### Q49. Asking to finish, and who approves ◐
+**Answer (18 October 2026):** "only level 5 and 6 can exit and awards are from nactvet".
+
+*In the system:* Level 6 is the normal end; the only early exit is **after NTA Level 5** (`lifecycle.EXIT_LEVELS`). The system prints no award — NACTVET's is the award.
+
+### Q49. Asking to finish, and who approves ✅
 
 - Asked by the student on the portal or by records on paper (recommended: both).
 - Approved by the Principal (recommended — as postponement) — or records alone, the
@@ -729,7 +757,11 @@ Level 5 depends on your Level 4 results."
 - Owing money: may exit, but not cleared or given documents until paid
   (recommended — as finishing now).
 
-### Q50. After finishing at a level ◐
+**Answer (18 October 2026):** "students exit request from the portal only, principal approves".
+
+*In the system:* Request a Service ▸ Finish after Level 5; one waiting at a time, withdrawable; only the Principal approves or declines (with a reason the student reads); only with Level 5 passed and nothing owed or provisional.
+
+### Q50. After finishing at a level ✅
 
 - The same route as Level 6: finance checks every year and prints the statement,
   clears; the Principal declares cleared; portal closed, record kept (recommended).
@@ -737,7 +769,11 @@ Level 5 depends on your Level 4 results."
   that done outside it?
 - Caution money and refunds at a Level 4/5 exit: the same as at Level 6?
 
-### Q51. Coming back after finishing at a level ◐
+**Answer (18 October 2026):** "no refund for exit"; awards from NACTVET.
+
+*In the system:* approval sets the standing to Finished at Level 5 and cancels the Level 6 application; then the same finishing route (finance statement and clearance, the Principal declares cleared). No refund; completion documents come from NACTVET, outside the system.
+
+### Q51. Coming back after finishing at a level ✅
 
 - Returns for the next level as a continuing student on the same record — in any
   later year, or within a time limit?
@@ -746,7 +782,11 @@ Level 5 depends on your Level 4 results."
 - No exit accepted until the results are final, so a late supplementary cannot undo
   one (recommended).
 
-### Q52. Students who do not report ◐
+**Answer (18 October 2026):** "a student can return any later".
+
+*In the system:* any later year, on the same record, as a continuing student at Level 6; no time limit.
+
+### Q52. Students who do not report ✅
 
 - When the admission window closes, who works through the list of continuing
   students who never came — the Principal, DPARC or the admission office?
@@ -755,3 +795,9 @@ Level 5 depends on your Level 4 results."
   wanted?
 - Reminders before the window closes: a portal notification (exists); a text
   message would need an SMS service the system does not have.
+
+**Answer (18 October 2026):** "admission works on them, to be decided three months from the day of admission".
+
+*In the system:* Admissions ▸ Did not report, from three months after the window's opening day: *Still expected* or *Did not report* (place and fees called off, standing "did not report", may return in a later year). Reminders stay as portal notifications; no SMS.
+
+*Also decided 18 October 2026, from the paper Student Enrolment Form:* the address, guarantor / sponsor and the schools before are now kept, with a passport photo; the name stays one field (First Middle Surname) and the declarations and signatures stay on paper.

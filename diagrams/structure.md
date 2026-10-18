@@ -141,7 +141,10 @@ ICT officer's.
    └──► profile ──► StudentProfile   one row per PERSON
                       nactvet_reg_no (unique), college_id, phone,
                       gender, DOB, form_four_index (PST, unique),
-                      NextOfKin ×2, StudentDocument,
+                      address, guarantor / sponsor, passport photo
+                      (media/passports/, served only through the app),
+                      NextOfKin ×2, StudentEducation (O-level, A-level,
+                      college), StudentDocument,
                       HealthRecord ── certificate (a verified medical
                                       StudentDocument); read by the Dean
 ```
@@ -174,11 +177,14 @@ sign in.
   SemesterRegistration   profile + semester + programme + level + kind
                          (new / continuing / repeating / readmission)
   StudentStanding        where the person is now: active, repeating,
-                         postponed, discontinued, completed, archived
+                         postponed, discontinued, completed, archived,
+                         did not report
+  Semester.provisional_cutoff   the exam officer's date for late results
   StandingChange         history of every change
   SemesterReview         proposed → confirmed outcome per semester
   OutstandingRepeat      a failed module still to be passed
   Postponement           request → Principal decides
+  ExitRequest            finish after Level 5: portal → Principal decides
   CompletionClearance    finance clear → Principal declares cleared
   ResultWithholding      hides one semester's results on the portal
 ```
@@ -312,8 +318,14 @@ are dropped once the production row counts are checked.
      / next level    fail → repeat       stays at level    readmission
                            │
                            ▼
-            year-end advance (all reviews confirmed first)
+            year-end advance — results not out and nothing failed yet:
+            PROVISIONAL at the next level (a failure so far, or Level 6: waits)
             → carries modules forward, opens continuing applications
+                           │
+                           ▼
+            late results uploaded → Provisional places (Principal / DPARC):
+            pass → place confirmed; fail → a repeat of ITS OWN semester,
+            the later place, registration and fees called off
 ```
 
 ### 4d. Money, from fee to clearance
@@ -339,6 +351,10 @@ are dropped once the production row counts are checked.
              money paid kept as credit → back on the return semester
   FINISH     level 6 passed → accountant clears debts and prints the statement
              → Principal declares cleared → archived (portal closed, records kept)
+  EXIT AT 5  student asks on the portal → Principal approves → finished at Level 5
+             (NACTVET's award, no refund) → the FINISH route; may return later
+  NO-SHOW    admission, from three months after the window opened → place and
+             fees called off, standing "did not report"; may return later
 ```
 
 ---
@@ -350,8 +366,9 @@ are dropped once the production row counts are checked.
   Attendance (Sem 1, Sem 2) · CA Results · End of Semester (or "Withheld")
   Enrolled Modules · Exam Eligibility
   What I Owe · Generate Invoice · My Invoices
-  Request a Service (Postpone, Hostel, forms) · My Requests · Forms
-  My Profile (details and next of kin kept by records)
+  Request a Service (Postpone, Finish after Level 5, Hostel, forms) · My Requests · Forms
+  My Profile (passport photo — the student uploads it; details, schools and next of
+  kin kept by records); the photo shows small on the dashboard
 ```
 
 ---

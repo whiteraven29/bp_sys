@@ -140,8 +140,17 @@
   }
   .avatar {
     display: grid; place-items: center; flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%;
-    color: var(--on-fill); background: var(--blue-fill); font-weight: 700;
+    color: var(--on-fill); background: var(--blue-fill); font-weight: 700; overflow: hidden;
   }
+  /* The passport photo: small beside the name, clear on the profile. */
+  .avatar img, .top-avatar img, .photo-sm img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo-sm { flex: 0 0 auto; width: 56px; height: 56px; border-radius: 50%; overflow: hidden; border: 2px solid var(--line);
+              background: var(--blue-fill); color: var(--on-fill); display: grid; place-items: center; font-weight: 700; font-size: 1.3rem; }
+  .welcome { display: flex; align-items: center; gap: 14px; }
+  .photo-lg { width: 160px; height: 160px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line);
+              background: var(--surface-2); display: grid; place-items: center; color: var(--muted); font-size: .8rem; text-align: center; }
+  .photo-lg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
   .student-mini strong { display: block; overflow: hidden; max-width: 150px; white-space: nowrap; text-overflow: ellipsis; font-size: .82rem; font-weight: 600; }
   .student-mini span { display: block; margin-top: 2px; color: var(--muted); font-size: .72rem; }
   .nav { padding: 0; }
@@ -559,7 +568,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="brand"><div class="brand-mark">E</div><div>EduTrack<small>Student portal</small></div></div>
     <div class="student-mini">
-      <div class="avatar">{{ student_name|slice:":1"|upper }}</div>
+      <div class="avatar" data-photo="small">{% if record.passport_url %}<img src="{{ record.passport_url }}" alt="">{% else %}{{ student_name|slice:":1"|upper }}{% endif %}</div>
       <div><strong>{{ student_name }}</strong><span>{{ registration_number }}</span></div>
     </div>
     <nav class="nav" aria-label="Student portal navigation">
@@ -621,7 +630,7 @@
           </div>
         </div>
         <span class="semester-pill">{{ active_semester }}</span>
-        <div class="top-avatar" title="{{ student_name }} — {{ registration_number }}">{{ student_name|slice:":1"|upper }}</div>
+        <div class="top-avatar" data-photo="small" title="{{ student_name }} — {{ registration_number }}" style="overflow:hidden">{% if record.passport_url %}<img src="{{ record.passport_url }}" alt="">{% else %}{{ student_name|slice:":1"|upper }}{% endif %}</div>
         <a href="{% url 'student-logout' %}" class="logout"><i class="bi bi-box-arrow-right"></i><span class="logout-text">Sign out</span></a>
       </div>
     </header>
@@ -641,7 +650,7 @@
           <button type="button" class="btn-mini" data-profile-option="password" style="margin-left:6px;">Change it now</button>
         </div>
         {% endif %}
-        <div class="page-head"><div><p class="eyebrow">{{ academic_year }} · {{ active_semester }}</p><h1>Welcome, {{ student_name }}</h1><p class="page-copy">Here is your academic progress at a glance.</p></div></div>
+        <div class="page-head"><div class="welcome"><div class="photo-sm" data-photo="small" title="Your passport photo">{% if record.passport_url %}<img src="{{ record.passport_url }}" alt="Your photo">{% else %}{{ student_name|slice:":1"|upper }}{% endif %}</div><div><p class="eyebrow">{{ academic_year }} · {{ active_semester }}</p><h1>Welcome, {{ student_name }}</h1><p class="page-copy">Here is your academic progress at a glance.{% if record and not record.passport_url %} <button type="button" class="btn-mini" data-profile-option="personal">Add your passport photo</button>{% endif %}</p></div></div></div>
         <div class="quick-facts">
           <div class="qf-item"><span>Overall attendance</span><strong title="Counts Present and all Sick days. Exam eligibility only counts Sick days backed by a submitted certificate — see the eligibility table for that figure.">{% if overall_attendance is not None %}{{ overall_attendance }}%{% else %}—{% endif %}</strong></div>
           <div class="qf-item"><span>Active modules</span><strong>{{ active_module_count }}</strong></div>
@@ -1044,6 +1053,7 @@
           <div class="choice-grid">
             <button type="button" class="choice" data-service="hostel"><i class="bi bi-house-door"></i><strong>Hostel place</strong><small id="hostel-choice-note">Ask for a bed in the college hostel.</small></button>
             <button type="button" class="choice" data-service="postpone"><i class="bi bi-pause-circle"></i><strong>Postpone my studies</strong><small id="postpone-choice-note">Ask the Principal to postpone a semester or the year.</small></button>
+            <button type="button" class="choice" data-service="exit" id="exit-choice" hidden><i class="bi bi-mortarboard"></i><strong id="exit-choice-title">Finish after Level 5</strong><small id="exit-choice-note">Ask the Principal to finish with the Level 5 award.</small></button>
             {% for entry in service_forms %}
             {% if entry.can_answer %}
             <button type="button" class="choice searchable" data-search="{{ entry.form.title }} {{ entry.form.intro }}" data-open-form="{{ entry.form.slug }}" data-from-view="services"><i class="bi bi-file-earmark-text"></i><strong>{{ entry.form.title }}</strong><small>{% if entry.answered %}Request again{% else %}Make this request{% endif %}{% if entry.form.closes_on %} · closes {{ entry.form.closes_on|date:"d M Y" }}{% endif %}</small></button>
@@ -1067,6 +1077,20 @@
                 <input id="postpone-reason" maxlength="2000" placeholder="e.g. illness — attach the medical letter at the records office"></div>
               <button class="account-button" type="button" id="postpone-btn">Ask the Principal</button>
             </div>
+          </div>
+        </section>
+
+        <section class="panel pane" id="exit-panel" data-service-pane="exit">
+          <button type="button" class="back-link" data-service-back style="margin:12px 16px 0;"><i class="bi bi-arrow-left"></i> All services</button>
+          <div class="panel-head"><h2>Finish after Level 5 <span class="tip" tabindex="0" role="note" aria-label="Help: finishing early" data-tip="You may finish with the Level 5 award instead of going on to Level 6. The Principal decides. If approved, your Level 6 place is cancelled and its fees reversed; nothing already paid is refunded. Finance then clears your account. Your certificate comes from NACTVET. You may come back for Level 6 in any later year.">?</span></h2></div>
+          <div style="padding:14px 16px;">
+            <div id="exit-requests" style="font-size:.84rem;margin-bottom:10px;"></div>
+            <div class="account-form" id="exit-form" style="margin-top:0;">
+              <div class="account-field" style="grid-column:span 2;"><label>Why you are finishing now (optional)</label>
+                <input id="exit-reason" maxlength="500" placeholder="e.g. starting work"></div>
+              <button class="account-button" type="button" id="exit-btn">Ask the Principal</button>
+            </div>
+            <p id="exit-why-not" style="display:none;color:var(--muted);font-size:.84rem;margin:0;"></p>
           </div>
         </section>
 
@@ -1210,6 +1234,14 @@
         </div>
 
         <div class="pane on" data-profile-pane="personal">
+          <div class="photo-row">
+            <div class="photo-lg" data-photo="large">{% if record.passport_url %}<img src="{{ record.passport_url }}" alt="Your passport photo">{% else %}No photo yet{% endif %}</div>
+            <div>
+              <p style="margin:0 0 8px;color:var(--muted);font-size:.8rem;max-width:320px;">A recent passport-size photo, face clear on a plain background. It is made small before it is sent.</p>
+              <input type="file" id="passport-file" accept="image/jpeg,image/png" style="display:none">
+              <button type="button" class="btn" id="passport-btn">{% if record.passport_url %}Change photo{% else %}Upload photo{% endif %}</button>
+            </div>
+          </div>
           <div class="profile-grid">
             <div class="profile-item"><span>Full name</span><strong>{% if record %}{{ record.name }}{% else %}{{ student_name }}{% endif %}</strong></div>
             <div class="profile-item"><span>NACTVET number</span><strong>{{ registration_number }}</strong></div>
@@ -1219,6 +1251,8 @@
             <div class="profile-item"><span>Date of birth</span><strong>{{ record.date_of_birth|date:"d M Y"|default:"—" }}</strong></div>
             <div class="profile-item"><span>Phone</span><strong>{{ record.phone|default:"—" }}</strong></div>
             <div class="profile-item"><span>Form Four index</span><strong>{{ record.form_four_index|default:"—" }}</strong></div>
+            <div class="profile-item"><span>Address</span><strong>{{ record.address|default:"—" }}</strong></div>
+            <div class="profile-item"><span>Guarantor / sponsor</span><strong>{% if record.sponsor_name %}{{ record.sponsor_name }}{% if record.sponsor_phone %} · {{ record.sponsor_phone }}{% endif %}{% else %}—{% endif %}</strong></div>
             {% endif %}
           </div>
           {% if record.missing %}
@@ -1238,6 +1272,21 @@
             <div class="profile-item"><span>Enrolled modules</span><strong>{{ module_count }}</strong></div>
             <div class="profile-item"><span>Recorded sessions</span><strong>{{ total_sessions }}</strong></div>
           </div>
+          {% if record %}
+          <section class="panel" style="margin-top:14px;">
+            <h3 class="statement-title">Schools and colleges before</h3>
+            <div style="padding:14px 16px;"><div class="table-wrap"><table>
+              <thead><tr><th>Level</th><th>School / college</th><th>Years</th><th>Index No.</th></tr></thead>
+              <tbody>
+              {% for row in record.education %}
+              <tr><td>{{ row.level_display }}</td><td>{{ row.institution }}</td><td>{{ row.start_year|default:"—" }}–{{ row.end_year|default:"—" }}</td><td>{{ row.index_number|default:"—" }}</td></tr>
+              {% empty %}
+              <tr><td colspan="4" style="color:var(--muted);">Not recorded yet — the records office takes these from your enrolment form.</td></tr>
+              {% endfor %}
+              </tbody>
+            </table></div></div>
+          </section>
+          {% endif %}
         </div>
 
         {% if record %}
@@ -1862,6 +1911,82 @@
   });
 
   loadMyHealth();
+
+  // The passport photo: squared and made small in the browser (300×300 JPEG),
+  // so a phone's 4 MB picture is sent as a few tens of kilobytes.
+  function shrinkPhoto(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        const side = Math.min(image.naturalWidth, image.naturalHeight);
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 300;
+        canvas.getContext('2d').drawImage(image, (image.naturalWidth - side) / 2, (image.naturalHeight - side) / 2,
+                                          side, side, 0, 0, 300, 300);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('empty')), 'image/jpeg', 0.85);
+      };
+      image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('not a picture')); };
+      image.src = url;
+    });
+  }
+  document.getElementById('passport-btn')?.addEventListener('click', () => document.getElementById('passport-file').click());
+  document.getElementById('passport-file')?.addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const body = new FormData();
+      body.append('file', await shrinkPhoto(file), 'passport.jpg');
+      const response = await fetch('/api/my-passport/', { method: 'POST', body,
+        headers: { 'X-CSRFToken': getCookie('csrftoken') }, credentials: 'same-origin' });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw data || { detail: 'Could not save the photo.' };
+      document.querySelectorAll('[data-photo]').forEach(box => {
+        box.innerHTML = `<img src="${data.passport_url}" alt="">`;
+      });
+      document.getElementById('passport-btn').textContent = 'Change photo';
+      toast('Photo saved.');
+    } catch (error) { toast(error?.detail || 'That picture could not be used. Choose a JPG or PNG photo.'); }
+    event.target.value = '';
+  });
+
+  // Finishing after Level 5: asked here, decided by the Principal.
+  async function loadMyExit() {
+    try {
+      const data = await api('GET', '/my-exit/');
+      const tile = document.getElementById('exit-choice');
+      const waiting = data.requests.find(r => r.status === 'pending');
+      tile.hidden = !(data.can_ask || data.requests.length);
+      if (data.level) document.getElementById('exit-choice-title').textContent = `Finish after ${data.level.replace('NTA ', '')}`;
+      document.getElementById('exit-choice-note').textContent = waiting ? 'Asked — waiting for the Principal.'
+        : data.requests[0]?.status === 'approved' ? 'Approved — finance is checking your account.'
+        : 'Ask the Principal to finish with the Level 5 award.';
+      document.getElementById('exit-requests').innerHTML = data.requests.map(r => `
+        <div style="margin-bottom:6px;">Asked ${escapeText(String(r.created_at).slice(0, 10))} to finish after ${escapeText(r.level)} —
+          <strong>${escapeText(r.status_display.toLowerCase())}</strong>
+          ${r.decision_note ? `<span style="color:var(--muted);">(${escapeText(r.decision_note)})</span>` : ''}
+          ${r.status === 'pending' ? `<button class="btn-mini" type="button" data-exit-withdraw="${r.id}">Withdraw</button>` : ''}</div>`).join('');
+      document.getElementById('exit-form').style.display = data.can_ask ? '' : 'none';
+      const why = document.getElementById('exit-why-not');
+      why.style.display = !data.can_ask && !waiting && data.why_not ? '' : 'none';
+      why.textContent = data.why_not || '';
+      document.querySelectorAll('[data-exit-withdraw]').forEach(button => button.addEventListener('click', async () => {
+        try { await api('POST', '/my-exit/', { withdraw: button.dataset.exitWithdraw }); toast('Withdrawn.'); loadMyExit(); }
+        catch (error) { toast(error?.detail || 'Could not withdraw it.'); }
+      }));
+    } catch (error) { /* the portal works without it */ }
+  }
+  document.getElementById('exit-btn')?.addEventListener('click', async () => {
+    if (!confirm('Ask the Principal to let you finish after Level 5? If approved, your Level 6 place is cancelled; nothing already paid is refunded.')) return;
+    try {
+      await api('POST', '/my-exit/', { reason: document.getElementById('exit-reason').value.trim() });
+      document.getElementById('exit-reason').value = '';
+      toast('Sent to the Principal. The answer appears here.');
+      loadMyExit();
+    } catch (error) { toast(error?.detail || 'Could not send it.'); }
+  });
+  loadMyExit();
 
   // The hostel: where the college has the student living this year, and a
   // request for a place for a day student.

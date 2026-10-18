@@ -304,6 +304,11 @@
 
   .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px 14px; margin-bottom: 14px; }
   .form-grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px 14px; margin-bottom: 14px; }
+  .form-grid-4 { display: grid; grid-template-columns: 2fr 1fr 1fr 1.4fr; gap: 10px 14px; margin-bottom: 10px; }
+  .rec-photo-row { display: flex; gap: 14px; align-items: center; margin: 4px 0 14px; }
+  .rec-photo { width: 96px; height: 96px; border-radius: 10px; border: 1px solid var(--border); overflow: hidden;
+               display: flex; align-items: center; justify-content: center; font-size: .72rem; color: var(--muted); flex-shrink: 0; }
+  .rec-photo img { width: 100%; height: 100%; object-fit: cover; }
   @media (min-width: 1500px) {
     .form-grid, .form-grid-3 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   }
@@ -524,6 +529,8 @@
   .app-trail summary { cursor: pointer; font-size: .86rem; font-weight: 600; padding: 6px 0; }
   #page-admissions [data-adm-section], #page-student-records [data-rec-section] { display: none; }
   #page-lab [data-lab-section] { display: none; }
+  #page-progression [data-review-section] { display: none; }
+  #page-progression [data-review-section].sec-on { display: block; }
   #page-lab [data-lab-section].sec-on { display: block; }
   #page-admissions [data-adm-section].sec-on, #page-student-records [data-rec-section].sec-on { display: block; }
   .student-subview, .module-subview { display: none; }
@@ -660,6 +667,7 @@
     main { margin-left: 0; padding: 20px 14px; }
     .stats-grid { grid-template-columns: 1fr 1fr; }
     .form-grid, .form-grid-3 { grid-template-columns: 1fr; }
+    .form-grid-4 { grid-template-columns: 1fr 1fr; }
     .page-title { font-size: 1.25rem; }
     table { min-width: 600px; }
     .logout-btn span { display: none; }
@@ -856,6 +864,7 @@
         <button class="nav-sub-btn" data-adm-section="new" data-roles="principal admission" onclick="showAdmissionSection('new', this)">New application</button>
         <button class="nav-sub-btn" data-adm-section="all" onclick="showAdmissionSection('all', this)">All applications</button>
         <button class="nav-sub-btn" data-adm-section="dueback" data-roles="principal admission" onclick="showAdmissionSection('dueback', this)">Expected back</button>
+        <button class="nav-sub-btn" data-adm-section="noshow" data-roles="principal admission" onclick="showAdmissionSection('noshow', this)">Did not report</button>
         <button class="nav-sub-btn" data-adm-section="items" data-roles="principal finance" onclick="showAdmissionSection('items', this)">Items check</button>
         <button class="nav-sub-btn" data-adm-section="classlist" onclick="showAdmissionSection('classlist', this)">Class lists</button>
         <button class="nav-sub-btn" data-adm-section="veta" data-roles="principal dparc admission records finance" onclick="showAdmissionSection('veta', this)">VETA courses</button>
@@ -875,6 +884,7 @@
       <button class="nav-btn" data-page="status" onclick="toggleStatusMenu(event)"><span class="icon"><i class="bi bi-hourglass-split"></i></span> Postpone &amp; Finish <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-status-section="postpone" data-roles="principal dparc records dean" onclick="showStatusSection('postpone', this)">Postponements</button>
+        <button class="nav-sub-btn" data-status-section="exits" data-roles="principal dparc dean records" onclick="showStatusSection('exits', this)">Finishing after Level 5</button>
         <button class="nav-sub-btn" data-status-section="finish" data-roles="principal finance" onclick="showStatusSection('finish', this)">Finishing</button>
       </div>
     </div>
@@ -899,7 +909,13 @@
         <button class="nav-sub-btn" data-exec-section="lab" data-roles="principal dpfpa" onclick="showExecSection('lab', this)">Laboratory stock</button>
       </div>
     </div>
-    <button class="nav-btn admin-only" data-page="progression" onclick="showPage('progression',this); loadProgression()"><span class="icon"><i class="bi bi-arrow-up-right-circle"></i></span> Semester Review</button>
+    <div class="nav-group admin-only" id="review-nav-group">
+      <button class="nav-btn" data-page="progression" onclick="toggleReviewMenu(event)"><span class="icon"><i class="bi bi-arrow-up-right-circle"></i></span> Semester Review <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-review-section="review" onclick="showReviewSection('review', this)">Review &amp; advance</button>
+        <button class="nav-sub-btn" data-review-section="provisional" onclick="showReviewSection('provisional', this)">Provisional places</button>
+      </div>
+    </div>
     <div class="aside-label estate-only">Inventory</div>
     <button class="nav-btn estate-only inventory-nav-btn active" title="Overview" data-page="inventory" data-inventory-section="overview" onclick="showInventorySection('overview',this)"><span class="icon"><i class="bi bi-grid-1x2"></i></span> Overview</button>
     <div class="nav-group estate-only" id="inventory-assets-nav-group">
@@ -1016,6 +1032,10 @@
     </div>
     <div class="main-inner">
 
+    <div id="provisional-banner" style="display:none;align-items:center;gap:10px;padding:10px 14px;margin-bottom:14px;border:1px solid var(--orange);border-radius:var(--radius);font-size:.84rem;background:var(--yellow-soft);color:var(--orange);">
+      <span id="provisional-banner-text"></span>
+      <button class="btn btn-ghost btn-sm" onclick="showReviewSection('provisional', document.querySelector('[data-review-section=&quot;provisional&quot;].nav-sub-btn'))">Settle them</button>
+    </div>
     <div id="password-banner" style="display:none;align-items:center;gap:10px;padding:10px 14px;margin-bottom:14px;border:1px solid var(--border);border-radius:var(--radius);font-size:.84rem;">
       <span id="password-banner-text"></span>
       <button class="btn btn-ghost btn-sm" onclick="openProfileModal()">Change it now</button>
@@ -1147,6 +1167,14 @@
         <div class="card-title"><span id="rec-editor-title">Student</span></div>
         <input type="hidden" id="rec-profile-id">
         <div id="rec-editor-missing"></div>
+        <div class="rec-photo-row">
+          <div id="rec-photo" class="rec-photo"><span>No photo</span></div>
+          <div>
+            <input type="file" id="rec-photo-file" accept="image/jpeg,image/png" style="display:none" onchange="uploadRecordPhoto(this)">
+            <button class="btn btn-ghost btn-sm" data-roles="principal records" onclick="document.getElementById('rec-photo-file').click()">Upload passport photo…</button>
+            <div style="font-size:.72rem;color:var(--muted);margin-top:4px">A JPG or PNG; the page makes it small (300×300) before sending.</div>
+          </div>
+        </div>
         <div id="rec-editor-form"></div>
         <button class="btn btn-primary btn-sm" onclick="saveRecord(event)">Save details</button>
         <div class="block-title" style="margin-top:18px;">Documents</div>
@@ -1366,6 +1394,16 @@
         <button class="btn btn-secondary btn-sm" onclick="enterPostponement(event)">Send to the Principal</button>
         </div>
         <p class="help-note" data-roles="dparc" style="margin-top:10px;">The Principal decides each request; you are told of every one.</p>
+      </div>
+
+      <div class="card" data-status-section="exits" data-roles="principal dparc dean records">
+        <div class="card-title">Asking to finish after Level 5 <span class="tip" tabindex="0" role="note" aria-label="Help: finishing after Level 5" data-tip="A student who has passed Level 5 may ask, from the portal, to finish there; the award is NACTVET's. Only the Principal approves: the Level 6 place is called off and its fees reversed — nothing is refunded — and the student goes on to Finishing for clearance. They may come back for Level 6 in any later year, through admission as a continuing student.">?</span></div>
+        <div class="field" style="max-width:260px;"><label>Show</label>
+          <select id="exit-filter" onchange="loadExitRequests()"><option value="pending">Waiting for the Principal</option><option value="approved">Approved</option><option value="declined">Declined</option><option value="">All</option></select></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Reg. No.</th><th>Name</th><th>Finishes after</th><th>Why</th><th>Asked</th><th>Status</th><th></th></tr></thead>
+          <tbody id="exit-tbody"></tbody>
+        </table></div>
       </div>
 
       <div class="card" data-status-section="finish" data-roles="principal finance">
@@ -1658,6 +1696,18 @@
         </div>
       </div>
 
+      <div class="card" data-adm-section="noshow">
+        <div class="card-title">Continuing students who have not reported <span class="tip" tabindex="0" role="note" aria-label="Help: did not report" data-tip="Continuing students handed to admission who have not come through the desks. Three months after admission opened, decide for each: still expected (the check is recorded), or did not report — the application is cancelled, its fees reversed, and they appear under Expected back in a later year.">?</span></div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field"><label>Semester</label><select id="ns-semester" onchange="loadNotReported()"></select></div>
+        </div>
+        <div id="ns-note" style="margin-bottom:10px;"></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Reg. No.</th><th>Name</th><th>Going to</th><th>At the desk</th><th>Last checked</th><th></th></tr></thead>
+          <tbody id="ns-tbody"></tbody>
+        </table></div>
+      </div>
+
       <div class="card" data-adm-section="classlist">
         <div class="card-title">Class list <span class="tip" tabindex="0" role="note" aria-label="Help: class list" data-tip="Everybody at the level this semester, by name: NACTVET registration number, and first sitting or repeater. A repeater's repeat modules are listed. While the admission window is open the list is provisional — students are still being admitted; once it closes it is the class the semester runs with.">?</span></div>
         <div class="form-grid-3" style="margin-bottom:12px;">
@@ -1832,10 +1882,10 @@
     </div>
 
     <div class="page" id="page-progression">
-      <div class="page-title">Semester Review</div>
-      <div class="page-sub">What each student's results mean for next semester.</div>
+      <div class="page-title" id="review-page-title">Semester Review</div>
+      <div class="page-sub" id="review-page-sub">What each student's results mean for next semester.</div>
 
-      <div class="card">
+      <div class="card" data-review-section="review">
         <div class="card-title">The semester being closed <span class="tip" tabindex="0" role="note" aria-label="Help: Waiting on a supplementary? Confirm as “continues while results are awaited”, then decide when the marks arrive. Overrides need a reason." data-tip="Waiting on a supplementary? Confirm as “continues while results are awaited”, then decide when the marks arrive. Overrides need a reason.">?</span></div>
         <div class="form-grid-3" style="margin-bottom:12px;">
           <div class="field"><label>Semester</label><select id="rev-semester" onchange="loadProgression()"></select></div>
@@ -1862,7 +1912,7 @@
         <div class="quick-facts" id="rev-counts" style="margin-top:12px;"></div>
       </div>
 
-      <div class="card">
+      <div class="card" data-review-section="review">
         <div class="card-title">By class <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— where the work that is left actually is</span></div>
         <div class="table-wrap">
           <table>
@@ -1872,7 +1922,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" data-review-section="review">
         <div class="card-title">Students <span id="rev-range" style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;"></span></div>
         <div class="table-wrap">
           <table>
@@ -1887,7 +1937,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" data-review-section="review">
         <div class="card-title">Not studying now — and what they come back to</div>
         <div class="table-wrap">
           <table>
@@ -1895,6 +1945,21 @@
             <tbody id="standing-tbody"><tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-people"></i></div>Nobody</div></td></tr></tbody>
           </table>
         </div>
+      </div>
+      <div class="card" data-review-section="provisional">
+        <div class="card-title">Placed while their results were out <span class="tip" tabindex="0" role="note" aria-label="Help: provisional places" data-tip="When the year opens before NACTVET's results, students are placed where a pass takes them. Once the grades are uploaded, their results show here: confirm the passes in one go; a repeat or discontinuation is confirmed one by one, and takes the place away and reverses its fees. A provisional student sits no end-of-semester exam until settled.">?</span></div>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+          <button class="btn btn-primary btn-sm" id="prov-settle-btn" onclick="settleProvisionalPasses(event)">Confirm all passes</button>
+          <span id="prov-summary" style="font-size:.82rem;color:var(--muted);"></span>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Reg. No.</th><th>Name</th><th>Results of</th><th>Placed in</th><th>Results now say</th><th></th></tr></thead>
+          <tbody id="prov-tbody"></tbody>
+        </table></div>
+      </div>
+      <div class="card" data-review-section="provisional">
+        <div class="card-title">Cut-off <span class="tip" tabindex="0" role="note" aria-label="Help: cut-off" data-tip="Set by the examination officer: the date by which every provisional student in the semester should be settled. After it, the Principal, DPARC and the examination office are warned every day on the dashboard.">?</span></div>
+        <div id="prov-cutoffs" style="font-size:.85rem;"></div>
       </div>
     </div>
 
@@ -4387,6 +4452,11 @@ async function boot() {
     const advanceBtn = document.getElementById('advance-sem-btn');
     if (advanceBtn && !state.canAdvanceSemester) advanceBtn.style.display = 'none';
     renderPasswordAge(dash.password);
+    if (dash.provisional_overdue) {
+      document.getElementById('provisional-banner-text').textContent =
+        `${dash.provisional_overdue} student(s) are still provisional after the cut-off: their results must be settled.`;
+      document.getElementById('provisional-banner').style.display = 'flex';
+    }
     if (state.isRecordsOffice && !state.isStaff) {
       document.body.classList.add('is-records');
       document.getElementById('role-badge').textContent =
@@ -5087,9 +5157,13 @@ async function loadModuleRoster() {
 // After a repeater's name on the staff screens: they sit with the class but
 // their marks go on the repeaters' sheet and complete the semester they failed.
 function repeatTag(s) {
-  return s.attempt === 'repeat'
+  return (s.attempt === 'repeat'
     ? ' <span class="badge" style="background:var(--orange);font-size:.65rem;vertical-align:middle" title="Repeating this module: marks go on the Repeaters sheet">Repeat</span>'
-    : '';
+    : '') + provisionalTag(s);
+}
+// Placed while the results of the level before were not out (said 18 October 2026).
+function provisionalTag(s) {
+  return s.provisional ? ' <span class="badge" style="background:var(--accent);font-size:.65rem;vertical-align:middle" title="Placed while the results of the level before were not out">Provisional</span>' : '';
 }
 // First sittings, then the repeaters under their own heading.
 function repeatersLast(rows) {
@@ -7553,7 +7627,8 @@ async function loadFinanceSection() {
 // so each has its own menu item and its own screen.
 const STATUS_SECTIONS = {
   postpone: ['Postponements', 'Students asking to stop for a while. The Principal decides.'],
-  finish: ['Finishing', 'Students who finished level 6: finance clears them, then the Principal declares them cleared.'],
+  exits: ['Finishing after Level 5', 'Students asking to finish with the Level 5 award. The Principal decides.'],
+  finish: ['Finishing', 'Students who finished — after Level 6, or after Level 5 with approval: finance clears them, then the Principal declares them cleared.'],
 };
 
 function toggleStatusMenu(event) {
@@ -7579,7 +7654,38 @@ function showStatusSection(section, btn) {
   showPage('status', document.querySelector('#status-nav-group .nav-btn'));
   document.getElementById('status-nav-group').classList.add('open');
   if (btn) btn.classList.add('active');
+  if (section === 'exits') return loadExitRequests();
   return section === 'postpone' ? loadPostponements() : loadFinishing();
+}
+
+async function loadExitRequests() {
+  const body = document.getElementById('exit-tbody');
+  const wanted = document.getElementById('exit-filter').value;
+  try {
+    const data = await api('GET', `/exit-requests/${wanted ? `?status=${wanted}` : '?status='}`);
+    body.innerHTML = data.rows.length ? data.rows.map(r => `<tr>
+        <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}</td><td>${safeText(r.name)}</td>
+        <td>${safeText(r.level)}</td><td style="max-width:260px">${safeText(r.reason || '—')}</td>
+        <td>${safeText(new Date(r.created_at).toLocaleDateString())}</td>
+        <td>${safeText(r.status_display)}${r.decided_by ? `<div style="font-size:.72rem;color:var(--muted)">${safeText(r.decided_by)}${r.decision_note ? ' — ' + safeText(r.decision_note) : ''}</div>` : ''}</td>
+        <td style="white-space:nowrap">${data.can_decide && r.status === 'pending' ? `
+          <button class="btn btn-primary btn-sm" onclick="decideExit(${r.id}, 'approve', ${jsArg(r.name)})">Approve</button>
+          <button class="btn btn-ghost btn-sm" onclick="decideExit(${r.id}, 'decline', ${jsArg(r.name)})">Decline…</button>` : ''}</td></tr>`).join('')
+      : '<tr><td colspan="7" style="color:var(--muted)">Nothing here</td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load the requests'), 'var(--red)'); }
+}
+
+async function decideExit(id, decision, name) {
+  let note = '';
+  if (decision === 'decline') {
+    note = prompt(`Why is ${name}'s request declined? They read this.`);
+    if (!note) return;
+  } else if (!confirm(`Approve ${name} finishing after Level 5? Their Level 6 place is called off and its fees reversed — nothing is refunded — and they go to Finishing for clearance.`)) return;
+  try {
+    await api('POST', `/exit-requests/${id}/decide/`, { decision, note });
+    toast(decision === 'approve' ? 'Approved — finance is told for clearance' : 'Declined — the student is told', 'var(--green)');
+    loadExitRequests();
+  } catch (e) { toast(apiErrorText(e, 'Could not decide it'), 'var(--red)'); }
 }
 
 async function loadPostponements() {
@@ -8194,6 +8300,9 @@ const NOTIFICATION_LINKS = {
   'inventory:disposal': () => showInventorySection('disposal', document.querySelector('[data-inventory-section="disposal"]')),
   'finance:expenses': () => showFinanceSection('expenses', document.querySelector('[data-finance-section="expenses"].nav-sub-btn')),
   'health': () => showHealthSection(),
+  'review:provisional': () => showReviewSection('provisional', document.querySelector('[data-review-section="provisional"].nav-sub-btn')),
+  'status:exits': () => showStatusSection('exits', document.querySelector('[data-status-section="exits"].nav-sub-btn')),
+  'status:finish': () => showStatusSection('finish', document.querySelector('[data-status-section="finish"].nav-sub-btn')),
   'finance:hostel': () => showFinanceSection('hostel', document.querySelector('[data-finance-section="hostel"].nav-sub-btn')),
 };
 
@@ -10259,6 +10368,7 @@ async function openRecord(profileId) {
     document.getElementById('rec-editor-missing').innerHTML = record.missing.length
       ? `<div class="missing-note">Still to record: ${safeText(record.missing.join(', '))}</div>` : '';
     document.getElementById('rec-editor-form').innerHTML = detailsFormHtml('rec-det', record);
+    renderRecordPhoto(record);
     await renderRecordDocuments(profileId);
     await renderRecordHealth(profileId);
     const editor = document.getElementById('rec-editor');
@@ -10281,6 +10391,46 @@ async function saveRecord(event) {
   } catch (e) {
     toast(apiErrorText(e, 'Could not save'), 'var(--red)');
   } finally { done(); }
+}
+
+function renderRecordPhoto(record) {
+  document.getElementById('rec-photo').innerHTML = record.passport_url
+    ? `<img src="${safeText(record.passport_url)}" alt="Passport photo of ${safeText(record.name)}">` : '<span>No photo</span>';
+}
+
+// A phone photo is several MB; the passport is shown small, so the browser
+// crops it square and sends a 300×300 JPEG (the server takes at most 512 KB).
+function shrinkPhoto(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That is not a picture'));
+      img.onload = () => {
+        const side = Math.min(img.width, img.height);
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 300;
+        canvas.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 300, 300);
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not shrink the photo')), 'image/jpeg', 0.85);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadRecordPhoto(input) {
+  const file = input.files[0]; input.value = '';
+  if (!file) return;
+  const id = document.getElementById('rec-profile-id').value;
+  try {
+    const form = new FormData();
+    form.append('file', await shrinkPhoto(file), 'passport.jpg');
+    const record = await api('POST', `/student-records/${id}/passport/`, form);
+    renderRecordPhoto(record);
+    toast('Passport photo saved', 'var(--green)');
+  } catch (e) { toast(e?.message && !e.detail ? e.message : apiErrorText(e, 'Could not save the photo'), 'var(--red)'); }
 }
 
 // ── health records: kept by records, read by the Dean of Students ───────────
@@ -10494,6 +10644,7 @@ const ADMISSION_SECTIONS = {
   veta: ['VETA courses', 'Intakes, and students on their way through the desks.'],
   items: ['Items check', 'TPH book, calculator, rim paper — checked again each semester.'],
   classlist: ['Class lists', 'A level\'s students this semester: first sitting or repeater.'],
+  noshow: ['Did not report', 'Continuing students who never came: decide three months after admission opened.'],
 };
 
 function toggleAdmissionsMenu(event) {
@@ -10543,6 +10694,49 @@ async function showAdmissionSection(section, btn) {
   }
   if (section === 'settings') await loadAdmissionSettings();
   if (section === 'classlist') await openClassList();
+  if (section === 'noshow') {
+    const picker = document.getElementById('ns-semester');
+    if (!picker.options.length) {
+      picker.innerHTML = (state.semesters || []).map(sem => `<option value="${sem.id}">${safeText(sem.label)}</option>`).join('');
+      const active = (state.semesters || []).find(sem => sem.is_active); if (active) picker.value = active.id;
+    }
+    await loadNotReported();
+  }
+}
+
+async function loadNotReported() {
+  const semester = document.getElementById('ns-semester').value;
+  const body = document.getElementById('ns-tbody');
+  try {
+    const data = await api('GET', `/not-reported/?semester_id=${encodeURIComponent(semester)}`);
+    const due = data.decide_from;
+    const open = due && new Date(due) <= new Date();
+    document.getElementById('ns-note').innerHTML = !due
+      ? '<div class="missing-note">No admission window is set for this semester.</div>'
+      : `<div class="missing-note" style="border-left-color:${open ? 'var(--orange)' : 'var(--accent)'}">${open
+          ? `Three months have passed since admission opened: decide for each student below.`
+          : `Decide from <strong>${safeText(new Date(due).toLocaleDateString())}</strong> — three months after admission opened.`}</div>`;
+    body.innerHTML = data.rows.length ? data.rows.map(r => `<tr>
+        <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}</td><td>${safeText(r.name)}</td>
+        <td>${safeText(r.level)} · ${safeText(r.programme)}</td><td>${safeText(r.desk)}</td>
+        <td>${r.still_expected_on ? `still expected, ${safeText(r.still_expected_on)}` : '—'}</td>
+        <td style="white-space:nowrap">${r.can_decide ? `
+          <button class="btn btn-ghost btn-sm" onclick="decideNotReported(${r.application_id}, 'expected', ${jsArg(r.name)})">Still expected</button>
+          <button class="btn btn-primary btn-sm" onclick="decideNotReported(${r.application_id}, 'not_reported', ${jsArg(r.name)})">Did not report</button>` : ''}</td></tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty">Every continuing student has reported</div></td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load the list'), 'var(--red)'); }
+}
+
+async function decideNotReported(id, decision, name) {
+  const note = prompt(decision === 'expected'
+    ? `${name} is still expected — a note (e.g. "phoned, coming next week"):`
+    : `${name} did not report. Their application is cancelled, its fees reversed, and they may return in a later year. A note (optional):`, '');
+  if (note === null) return;
+  try {
+    await api('POST', `/not-reported/${id}/`, { decision, note });
+    toast(decision === 'expected' ? 'Recorded: still expected' : 'Recorded: did not report', 'var(--green)');
+    loadNotReported();
+  } catch (e) { toast(apiErrorText(e, 'Could not record it'), 'var(--red)'); }
 }
 
 // After something changes, refresh whatever is on screen.
@@ -10618,7 +10812,7 @@ function deskLabel(row) {
 function applicationRow(row, { showDesk = true } = {}) {
   return `<tr>
     <td>${safeText(row.reg_no)}${row.college_id ? `<div style="font-size:.68rem;color:var(--muted);">${safeText(row.college_id)}</div>` : ''}</td>
-    <td>${safeText(row.student_name)}</td>
+    <td>${safeText(row.student_name)}${provisionalTag(row)}</td>
     <td>${safeText(KIND_LABELS[row.kind] || row.kind)}</td>
     <td>${safeText(row.class_level_name || '—')}</td>
     ${showDesk ? `<td>${deskLabel(row)}</td>` : ''}
@@ -10637,7 +10831,7 @@ async function loadMyDesk() {
     document.getElementById('adm-desk-tbody').innerHTML = list.length
       ? list.map(row => `<tr>
           <td>${safeText(row.reg_no)}</td>
-          <td>${safeText(row.student_name)}</td>
+          <td>${safeText(row.student_name)}${provisionalTag(row)}</td>
           <td>${safeText(KIND_LABELS[row.kind] || row.kind)}</td>
           <td>${safeText(row.class_level_name || '—')}</td>
           <td>${safeText(row.balance)}</td>
@@ -10877,7 +11071,7 @@ async function loadClassList() {
     tbody.innerHTML = data.rows.length ? data.rows.map((r, i) => `<tr>
         <td>${i + 1}</td><td>${safeText(r.name)}</td>
         <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}</td>
-        <td>${statusBadge(r.status)}</td><td>${safeText(r.modules_repeated.join(', ') || '—')}</td></tr>`).join('')
+        <td>${statusBadge(r.status)}${provisionalTag(r)}</td><td>${safeText(r.modules_repeated.join(', ') || '—')}</td></tr>`).join('')
       : '<tr><td colspan="5"><div class="empty">Nobody at this level this semester</div></td></tr>';
   } catch (e) { toast(apiErrorText(e, 'Could not load the class list'), 'var(--red)'); }
 }
@@ -10891,7 +11085,7 @@ function downloadClassList() {
     [data.final ? 'Admissions closed: final list' : `PROVISIONAL — admissions still open (${new Date().toLocaleDateString()})`],
     [],
     ['S/N', 'Name', 'NACTVET Reg. No.', 'Status', 'Modules repeated'],
-    ...data.rows.map((r, i) => [i + 1, r.name, r.reg_no, r.status, r.modules_repeated.join(', ')]),
+    ...data.rows.map((r, i) => [i + 1, r.name, r.reg_no, r.status + (r.provisional ? ' (Provisional)' : ''), r.modules_repeated.join(', ')]),
     [],
     [`First sitting: ${data.first_sitting}`, `Repeaters: ${data.repeaters}`, `Total: ${data.rows.length}`],
   ]);
@@ -10960,7 +11154,7 @@ function renderCatNumbers(data) {
   document.getElementById('cat-tbody').innerHTML = data.rows.length ? data.rows.map(r => `<tr>
       <td style="font-family:var(--font-mono);font-size:.8rem">${r.cat_number ? safeText(r.cat_number) : '<span style="color:var(--muted)">not yet</span>'}</td>
       <td>${safeText(r.name)}</td><td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}</td>
-      <td>${statusBadge(r.status)}</td><td>${safeText(r.modules_repeated.join(', ') || '—')}</td></tr>`).join('')
+      <td>${statusBadge(r.status)}${provisionalTag(r)}</td><td>${safeText(r.modules_repeated.join(', ') || '—')}</td></tr>`).join('')
     : '<tr><td colspan="5"><div class="empty">Nobody at this level this semester</div></td></tr>';
 }
 
@@ -10999,7 +11193,7 @@ function downloadCatNumbers() {
     [`${data.class_level} · ${data.semester}`],
     [],
     ['S/N', 'CAT No.', 'Name', 'NACTVET Reg. No.', 'Status', 'Modules repeated'],
-    ...data.rows.map((r, i) => [i + 1, r.cat_number, r.name, r.reg_no, r.status, r.modules_repeated.join(', ')]),
+    ...data.rows.map((r, i) => [i + 1, r.cat_number, r.name, r.reg_no, r.status + (r.provisional ? ' (Provisional)' : ''), r.modules_repeated.join(', ')]),
   ]);
   ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 34 }, { wch: 22 }, { wch: 14 }, { wch: 36 }];
   const wb = XLSX.utils.book_new();
@@ -11094,7 +11288,7 @@ async function openApplicationModal(id) {
     document.getElementById('app-modal-summary').innerHTML = `
       ${safeText(KIND_LABELS[application.kind] || application.kind)} ·
       ${safeText(application.programme_code || '')} ${safeText(application.class_level_name || '')} ·
-      ${safeText(application.semester_label)}<br>
+      ${safeText(application.semester_label)}${provisionalTag(application)}<br>
       <strong>Where it is:</strong> ${safeText(DESK_LABELS[application.state] || application.state)}
       ${application.balance === null ? '' : ` · <strong>Owes:</strong> ${safeText(application.balance)}`}
       ${application.payment ? `<br><strong>To register:</strong> ${application.payment.cleared
@@ -11200,8 +11394,24 @@ function detailsFormHtml(prefix, details) {
       <div class="field"><label>Next of kin ${n}</label><input id="${prefix}-kin${n}-name" value="${safeText(kin(n).name || '')}"></div>
       <div class="field"><label>Phone</label><input id="${prefix}-kin${n}-phone" value="${safeText(kin(n).phone || '')}"></div>
       <div class="field"><label>Relationship</label><select id="${prefix}-kin${n}-rel">${rel(n)}</select></div>
-    </div>`).join('')}`;
+    </div>`).join('')}
+    <div class="form-grid-3">
+      <div class="field"><label>Address</label><input id="${prefix}-address" maxlength="300" value="${safeText(details.address || '')}" placeholder="P.O. Box, street, town"></div>
+      <div class="field"><label>Guarantor / sponsor</label><input id="${prefix}-sponsor" maxlength="200" value="${safeText(details.sponsor_name || '')}"></div>
+      <div class="field"><label>Sponsor's phone</label><input id="${prefix}-sponsor-phone" maxlength="30" value="${safeText(details.sponsor_phone || '')}"></div>
+    </div>
+    <div style="font-size:.78rem;font-weight:600;margin:6px 0 4px">Schools and colleges before</div>
+    ${EDUCATION_LEVELS.map(([level, label]) => {
+      const row = (details.education || []).find(e => e.level === level) || {};
+      return `<div class="form-grid-4">
+        <div class="field"><label>${label} — school or college</label><input id="${prefix}-edu-${level}-inst" value="${safeText(row.institution || '')}"></div>
+        <div class="field"><label>From (year)</label><input id="${prefix}-edu-${level}-from" inputmode="numeric" maxlength="4" value="${safeText(row.start_year || '')}"></div>
+        <div class="field"><label>To (year)</label><input id="${prefix}-edu-${level}-to" inputmode="numeric" maxlength="4" value="${safeText(row.end_year || '')}"></div>
+        <div class="field"><label>Index No.</label><input id="${prefix}-edu-${level}-index" value="${safeText(row.index_number || '')}"></div>
+      </div>`; }).join('')}`;
 }
+
+const EDUCATION_LEVELS = [['o_level', 'O-level'], ['a_level', 'A-level'], ['college', 'College']];
 
 function readDetailsForm(prefix) {
   const value = (suffix) => document.getElementById(`${prefix}-${suffix}`).value.trim();
@@ -11211,18 +11421,25 @@ function readDetailsForm(prefix) {
     ...(document.getElementById(`${prefix}-f4`) ? { form_four_index: value('f4') } : {}),
     next_of_kin: [1, 2].map(n => ({ name: value(`kin${n}-name`), phone: value(`kin${n}-phone`),
                                     relationship: value(`kin${n}-rel`) })),
+    address: value('address'), sponsor_name: value('sponsor'), sponsor_phone: value('sponsor-phone'),
+    education: EDUCATION_LEVELS.map(([level]) => ({ level, institution: value(`edu-${level}-inst`),
+      start_year: value(`edu-${level}-from`), end_year: value(`edu-${level}-to`), index_number: value(`edu-${level}-index`) })),
   };
 }
 
 function detailsReadOnlyHtml(details) {
   const kin = (details.next_of_kin || []).map(k =>
     `${safeText(k.name)} (${safeText(k.relationship_display || k.relationship)}) · ${safeText(k.phone || '—')}`).join('<br>');
-  return `<dl class="facts">
+  return `${details.passport_url ? `<div class="rec-photo" style="float:right;margin:0 0 8px 12px"><img src="${safeText(details.passport_url)}" alt="Passport photo"></div>` : ''}<dl class="facts">
     <dt>Gender</dt><dd>${safeText(details.gender_display || details.gender || '—')}</dd>
     <dt>Date of birth</dt><dd>${safeText(details.date_of_birth || '—')}</dd>
     <dt>Form Four index</dt><dd>${safeText(details.form_four_index || '—')}</dd>
     <dt>Phone</dt><dd>${safeText(details.phone || '—')}</dd>
     <dt>Next of kin</dt><dd>${kin || '—'}</dd>
+    <dt>Address</dt><dd>${safeText(details.address || '—')}</dd>
+    <dt>Guarantor / sponsor</dt><dd>${safeText([details.sponsor_name, details.sponsor_phone].filter(Boolean).join(' · ') || '—')}</dd>
+    <dt>Schools before</dt><dd>${(details.education || []).map(e =>
+      `${safeText(e.level_display)}: ${safeText(e.institution)}${e.start_year || e.end_year ? ` (${safeText(e.start_year || '?')}–${safeText(e.end_year || '?')})` : ''}${e.index_number ? ' · ' + safeText(e.index_number) : ''}`).join('<br>') || '—'}</dd>
   </dl>`;
 }
 
@@ -11766,6 +11983,87 @@ function outcomeBadge(outcome) {
   return `<span class="badge ${cls}">${safeText(label)}</span>`;
 }
 
+const REVIEW_SECTIONS = {
+  review: ['Semester Review', "What each student's results mean for next semester."],
+  provisional: ['Provisional places', 'Students placed while their results were out — settle them once the grades are in.'],
+};
+
+function toggleReviewMenu(event) {
+  const group = document.getElementById('review-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-progression').classList.contains('active')) showReviewSection('review');
+  event.stopPropagation();
+}
+
+async function showReviewSection(section, btn) {
+  if (!REVIEW_SECTIONS[section]) section = 'review';
+  showPage('progression', document.querySelector('#review-nav-group .nav-btn'));
+  document.getElementById('review-nav-group').classList.add('open');
+  document.querySelectorAll('#page-progression [data-review-section]').forEach(card =>
+    card.classList.toggle('sec-on', card.dataset.reviewSection === section));
+  document.querySelectorAll('[data-review-section].nav-sub-btn').forEach(b => b.classList.toggle('active', b.dataset.reviewSection === section));
+  const [title, sub] = REVIEW_SECTIONS[section];
+  document.getElementById('review-page-title').textContent = title;
+  document.getElementById('review-page-sub').textContent = sub;
+  const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = title;
+  if (section === 'review') return loadProgression();
+  return loadProvisional();
+}
+
+async function loadProvisional() {
+  const body = document.getElementById('prov-tbody');
+  try {
+    const data = await api('GET', '/provisional/');
+    const passes = data.rows.filter(r => ['clear', 'completed'].includes(r.proposed)).length;
+    document.getElementById('prov-settle-btn').style.display = data.can_settle && passes ? '' : 'none';
+    document.getElementById('prov-summary').textContent = data.rows.length
+      ? `${data.rows.length} provisional · ${data.rows.filter(r => r.results_in).length} with results in · ${passes} passed`
+      : 'Nobody is provisional.';
+    body.innerHTML = data.rows.length ? data.rows.map(r => `<tr>
+        <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}</td><td>${safeText(r.name)}</td>
+        <td>${safeText(r.level)} · ${safeText(r.semester)}</td><td>${safeText(r.placed_in)}</td>
+        <td>${r.results_in ? `<span class="badge ${['clear', 'completed'].includes(r.proposed) ? 'badge-green' : 'badge-red'}">${safeText(r.proposed_display)}</span>`
+                            : '<span class="badge badge-gen">Results not out</span>'}
+            <div style="font-size:.72rem;color:var(--muted)">${safeText(r.reason || '')}</div></td>
+        <td>${data.can_settle && r.results_in && !['clear', 'completed'].includes(r.proposed)
+              ? `<button class="btn btn-ghost btn-sm" onclick="settleProvisional(${r.review_id}, '${r.proposed}', ${jsArg(r.name)}, ${jsArg(r.proposed_display)})">Confirm…</button>` : ''}</td></tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty">Nobody is provisional</div></td></tr>';
+    document.getElementById('prov-cutoffs').innerHTML = data.cutoffs.map(c => `
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0;">
+        <span style="min-width:180px">${safeText(c.semester)}</span>
+        ${data.can_set_cutoff
+          ? `<input type="date" id="prov-cutoff-${c.semester_id}" value="${c.cutoff || ''}" style="max-width:170px">
+             <button class="btn btn-secondary btn-sm" onclick="saveProvisionalCutoff(${c.semester_id})">Save</button>`
+          : `<strong>${c.cutoff ? safeText(c.cutoff) : 'not set'}</strong> <span style="color:var(--muted)">— set by the examination officer</span>`}
+      </div>`).join('') || '<span style="color:var(--muted)">No active semester.</span>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load provisional places'), 'var(--red)'); }
+}
+
+async function settleProvisionalPasses(event) {
+  if (!confirm('Confirm every provisional student whose results now show a pass? Their places stand.')) return;
+  const done = working(event?.currentTarget, 'Confirming…');
+  try {
+    const result = await api('POST', '/provisional/settle-passes/', {});
+    toast(`${result.settled} confirmed`, 'var(--green)'); await loadProvisional();
+  } catch (e) { toast(apiErrorText(e, 'Could not confirm'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function settleProvisional(reviewId, outcome, name, label) {
+  if (!confirm(`${name}: the results say ${label}. Confirm it? Their place in the next level is taken away, its fees reversed, and they are told.`)) return;
+  try {
+    await api('POST', `/semester-reviews/${reviewId}/confirm/`, { outcome });
+    toast('Confirmed', 'var(--green)'); await loadProvisional();
+  } catch (e) { toast(apiErrorText(e, 'Could not confirm'), 'var(--red)'); }
+}
+
+async function saveProvisionalCutoff(semesterId) {
+  try {
+    await api('POST', '/provisional/cutoff/', { semester_id: semesterId, cutoff: document.getElementById(`prov-cutoff-${semesterId}`).value || null });
+    toast('Cut-off saved', 'var(--green)');
+  } catch (e) { toast(apiErrorText(e, 'Could not save the cut-off'), 'var(--red)'); }
+}
+
 async function loadProgression() {
   document.getElementById('rev-actions').style.display = state.canReviewProgression ? '' : 'none';
   document.getElementById('rev-confirm-all').style.display = state.canConfirmReviews ? '' : 'none';
@@ -12009,12 +12307,13 @@ async function advanceSemester() {
       discontinued: 'discontinued — return on readmission', completed: 'finished, awaiting clearance',
       deferred: 'held back until semester 1 is passed', away: 'postponed',
     };
+    const provisionalCount = (plan.moves || []).filter(move => move.provisional).length;
     const summary = Object.entries(actions).map(([action, total]) =>
       `<div class="qf-item"><span>${safeText(labels[action] || action)}</span><strong>${total}</strong></div>`).join('');
     const blocked = (plan.blocked || []).length
       ? `<div class="card" style="border-color:var(--red);margin-top:12px;">
            <div class="card-title" style="color:var(--red)">${plan.blocked.length} student(s) not yet confirmed</div>
-           <p class="help-note">Confirm every student in Semester Review first.</p>
+           <p class="help-note">Their results have decided — confirm them in Semester Review first (students whose results are not out are placed provisionally and do not block).</p>
            <div style="font-size:.78rem;max-height:160px;overflow:auto;">${plan.blocked.map(row =>
              `${safeText(row.reg_no)} — ${safeText(row.name)} (${safeText(row.reason)})`).join('<br>')}</div>
          </div>`
@@ -12038,6 +12337,12 @@ async function advanceSemester() {
                   : 'No modules need carrying forward.'}
       </p>
       <div class="quick-facts">${summary || '<div class="qf-item"><span>No students</span><strong>0</strong></div>'}</div>
+      ${provisionalCount ? `<div class="missing-note" style="border-left-color:var(--orange);margin-top:10px;">${provisionalCount} of them are placed <strong>provisionally</strong> — their results are not out. They are settled under Semester Review ▸ Provisional places once the grades are uploaded.</div>` : ''}
+      ${(plan.waiting || []).length ? `<div class="card" style="border-color:var(--orange);margin-top:12px;">
+           <div class="card-title" style="color:var(--orange)">${plan.waiting.length} student(s) wait for their results</div>
+           <p class="help-note">Not placed yet. Once their results are complete and confirmed, the admission office sends them to finance (Admissions ▸ My desk ▸ Send continuing students to finance).</p>
+           <div style="font-size:.78rem;max-height:160px;overflow:auto;">${plan.waiting.map(row =>
+             `${safeText(row.reg_no)} — ${safeText(row.name)} (${safeText(row.reason)})`).join('<br>')}</div></div>` : ''}
       ${blocked}
       <div class="table-wrap" style="margin-top:12px;max-height:280px;overflow:auto;">
         <table><thead><tr><th>Reg. No.</th><th>Name</th><th>Outcome</th><th>What happens</th></tr></thead>

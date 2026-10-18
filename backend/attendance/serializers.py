@@ -358,7 +358,18 @@ def known_student(reg_no):
 NOT_ADMITTED = '{} has not been admitted. New students come in through Admissions.'
 
 
+def _provisional_ids(context):
+    """Students placed provisionally — read once per response, not per row."""
+    if context is None:
+        context = {}
+    if '_provisional_ids' not in context:
+        from .progression import provisional_profile_ids
+        context['_provisional_ids'] = provisional_profile_ids()
+    return context['_provisional_ids']
+
+
 class StudentSerializer(serializers.ModelSerializer):
+    provisional = serializers.SerializerMethodField()
     portal_pin = serializers.CharField(
         write_only=True, required=False, allow_blank=False, min_length=6
     )
@@ -386,7 +397,7 @@ class StudentSerializer(serializers.ModelSerializer):
             'semester_id', 'semester_label',
             'sessions_attended', 'sessions_sick', 'sessions_absent',
             'sessions_total', 'theory_total', 'practical_total',
-            'attendance_pct', 'has_portal_pin', 'portal_pin', 'attempt', 'created_at',
+            'attendance_pct', 'has_portal_pin', 'portal_pin', 'attempt', 'provisional', 'created_at',
         ]
         read_only_fields = ['id', 'created_at', 'attempt']
 
@@ -397,6 +408,9 @@ class StudentSerializer(serializers.ModelSerializer):
         from .roles import can_issue_student_passwords
         request = self.context.get('request')
         return bool(request and can_issue_student_passwords(request.user))
+
+    def get_provisional(self, obj):
+        return bool(obj.profile_id) and obj.profile_id in _provisional_ids(self.context)
 
     def validate_portal_pin(self, value):
         if value and not self._may_set_password():
@@ -1937,6 +1951,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     items = serializers.SerializerMethodField()
     held_by_name = serializers.SerializerMethodField()
     residence = serializers.SerializerMethodField()
+    provisional = serializers.SerializerMethodField()
 
     class Meta:
         model = Application
@@ -1946,7 +1961,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'programme', 'programme_code', 'class_level', 'class_level_name',
             'returning_to', 'registration', 'note', 'decided_reason', 'steps',
             'requirement_checks', 'balance', 'details', 'missing_details', 'academic', 'payment',
-            'items', 'on_hold', 'hold_reason', 'held_at', 'held_by_name', 'residence',
+            'items', 'on_hold', 'hold_reason', 'held_at', 'held_by_name', 'residence', 'provisional',
             'created_at', 'updated_at',
         ]
         read_only_fields = fields
@@ -1963,6 +1978,15 @@ class ApplicationSerializer(serializers.ModelSerializer):
                              'relationship': kin.relationship,
                              'relationship_display': kin.get_relationship_display()}
                             for kin in profile.next_of_kin.all()],
+            'address': profile.address, 'sponsor_name': profile.sponsor_name,
+            'sponsor_phone': profile.sponsor_phone,
+            'education': [{'level': row.level, 'level_display': row.get_level_display(),
+                           'institution': row.institution, 'start_year': row.start_year,
+                           'end_year': row.end_year, 'index_number': row.index_number}
+                          for row in profile.education.all()],
+            'passport_url': (f'/api/student-records/{profile.id}/passport/?v='
+                             f'{int(profile.passport_updated_at.timestamp()) if profile.passport_updated_at else 0}'
+                             if profile.passport else ''),
         }
 
     def get_missing_details(self, obj):
@@ -2012,6 +2036,10 @@ class ApplicationSerializer(serializers.ModelSerializer):
         from .admissions import items_owed, items_unchecked
         return {'owed': items_owed(obj.profile, obj.semester),
                 'unchecked': items_unchecked(obj) if obj.is_open else []}
+
+    def get_provisional(self, obj):
+        """Placed while the results of the level before are not out."""
+        return _provisional_ids(self.context).__contains__(obj.profile_id)
 
     def get_residence(self, obj):
         """Day or hostel for the year — the finance desk states it."""
