@@ -1611,8 +1611,9 @@ def returning_students(request):
     """Students coming back from before the system — readmissions, repeaters,
     postponement returns — entered from last year's papers so admission takes
     them back the usual way. GET: the ones entered and not yet admitted.
-    POST: {'reference', 'students': [{reg_no, name, programme_id, class_level_id,
-    kind, return_semester, modules}]} — row by row, each refused on its own."""
+    POST: {'reference', 'students': [{reg_no, name, college_id, programme_id,
+    class_level_id, kind, return_semester, modules}]} — row by row, each
+    refused on its own."""
     if not can_record_returning_students(request.user):
         raise PermissionDenied('The examination officer, the Principal or DPARC enters these.')
     if request.method == 'GET':
@@ -1626,6 +1627,7 @@ def returning_students(request):
             owed.setdefault(repeat.profile_id, []).append(repeat.module_code)
         return Response([{
             'reg_no': row.profile.nactvet_reg_no, 'name': row.profile.name,
+            'college_id': row.profile.college_id or '',
             'status': row.status, 'status_display': row.get_status_display(),
             'class_level': row.class_level.name if row.class_level_id else '',
             'programme': row.programme.code if row.programme_id else '',
@@ -1648,7 +1650,8 @@ def returning_students(request):
             standing = admissions.record_returning_student(
                 reg_no=reg_no, name=str(item.get('name') or ''), programme=programme, class_level=level,
                 kind=str(item.get('kind') or ''), return_semester=int(item.get('return_semester') or 0),
-                modules=modules, reference=str(item.get('reference') or reference), actor=request.user)
+                modules=modules, reference=str(item.get('reference') or reference), actor=request.user,
+                college_id=str(item.get('college_id') or ''))
             results.append({'reg_no': reg_no, 'ok': True, 'status': standing.get_status_display()})
         except (admissions.AdmissionError, ValueError) as exc:
             results.append({'reg_no': reg_no, 'ok': False, 'error': str(exc)})

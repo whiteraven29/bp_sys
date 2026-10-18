@@ -122,6 +122,13 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    Migration 0067; `test_passport.py`.
    - [x] Built and tested (1034 tests), checked in the browser at desktop and phone width
    - [ ] Names stay one field (First Middle Surname); the form's declarations and signatures stay on paper
+2n. **Result sheets and returning students' college ID — 18 Oct (not committed).** Authority grade
+   templates: modules in code order; no Sitting column; the continuing sheet only for students sitting
+   every module as first sittings, anybody missing a module on the repeaters' sheet
+   (`progression.sheets_for`, shared with Results Summary). Returning Students record the college ID
+   (form and Excel column), refused over a different ID or one another student holds.
+   `test_result_sheets.py`.
+   - [x] Built and tested (1042 tests), both templates checked in the browser
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

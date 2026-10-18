@@ -1090,7 +1090,7 @@ RETURNING_KINDS = {
 
 @transaction.atomic
 def record_returning_student(*, reg_no, name, programme, class_level, kind, return_semester,
-                             modules=(), reference, actor=None, year=None):
+                             modules=(), reference, actor=None, year=None, college_id=''):
     """Enter last year's position for a student the system has no results for,
     from the college's papers (NACTVET's results sheet, the postponement or
     discontinuation letter), so admission can take them back the usual way.
@@ -1106,7 +1106,9 @@ def record_returning_student(*, reg_no, name, programme, class_level, kind, retu
 
     Nothing is guessed: a student whose results the system already holds is
     refused (their review decides), and `reference` — which paper it came
-    from — is kept on every row this writes. Returns the standing.
+    from — is kept on every row this writes. `college_id`, the ID number the
+    student already carries, is recorded when given — never over a different
+    one, never one another student holds. Returns the standing.
     """
     from .models import AcademicYear, OutstandingRepeat, SemesterReview
     if kind not in RETURNING_KINDS:
@@ -1134,6 +1136,17 @@ def record_returning_student(*, reg_no, name, programme, class_level, kind, retu
     if Application.objects.filter(profile=profile, semester__academic_year=year).exclude(
             state__in=[Application.REJECTED, Application.CANCELLED]).exists():
         raise ReturningError(f'{profile.name} already has an application this year.')
+    college_id = (college_id or '').strip()
+    if college_id:
+        if profile.college_id and profile.college_id.upper() != college_id.upper():
+            raise ReturningError(f'{profile.name} already has college ID {profile.college_id}; '
+                                 f'it is not changed here.')
+        holder = StudentProfile.objects.filter(college_id__iexact=college_id).exclude(pk=profile.pk).first()
+        if holder is not None:
+            raise ReturningError(f'College ID {college_id} already belongs to {holder.nactvet_reg_no}.')
+        if not profile.college_id:
+            profile.college_id = college_id[:40]
+            profile.save(update_fields=['college_id'])
 
     status = {'readmission': StudentStanding.DISCONTINUED, 'repeat': StudentStanding.REPEATING,
               'postponed': StudentStanding.POSTPONED}[kind]

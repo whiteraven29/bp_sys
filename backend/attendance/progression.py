@@ -321,26 +321,58 @@ def complete_with_repeats(origin_rows, repeat_rows):
     return sorted(merged.values(), key=lambda row: row['code'])
 
 
+def sheets_for(semester, class_level, *, programme=None):
+    """Who goes on which of NACTVET's two sheets for a semester and level (said
+    18 October 2026): the continuing sheet is only for students sitting every
+    module of their programme at this level and semester, all as first
+    sittings. Anybody missing a module — a repeater, a returning student, a
+    student enrolled in part of the semester — is on the repeaters' sheet.
+    "Every module" is every module somebody sits as a first sitting here.
+
+    Returns (continuing, repeaters): each a dict of person → their enrollments
+    here, in module-code order."""
+    enrollments = (Student.objects.studying()
+                   .filter(module__semester=semester, module__class_level=class_level)
+                   .select_related('module__class_level', 'module__programme', 'result', 'profile',
+                                   'repeat_of__module__semester__academic_year')
+                   .order_by('name', 'module__code'))
+    if programme is not None:
+        enrollments = enrollments.filter(module__programme=programme)
+    people, offered = {}, {}
+    for enrollment in enrollments:
+        people.setdefault(enrollment.profile_id or enrollment.nactvet_reg_no.upper(), []).append(enrollment)
+        # The semester's modules are the ones the class sits: a module
+        # registered with nobody on it yet, or sat only by repeaters, does not
+        # take the whole class off the continuing sheet.
+        if enrollment.attempt != Student.REPEAT:
+            offered[enrollment.module_id] = enrollment.module.programme_id
+    offered = list(offered.items())
+
+    continuing, repeaters = {}, {}
+    for key, rows in people.items():
+        # Their programme is their modules' programme; a module with none is
+        # everybody's at the level.
+        programmes = {row.module.programme_id for row in rows if row.module.programme_id}
+        required = {module_id for module_id, module_programme in offered
+                    if module_programme is None or module_programme in programmes}
+        first_sittings = {row.module_id for row in rows if row.attempt != Student.REPEAT}
+        (continuing if required and required <= first_sittings else repeaters)[key] = rows
+    return continuing, repeaters
+
+
 def repeaters_summary(semester, class_level, *, programme=None):
-    """NACTVET's repeaters' sheet: every student sitting a repeat this
-    semester at this level, with the semester they failed completed by the
-    repeat — the earlier grades, the repeat grades in the failed modules'
-    places, the GPA and remark of the whole. A repeat entered from paper (no
-    earlier semester in the system) shows its repeat sittings alone."""
+    """NACTVET's repeaters' sheet: every student at this level this semester
+    who does not sit the whole semester as first sittings (`sheets_for`).
+
+    A repeater's semester they failed is completed by the repeat — the earlier
+    grades, the repeat grades in the failed modules' places, the GPA and remark
+    of the whole. A repeat entered from paper (no earlier semester in the
+    system) shows its repeat sittings alone; a student sitting part of the
+    semester as first sittings shows those."""
     from .grading import gpa_classification
 
-    sittings = (Student.objects.studying()
-                .filter(module__semester=semester, module__class_level=class_level,
-                        attempt=Student.REPEAT)
-                .select_related('module__class_level', 'module__programme', 'result', 'profile',
-                                'repeat_of__module__semester__academic_year')
-                .order_by('name', 'module__code'))
-    if programme is not None:
-        sittings = sittings.filter(module__programme=programme)
     serializer = _result_serializer()
-    people = {}
-    for sitting in sittings:
-        people.setdefault(sitting.profile_id or sitting.nactvet_reg_no.upper(), []).append(sitting)
+    _, people = sheets_for(semester, class_level, programme=programme)
 
     students = []
     for rows_for_person in people.values():
@@ -351,14 +383,27 @@ def repeaters_summary(semester, class_level, *, programme=None):
             origin_rows = [module_row(e, serializer) for e in Student.objects.filter(
                 nactvet_reg_no__iexact=first.nactvet_reg_no, module__semester=origin,
                 attempt=Student.NORMAL).select_related('module__class_level', 'result')]
-        repeat_rows = [module_row(s, serializer) for s in rows_for_person]
+        repeat_rows = [module_row(s, serializer) for s in rows_for_person if s.attempt == Student.REPEAT]
+        sitting_rows = [module_row(s, serializer) for s in rows_for_person]
         merged = complete_with_repeats(origin_rows, repeat_rows)
+        # First sittings here (part of the semester) count as they are.
+        taken = {row['code'].upper() for row in merged}
+        merged = sorted(merged + [row for row in sitting_rows
+                                  if row.get('attempt') != Student.REPEAT and row['code'].upper() not in taken],
+                        key=lambda row: row['code'])
+        if origin is None:
+            origin_label = 'From the paper record' if repeat_rows else semester.label
+        else:
+            origin_label = origin.label
         decision = decide(merged)
         remark = decision['remark']
         students.append({
             'profile_id': first.profile_id, 'reg_no': first.nactvet_reg_no, 'name': first.name,
-            'origin': origin.label if origin else 'From the paper record',
+            'origin': origin_label,
             'repeats': [row['code'] for row in repeat_rows],
+            # What they sit this semester, repeat or not: the cells to fill.
+            'sitting': [row['code'] for row in sitting_rows],
+            'sitting_grades': {row['code']: row['grade'] for row in sitting_rows},
             'gpa': decision['gpa'], 'remark': remark,
             'classification': gpa_classification(decision['gpa'], class_level) if remark == PASS else '',
             'failed': sorted(set(decision['failed'] + decision['failed_again'] + decision['discontinued'])),
@@ -395,30 +440,17 @@ def results_summary(semester, class_level, *, programme=None, sheet='continuing'
     if sheet == 'repeaters':
         return repeaters_summary(semester, class_level, programme=programme)
 
-    enrollments = (Student.objects.studying()
-                   .filter(module__semester=semester, module__class_level=class_level)
-                   .select_related('module__class_level', 'module__programme', 'result', 'profile')
-                   .order_by('name', 'module__code'))
-    if programme is not None:
-        enrollments = enrollments.filter(module__programme=programme)
     serializer = _result_serializer()
     withheld = {row.profile_id: row for row in ResultWithholding.objects.filter(
         semester=semester, released_at__isnull=True)}
 
-    people, modules = {}, {}
-    for enrollment in enrollments:
-        key = enrollment.profile_id or enrollment.nactvet_reg_no.upper()
-        people.setdefault(key, []).append(enrollment)
+    # Only students sitting the whole semester as first sittings; everybody
+    # else is on the repeaters' sheet (sheets_for).
+    people, _ = sheets_for(semester, class_level, programme=programme)
+    modules = {}
 
     students = []
     for key, rows_for_person in people.items():
-        # Somebody sitting only repeats is on the repeaters' sheet. Somebody
-        # with first sittings is here — their grades and the module pass rates
-        # are the first sittings', but the remark and GPA are the whole
-        # semester's, as the review decides it (a failed repeat beside a
-        # passed year is still a discontinuation).
-        if all(enrollment.attempt == Student.REPEAT for enrollment in rows_for_person):
-            continue
         first = rows_for_person[0]
         rows = [module_row(enrollment, serializer) for enrollment in rows_for_person]
         decision = decide(rows)

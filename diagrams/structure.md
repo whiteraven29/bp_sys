@@ -307,6 +307,8 @@ are dropped once the production row counts are checked.
                            │  progression.decide: NACTVET's order (design §19)
                            ▼
               Results Summary (pass / supp / repeat / disco)
+              two sheets (progression.sheets_for): continuing = every module
+              as a first sitting; repeaters = everybody else
                            │  optional: withhold a semester
                            ▼
        Semester Review: prepared by exam office → confirmed by Principal or DPARC

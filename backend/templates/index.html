@@ -1209,6 +1209,7 @@
         <div class="form-grid-3">
           <div class="field"><label>Registration number *</label><input id="ret-reg" placeholder="e.g. NS2183/0046/2023"></div>
           <div class="field"><label>Name (if new to the system)</label><input id="ret-name"></div>
+          <div class="field"><label>College ID No.</label><input id="ret-college-id" maxlength="40" placeholder="as on their college ID card"></div>
           <div class="field"><label>They are *</label>
             <select id="ret-kind" onchange="onReturningKindChange()">
               <option value="readmission">Readmission — discontinued last year</option>
@@ -1224,7 +1225,7 @@
         <button class="btn btn-primary btn-sm" onclick="recordReturning(event)">Record</button>
       </div>
       <div class="card">
-        <div class="card-title">A whole sheet (Excel) <span class="tip" tabindex="0" role="note" aria-label="Help: sheet" data-tip="Columns: Registration Number, Name, Kind (readmission, repeat or postponed), Programme (code), Level (4, 5 or 6), Semester (1 or 2), Modules (codes — for repeaters, and for a postponed student who was repeating). Each row is recorded or refused on its own, with the reason.">?</span></div>
+        <div class="card-title">A whole sheet (Excel) <span class="tip" tabindex="0" role="note" aria-label="Help: sheet" data-tip="Columns: Registration Number, Name, College ID, Kind (readmission, repeat or postponed), Programme (code), Level (4, 5 or 6), Semester (1 or 2), Modules (codes — for repeaters, and for a postponed student who was repeating). Each row is recorded or refused on its own, with the reason.">?</span></div>
         <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" onclick="downloadReturningTemplate()">⬇ Template</button>
           <div class="field" style="margin:0;"><label>Filled sheet</label><input type="file" id="ret-file" accept=".xlsx,.xls,.csv"></div>
@@ -1235,7 +1236,7 @@
       <div class="card">
         <div class="card-title">Entered, not yet admitted</div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Reg. No.</th><th>Name</th><th>Standing</th><th>Back to</th><th>Modules owed</th><th>From</th></tr></thead>
+          <thead><tr><th>Reg. No.</th><th>College ID</th><th>Name</th><th>Standing</th><th>Back to</th><th>Modules owed</th><th>From</th></tr></thead>
           <tbody id="ret-tbody"></tbody>
         </table></div>
       </div>
@@ -6168,58 +6169,44 @@ async function authorityTemplateData() {
   const levelId = document.getElementById('auth-grade-level').value;
   if (!semesterId || !levelId) throw { detail: 'Select a semester and class level first.' };
   const moduleData = await api('GET', `/modules/?semester_id=${encodeURIComponent(semesterId)}&class_level_id=${encodeURIComponent(levelId)}`);
-  const modules = moduleData.results ?? moduleData;
+  // Module columns in code order, as on NACTVET's sheets.
+  const modules = [...(moduleData.results ?? moduleData)].sort((a, b) => a.code.localeCompare(b.code));
   if (!modules.length) throw { detail: 'No modules found for the selected level and semester.' };
-  if (document.getElementById('auth-grade-sheet').value === 'repeaters') {
-    // NACTVET's repeaters' sheet: each repeater's whole semester, last time's
-    // grades in place and the repeat modules to fill — the upload takes only
-    // the repeat sittings, the rest are their earlier results.
-    const data = await api('GET', `/results-summary/?semester_id=${semesterId}&class_level_id=${levelId}&sheet=repeaters`);
-    const rows = data.students.map(s => {
-      const row = { 'Registration Number': s.reg_no, 'Student Name': s.name,
-                    'Sitting': 'Repeat: ' + (s.repeats || []).join(', '), 'Completes': s.origin };
-      modules.forEach(m => {
-        row[m.code] = (s.repeats || []).includes(m.code) ? (s.repeat_grades[m.code] || '')
-          : (m.code in s.grades ? (s.grades[m.code] || '') : 'NA');
-      });
-      return row;
+  // Who is on which sheet is the server's one rule (progression.sheets_for):
+  // the continuing sheet only for students sitting every module as first
+  // sittings; anybody missing a module is on the repeaters' sheet.
+  const repeaters = document.getElementById('auth-grade-sheet').value === 'repeaters';
+  const data = await api('GET', `/results-summary/?semester_id=${encodeURIComponent(semesterId)}&class_level_id=${encodeURIComponent(levelId)}&sheet=${repeaters ? 'repeaters' : 'continuing'}`);
+  const rows = data.students.map(s => {
+    const row = { 'Registration Number': s.reg_no, 'Student Name': s.name };
+    if (repeaters) row['Completes'] = s.origin;
+    const sitting = new Set(repeaters ? (s.sitting || s.repeats || []) : Object.keys(s.grades));
+    modules.forEach(m => {
+      // A module they sit this semester is the cell to fill (its grade if it
+      // is in already); a repeater's other modules carry last time's grade;
+      // NA (NACTVET's "not applicable") for a module they do not sit.
+      row[m.code] = sitting.has(m.code)
+        ? ((repeaters ? (s.sitting_grades || s.repeat_grades || {})[m.code] : null) || '')
+        : (repeaters && m.code in s.grades ? (s.grades[m.code] || '') : 'NA');
     });
-    return { modules, rows, levelId, repeaters: true };
-  }
-  const rosters = await Promise.all(modules.map(m => api('GET', `/students/?module_id=${encodeURIComponent(m.id)}`)));
-  const students = new Map();
-  // A module the student does not sit this semester reads NA (NACTVET's "not
-  // applicable"), so an empty cell always means "grade still to enter"; a
-  // repeater's row says which modules are repeat sittings.
-  rosters.forEach((data, index) => (data.results ?? data).forEach(student => {
-    // The continuing sheet is the class's first sittings; repeat sittings go
-    // on the repeaters' sheet (NACTVET keeps the two apart).
-    if (student.attempt === 'repeat') return;
-    const key = student.nactvet_reg_no.trim().toUpperCase();
-    if (!students.has(key)) {
-      const row = { 'Registration Number': student.nactvet_reg_no, 'Student Name': student.name, 'Sitting': '' };
-      modules.forEach(m => { row[m.code] = 'NA'; });
-      students.set(key, row);
-    }
-    const row = students.get(key);
-    row[modules[index].code] = '';
-    if (student.attempt === 'repeat') {
-      row['Sitting'] = (row['Sitting'] ? row['Sitting'] + ', ' : 'Repeat: ') + modules[index].code;
-    }
-  }));
-  return { modules, rows: [...students.values()].sort((a, b) => a['Registration Number'].localeCompare(b['Registration Number'])), levelId };
+    return row;
+  }).sort((a, b) => a['Registration Number'].localeCompare(b['Registration Number']));
+  return { modules, rows, levelId, repeaters };
 }
 
 async function downloadAuthorityGradeTemplate() {
   try {
     const { modules, rows, levelId, repeaters } = await authorityTemplateData();
-    const headers = ['Registration Number', 'Student Name', 'Sitting', ...(repeaters ? ['Completes'] : []), ...modules.map(m => m.code)];
+    const headers = ['Registration Number', 'Student Name', ...(repeaters ? ['Completes'] : []), ...modules.map(m => m.code)];
     const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
-    ws['!cols'] = [{ wch: 24 }, { wch: 30 }, { wch: 22 }, ...modules.map(() => ({ wch: 14 }))];
+    ws['!cols'] = [{ wch: 24 }, { wch: 30 }, ...(repeaters ? [{ wch: 22 }] : []), ...modules.map(() => ({ wch: 14 }))];
     const help = XLSX.utils.aoa_to_sheet([
       ['AUTHORITY GRADE TEMPLATE INSTRUCTIONS'],
       ['Enter one authority grade under each module code. Do not edit registration numbers or module-code headings.'],
-      ['NA means the student does not sit that module this semester — leave it. "Repeat: …" in Sitting names their repeat sittings: a fail there (starred too) is a discontinuation.'],
+      [repeaters
+        ? 'Repeaters: every student who does not sit the whole semester as first sittings. Fill the empty cells (the modules they sit now); the filled ones are last time\'s grades and are not changed. Completes names the semester a repeat completes. A repeat failed again (starred too) is a discontinuation.'
+        : 'Continuing: only students sitting every module of the semester as first sittings. Anybody missing a module is on the Repeaters sheet.'],
+      ['NA means the student does not sit that module this semester — leave it. Choose First sitting or Supplementary sitting when you upload.'],
       ['Item', 'Meaning'], ['Grade****', 'Failed both Written & Practical'],
       ['Grade***', 'Failed Written'], ['Grade**', 'Failed Practical'],
       ['Grade*', 'Failed Semester Exam (SE)'], ['*N*', 'Results Nullified'],
@@ -6230,7 +6217,7 @@ async function downloadAuthorityGradeTemplate() {
     XLSX.utils.book_append_sheet(wb, help, 'Instructions');
     const level = state.levels.find(l => String(l.id) === String(levelId));
     XLSX.writeFile(wb, `authority_grades_${repeaters ? 'repeaters_' : ''}${(level?.name || 'level').replace(/\s+/g, '_')}.xlsx`);
-    toast('Authority grade template downloaded', 'var(--green)');
+    toast(`Authority grade template downloaded — ${rows.length} student(s)`, 'var(--green)');
   } catch(e) { toast(e?.detail || 'Could not create grade template', 'var(--red)'); }
 }
 
@@ -10941,11 +10928,12 @@ async function loadReturning() {
     const rows = await api('GET', '/returning-students/');
     document.getElementById('ret-tbody').innerHTML = rows.length ? rows.map(r => `<tr>
         <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}</td>
+        <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.college_id || '—')}</td>
         <td>${safeText(r.name)}</td><td>${safeText(r.status_display)}</td>
         <td>${safeText(r.class_level)} · ${safeText(r.programme)} · semester ${safeText(r.return_semester)}</td>
         <td>${safeText(r.modules.join(', ') || '—')}</td>
         <td style="font-size:.75rem;color:var(--muted)">${safeText(r.reference.replace(/^From the paper record: /, ''))}</td></tr>`).join('')
-      : '<tr><td colspan="6"><div class="empty">Nobody entered yet</div></td></tr>';
+      : '<tr><td colspan="7"><div class="empty">Nobody entered yet</div></td></tr>';
   } catch (e) { toast(apiErrorText(e, 'Could not load returning students'), 'var(--red)'); }
 }
 
@@ -10983,16 +10971,16 @@ function onReturningKindChange() {
 async function recordReturning(event) {
   const value = id => document.getElementById(id).value.trim();
   const data = await sendReturning([{
-    reg_no: value('ret-reg'), name: value('ret-name'), kind: value('ret-kind'),
+    reg_no: value('ret-reg'), name: value('ret-name'), college_id: value('ret-college-id'), kind: value('ret-kind'),
     programme_id: value('ret-programme'), class_level_id: value('ret-level'),
     return_semester: value('ret-semester'), modules: value('ret-modules') }], event);
-  if (data && data.recorded) ['ret-reg', 'ret-name', 'ret-modules'].forEach(id => document.getElementById(id).value = '');
+  if (data && data.recorded) ['ret-reg', 'ret-name', 'ret-college-id', 'ret-modules'].forEach(id => document.getElementById(id).value = '');
 }
 
 function downloadReturningTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([
-    ['Registration Number', 'Name', 'Kind', 'Programme', 'Level', 'Semester', 'Modules'],
-    ['NS2183/0046/2023', 'Example Student', 'repeat', 'PST', 4, 2, 'PST04209, PST04211'],
+    ['Registration Number', 'Name', 'College ID', 'Kind', 'Programme', 'Level', 'Semester', 'Modules'],
+    ['NS2183/0046/2023', 'Example Student', 'BPH/PST/2023/0046', 'repeat', 'PST', 4, 2, 'PST04209, PST04211'],
   ]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Returning students');
@@ -11009,6 +10997,7 @@ async function uploadReturning(event) {
   const levelId = n => (state.levels || []).find(l => String(l.order) === String(n).trim() || l.name === String(n).trim())?.id;
   const students = rows.filter(r => String(r['Registration Number'] || '').trim()).map(r => ({
     reg_no: String(r['Registration Number']).trim(), name: String(r['Name'] || '').trim(),
+    college_id: String(r['College ID'] || '').trim(),
     kind: String(r['Kind'] || '').trim().toLowerCase(), programme_id: programmeId(r['Programme']),
     class_level_id: levelId(r['Level']), return_semester: String(r['Semester'] || '').trim(),
     modules: String(r['Modules'] || '') }));
