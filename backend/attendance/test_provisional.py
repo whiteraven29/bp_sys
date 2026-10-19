@@ -96,18 +96,35 @@ class OpeningTheYearTests(ProvisionalBase):
         self.assertIn('placed provisionally', results)
         self.assertNotIn('supplementary', results)
 
-    def test_a_failure_already_in_waits_and_finishing_waits(self):
+    def test_everybody_goes_on_provisionally_and_only_finishing_waits(self):
+        # Said 19 October 2026: one advance for every level and programme —
+        # a failure so far goes on provisionally too, and is settled (the place
+        # taken away) when the results are in. Finishing has no next level.
         failing = self.waiting_student('REG/102', failed=True)
         finishing = self.waiting_student('REG/103', self.level6)
         progression.build_reviews(self.sem2)
         plan = progression.plan_advance(self.sem2)
         self.assertEqual(plan['blocked'], [])
-        self.assertEqual({row['reg_no'] for row in plan['waiting']}, {'REG/102', 'REG/103'})
+        self.assertEqual({row['reg_no'] for row in plan['waiting']}, {'REG/103'})
         summary = self.advance()
-        self.assertEqual(summary['waiting'], 2)
-        for profile in (failing, finishing):
-            self.assertFalse(Application.objects.filter(profile=profile).exists())
-            self.assertFalse(SemesterReview.objects.get(profile=profile).is_confirmed)
+        self.assertEqual((summary['provisional'], summary['waiting']), (1, 1))
+        self.assertEqual(Application.objects.get(profile=failing, semester=self.next_sem1).class_level, self.level5)
+        self.assertEqual(SemesterReview.objects.get(profile=failing).confirmed, SemesterReview.PROVISIONAL)
+        self.assertFalse(Application.objects.filter(profile=finishing).exists())
+        self.assertFalse(SemesterReview.objects.get(profile=finishing).is_confirmed)
+
+    def test_a_failure_so_far_loses_the_place_when_settled(self):
+        failing = self.waiting_student('REG/104', failed=True)
+        self.open_year()
+        review = SemesterReview.objects.get(profile=failing, semester=self.sem2)
+        self.assertEqual(review.confirmed, SemesterReview.PROVISIONAL)
+        self.publish(failing, 10)
+        progression.refresh_provisional()
+        review.refresh_from_db()
+        self.assertIn(review.proposed, (SemesterReview.REPEAT, SemesterReview.DISCONTINUED))
+        progression.confirm_review(review, review.proposed, actor=self.principal_user)
+        self.assertFalse(Application.objects.filter(profile=failing, semester=self.next_sem1)
+                         .exclude(state__in=[Application.CANCELLED, Application.REJECTED]).exists())
 
 
 class SettlingTests(ProvisionalBase):

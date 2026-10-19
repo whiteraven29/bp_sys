@@ -1422,7 +1422,8 @@ class OfficeVisibilityTests(OfficeClients):
 
 class QueueContinuingTests(OfficeClients):
     """A year opened without the advance still gets its continuing students
-    queued at finance, from last year's confirmed review."""
+    queued at finance, from last year's review — one not confirmed yet is
+    placed provisionally, as the advance does (said 19 October 2026)."""
 
     def setUp(self):
         super().setUp()
@@ -1445,14 +1446,19 @@ class QueueContinuingTests(OfficeClients):
         response = self.admission.post('/api/applications/queue-continuing/', {}, format='json')
 
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['queued'], 1)
-        self.assertEqual([row['reg_no'] for row in response.data['blocked']], ['NIT/PST/2025/0002'])
+        self.assertEqual(response.data['queued'], 2)
+        self.assertEqual(response.data['provisional'], 1)
+        self.assertEqual(response.data['blocked'], [])
         application = Application.objects.get(profile=self.promoted)
         self.assertEqual(application.state, Application.FINANCE)
         self.assertEqual(application.kind, Application.CONTINUING)
         self.assertEqual(application.class_level, self.level5)
         self.assertEqual(application.semester, self.sem1)
-        self.assertFalse(Application.objects.filter(profile=self.undecided).exists())
+        # The undecided one goes on provisionally, to be settled when the results are in.
+        self.assertEqual(Application.objects.get(profile=self.undecided).class_level, self.level5)
+        self.assertEqual(SemesterReview.objects.get(profile=self.undecided).confirmed,
+                         SemesterReview.PROVISIONAL)
+        self.assertEqual(SemesterReview.objects.get(profile=self.promoted).confirmed, SemesterReview.CLEAR)
         # Nobody is registered by queueing.
         self.assertFalse(SemesterRegistration.objects.filter(semester=self.sem1).exists())
 
@@ -1462,7 +1468,7 @@ class QueueContinuingTests(OfficeClients):
         again = self.admission.post('/api/applications/queue-continuing/', {}, format='json').data
 
         self.assertEqual(again['queued'], 0)
-        self.assertEqual(again['already_applied'], 1)
+        self.assertEqual(again['already_applied'], 2)
         self.assertEqual(Application.objects.filter(profile=self.promoted).count(), 1)
 
     def test_a_student_already_registered_is_left_alone(self):
@@ -1472,7 +1478,7 @@ class QueueContinuingTests(OfficeClients):
 
         result = self.admission.post('/api/applications/queue-continuing/', {}, format='json').data
 
-        self.assertEqual(result['queued'], 0)
+        self.assertEqual(result['queued'], 1)                 # only the undecided one
         self.assertEqual(result['already_registered'], 1)
 
     def test_only_admission_and_the_principal_queue_them(self):
@@ -1487,7 +1493,7 @@ class QueueContinuingTests(OfficeClients):
 
         queue = self.accounts.get('/api/applications/queue/').data
 
-        self.assertEqual(queue['by_desk'], {Application.FINANCE: 1})
+        self.assertEqual(queue['by_desk'], {Application.FINANCE: 2})
 
 
 class PortalRecordTests(AdmissionBase):

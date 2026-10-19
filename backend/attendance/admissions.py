@@ -643,10 +643,11 @@ def queue_continuing(semester, *, actor=None):
 
     The year-end advance does this itself. This is for a year that was opened
     another way — or turned before the queue existed — so every student the
-    last review sent on is waiting at finance. It follows that review and
-    nothing else: a student without a confirmed review is reported, not
-    guessed at, and anybody already registered or applied for this year is
-    left where they are. Safe to run again.
+    last review sent on is waiting at finance. It follows the same plan as
+    the advance: a student whose review is not confirmed yet is placed
+    provisionally (said 19 October 2026) and settled later from Provisional
+    places; anybody already registered or applied for this year is left where
+    they are. Safe to run again.
     """
     closing = closing_semester(semester)
     if closing is None:
@@ -684,6 +685,12 @@ def queue_continuing(semester, *, actor=None):
             summary['unplaced'].append({'reg_no': profile.nactvet_reg_no, 'name': profile.name,
                                         'reason': 'no programme or level on the review'})
             continue
+        if move.get('provisional'):
+            review = SemesterReview.objects.filter(profile=profile, semester=closing).first()
+            if review is not None and not review.is_confirmed:
+                progression.confirm_review(review, SemesterReview.PROVISIONAL, actor=actor,
+                                           reason=progression.PROVISIONAL_REASON.format(target=semester))
+            summary['provisional'] = summary.get('provisional', 0) + 1
         open_continuing(profile, semester, programme=programme, class_level=level, actor=actor)
         summary['queued'] += 1
     logger.info('Queued %s continuing student(s) for %s from %s', summary['queued'],

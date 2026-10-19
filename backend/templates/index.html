@@ -12326,10 +12326,10 @@ async function advanceSemester() {
                   : 'No modules need carrying forward.'}
       </p>
       <div class="quick-facts">${summary || '<div class="qf-item"><span>No students</span><strong>0</strong></div>'}</div>
-      ${provisionalCount ? `<div class="missing-note" style="border-left-color:var(--orange);margin-top:10px;">${provisionalCount} of them are placed <strong>provisionally</strong> — their results are not out. They are settled under Semester Review ▸ Provisional places once the grades are uploaded.</div>` : ''}
+      ${provisionalCount ? `<div class="missing-note" style="border-left-color:var(--orange);margin-top:10px;">${provisionalCount} of them are placed <strong>provisionally</strong>: every student whose results are not confirmed yet, at every level and programme, whatever the results so far say. They are settled under Semester Review ▸ Provisional places once the grades are in; a failure then takes the place away and is a repeat of its own semester.</div>` : ''}
       ${(plan.waiting || []).length ? `<div class="card" style="border-color:var(--orange);margin-top:12px;">
-           <div class="card-title" style="color:var(--orange)">${plan.waiting.length} student(s) wait for their results</div>
-           <p class="help-note">Not placed yet. Once their results are complete and confirmed, the admission office sends them to finance (Admissions ▸ My desk ▸ Send continuing students to finance).</p>
+           <div class="card-title" style="color:var(--orange)">${plan.waiting.length} student(s) finishing the programme wait for their results</div>
+           <p class="help-note">There is no next level to place them in. Once their results are in, the Principal confirms the review and they go to Postpone &amp; Finish ▸ Finishing.</p>
            <div style="font-size:.78rem;max-height:160px;overflow:auto;">${plan.waiting.map(row =>
              `${safeText(row.reg_no)} — ${safeText(row.name)} (${safeText(row.reason)})`).join('<br>')}</div></div>` : ''}
       ${blocked}

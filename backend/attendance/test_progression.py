@@ -691,13 +691,17 @@ class ProgressionApiTests(ProgressionBase):
         self.sem2.refresh_from_db()
         self.assertTrue(self.sem2.is_active)
 
-    def test_the_advance_is_refused_while_a_student_is_unreviewed(self):
+    def test_an_unconfirmed_student_goes_on_provisionally(self):
+        # Said 19 October 2026: one advance for everybody while the results are
+        # out — a review not confirmed yet no longer stops it.
         response = self.api.post('/api/academic-years/advance/', {}, format='json')
 
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(len(response.data['blocked']), 1)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['students']['provisional'], 1)
+        self.assertEqual(SemesterReview.objects.get(profile=self.profile, semester=self.sem2).confirmed,
+                         SemesterReview.PROVISIONAL)
         self.sem2.refresh_from_db()
-        self.assertTrue(self.sem2.is_active)
+        self.assertFalse(self.sem2.is_active)
 
     def test_the_preview_shows_the_moves_and_the_modules_before_anybody_commits(self):
         self.exam.post('/api/semester-reviews/build/', {}, format='json')

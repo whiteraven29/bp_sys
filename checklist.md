@@ -102,7 +102,8 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
 2l. **Opening the year while results are out (option B), finishing after Level 5, did not report —
    18 Oct (not committed).** The advance no longer stops for missing results: a student with nothing
    failed so far is placed provisionally (*Provisional* on the desks, lists, registers and portal; no
-   end-of-semester exam until settled); a failure already in, or Level 6, waits. Semester Review ▸
+   end-of-semester exam until settled); a failure already in, or Level 6, waits — **changed 19 Oct:
+   everybody unconfirmed goes provisionally in one advance, only Level 6 finishing waits**. Semester Review ▸
    Provisional places: the exam officer's cut-off, what the results now say, *Settle the passes*
    (Principal / DPARC). A late failure is a repeat of **its own semester** (2025/26); the provisional
    place, registration, applications and fees are called off, marks kept but not counted; a
@@ -129,6 +130,15 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    (form and Excel column), refused over a different ID or one another student holds.
    `test_result_sheets.py`.
    - [x] Built and tested (1042 tests), both templates checked in the browser
+2o. **One advance for everybody, and the server's 500 — 19 Oct (not committed).** The advance on the server
+   failed with a server error: a review confirmed before its modules had a programme kept none.
+   `progression.programme_and_level` reads review → standing → registration → modules → the only
+   programme offering the level, and fills the blank on the review; anyone still unplaceable is named in
+   the preview; a refusal is a 400 with the reason, nothing changed. Your rule: one advance places every
+   unconfirmed student provisionally, every level and programme; only Level 6 finishing waits.
+   *Send continuing students to finance* marks them provisional the same way. A 500 now logs its
+   traceback (`django.request` → journalctl). `test_advance_programme.py`.
+   - [x] Built and tested (1046 tests)
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

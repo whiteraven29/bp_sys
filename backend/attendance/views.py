@@ -1890,8 +1890,8 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
             plan = progression.plan_advance(cur)
             if plan['blocked']:
                 return Response({
-                    'detail': (f'{len(plan["blocked"])} student(s) in {cur.label} have no confirmed '
-                               f'review. Finish the semester review first.'),
+                    'detail': (f'{len(plan["blocked"])} student(s) in {cur.label} cannot be placed: '
+                               + '; '.join(f'{row["reg_no"]} — {row["reason"]}' for row in plan['blocked'][:5])),
                     'blocked': plan['blocked'],
                 }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1909,7 +1909,13 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
             new_sem.save()
 
             carried = progression.carry_modules(new_sem, actor=request.user)
-            moved = progression.apply_advance(cur, new_sem, actor=request.user)
+            try:
+                moved = progression.apply_advance(cur, new_sem, actor=request.user)
+            except progression.ProgressionError as exc:
+                # Nothing is kept: the semester stays as it was, and the
+                # office is told who stopped it, not "Server Error".
+                transaction.set_rollback(True)
+                return Response({'detail': f'Not advanced: {exc}'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({
             'detail': f'Advanced to {new_sem}',

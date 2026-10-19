@@ -685,6 +685,8 @@ arrive (recommended — as now).
 
 *In the system:* placed automatically when the year opens, at the level a pass takes them; the preview lists them first. A failure already in, or Level 6, waits instead; a supplementary still to come keeps them provisional (`progression.provisional_placement`).
 
+**Changed (19 October 2026):** "advance all students in all levels and programmes as one … as bulk provisional … since results for all levels are not here". Every student whose review is not confirmed goes on provisionally, a failure so far included, with nothing to confirm first; only Level 6 students finishing wait. A failure is settled later as before (place called off, repeat of its own semester).
+
 ### Q44. Fees while provisional ✅
 
 - Full year billed, reversed if they do not progress (recommended) — or the first

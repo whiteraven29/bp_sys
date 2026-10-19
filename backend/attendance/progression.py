@@ -52,7 +52,7 @@ from django.utils import timezone
 from . import finance
 from .grading import is_level_six
 from .models import (
-    AcademicYear, ChargeType, ClassLevel, Module, Notification, OutstandingRepeat, Semester,
+    AcademicYear, ChargeType, ClassLevel, Module, Notification, OutstandingRepeat, Programme, Semester,
     SemesterRegistration, SemesterReview, StandingChange, Student,
     StudentStanding,
 )
@@ -1266,6 +1266,33 @@ def _next_level_cached(programme, class_level, cache):
     return higher[0] if higher else None
 
 
+NO_PROGRAMME = ('no programme or level on record — link their modules to the programme '
+                '(Modules) or record their registration, then read the results again')
+
+
+def programme_and_level(profile, review, standing, registration, semester):
+    """The programme and level a student is moved on from, read in order from
+    the review, the standing, this semester's registration and the modules they
+    sit (said 19 October 2026: a review confirmed before its modules were
+    linked to a programme kept none, and stopped the advance). If only one
+    programme offers that level, it is theirs. Either may still be None."""
+    programme = getattr(review, 'programme', None) or getattr(standing, 'programme', None) \
+        or getattr(registration, 'programme', None)
+    level = getattr(review, 'class_level', None) or getattr(standing, 'class_level', None) \
+        or getattr(registration, 'class_level', None)
+    if programme is None or level is None:
+        sits = list(Student.objects.filter(profile=profile, module__semester=semester)
+                    .select_related('module__programme', 'module__class_level'))
+        programme = programme or next((row.module.programme for row in sits if row.module.programme_id), None)
+        if level is None and sits:
+            level = max((row.module.class_level for row in sits), key=lambda lvl: lvl.order)
+    if programme is None and level is not None:
+        offering = list(Programme.objects.filter(levels=level)[:2])
+        if len(offering) == 1:
+            programme = offering[0]
+    return programme, level
+
+
 def plan_advance(semester):
     """What advancing out of this semester would do to each student.
 
@@ -1297,19 +1324,15 @@ def plan_advance(semester):
             placement = provisional_placement(review, semester, standing, levels_of)
             row = {'profile_id': profile.id, 'reg_no': profile.nactvet_reg_no, 'name': profile.name}
             if placement == 'waiting':
-                waiting.append({**row, 'reason': 'results so far show a failed module — waits for the rest'
-                                if review and _has_failure(review)
-                                else 'finishing the programme waits for the results'})
+                waiting.append({**row, 'reason': 'finishing the programme waits for the results'})
                 continue
             if placement != 'provisional':
-                blocked.append({**row, 'reason': 'no review yet' if review is None
-                                else f'review says {review.get_proposed_display().lower()} — confirm it'})
+                blocked.append({**row, 'reason': 'no review yet — read the results again'})
                 continue
             provisional = True
 
         outcome = SemesterReview.PROVISIONAL if provisional else review.confirmed
-        level = review.class_level or standing.class_level
-        programme = review.programme or standing.programme
+        programme, level = programme_and_level(profile, review, standing, registration, semester)
         move = {
             'profile_id': profile.id, 'reg_no': profile.nactvet_reg_no, 'name': profile.name,
             'outcome': outcome, 'from_level': level.name if level else None,
@@ -1357,6 +1380,12 @@ def plan_advance(semester):
                     move.update(action='promoted', registers=True, to_level=up.name,
                                 to_level_id=up.id, to_semester=Semester.SEM1, kind=SemesterRegistration.CONTINUING,
                                 detail=f'{level.name} → {up.name} — to admissions')
+        if move.get('registers') and (programme is None or not move.get('to_level_id')):
+            # The advance could not place them: say so here, before anybody
+            # presses the button, rather than failing half-way through it.
+            blocked.append({'profile_id': profile.id, 'reg_no': profile.nactvet_reg_no,
+                            'name': profile.name, 'reason': NO_PROGRAMME})
+            continue
         if move['provisional']:
             move['detail'] = f"{move.get('detail', '')} — provisional, results awaited".lstrip(' —')
         moves.append(move)
@@ -1364,18 +1393,19 @@ def plan_advance(semester):
     return {'moves': moves, 'blocked': blocked, 'waiting': waiting}
 
 
-def _has_failure(review):
-    return any(row.get('status') in FAILED_STATUSES for row in (review.modules or []))
-
-
 def provisional_placement(review, semester, standing, levels_cache=None):
     """How a student whose review is not confirmed goes into the next
     semester: 'provisional' (placed where a pass takes them), 'waiting' (left
-    out until the results are complete) or 'blocked' (a decision to confirm)."""
-    if review is None or review.proposed != SemesterReview.PENDING:
+    out: nothing to place them in) or 'blocked' (no review at all).
+
+    Said 19 October 2026: the year opens for everybody in one go, at every
+    level and in every programme, while the results are out — whatever the
+    results so far say, and whether or not a decision is confirmed yet. Each
+    is settled from Provisional places once the grades are in (a failure then
+    takes the place away and is a repeat of its own semester). Only a student
+    finishing the programme waits: there is no next level to place them in."""
+    if review is None:
         return 'blocked'
-    if _has_failure(review):
-        return 'waiting'
     if semester.number == Semester.SEM2:
         level = review.class_level or (standing.class_level if standing else None)
         programme = review.programme or (standing.programme if standing else None)
@@ -1498,7 +1528,7 @@ def apply_advance(semester, target, *, actor=None):
         semester=target, profile__in=profiles).values_list('profile_id', flat=True))
     levels_of = {}
 
-    for profile, _registration in people:
+    for profile, registration in people:
         review = reviews.get(profile.id)
         if review is None or not review.is_confirmed:
             placement = provisional_placement(review, semester, standing_for(profile, known=standings), levels_of)
@@ -1513,8 +1543,12 @@ def apply_advance(semester, target, *, actor=None):
             summary['provisional'] = summary.get('provisional', 0) + 1
         standing = standing_for(profile, known=standings)
         outcome = review.confirmed
-        level = review.class_level or standing.class_level
-        programme = review.programme or standing.programme
+        programme, level = programme_and_level(profile, review, standing, registration, semester)
+        # A blank on the review is filled in from the record; nothing set is changed.
+        blanks = {field: value for field, value in (('programme', programme), ('class_level', level))
+                  if value is not None and getattr(review, f'{field}_id') is None}
+        if blanks:
+            SemesterReview.objects.filter(pk=review.pk).update(**blanks)
 
         if standing.status == StudentStanding.POSTPONED:
             summary['away'] += 1
@@ -1558,9 +1592,7 @@ def apply_advance(semester, target, *, actor=None):
                 summary['promoted'] += 1
 
         if programme is None or to_level is None:
-            raise ProgressionError(
-                f'{profile.nactvet_reg_no} has no programme or level recorded; '
-                'set it on the review before advancing.')
+            raise ProgressionError(f'{profile.nactvet_reg_no} ({profile.name}): {NO_PROGRAMME}.')
 
         if semester.number == Semester.SEM2:
             # A new academic year. The student is not registered here: they go
