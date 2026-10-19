@@ -189,6 +189,9 @@ LOGGING = {
     'loggers': {
         'edutrack.security': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
         'django.security': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+        # A 500 writes its traceback to the service log (journalctl -u edutrack);
+        # without this, DEBUG off, Django answers "Server Error" and keeps nothing.
+        'django.request': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
     },
 }
 
