@@ -248,6 +248,17 @@ def can_edit_student_records(user):
 can_answer_requests = can_handle_requests
 
 
+def pk_or_none(value):
+    """An id sent by the page, or None when it is blank or not a number — so a
+    form sent without its choice gets the view's own "choose …" answer, not a
+    server error (said 19 October 2026: New application sent without a
+    programme answered 500)."""
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 def active_semester():
     return Semester.objects.filter(is_active=True).select_related('academic_year').first()
 
@@ -1544,7 +1555,7 @@ def executive_finance(request):
     only — the accountant's ledger is where a student's account is read."""
     if not can_view_finance_summary(request.user):
         raise PermissionDenied('For the Principal, DPFPA and the accountant.')
-    year = (AcademicYear.objects.filter(id=request.query_params.get('academic_year_id')).first()
+    year = (AcademicYear.objects.filter(id=pk_or_none(request.query_params.get('academic_year_id'))).first()
             or active_academic_year())
     if year is None:
         return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -2418,9 +2429,9 @@ def health_records(request):
         raise PermissionDenied('Health records are for the records office, the Dean of Students '
                                'and the Principal.')
     if request.method == 'POST':
-        profile = get_object_or_404(visible_profiles(request.user), pk=request.data.get('profile_id'))
+        profile = get_object_or_404(visible_profiles(request.user), pk=pk_or_none(request.data.get('profile_id')))
         certificate = StudentDocument.objects.filter(
-            pk=request.data.get('certificate_id') or 0, profile=profile).first()
+            pk=pk_or_none(request.data.get('certificate_id')) or 0, profile=profile).first()
         try:
             record = health.add_record(profile, condition=request.data.get('condition'),
                                        certificate=certificate, notes=request.data.get('notes') or '',
@@ -2546,7 +2557,7 @@ def item_checks(request):
         if registration is None:
             return Response({'detail': 'That student is not registered for this semester.'},
                             status=status.HTTP_400_BAD_REQUEST)
-        requirement = AdmissionRequirement.objects.filter(id=request.data.get('requirement_id')).first()
+        requirement = AdmissionRequirement.objects.filter(id=pk_or_none(request.data.get('requirement_id'))).first()
         if requirement is None:
             return Response({'detail': 'No such item.'}, status=status.HTTP_400_BAD_REQUEST)
         application = Application.objects.filter(profile=registration.profile, semester=semester).first()
@@ -2562,7 +2573,8 @@ def item_checks(request):
         except admissions.AdmissionError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         data = RequirementCheckSerializer(check).data
-        if check.status == RequirementCheck.MISSING and check.charge_id is None:
+        if (check.status == RequirementCheck.MISSING and check.charge_id is None
+                and check.requirement.kind == AdmissionRequirement.BILLED):
             data['warning'] = (f'Recorded, but nothing was charged: no rate is set for '
                                f'{requirement.name} at {registration.class_level}.')
         return Response(data)
@@ -2805,7 +2817,7 @@ def payment_schedules(request):
     """
     if not can_manage_finance(request.user):
         raise PermissionDenied('Finance access required.')
-    year = (AcademicYear.objects.filter(id=request.data.get('academic_year') or
+    year = (AcademicYear.objects.filter(id=pk_or_none(request.data.get('academic_year')) or
                                         request.query_params.get('academic_year')).first()
             or active_academic_year())
     if year is None:
@@ -2863,7 +2875,7 @@ def copy_payment_schedules(request):
     """Start a year's schedules from the year before, every date a year on."""
     if not can_manage_finance(request.user):
         raise PermissionDenied('Finance access required.')
-    year = get_object_or_404(AcademicYear, pk=request.data.get('academic_year'))
+    year = get_object_or_404(AcademicYear, pk=pk_or_none(request.data.get('academic_year')))
     previous = AcademicYear.objects.filter(name__lt=year.name).order_by('-name').first()
     if previous is None:
         return Response({'detail': 'There is no earlier year to copy from.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -2989,11 +3001,11 @@ def results_summary(request):
     the Head of Department to read."""
     if not can_read_exams(request.user):
         raise PermissionDenied('For the examination office.')
-    semester = Semester.objects.filter(id=request.query_params.get('semester_id')).first()
-    level = ClassLevel.objects.filter(id=request.query_params.get('class_level_id')).first()
+    semester = Semester.objects.filter(id=pk_or_none(request.query_params.get('semester_id'))).first()
+    level = ClassLevel.objects.filter(id=pk_or_none(request.query_params.get('class_level_id'))).first()
     if semester is None or level is None:
         return Response({'detail': 'Pick a semester and a class level.'}, status=status.HTTP_400_BAD_REQUEST)
-    programme = Programme.objects.filter(id=request.query_params.get('programme_id')).first()
+    programme = Programme.objects.filter(id=pk_or_none(request.query_params.get('programme_id'))).first()
     sheet = 'repeaters' if request.query_params.get('sheet') == 'repeaters' else 'continuing'
     return Response(progression.results_summary(semester, level, programme=programme, sheet=sheet))
 
@@ -3005,8 +3017,8 @@ def withhold_results(request):
     "Withheld" on the portal — usually over unpaid fees."""
     if not can_manage_exams(request.user):
         raise PermissionDenied('The examination officer withholds results.')
-    profile = StudentProfile.objects.filter(id=request.data.get('profile_id')).first()
-    semester = Semester.objects.filter(id=request.data.get('semester_id')).first()
+    profile = StudentProfile.objects.filter(id=pk_or_none(request.data.get('profile_id'))).first()
+    semester = Semester.objects.filter(id=pk_or_none(request.data.get('semester_id'))).first()
     if profile is None or semester is None:
         return Response({'detail': 'Which student, and which semester?'}, status=status.HTTP_400_BAD_REQUEST)
     holding, made = ResultWithholding.objects.get_or_create(
@@ -3226,7 +3238,7 @@ def postponements(request):
             raise PermissionDenied('The records office writes down a postponement request.')
         reg_no = str(request.data.get('reg_no') or '').strip()
         profile = StudentProfile.objects.filter(nactvet_reg_no__iexact=reg_no).first() if reg_no else \
-            StudentProfile.objects.filter(id=request.data.get('profile_id')).first()
+            StudentProfile.objects.filter(id=pk_or_none(request.data.get('profile_id'))).first()
         if profile is None:
             return Response({'detail': 'No student with that registration number.'},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -3581,9 +3593,9 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
                 or can_work_desk(request.user, Application.INTAKE)):
             return Response({'detail': 'The records or admission office opens an application.'},
                             status=status.HTTP_403_FORBIDDEN)
-        semester = Semester.objects.filter(id=data.get('semester_id')).first() or active_semester()
-        programme = Programme.objects.filter(id=data.get('programme_id')).first()
-        class_level = ClassLevel.objects.filter(id=data.get('class_level_id')).first()
+        semester = Semester.objects.filter(id=pk_or_none(data.get('semester_id'))).first() or active_semester()
+        programme = Programme.objects.filter(id=pk_or_none(data.get('programme_id'))).first()
+        class_level = ClassLevel.objects.filter(id=pk_or_none(data.get('class_level_id'))).first()
         if semester is None or programme is None or class_level is None:
             return Response({'detail': 'A semester, a programme and a level are all needed.'},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -3684,27 +3696,39 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         if request.method == 'GET':
             checks = {check.requirement_id: check for check in RequirementCheck.objects.filter(
                 profile=application.profile, semester=application.semester)}
+            # A billed item finance found missing: what it costs and whether it
+            # is paid, so the admission desk knows before admitting.
+            owed = {row['requirement']: row for row in
+                    admissions.items_owed(application.profile, application.semester)}
             return Response([{
                 'requirement': requirement.id,
                 'name': requirement.name,
                 'description': requirement.description,
                 'mandatory': requirement.mandatory,
+                'kind': requirement.kind,
+                'desks': list(admissions.item_desks(requirement)),
                 'status': checks[requirement.id].status if requirement.id in checks else '',
                 'charge': checks[requirement.id].charge_id if requirement.id in checks else None,
+                'amount': owed[requirement.id]['amount'] if requirement.id in owed else None,
+                'balance': owed[requirement.id]['balance'] if requirement.id in owed else None,
+                'paid': owed[requirement.id]['paid'] if requirement.id in owed else None,
             } for requirement in admissions.requirements_for(application)])
 
-        # Finance checks the items; the admission desk records one a held
-        # student brings back. Records handles no money, so marks none.
-        if application.state not in admissions.ITEM_DESKS:
-            return Response({'detail': 'Items are checked at the finance desk.'},
+        # A billed item is finance's to check (the admission desk records one a
+        # held student brings back); a check-only one — a certificate, a signed
+        # form — is marked by whichever desk holds the application.
+        requirement = AdmissionRequirement.objects.filter(
+            id=pk_or_none(request.data.get('requirement_id'))).first()
+        if requirement is None:
+            return Response({'detail': 'No such requirement.'}, status=status.HTTP_400_BAD_REQUEST)
+        if application.state not in admissions.item_desks(requirement):
+            return Response({'detail': 'Billed items are checked at the finance desk.'
+                             if requirement.kind == AdmissionRequirement.BILLED
+                             else 'This item is checked at the admission desk, before admitting.'},
                             status=status.HTTP_400_BAD_REQUEST)
         if not can_work_desk(request.user, application.state):
             return Response({'detail': 'This application is with another desk.'},
                             status=status.HTTP_403_FORBIDDEN)
-        requirement = AdmissionRequirement.objects.filter(
-            id=request.data.get('requirement_id')).first()
-        if requirement is None:
-            return Response({'detail': 'No such requirement.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             check = admissions.record_requirement(
                 application, requirement, str(request.data.get('status') or ''),
@@ -3715,7 +3739,12 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         # Marking something missing that the accountant has no rate for records
         # the fact and charges nothing. Say so, rather than let the desk assume
         # the student has been billed.
-        if check.status == RequirementCheck.MISSING and check.charge_id is None:
+        if requirement.kind == AdmissionRequirement.CHECK_ONLY:
+            application.refresh_from_db()
+            data['on_hold'] = application.on_hold
+            data['hold_reason'] = application.hold_reason if application.on_hold else ''
+            data['check_only'] = True
+        elif check.status == RequirementCheck.MISSING and check.charge_id is None:
             data['warning'] = (
                 f'Recorded, but nothing was charged: the accountant has set no rate for '
                 f'{requirement.name} at {application.class_level}.')
@@ -5970,7 +5999,7 @@ class ResultViewSet(viewsets.ModelViewSet):
         rows = payload.get('rows', [])
         if not rows:
             return Response({'detail': 'No grade rows supplied.'}, status=status.HTTP_400_BAD_REQUEST)
-        semester = Semester.objects.filter(id=payload.get('semester_id')).first()
+        semester = Semester.objects.filter(id=pk_or_none(payload.get('semester_id'))).first()
         if semester is None:
             return Response({'detail': 'Say which semester these grades are for.'},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -6370,7 +6399,7 @@ class ResultViewSet(viewsets.ModelViewSet):
                 result = (
                     StudentResult.objects
                     .select_related('student__module')
-                    .get(pk=item.get('id'))
+                    .get(pk=pk_or_none(item.get('id')))
                 )
             except StudentResult.DoesNotExist:
                 errors.append(f'Result {item.get("id")} not found')
@@ -8001,7 +8030,7 @@ def finance_students(request):
         raise PermissionDenied('Finance access required.')
 
     year = AcademicYear.objects.filter(
-        id=request.query_params.get('academic_year_id')
+        id=pk_or_none(request.query_params.get('academic_year_id'))
     ).first() or active_academic_year()
     if year is None:
         return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -8049,7 +8078,7 @@ def finance_statement(request, profile_id):
     if not can_manage_finance(request.user):
         raise PermissionDenied('Finance access required.')
     year = AcademicYear.objects.filter(
-        id=request.query_params.get('academic_year_id')
+        id=pk_or_none(request.query_params.get('academic_year_id'))
     ).first() or active_academic_year()
     return Response(_statement_payload(profile, year, active_semester()))
 
@@ -8153,8 +8182,8 @@ def finance_generate_charges(request):
     if not can_manage_finance(request.user):
         raise PermissionDenied('Only the accountant can generate charges.')
 
-    year = get_object_or_404(AcademicYear, pk=request.data.get('academic_year'))
-    level = ClassLevel.objects.filter(id=request.data.get('class_level')).first()
+    year = get_object_or_404(AcademicYear, pk=pk_or_none(request.data.get('academic_year')))
+    level = ClassLevel.objects.filter(id=pk_or_none(request.data.get('class_level'))).first()
 
     profiles = StudentProfile.objects.prefetch_related('enrollments__module__class_level')
     if level:
@@ -8200,7 +8229,7 @@ def exam_declarations(request):
     if request.method == 'GET':
         if not (can_read_exams(user) or can_manage_finance(user)):
             return Response({'detail': 'Staff only.'}, status=status.HTTP_403_FORBIDDEN)
-        module = get_object_or_404(Module, pk=request.query_params.get('module_id'))
+        module = get_object_or_404(Module, pk=pk_or_none(request.query_params.get('module_id')))
         by_profile = finance.declared_charges(module)
         declared = {
             str(enrollment.id): by_profile[enrollment.profile_id]
@@ -8346,10 +8375,10 @@ def finance_raise_charge(request):
     hostel place, a supplementary exam, a repeat module."""
     if not can_manage_finance(request.user):
         raise PermissionDenied('Finance access required.')
-    profile = get_object_or_404(StudentProfile, pk=request.data.get('profile'))
-    charge_type = get_object_or_404(ChargeType, pk=request.data.get('charge_type'))
-    year = get_object_or_404(AcademicYear, pk=request.data.get('academic_year'))
-    semester = Semester.objects.filter(id=request.data.get('semester')).first()
+    profile = get_object_or_404(StudentProfile, pk=pk_or_none(request.data.get('profile')))
+    charge_type = get_object_or_404(ChargeType, pk=pk_or_none(request.data.get('charge_type')))
+    year = get_object_or_404(AcademicYear, pk=pk_or_none(request.data.get('academic_year')))
+    semester = Semester.objects.filter(id=pk_or_none(request.data.get('semester'))).first()
 
     try:
         amount = Decimal(str(request.data.get('amount')))
@@ -8379,9 +8408,9 @@ def finance_issue_invoice(request):
     reference. Raised at the office; students use the portal endpoint."""
     if not can_manage_finance(request.user):
         raise PermissionDenied('Finance access required.')
-    profile = get_object_or_404(StudentProfile, pk=request.data.get('profile'))
+    profile = get_object_or_404(StudentProfile, pk=pk_or_none(request.data.get('profile')))
     year = AcademicYear.objects.filter(
-        id=request.data.get('academic_year')
+        id=pk_or_none(request.data.get('academic_year'))
     ).first() or active_academic_year()
 
     family = str(request.data.get('family') or '')
@@ -9018,7 +9047,7 @@ class ServiceRequestViewSet(mixins.RetrieveModelMixin,
             raise PermissionDenied('Only the secretary or the admin sends a document back.')
         service_request = self.get_object()
         attachment = get_object_or_404(
-            RequestAttachment, pk=request.data.get('attachment_id'), request=service_request)
+            RequestAttachment, pk=pk_or_none(request.data.get('attachment_id')), request=service_request)
 
         finance.audit('service_request.unattach', 'FormResponse', actor=request.user,
                       entity_id=service_request.id,

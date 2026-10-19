@@ -114,3 +114,36 @@ class NewEndpointAccessTests(TestCase):
         self.assertIn('10 MB', report(big).json()['detail'])
         real = SimpleUploadedFile('letter.pdf', b'%PDF-1.4 hospital', content_type='application/pdf')
         self.assertEqual(report(real).status_code, 201)
+
+
+class BlankChoiceTests(NewEndpointAccessTests):
+    """A form sent without its choice gets an answer, not a server error (said
+    19 October 2026: New application without a programme answered 500)."""
+
+    def office_client(self, username, role):
+        user = User.objects.create_user(username, password='pw')
+        set_roles(user, [role], full_name=username.title())
+        client = APIClient()
+        client.force_authenticate(user)
+        return client
+
+    def test_a_blank_programme_is_asked_for(self):
+        admission = self.office_client('adm', 'admission_officer')
+        response = admission.post('/api/applications/capture/', {
+            'kind': 'new', 'name': 'Grace Mollel', 'programme_id': '', 'class_level_id': ''}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('programme', response.data['detail'])
+        nonsense = admission.post('/api/applications/capture/', {
+            'kind': 'new', 'name': 'Grace Mollel', 'programme_id': 'abc', 'class_level_id': 'x'}, format='json')
+        self.assertEqual(nonsense.status_code, 400)
+
+    def test_blank_ids_elsewhere_are_not_server_errors(self):
+        exam = self.office_client('exam', 'exam_officer')
+        self.assertEqual(exam.get('/api/results-summary/?semester_id=&class_level_id=').status_code, 400)
+        principal = self.office_client('boss', 'principal')
+        self.assertIn(principal.post('/api/result-withholdings/', {'profile_id': '', 'semester_id': ''},
+                                     format='json').status_code, (400, 403, 404))
+
+
+for _name in [n for n in dir(NewEndpointAccessTests) if n.startswith('test_')]:
+    setattr(BlankChoiceTests, _name, None)

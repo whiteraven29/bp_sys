@@ -1890,8 +1890,8 @@ class ApplicationStep(models.Model):
 
 
 class AdmissionRequirement(models.Model):
-    """Something a student must have to study: the TPH book, insurance, a
-    calculator, rim paper.
+    """Something a student must have or hand in: the TPH book, insurance, a
+    calculator, rim paper — or a certificate, a signed form.
 
     Checked at admission and again the next semester, because a student who had
     a book in October may not have one in February. What is missing is charged
@@ -1907,12 +1907,24 @@ class AdmissionRequirement(models.Model):
         (ONCE, 'Checked once, when they join'),
     ]
 
+    # Two kinds (said 19 October 2026). A billed item (the TPH book) missing is
+    # added to the bill and never holds anybody. A check-only item (a
+    # certificate, a signed form) is not billed: missing holds the student at
+    # the admission desk until it is brought.
+    BILLED = 'billed'
+    CHECK_ONLY = 'check'
+    KIND_CHOICES = [
+        (BILLED, 'Billed when missing — never a hold'),
+        (CHECK_ONLY, 'Checked only — missing holds the student'),
+    ]
+
     name = models.CharField(max_length=120, unique=True)
     description = models.CharField(max_length=300, blank=True)
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES, default=BILLED)
     charge_type = models.ForeignKey(
         'ChargeType', on_delete=models.PROTECT, null=True, blank=True,
         related_name='requirements',
-        help_text='What the college charges when the student does not have it.')
+        help_text='What the college charges when the student does not have it (billed items only).')
     frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default=EVERY_SEMESTER)
     applies_to_levels = models.ManyToManyField(
         ClassLevel, blank=True, related_name='requirements',

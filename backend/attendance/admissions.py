@@ -745,6 +745,8 @@ def complete_step(application, *, actor=None, note=''):
     application.save(update_fields=['state', 'updated_at'])
     if following == Application.FINANCE:
         _raise_charges(application, actor=actor)
+    if following == Application.ADMISSION:
+        sync_item_hold(application, actor=actor)
     logger.info('Application %s moved from %s to %s', application.id, step, following)
     return application
 
@@ -794,10 +796,47 @@ def refuse(application, *, actor=None, reason=''):
 # who has their own has that fee waived when finance marks it; for the items the
 # college does not bill by default, marking one missing raises the charge.
 
-#: The desks an item may be marked at: finance checks them, and the admission
-#: office records one the student brings back while held at its desk.
+#: The desks a billed item may be marked at: finance checks them, and the
+#: admission office records one the student brings back while held at its desk.
 ITEM_DESKS = (Application.FINANCE, Application.ADMISSION)
+#: A check-only item (a certificate, a signed form) is checked at the last
+#: desk only, by the admission office, before it admits (said 19 October 2026:
+#: records checks nothing; finance only the billed items).
+CHECK_DESKS = (Application.ADMISSION,)
 WAIVER_MARK = 'Item check: '
+#: The reason on a hold the items put on, so that bringing them lifts it — and
+#: only it: a hold the officer put on by hand stays until they lift it.
+ITEM_HOLD = 'Missing: '
+
+
+def item_desks(requirement):
+    return CHECK_DESKS if requirement.kind == AdmissionRequirement.CHECK_ONLY else ITEM_DESKS
+
+
+def items_holding(application):
+    """The check-only items due on this application that are missing, and the
+    ones nobody has checked yet: (missing, unchecked), by name."""
+    due = [requirement for requirement in requirements_for(application)
+           if requirement.kind == AdmissionRequirement.CHECK_ONLY]
+    if not due:
+        return [], []
+    checks = {check.requirement_id: check.status for check in RequirementCheck.objects.filter(
+        profile=application.profile, semester=application.semester, requirement__in=due)}
+    missing = [r.name for r in due if checks.get(r.id) == RequirementCheck.MISSING]
+    unchecked = [r.name for r in due if r.id not in checks and r.mandatory]
+    return missing, unchecked
+
+
+def sync_item_hold(application, *, actor=None):
+    """Hold a student at the admission desk while a check-only item is missing,
+    and lift that hold once every one is brought or waived."""
+    missing, _ = items_holding(application)
+    if missing and application.state == Application.ADMISSION:
+        if not application.on_hold or application.hold_reason.startswith(ITEM_HOLD):
+            hold(application, reason=ITEM_HOLD + ', '.join(missing), actor=actor)
+    elif not missing and application.on_hold and application.hold_reason.startswith(ITEM_HOLD):
+        release_hold(application, actor=actor)
+    return application
 
 
 def items_due(profile, semester, class_level, *, requirements=None, history=None):
@@ -881,6 +920,8 @@ def record_item(profile, semester, requirement, status, *, class_level, programm
         defaults['application'] = application
     check, _ = RequirementCheck.objects.update_or_create(
         profile=profile, semester=semester, requirement=requirement, defaults=defaults)
+    if requirement.kind == AdmissionRequirement.CHECK_ONLY:
+        return check                  # checked, never billed
 
     year = semester.academic_year
     default_charges = _billed_by_default(requirement, profile, year)
@@ -919,11 +960,16 @@ def record_item(profile, semester, requirement, status, *, class_level, programm
 
 
 def record_requirement(application, requirement, status, *, actor=None, note=''):
-    """Mark an item on an application — at the finance desk, or at the
-    admission desk when a held student brings it back."""
-    return record_item(application.profile, application.semester, requirement, status,
-                       class_level=application.class_level, programme=application.programme,
-                       application=application, actor=actor, note=note)
+    """Mark an item on an application — a billed one at the finance desk (or
+    the admission desk when a held student brings it back), a check-only one at
+    the admission desk before admitting. A check-only item missing holds the
+    student."""
+    check = record_item(application.profile, application.semester, requirement, status,
+                        class_level=application.class_level, programme=application.programme,
+                        application=application, actor=actor, note=note)
+    if requirement.kind == AdmissionRequirement.CHECK_ONLY:
+        sync_item_hold(application, actor=actor)
+    return check
 
 
 def items_owed(profile, semester):
@@ -932,6 +978,7 @@ def items_owed(profile, semester):
     rows = []
     checks = (RequirementCheck.objects.filter(profile=profile, semester=semester,
                                               status=RequirementCheck.MISSING)
+              .exclude(requirement__kind=AdmissionRequirement.CHECK_ONLY)   # money only
               .select_related('requirement__charge_type'))
     for check in checks:
         requirement = check.requirement
@@ -1040,6 +1087,15 @@ def admit(application, *, actor=None, note=''):
     """
     if application.state not in (Application.ADMISSION, *Application.OPEN_STATES):
         raise AdmissionError(f'This application is {application.get_state_display().lower()}.')
+    # A certificate or a signed form not handed in holds the student; a billed
+    # item never does (said 19 October 2026).
+    missing, unchecked = items_holding(application)
+    if missing:
+        sync_item_hold(application, actor=actor)
+        raise AdmissionError(f'On hold — missing: {", ".join(missing)}. Mark each "Has it" when it is '
+                             f'brought (or "Waive"), then admit.')
+    if unchecked:
+        raise AdmissionError(f'Check first: {", ".join(unchecked)}.')
 
     owed = [row['name'] for row in items_owed(application.profile, application.semester)
             if not row['paid']]

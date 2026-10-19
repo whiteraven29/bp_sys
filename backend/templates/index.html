@@ -1847,17 +1847,22 @@
         </div>
         <button class="btn btn-secondary btn-sm" onclick="saveCollegeIdFormat()">Save the format</button>
         <div style="border-top:1px solid var(--border);margin:16px 0 12px;"></div>
-        <div class="card-title" style="font-size:.9rem;">Required items <span class="tip" tabindex="0" role="note" aria-label="Help: required items" data-tip="What a student must have — TPH book, calculator, rim paper, insurance. Finance checks them; one missing is added to the bill at the rate the accountant set for its charge type. Never a hold.">?</span></div>
+        <div class="card-title" style="font-size:.9rem;">Required items <span class="tip" tabindex="0" role="note" aria-label="Help: required items" data-tip="What a student must have or hand in. Billed items (TPH book, calculator, rim paper, insurance): finance checks them, and one missing is added to the bill at the accountant's rate — never a hold. Checked-only items (certificates, signed forms): nothing is billed; the admission desk checks them before admitting, and one missing holds the student until it is brought. Records checks no items.">?</span></div>
         <div class="table-wrap" style="margin-bottom:12px;">
           <table>
-            <thead><tr><th>Item</th><th>Bills under</th><th>Checked</th><th>Levels</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Item</th><th>When missing</th><th>Checked</th><th>Levels</th><th>Status</th><th></th></tr></thead>
             <tbody id="req-tbody"><tr><td colspan="6" style="color:var(--muted);">No items yet</td></tr></tbody>
           </table>
         </div>
         <input type="hidden" id="req-id">
         <div class="form-grid-3">
-          <div class="field"><label>Item *</label><input id="req-name" placeholder="e.g. TPH Book"></div>
-          <div class="field"><label>Bills under <span class="tip" tabindex="0" role="note" aria-label="Help: bills under" data-tip="The accountant's charge type, whose rate is charged when the item is missing. Insurance: the medical fee, which is waived for a student with their own.">?</span></label>
+          <div class="field"><label>Item *</label><input id="req-name" placeholder="e.g. TPH Book, or Birth certificate"></div>
+          <div class="field"><label>When it is missing *</label>
+            <select id="req-kind" onchange="onRequirementKindChange()">
+              <option value="check">Checked only — hold the student until it is brought</option>
+              <option value="billed">Billed — add it to the bill, never a hold</option>
+            </select></div>
+          <div class="field" id="req-charge-wrap"><label>Bills under <span class="tip" tabindex="0" role="note" aria-label="Help: bills under" data-tip="The accountant's charge type, whose rate is charged when the item is missing. Insurance: the medical fee, which is waived for a student with their own.">?</span></label>
             <select id="req-charge" onchange="showRequirementRates()"></select>
             <span id="req-rates" style="font-size:.72rem;color:var(--muted);margin-top:3px;"></span>
           </div>
@@ -4628,7 +4633,7 @@ function buildModuleOptions(el, modules, includeAll = false) {
 function populateAllSelects() {
   buildSemOptions(document.getElementById('mod-semester'));
   buildLevelOptions(document.getElementById('mod-level'));
-  if (state.isStaff) ensureProgrammes().then(() => buildProgrammeOptions(document.getElementById('mod-programme')));
+  if (state.isStaff) ensureProgrammes(true).then(() => buildProgrammeOptions(document.getElementById('mod-programme')));
   buildSemOptions(document.getElementById('flt-mod-sem'), true);
   buildLevelOptions(document.getElementById('flt-mod-level'), true);
   buildSemOptions(document.getElementById('stu-flt-sem'), true);
@@ -9440,7 +9445,7 @@ async function loadWhoResponded() {
 async function loadFeeGrid() {
   const yearId = document.getElementById('fin-fs-year')?.value;
   if (!yearId) return;
-  await ensureProgrammes();
+  await ensureProgrammes(true);
   buildProgrammeOptions(document.getElementById('fin-fs-programme'), 'Every programme');
   const programmeId = document.getElementById('fin-fs-programme').value;
   const grid = await api('GET', `/fee-structures/grid/?academic_year_id=${yearId}` +
@@ -10659,7 +10664,8 @@ async function showAdmissionSection(section, btn) {
 
   if (section === 'desk') await Promise.all([loadAdmissionQueue(), loadMyDesk()]);
   if (section === 'new') {
-    await ensureProgrammes();
+    // Fresh each time: a programme added since the page opened must show (said 19 October 2026).
+    await ensureProgrammes(true);
     buildProgrammeOptions(document.getElementById('adm-programme'), '— pick a programme —');
     buildLevelOptions(document.getElementById('adm-level'), false);
   }
@@ -10913,10 +10919,11 @@ async function saveItemCheck(profileId, requirementId, select) {
 
 // ── returning students, entered from last year's papers ──────────────────────
 async function loadReturning() {
-  await ensureProgrammes();
+  await ensureProgrammes(true);
   const programme = document.getElementById('ret-programme');
-  if (!programme.options.length) {
-    buildProgrammeOptions(programme, '— programme —');
+  const first = !programme.options.length;
+  buildProgrammeOptions(programme, '— programme —');
+  if (first) {
     // One programme (PST, today): chosen already.
     const real = [...programme.options].filter(o => o.value);
     if (real.length === 1) programme.value = real[0].value;
@@ -11034,10 +11041,9 @@ function statusBadge(status) {
 }
 
 async function openClassList() {
-  await ensureProgrammes();
+  await ensureProgrammes(true);
   fillSemesterLevelPickers('cl-semester', 'cl-level');
-  const programme = document.getElementById('cl-programme');
-  if (!programme.options.length) buildProgrammeOptions(programme, 'All programmes');
+  buildProgrammeOptions(document.getElementById('cl-programme'), 'All programmes');
   await loadClassList();
 }
 
@@ -11251,6 +11257,7 @@ async function openApplication(event) {
     form_four_index: document.getElementById('adm-f4').value.trim(),
   };
   if (!payload.name) { toast('A name is needed', 'var(--red)'); return; }
+  if (!payload.programme_id || !payload.class_level_id) { toast('Choose the programme and the level', 'var(--red)'); return; }
   if (!payload.nactvet_reg_no && payload.kind !== 'new') {
     toast('A continuing or readmitted student is found by their registration number', 'var(--red)');
     return;
@@ -11311,28 +11318,40 @@ async function openApplicationModal(id) {
   }
 }
 
+// A billed item charged: what it costs, and whether it is paid yet.
+function itemPaidBadge(row) {
+  if (row.amount == null) return '';
+  return row.paid ? `<span class="badge badge-green">paid ${safeText(row.amount)}</span>`
+    : `<span class="badge badge-red">not paid — ${safeText(row.balance)} owed</span>`;
+}
+
 async function renderRequirementChecklist(id) {
   const box = document.getElementById('app-modal-requirements');
   const me = state.offices || {};
-  // Finance checks the items at its desk; the admission desk records one a
-  // held student brings back. Records handles no money, so marks none.
+  // A billed item is finance's (the admission desk records one a held student
+  // brings back); a checked-only one is the admission desk's, before it admits.
+  // Records checks nothing. The server says which desks may mark each (row.desks).
   const at = state.application?.state;
-  const checker = me.principal && ['finance', 'admission'].includes(at)
-    || (at === 'finance' && me.finance) || (at === 'admission' && me.admission);
+  const holds = { intake: me.admission, information: me.records, records: me.records,
+                  finance: me.finance, admission: me.admission }[at];
+  const canMark = row => (row.desks || []).includes(at) && (me.principal || holds);
   try {
     const rows = await api('GET', `/applications/${id}/requirements/`);
     if (!rows.length) { box.innerHTML = ''; return; }
-    box.innerHTML = `<div class="card-title" style="font-size:.9rem;">What they must have <span class="tip" tabindex="0" role="note" aria-label="Help: items" data-tip="Missing adds the item to their bill at the accountant's rate — a debt, never a hold. Has it, or waived: nothing owed for it; insurance of their own takes the medical fee off.">?</span></div>` +
+    box.innerHTML = `<div class="card-title" style="font-size:.9rem;">What they must have <span class="tip" tabindex="0" role="note" aria-label="Help: items" data-tip="Billed items (TPH book…): finance checks them; missing adds the item to the bill at the accountant's rate — a debt, never a hold — and the admission desk sees whether it is paid. Checked-only items (certificates, signed forms): the admission desk checks them before admitting; missing holds the student until it is brought, and Has it or Waive lifts that hold. Records checks no items.">?</span></div>` +
       rows.map(row => {
-        const name = `<span style="min-width:170px;font-size:.82rem;">${safeText(row.name)}${row.mandatory ? '' : ' <span style="color:var(--muted)">(optional)</span>'}</span>`;
-        // Finance checks them; every other desk reads what was found.
-        if (!checker) {
-          const said = { has_it: 'Has it', missing: 'Missing — charged', waived: 'Waived' }[row.status] || 'Not checked yet';
+        const check = row.kind === 'check';
+        const name = `<span style="min-width:170px;font-size:.82rem;">${safeText(row.name)}${row.mandatory ? '' : ' <span style="color:var(--muted)">(optional)</span>'}${check ? ' <span style="color:var(--muted);font-size:.72rem">· checked only</span>' : ''}</span>`;
+        // The desk that marks it has buttons; every other desk reads what was found.
+        if (!canMark(row)) {
+          const said = { has_it: 'Has it', missing: check ? 'Missing — held' : `Missing — charged ${itemPaidBadge(row)}`, waived: 'Waived' }[row.status]
+            || (check ? 'Checked at the admission desk' : 'Not checked yet');
           return `<div style="display:flex;gap:10px;margin-bottom:4px;">${name}<span style="font-size:.82rem;">${said}</span></div>`;
         }
         return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">${name}
         <button class="btn ${row.status === 'has_it' ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'has_it')">Has it</button>
-        <button class="btn ${row.status === 'missing' ? 'btn-warning' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'missing')">Missing — add to bill</button>
+        ${!check && row.status === 'missing' ? `<span style="font-size:.78rem">${itemPaidBadge(row)}</span>` : ''}
+        <button class="btn ${row.status === 'missing' ? 'btn-warning' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'missing')">${check ? 'Missing — hold' : 'Missing — add to bill'}</button>
         <button class="btn ${row.status === 'waived' ? 'btn-secondary' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'waived')">Waive</button>
       </div>`;
       }).join('');
@@ -11537,8 +11556,10 @@ async function verifyDocument(documentId, applicationId) {
 async function recordRequirement(id, requirementId, status) {
   try {
     const saved = await api('POST', `/applications/${id}/requirements/`, { requirement_id: requirementId, status });
-    toast(saved?.warning || (saved?.charge_amount && status === 'missing' ? `Recorded — added to the bill: ${saved.charge_amount}` : 'Recorded'),
-          saved?.warning ? 'var(--orange)' : 'var(--green)');
+    toast(saved?.warning || (saved?.on_hold ? `Recorded — on hold. ${saved.hold_reason}`
+          : saved?.check_only && status === 'missing' ? 'Recorded — held until it is brought'
+          : saved?.charge_amount && status === 'missing' ? `Recorded — added to the bill: ${saved.charge_amount}` : 'Recorded'),
+          saved?.warning || saved?.on_hold ? 'var(--orange)' : 'var(--green)');
     await openApplicationModal(id);
   } catch (e) {
     toast(apiErrorText(e, 'Could not record it'), 'var(--red)');
@@ -11799,7 +11820,8 @@ async function loadRequirements() {
   document.getElementById('req-tbody').innerHTML = state.requirements.length
     ? state.requirements.map(item => `<tr>
         <td>${safeText(item.name)}</td>
-        <td>${item.charge_type_name ? safeText(item.charge_type_name) : '<span style="color:var(--muted);">nothing charged</span>'}</td>
+        <td>${item.kind === 'check' ? '<span class="badge badge-yellow">Held — checked only</span>'
+              : item.charge_type_name ? `Billed under ${safeText(item.charge_type_name)}` : '<span style="color:var(--muted);">billed — no charge type</span>'}</td>
         <td>${safeText(FREQUENCY_LABELS[item.frequency] || item.frequency)}</td>
         <td>${safeText((item.level_names || []).join(', '))}</td>
         <td>${item.is_active ? '<span class="badge badge-green">in use</span>' : '<span class="badge badge-gen">off</span>'}</td>
@@ -11809,6 +11831,14 @@ async function loadRequirements() {
         </td>
       </tr>`).join('')
     : '<tr><td colspan="6" style="color:var(--muted);">No items yet</td></tr>';
+  onRequirementKindChange();
+}
+
+function onRequirementKindChange() {
+  // A certificate or a signed form is checked, never billed: no charge type to choose.
+  const billed = document.getElementById('req-kind').value === 'billed';
+  document.getElementById('req-charge-wrap').style.display = billed ? '' : 'none';
+  if (!billed) document.getElementById('req-charge').value = '';
   showRequirementRates();
 }
 
@@ -11823,11 +11853,12 @@ function resetRequirementForm() {
   document.getElementById('req-id').value = '';
   document.getElementById('req-name').value = '';
   document.getElementById('req-charge').value = '';
+  document.getElementById('req-kind').value = 'check';
   document.getElementById('req-frequency').value = 'each_semester';
   document.getElementById('req-active').checked = true;
   document.querySelectorAll('#req-levels input').forEach(box => { box.checked = false; });
   document.getElementById('req-save').textContent = 'Add the item';
-  showRequirementRates();
+  onRequirementKindChange();
 }
 
 function editRequirement(id) {
@@ -11835,6 +11866,7 @@ function editRequirement(id) {
   if (!item) return;
   document.getElementById('req-id').value = item.id;
   document.getElementById('req-name').value = item.name;
+  document.getElementById('req-kind').value = item.kind || 'billed';
   document.getElementById('req-charge').value = item.charge_type || '';
   document.getElementById('req-frequency').value = item.frequency;
   document.getElementById('req-active').checked = item.is_active;
@@ -11842,7 +11874,7 @@ function editRequirement(id) {
     box.checked = (item.applies_to_levels || []).includes(Number(box.value));
   });
   document.getElementById('req-save').textContent = 'Save changes';
-  showRequirementRates();
+  onRequirementKindChange();
   document.getElementById('req-name').focus();
 }
 
@@ -11850,12 +11882,14 @@ async function saveRequirement(event) {
   const id = document.getElementById('req-id').value;
   const payload = {
     name: document.getElementById('req-name').value.trim(),
-    charge_type: document.getElementById('req-charge').value || null,
+    kind: document.getElementById('req-kind').value,
+    charge_type: document.getElementById('req-kind').value === 'billed' ? (document.getElementById('req-charge').value || null) : null,
     frequency: document.getElementById('req-frequency').value,
     applies_to_levels: [...document.querySelectorAll('#req-levels input:checked')].map(box => Number(box.value)),
     is_active: document.getElementById('req-active').checked,
   };
   if (!payload.name) { toast('Give the item a name', 'var(--red)'); return; }
+  if (payload.kind === 'billed' && !payload.charge_type) { toast('Choose what it is billed under — or make it checked only', 'var(--red)'); return; }
   const done = working(event?.currentTarget, 'Saving…');
   let saved = false;
   try {

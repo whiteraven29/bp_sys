@@ -27,6 +27,7 @@ from .roles import (
     can_issue_student_passwords,
 )
 from .views import (
+    pk_or_none,
     active_academic_year, can_see_admissions, can_work_desk, full_name_for,
     visible_application_states,
 )
@@ -94,7 +95,7 @@ def intakes(request):
         return Response([_intake_row(i) for i in qs])
     if not _opens_intakes(request.user):
         raise PermissionDenied('The admission officer opens an intake.')
-    programme = Programme.objects.filter(id=request.data.get('programme')).first()
+    programme = Programme.objects.filter(id=pk_or_none(request.data.get('programme'))).first()
     starts_on = parse_date(str(request.data.get('starts_on') or ''))
     if programme is None or starts_on is None:
         return _bad('Pick the course and the start date.')
@@ -156,8 +157,8 @@ def course_fees(request):
 
     if not is_accountant(request.user):
         raise PermissionDenied('Course fees are set by the accountant.')
-    programme = Programme.objects.filter(id=request.data.get('programme')).first()
-    charge_type = ChargeType.objects.filter(id=request.data.get('charge_type'), is_active=True).first()
+    programme = Programme.objects.filter(id=pk_or_none(request.data.get('programme'))).first()
+    charge_type = ChargeType.objects.filter(id=pk_or_none(request.data.get('charge_type')), is_active=True).first()
     if programme is None or not programme.is_veta:
         return _bad('Pick a VETA course.')
     if charge_type is None:
@@ -222,7 +223,7 @@ def course_modules(request):
         return Response([_module_row(m) for m in qs])
     if not runs_veta_courses(request.user):
         raise PermissionDenied('The course coordinator keeps the modules.')
-    programme = Programme.objects.filter(id=request.data.get('programme')).first()
+    programme = Programme.objects.filter(id=pk_or_none(request.data.get('programme'))).first()
     code = str(request.data.get('code') or '').strip().upper()
     name = str(request.data.get('name') or '').strip()
     if programme is None or not programme.is_veta or not code or not name:
@@ -295,7 +296,7 @@ def course_applications(request):
         return Response([_application_row(a, user) for a in qs[:500]])
     if not can_work_desk(user, CourseApplication.INTAKE):
         raise PermissionDenied('The admission office takes a student on.')
-    intake = Intake.objects.filter(id=request.data.get('intake')).first()
+    intake = Intake.objects.filter(id=pk_or_none(request.data.get('intake'))).first()
     if intake is None:
         return _bad('Pick the intake.')
     try:
@@ -429,7 +430,7 @@ def expense_categories(request):
         fields = {'name': name[:120], 'code': str(request.data.get('code') or '')[:20],
                   'description': str(request.data.get('description') or '')[:300],
                   'is_active': request.data.get('is_active', True) not in (False, 'false', '0')}
-        category = ExpenseCategory.objects.filter(id=request.data.get('id')).first() \
+        category = ExpenseCategory.objects.filter(id=pk_or_none(request.data.get('id'))).first() \
             if request.data.get('id') else None
         if category is None:
             if ExpenseCategory.objects.filter(name__iexact=fields['name']).exists():
@@ -454,7 +455,7 @@ def expense_budgets(request):
     if year is None:
         return _bad('No academic year is active.')
     if request.method == 'POST':
-        category = ExpenseCategory.objects.filter(id=request.data.get('category')).first()
+        category = ExpenseCategory.objects.filter(id=pk_or_none(request.data.get('category'))).first()
         if category is None:
             return _bad('Pick a category.')
         try:
@@ -482,7 +483,7 @@ def expense_list(request):
             if request.query_params.get(param):
                 qs = qs.filter(**{param: request.query_params[param]})
         return Response([_expense_row(e, user) for e in qs[:1000]])
-    category = ExpenseCategory.objects.filter(id=request.data.get('category')).first()
+    category = ExpenseCategory.objects.filter(id=pk_or_none(request.data.get('category'))).first()
     incurred_on = parse_date(str(request.data.get('incurred_on') or '')) or date.today()
     if category is None:
         return _bad('Pick a category.')
@@ -518,7 +519,7 @@ def expense_action(request, pk, action):
             expense = expenses.decide(expense, approve=decision == 'approve', actor=user,
                                       note=str(request.data.get('note') or ''), ip=ip)
         elif action == 'pay':
-            account = BankAccount.objects.filter(id=request.data.get('bank_account')).first()
+            account = BankAccount.objects.filter(id=pk_or_none(request.data.get('bank_account'))).first()
             expense = expenses.pay(
                 expense, paid_on=parse_date(str(request.data.get('paid_on') or '')),
                 method=request.data.get('method'), bank_account=account,
@@ -534,7 +535,7 @@ def expense_action(request, pk, action):
             if request.data.get('incurred_on'):
                 changes['incurred_on'] = parse_date(str(request.data['incurred_on']))
             if request.data.get('category'):
-                category = ExpenseCategory.objects.filter(id=request.data.get('category')).first()
+                category = ExpenseCategory.objects.filter(id=pk_or_none(request.data.get('category'))).first()
                 if category is None:
                     return _bad('Pick a category.')
                 changes['category'] = category
@@ -566,7 +567,7 @@ def petty_cash(request):
     if year is None:
         return _bad('No academic year is active.')
     if request.method == 'POST':
-        account = BankAccount.objects.filter(id=request.data.get('bank_account')).first()
+        account = BankAccount.objects.filter(id=pk_or_none(request.data.get('bank_account'))).first()
         try:
             expenses.top_up_petty_cash(
                 academic_year=year, amount=_money(request.data.get('amount')),

@@ -1791,7 +1791,7 @@ class ItemSetupTests(OfficeClients):
         for client in (self.records, self.accounts):
             response = client.post('/api/admission-requirements/', {'name': 'Calculator'}, format='json')
             self.assertEqual(response.status_code, 403)
-        self.assertEqual(self.principal.post('/api/admission-requirements/', {'name': 'Calculator'},
+        self.assertEqual(self.principal.post('/api/admission-requirements/', {'name': 'Calculator', 'kind': 'check'},
                                              format='json').status_code, 201)
         self.assertEqual(self.exam.get('/api/admission-requirements/charge-types/').status_code, 403)
 

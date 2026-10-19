@@ -1896,10 +1896,23 @@ class AdmissionRequirementSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AdmissionRequirement
-        fields = ['id', 'name', 'description', 'charge_type', 'charge_type_name',
+        fields = ['id', 'name', 'description', 'kind', 'kind_display', 'charge_type', 'charge_type_name',
                   'frequency', 'applies_to_levels', 'level_names', 'mandatory',
                   'is_active', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+    kind_display = serializers.CharField(source='get_kind_display', read_only=True)
+
+    def validate(self, attrs):
+        if self.instance is not None and 'kind' not in attrs and 'charge_type' not in attrs:
+            return attrs                         # switching it on or off, renaming: billing untouched
+        kind = attrs.get('kind', getattr(self.instance, 'kind', AdmissionRequirement.BILLED))
+        if kind == AdmissionRequirement.CHECK_ONLY:
+            attrs['charge_type'] = None          # a form is checked, never billed
+        elif not (attrs['charge_type'] if 'charge_type' in attrs else getattr(self.instance, 'charge_type', None)):
+            raise serializers.ValidationError(
+                {'charge_type': 'A billed item needs the charge type it is billed under — or make it "checked only".'})
+        return attrs
 
     def get_level_names(self, obj):
         return [level.name for level in obj.applies_to_levels.all()] or ['Every level']

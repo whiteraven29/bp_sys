@@ -161,7 +161,10 @@ sign in.
 ```text
   AdmissionWindow ── one per Semester (opens / closes)
   CollegeIdFormat ── one per AcademicYear  {COLLEGE}/{PROG}/{YEAR}/{SEQ}
-  AdmissionRequirement ── TPH book, calculator, rim paper, insurance
+  AdmissionRequirement ── billed: TPH book, calculator, rim paper, insurance
+                          (missing → on the bill, never a hold)
+                          checked only: certificates, signed forms
+                          (missing → held at the admission desk)
        │  each points at a ChargeType; every semester / year / once
        ▼
   RequirementCheck  (profile + semester + requirement: has it / charged)

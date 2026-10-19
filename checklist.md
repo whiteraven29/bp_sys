@@ -139,6 +139,17 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    *Send continuing students to finance* marks them provisional the same way. A 500 now logs its
    traceback (`django.request` → journalctl). `test_advance_programme.py`.
    - [x] Built and tested (1046 tests)
+   - [x] New application without a programme answered 500 (`filter(id='')`): `views.pk_or_none` on every id
+     read from a request (41 places), so a blank or wrong id gets the view's own message; programme lists
+     reload when New application, Returning Students, Class lists, the fee grid or the module form opens,
+     so a programme added since the page loaded shows. 1048 tests
+2p. **Items checked only — 19 Oct (not committed).** Certificates, signed forms: `AdmissionRequirement.kind`
+   (billed / check, migration 0068 — items saved with nothing to charge become check-only). Check-only
+   items bill nothing, are checked only at the admission desk before admitting (records checks nothing;
+   finance only billed items, whose paid / not paid the admission desk sees), and when missing hold the student
+   at the admission desk (`admissions.sync_item_hold`, "Missing: …"); admitting is refused while one is
+   missing or unchecked; Has it / Waive lifts only that hold. Billed items unchanged. `test_check_items.py`.
+   - [x] Built and tested (1057 tests), checked in the browser
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password
