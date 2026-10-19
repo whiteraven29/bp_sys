@@ -801,6 +801,7 @@ def _student_record_for_portal(profile):
         'missing': admissions.missing_details(profile),
         'address': profile.address, 'sponsor_name': profile.sponsor_name, 'sponsor_phone': profile.sponsor_phone,
         'education': _education_rows(profile),
+        'typed_items': admissions.typed_items(profile),
         'passport_url': f'/api/my-passport/?v={int(profile.passport_updated_at.timestamp()) if profile.passport_updated_at else 0}' if profile.passport else '',
     }
 
@@ -2339,6 +2340,7 @@ def _student_record_payload(profile):
         'documents': StudentDocument.objects.filter(profile=profile).count(),
         'address': profile.address, 'sponsor_name': profile.sponsor_name, 'sponsor_phone': profile.sponsor_phone,
         'education': _education_rows(profile),
+        'typed_items': admissions.typed_items(profile),
         'passport_url': (f'/api/student-records/{profile.id}/passport/?v={int(profile.passport_updated_at.timestamp()) if profile.passport_updated_at else 0}'
                          if profile.passport else ''),
     }
@@ -2527,8 +2529,18 @@ def health_record_close(request, pk):
 
 
 def can_check_items(user):
-    """Finance checks the items a student must have; the Principal may too."""
-    return bool(user and user.is_authenticated and (is_accountant(user) or is_principal(user)))
+    """Finance checks the billed items; the admission office the checked-only
+    ones (the second ream in semester 2); the Principal may do both."""
+    return bool(user and user.is_authenticated
+                and (is_accountant(user) or is_admission_officer(user) or is_principal(user)))
+
+
+def can_mark_item(user, requirement):
+    if is_principal(user):
+        return True
+    if requirement.kind == AdmissionRequirement.CHECK_ONLY:
+        return is_admission_officer(user)
+    return is_accountant(user)
 
 
 @api_view(['GET', 'POST'])
@@ -2560,6 +2572,9 @@ def item_checks(request):
         requirement = AdmissionRequirement.objects.filter(id=pk_or_none(request.data.get('requirement_id'))).first()
         if requirement is None:
             return Response({'detail': 'No such item.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not can_mark_item(request.user, requirement):
+            return Response({'detail': 'Finance checks the billed items; the admission office the others.'},
+                            status=status.HTTP_403_FORBIDDEN)
         application = Application.objects.filter(profile=registration.profile, semester=semester).first()
         if application is not None and application.is_open:
             return Response({'detail': 'This student is still at admissions; check the item on their application.'},
@@ -2569,7 +2584,8 @@ def item_checks(request):
                 registration.profile, semester, requirement, str(request.data.get('status') or ''),
                 class_level=registration.class_level, programme=registration.programme,
                 application=application, actor=request.user,
-                note=str(request.data.get('note') or ''))
+                note=str(request.data.get('note') or ''), count=request.data.get('count'),
+                value=str(request.data.get('value') or ''))
         except admissions.AdmissionError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         data = RequirementCheckSerializer(check).data
@@ -2605,8 +2621,15 @@ def item_checks(request):
         items = []
         for requirement in due:
             check = checks.get((registration.profile_id, requirement.id))
+            earlier = [c for c in history.get(registration.profile_id, [])
+                       if c.semester.academic_year_id == semester.academic_year_id]
             items.append({'requirement': requirement.id, 'name': requirement.name,
-                          'status': check.status if check else '',
+                          'kind': requirement.kind, 'can_mark': can_mark_item(request.user, requirement),
+                          'quantity': requirement.quantity,
+                          'needed': max(1, requirement.quantity - admissions.brought_this_year(requirement, earlier)),
+                          'value_label': requirement.value_label,
+                          'status': check.status if check else '', 'count': check.count if check else None,
+                          'value': check.value if check else '',
                           'charged': bool(check and check.charge_id)})
         rows.append({'profile_id': registration.profile_id,
                      'reg_no': registration.profile.nactvet_reg_no,
@@ -3709,6 +3732,11 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
                 'desks': list(admissions.item_desks(requirement)),
                 'status': checks[requirement.id].status if requirement.id in checks else '',
                 'charge': checks[requirement.id].charge_id if requirement.id in checks else None,
+                'quantity': requirement.quantity,
+                'needed': admissions.still_needed(requirement, application.profile, application.semester),
+                'count': checks[requirement.id].count if requirement.id in checks else None,
+                'value_label': requirement.value_label,
+                'value': checks[requirement.id].value if requirement.id in checks else '',
                 'amount': owed[requirement.id]['amount'] if requirement.id in owed else None,
                 'balance': owed[requirement.id]['balance'] if requirement.id in owed else None,
                 'paid': owed[requirement.id]['paid'] if requirement.id in owed else None,
@@ -3732,7 +3760,8 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             check = admissions.record_requirement(
                 application, requirement, str(request.data.get('status') or ''),
-                actor=request.user, note=str(request.data.get('note') or ''))
+                actor=request.user, note=str(request.data.get('note') or ''),
+                count=request.data.get('count'), value=str(request.data.get('value') or ''))
         except admissions.AdmissionError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         data = RequirementCheckSerializer(check).data

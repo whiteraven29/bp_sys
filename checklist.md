@@ -150,6 +150,9 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    at the admission desk (`admissions.sync_item_hold`, "Missing: …"); admitting is refused while one is
    missing or unchecked; Has it / Waive lifts only that hold. Billed items unchanged. `test_check_items.py`.
    - [x] Built and tested (1057 tests), checked in the browser
+   - [x] Counted items (rim paper: 2 a year — Brought 1 asks again next semester, 2 clears the year; never
+     billed) and typed items (the NACTVET admission code, kept on the student's details), migration 0069;
+     Items check opened to the admission office for checked-only items. 1063 tests, checked in the browser
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

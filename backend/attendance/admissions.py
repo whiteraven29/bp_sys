@@ -861,11 +861,39 @@ def items_due(profile, semester, class_level, *, requirements=None, history=None
         before = [check for check in history if check.requirement_id == requirement.id]
         if requirement.frequency == AdmissionRequirement.ONCE and before:
             continue
-        if requirement.frequency == AdmissionRequirement.EVERY_YEAR and any(
+        # Counted over the year: the count decides, not the frequency.
+        if requirement.frequency == AdmissionRequirement.EVERY_YEAR and requirement.quantity <= 1 and any(
                 check.semester.academic_year_id == semester.academic_year_id for check in before):
             continue
+        if requirement.quantity > 1 and brought_this_year(
+                requirement, [check for check in before
+                              if check.semester.academic_year_id == semester.academic_year_id]) >= requirement.quantity:
+            continue                  # all of them brought already: cleared for the year
         wanted.append(requirement)
     return wanted
+
+
+def brought(check, requirement):
+    """How many one check counts towards an item counted over the year. A
+    check without a count (has it, or waived) counts as all of them."""
+    if check.status == RequirementCheck.MISSING:
+        return 0
+    return check.count if check.count is not None else requirement.quantity
+
+
+def brought_this_year(requirement, checks):
+    return sum(brought(check, requirement) for check in checks if check.requirement_id == requirement.id)
+
+
+def still_needed(requirement, profile, semester):
+    """How many of a counted item are still to be brought this year, before
+    this semester's check (rim paper: 2, or 1 after a semester with one)."""
+    if requirement.quantity <= 1:
+        return 1
+    earlier = RequirementCheck.objects.filter(
+        profile=profile, requirement=requirement,
+        semester__academic_year=semester.academic_year).exclude(semester=semester)
+    return max(1, requirement.quantity - brought_this_year(requirement, earlier))
 
 
 def requirements_for(application):
@@ -904,7 +932,7 @@ def _unwaive(charge, actor):
 
 @transaction.atomic
 def record_item(profile, semester, requirement, status, *, class_level, programme,
-                application=None, actor=None, note=''):
+                application=None, actor=None, note='', count=None, value=''):
     """Say whether the student has it, and let the bill follow.
 
     Missing: charged at the accountant's rate (or, for insurance, the medical
@@ -914,8 +942,22 @@ def record_item(profile, semester, requirement, status, *, class_level, programm
     """
     if status not in dict(RequirementCheck.STATUS_CHOICES):
         raise AdmissionError(f'{status!r} is not a requirement outcome.')
+    value = (value or '').strip()
+    if requirement.value_label and status == RequirementCheck.HAS_IT and not value:
+        raise AdmissionError(f'Type the {requirement.value_label}.')
+    if requirement.quantity > 1 and status == RequirementCheck.HAS_IT:
+        needed = still_needed(requirement, profile, semester)
+        try:
+            count = needed if count in (None, '') else int(count)
+        except (TypeError, ValueError):
+            raise AdmissionError(f'How many {requirement.name.lower()} did they bring?')
+        if not 1 <= count <= needed:
+            raise AdmissionError(f'{requirement.name}: between 1 and {needed} this semester.')
+    else:
+        count = None
 
-    defaults = {'status': status, 'note': note[:300], 'checked_by': actor}
+    defaults = {'status': status, 'note': note[:300], 'checked_by': actor, 'count': count,
+                'value': value[:120] if status == RequirementCheck.HAS_IT else ''}
     if application is not None:
         defaults['application'] = application
     check, _ = RequirementCheck.objects.update_or_create(
@@ -959,17 +1001,29 @@ def record_item(profile, semester, requirement, status, *, class_level, programm
     return check
 
 
-def record_requirement(application, requirement, status, *, actor=None, note=''):
+def record_requirement(application, requirement, status, *, actor=None, note='', count=None, value=''):
     """Mark an item on an application — a billed one at the finance desk (or
     the admission desk when a held student brings it back), a check-only one at
     the admission desk before admitting. A check-only item missing holds the
     student."""
     check = record_item(application.profile, application.semester, requirement, status,
                         class_level=application.class_level, programme=application.programme,
-                        application=application, actor=actor, note=note)
+                        application=application, actor=actor, note=note, count=count, value=value)
     if requirement.kind == AdmissionRequirement.CHECK_ONLY:
         sync_item_hold(application, actor=actor)
     return check
+
+
+def typed_items(profile):
+    """What was typed in for an item — the NACTVET admission code — the latest
+    for each, kept on the student's details."""
+    rows = {}
+    for check in (RequirementCheck.objects.filter(profile=profile, status=RequirementCheck.HAS_IT)
+                  .exclude(value='').select_related('requirement', 'semester')
+                  .order_by('checked_at')):
+        rows[check.requirement_id] = {'name': check.requirement.value_label or check.requirement.name,
+                                      'value': check.value}
+    return list(rows.values())
 
 
 def items_owed(profile, semester):

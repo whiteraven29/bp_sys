@@ -1750,12 +1750,19 @@ class ItemsTests(OfficeClients):
         self.assertEqual(RequirementCheck.objects.get(semester=self.sem1, requirement=self.tph).status,
                          RequirementCheck.HAS_IT)
 
-    def test_only_finance_runs_the_items_check(self):
+    def test_finance_and_admission_run_the_items_check_each_its_own_items(self):
+        # Said 19 October 2026: finance the billed items, the admission office
+        # the checked-only ones (the second ream); records checks nothing.
         self.admitted_into_semester_2()
 
-        for client in (self.records, self.admission, self.exam):
+        for client in (self.records, self.exam):
             self.assertEqual(client.get(f'/api/item-checks/?semester_id={self.sem2.id}').status_code, 403)
         self.assertEqual(self.principal.get(f'/api/item-checks/?semester_id={self.sem2.id}').status_code, 200)
+        self.assertEqual(self.admission.get(f'/api/item-checks/?semester_id={self.sem2.id}').status_code, 200)
+        refused = self.admission.post('/api/item-checks/', {
+            'semester_id': self.sem2.id, 'profile_id': self.student.id,
+            'requirement_id': self.tph.id, 'status': 'has_it'}, format='json')
+        self.assertEqual(refused.status_code, 403)
 
     def test_a_student_still_at_admissions_is_checked_on_their_application(self):
         SemesterRegistration.objects.create(

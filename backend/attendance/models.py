@@ -1926,6 +1926,16 @@ class AdmissionRequirement(models.Model):
         related_name='requirements',
         help_text='What the college charges when the student does not have it (billed items only).')
     frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default=EVERY_SEMESTER)
+    # Rim paper (said 19 October 2026): two reams over the year — two at once
+    # clears it for the year, one is asked for again next semester.
+    quantity = models.PositiveSmallIntegerField(
+        default=1, validators=[MinValueValidator(1), MaxValueValidator(10)],
+        help_text='How many a student brings over the year; all of them clears it for the year.')
+    # The NACTVET admission code: typed in when checked, and kept on the
+    # student's details.
+    value_label = models.CharField(
+        max_length=80, blank=True,
+        help_text='Typed in when checked (e.g. "NACTVET admission code") and kept on the student\'s details.')
     applies_to_levels = models.ManyToManyField(
         ClassLevel, blank=True, related_name='requirements',
         help_text='Leave empty for every level.')
@@ -1963,6 +1973,9 @@ class RequirementCheck(models.Model):
                                     related_name='requirement_checks')
     requirement = models.ForeignKey(AdmissionRequirement, on_delete=models.PROTECT, related_name='checks')
     status = models.CharField(max_length=12, choices=STATUS_CHOICES)
+    count = models.PositiveSmallIntegerField(null=True, blank=True,
+                                             help_text='How many were brought, for an item counted over the year.')
+    value = models.CharField(max_length=120, blank=True, help_text='What was typed in, e.g. the admission code.')
     charge = models.ForeignKey(
         'StudentCharge', on_delete=models.SET_NULL, null=True, blank=True, related_name='requirement_checks')
     note = models.CharField(max_length=300, blank=True)

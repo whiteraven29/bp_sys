@@ -138,5 +138,63 @@ class CheckOnlyItemTests(ItemsTests):
         self.assertIsNone(rows['Signed declaration form']['paid'])
 
 
+
+class CountedAndTypedItemTests(CheckOnlyItemTests):
+    """Rim paper is counted (said 19 October 2026): two reams at once clear it
+    for the year, one is asked for again next semester, and it is never billed.
+    The NACTVET admission code is typed in and stays on the student's details."""
+
+    def setUp(self):
+        super().setUp()
+        self.form.delete()
+        self.ream = AdmissionRequirement.objects.create(
+            name='Rim paper', kind=AdmissionRequirement.CHECK_ONLY, quantity=2,
+            frequency=AdmissionRequirement.EVERY_SEMESTER)
+        self.code = AdmissionRequirement.objects.create(
+            name='NACTVET admission', kind=AdmissionRequirement.CHECK_ONLY,
+            value_label='NACTVET admission code', frequency=AdmissionRequirement.ONCE)
+        self.to_records()
+        self.to_admission()
+
+    def mark_with(self, requirement, status, **extra):
+        return self.admission.post(f'/api/applications/{self.application.id}/requirements/',
+                                   {'requirement_id': requirement.id, 'status': status, **extra}, format='json')
+
+    def due_in_semester_2(self):
+        return [r.name for r in admissions.items_due(self.student, self.sem2, self.level5)]
+
+    def test_one_ream_is_asked_for_again_next_semester(self):
+        self.assertEqual(self.mark_with(self.ream, 'has_it', count=1).status_code, 200)
+        self.assertIn('Rim paper', self.due_in_semester_2())
+        self.assertEqual(admissions.still_needed(self.ream, self.student, self.sem2), 1)
+
+    def test_two_reams_clear_it_for_the_year_and_nothing_is_billed(self):
+        self.assertEqual(self.mark_with(self.ream, 'has_it', count=2).status_code, 200)
+        self.assertNotIn('Rim paper', self.due_in_semester_2())
+        self.assertFalse(StudentCharge.objects.filter(profile=self.student, note__icontains='rim').exists())
+
+    def test_more_than_needed_is_refused(self):
+        self.assertEqual(self.mark_with(self.ream, 'has_it', count=3).status_code, 400)
+
+    def test_no_ream_holds_the_student(self):
+        self.assertTrue(self.mark_with(self.ream, 'missing').data['on_hold'])
+
+    def test_the_admission_code_is_typed_and_kept_on_the_details(self):
+        self.assertEqual(self.mark_with(self.code, 'has_it').status_code, 400)       # nothing typed
+        self.assertEqual(self.mark_with(self.code, 'has_it', value=' AD/2026/00123 ').status_code, 200)
+        expected = [{'name': 'NACTVET admission code', 'value': 'AD/2026/00123'}]
+        self.assertEqual(admissions.typed_items(self.student), expected)
+        details = self.admission.get(f'/api/applications/{self.application.id}/').data['details']
+        self.assertEqual(details['typed_items'], expected)
+
+    def test_a_typed_value_is_never_a_billed_item(self):
+        refused = self.admission.post('/api/admission-requirements/', {
+            'name': 'Code', 'kind': 'billed', 'charge_type': self.book.id, 'value_label': 'Code'}, format='json')
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('value_label', refused.data)
+
+
 for _name in [n for n in dir(ItemsTests) if n.startswith('test_')]:
     setattr(CheckOnlyItemTests, _name, None)
+for _name in [n for n in vars(CheckOnlyItemTests) if n.startswith('test_')]:
+    setattr(CountedAndTypedItemTests, _name, None)

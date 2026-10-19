@@ -865,7 +865,7 @@
         <button class="nav-sub-btn" data-adm-section="all" onclick="showAdmissionSection('all', this)">All applications</button>
         <button class="nav-sub-btn" data-adm-section="dueback" data-roles="principal admission" onclick="showAdmissionSection('dueback', this)">Expected back</button>
         <button class="nav-sub-btn" data-adm-section="noshow" data-roles="principal admission" onclick="showAdmissionSection('noshow', this)">Did not report</button>
-        <button class="nav-sub-btn" data-adm-section="items" data-roles="principal finance" onclick="showAdmissionSection('items', this)">Items check</button>
+        <button class="nav-sub-btn" data-adm-section="items" data-roles="principal finance admission" onclick="showAdmissionSection('items', this)">Items check</button>
         <button class="nav-sub-btn" data-adm-section="classlist" onclick="showAdmissionSection('classlist', this)">Class lists</button>
         <button class="nav-sub-btn" data-adm-section="veta" data-roles="principal dparc admission records finance" onclick="showAdmissionSection('veta', this)">VETA courses</button>
         <button class="nav-sub-btn" data-adm-section="settings" data-roles="principal admission" onclick="showAdmissionSection('settings', this)">Window &amp; ID numbers</button>
@@ -1727,7 +1727,7 @@
       </div>
 
       <div class="card" data-adm-section="items">
-        <div class="card-title">Items check <span class="tip" tabindex="0" role="note" aria-label="Help: items check" data-tip="Semester 2 asks again for the items checked every semester. Missing adds the item to the student's bill — a debt, never a hold. Students still going through admissions are checked on their application.">?</span></div>
+        <div class="card-title">Items check <span class="tip" tabindex="0" role="note" aria-label="Help: items check" data-tip="Semester 2 asks again for the items checked every semester, and for the rest of a counted one (the second ream of rim paper). Finance marks the billed items (missing goes on the bill); the admission office marks the checked-only ones. Students still going through admissions are checked on their application.">?</span></div>
         <div class="form-grid-3" style="margin-bottom:12px;">
           <div class="field"><label>Semester</label><select id="items-semester" onchange="loadItemChecks(1)"></select></div>
           <div class="field"><label>Find a student</label><input id="items-search" placeholder="Name or registration" oninput="scheduleItemSearch()"></div>
@@ -1866,6 +1866,10 @@
             <select id="req-charge" onchange="showRequirementRates()"></select>
             <span id="req-rates" style="font-size:.72rem;color:var(--muted);margin-top:3px;"></span>
           </div>
+          <div class="field"><label>How many over the year <span class="tip" tabindex="0" role="note" aria-label="Help: how many" data-tip="Rim paper: 2 reams. Bringing them all clears the item for the year; bringing one asks for the next one the following semester. 1 for everything else.">?</span></label>
+            <input id="req-quantity" type="number" min="1" max="10" value="1"></div>
+          <div class="field" id="req-value-wrap"><label>Typed in when checked <span class="tip" tabindex="0" role="note" aria-label="Help: typed in" data-tip="For an item that is a number or code to write down, e.g. the NACTVET admission code: name it here. The admission desk types it when checking, and it stays on the student's details. Leave empty for a plain check.">?</span></label>
+            <input id="req-value-label" maxlength="80" placeholder="e.g. NACTVET admission code"></div>
           <div class="field"><label>Checked</label>
             <select id="req-frequency">
               <option value="each_semester">Every semester</option>
@@ -10357,8 +10361,10 @@ async function openRecord(profileId) {
     document.getElementById('rec-profile-id').value = profileId;
     document.getElementById('rec-editor-title').textContent =
       `${record.name} — ${record.reg_no}${record.college_id ? ' · ' + record.college_id : ''}`;
-    document.getElementById('rec-editor-missing').innerHTML = record.missing.length
-      ? `<div class="missing-note">Still to record: ${safeText(record.missing.join(', '))}</div>` : '';
+    // Typed in by the admission desk when checked (the NACTVET admission code): read here, not edited.
+    document.getElementById('rec-editor-missing').innerHTML = (record.missing.length
+      ? `<div class="missing-note">Still to record: ${safeText(record.missing.join(', '))}</div>` : '')
+      + (record.typed_items || []).map(t => `<div style="font-size:.82rem;margin:4px 0"><span style="color:var(--muted)">${safeText(t.name)}:</span> <strong>${safeText(t.value)}</strong></div>`).join('');
     document.getElementById('rec-editor-form').innerHTML = detailsFormHtml('rec-det', record);
     renderRecordPhoto(record);
     await renderRecordDocuments(profileId);
@@ -10634,7 +10640,7 @@ const ADMISSION_SECTIONS = {
   dueback: ['Expected back', 'Discontinued and postponed students due this semester.'],
   settings: ['Window & ID numbers', 'When admissions run, and the college ID format.'],
   veta: ['VETA courses', 'Intakes, and students on their way through the desks.'],
-  items: ['Items check', 'TPH book, calculator, rim paper — checked again each semester.'],
+  items: ['Items check', 'Items checked again each semester — the TPH book by finance, rim paper and the other checked items by the admission office.'],
   classlist: ['Class lists', 'A level\'s students this semester: first sitting or repeater.'],
   noshow: ['Did not report', 'Continuing students who never came: decide three months after admission opened.'],
 };
@@ -10863,6 +10869,19 @@ async function loadApplications() {
 
 const ITEM_STATUS = { '': 'Not checked', has_it: 'Has it', missing: 'Missing — on the bill', waived: 'Waived' };
 
+// One item's choices on the Items check: brought 1 or 2 for a counted item,
+// "held" rather than "on the bill" for a checked-only one.
+function itemCheckOptions(item) {
+  const chosen = item.status === 'has_it' && item.quantity > 1 ? `has_it:${item.count ?? item.needed}` : item.status;
+  const options = [['', 'Not checked']];
+  if (item.quantity > 1) {
+    for (let n = 1; n <= item.needed; n += 1) options.push([`has_it:${n}`, `Brought ${n}`]);
+  } else options.push(['has_it', item.value_label ? `Has it (type the ${item.value_label})` : 'Has it']);
+  options.push(['missing', item.kind === 'check' ? 'Missing — held' : 'Missing — on the bill'], ['waived', 'Waived']);
+  return options.map(([value, label]) =>
+    `<option value="${value}" ${value === chosen ? 'selected' : ''} ${value === '' ? 'disabled' : ''}>${safeText(label)}</option>`).join('');
+}
+
 let itemSearchTimer;
 function scheduleItemSearch() {
   clearTimeout(itemSearchTimer);
@@ -10889,11 +10908,10 @@ async function loadItemChecks(page) {
           <td>${safeText(row.class_level || '—')}</td>
           <td>${row.items.length ? row.items.map(item => `
             <label style="display:inline-flex;align-items:center;gap:6px;margin:0 12px 4px 0;font-size:.8rem;">
-              ${safeText(item.name)}
-              <select onchange="saveItemCheck(${row.profile_id}, ${item.requirement}, this)">
-                ${Object.entries(ITEM_STATUS).map(([value, label]) =>
-                  `<option value="${value}" ${value === item.status ? 'selected' : ''} ${value === '' ? 'disabled' : ''}>${label}</option>`).join('')}
-              </select>
+              ${safeText(item.name)}${item.value ? ` <span style="color:var(--muted)">${safeText(item.value)}</span>` : ''}
+              ${item.can_mark
+                ? `<select onchange="saveItemCheck(${row.profile_id}, ${item.requirement}, this, ${jsArg(item.value_label || '')})">${itemCheckOptions(item)}</select>`
+                : `<span style="color:var(--muted)">${safeText(ITEM_STATUS[item.status] || 'Not checked')}${item.kind === 'check' ? ' · admission office' : ' · finance'}</span>`}
             </label>`).join('') : '<span style="color:var(--muted);font-size:.8rem;">Nothing due this semester</span>'}</td>
         </tr>`).join('')
       : '<tr><td colspan="4"><div class="empty"><div class="ei"><i class="bi bi-bag-check"></i></div>Nobody to check</div></td></tr>';
@@ -10902,13 +10920,19 @@ async function loadItemChecks(page) {
   }
 }
 
-async function saveItemCheck(profileId, requirementId, select) {
+async function saveItemCheck(profileId, requirementId, select, valueLabel = '') {
+  const [status, count] = select.value.split(':');
+  let value = '';
+  if (status === 'has_it' && valueLabel) {
+    value = (prompt(`Type the ${valueLabel}`) || '').trim();
+    if (!value) { await loadItemChecks(state.itemsPage || 1); return; }
+  }
   try {
     const saved = await api('POST', '/item-checks/', {
       semester_id: document.getElementById('items-semester').value,
-      profile_id: profileId, requirement_id: requirementId, status: select.value,
+      profile_id: profileId, requirement_id: requirementId, status, ...(count ? { count: Number(count) } : {}), value,
     });
-    toast(saved?.warning || (select.value === 'missing' && saved?.charge_amount
+    toast(saved?.warning || (status === 'missing' && saved?.charge_amount
       ? `Added to the bill: ${saved.charge_amount}` : 'Recorded'),
       saved?.warning ? 'var(--orange)' : 'var(--green)');
   } catch (e) {
@@ -11318,6 +11342,28 @@ async function openApplicationModal(id) {
   }
 }
 
+// What "has it" means for an item: brought 1 or 2 (rim paper), the code typed
+// in (the NACTVET admission code), or simply has it.
+function hasItControls(id, row) {
+  const on = n => row.status === 'has_it' && (n == null || row.count === n) ? 'btn-primary' : 'btn-ghost';
+  if (row.value_label) {
+    return `<input id="req-val-${row.requirement}" value="${safeText(row.value || '')}" placeholder="${safeText(row.value_label)}" style="max-width:200px">
+      <button class="btn ${on()} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'has_it', { value: document.getElementById('req-val-${row.requirement}').value })">Save</button>`;
+  }
+  if (row.quantity > 1) {
+    return Array.from({ length: row.needed }, (_, i) => i + 1).map(n =>
+      `<button class="btn ${on(n)} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'has_it', { count: ${n} })">Brought ${n}</button>`).join('')
+      + `<span style="font-size:.72rem;color:var(--muted)">${row.needed < row.quantity ? `${row.quantity - row.needed} brought earlier this year` : `${row.quantity} over the year`}</span>`;
+  }
+  return `<button class="btn ${on()} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'has_it')">Has it</button>`;
+}
+
+function itemFound(row) {
+  if (row.value) return ` — ${safeText(row.value)}`;
+  if (row.quantity > 1 && row.count != null) return ` — ${row.count} of ${row.quantity}`;
+  return '';
+}
+
 // A billed item charged: what it costs, and whether it is paid yet.
 function itemPaidBadge(row) {
   if (row.amount == null) return '';
@@ -11344,12 +11390,12 @@ async function renderRequirementChecklist(id) {
         const name = `<span style="min-width:170px;font-size:.82rem;">${safeText(row.name)}${row.mandatory ? '' : ' <span style="color:var(--muted)">(optional)</span>'}${check ? ' <span style="color:var(--muted);font-size:.72rem">· checked only</span>' : ''}</span>`;
         // The desk that marks it has buttons; every other desk reads what was found.
         if (!canMark(row)) {
-          const said = { has_it: 'Has it', missing: check ? 'Missing — held' : `Missing — charged ${itemPaidBadge(row)}`, waived: 'Waived' }[row.status]
+          const said = { has_it: `Has it${itemFound(row)}`, missing: check ? 'Missing — held' : `Missing — charged ${itemPaidBadge(row)}`, waived: 'Waived' }[row.status]
             || (check ? 'Checked at the admission desk' : 'Not checked yet');
           return `<div style="display:flex;gap:10px;margin-bottom:4px;">${name}<span style="font-size:.82rem;">${said}</span></div>`;
         }
         return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">${name}
-        <button class="btn ${row.status === 'has_it' ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'has_it')">Has it</button>
+        ${hasItControls(id, row)}
         ${!check && row.status === 'missing' ? `<span style="font-size:.78rem">${itemPaidBadge(row)}</span>` : ''}
         <button class="btn ${row.status === 'missing' ? 'btn-warning' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'missing')">${check ? 'Missing — hold' : 'Missing — add to bill'}</button>
         <button class="btn ${row.status === 'waived' ? 'btn-secondary' : 'btn-ghost'} btn-sm" onclick="recordRequirement(${id}, ${row.requirement}, 'waived')">Waive</button>
@@ -11448,6 +11494,7 @@ function detailsReadOnlyHtml(details) {
     <dt>Guarantor / sponsor</dt><dd>${safeText([details.sponsor_name, details.sponsor_phone].filter(Boolean).join(' · ') || '—')}</dd>
     <dt>Schools before</dt><dd>${(details.education || []).map(e =>
       `${safeText(e.level_display)}: ${safeText(e.institution)}${e.start_year || e.end_year ? ` (${safeText(e.start_year || '?')}–${safeText(e.end_year || '?')})` : ''}${e.index_number ? ' · ' + safeText(e.index_number) : ''}`).join('<br>') || '—'}</dd>
+    ${(details.typed_items || []).map(t => `<dt>${safeText(t.name)}</dt><dd>${safeText(t.value)}</dd>`).join('')}
   </dl>`;
 }
 
@@ -11553,9 +11600,9 @@ async function verifyDocument(documentId, applicationId) {
   }
 }
 
-async function recordRequirement(id, requirementId, status) {
+async function recordRequirement(id, requirementId, status, extra = {}) {
   try {
-    const saved = await api('POST', `/applications/${id}/requirements/`, { requirement_id: requirementId, status });
+    const saved = await api('POST', `/applications/${id}/requirements/`, { requirement_id: requirementId, status, ...extra });
     toast(saved?.warning || (saved?.on_hold ? `Recorded — on hold. ${saved.hold_reason}`
           : saved?.check_only && status === 'missing' ? 'Recorded — held until it is brought'
           : saved?.charge_amount && status === 'missing' ? `Recorded — added to the bill: ${saved.charge_amount}` : 'Recorded'),
@@ -11822,7 +11869,7 @@ async function loadRequirements() {
         <td>${safeText(item.name)}</td>
         <td>${item.kind === 'check' ? '<span class="badge badge-yellow">Held — checked only</span>'
               : item.charge_type_name ? `Billed under ${safeText(item.charge_type_name)}` : '<span style="color:var(--muted);">billed — no charge type</span>'}</td>
-        <td>${safeText(FREQUENCY_LABELS[item.frequency] || item.frequency)}</td>
+        <td>${safeText(FREQUENCY_LABELS[item.frequency] || item.frequency)}${item.quantity > 1 ? ` · ${item.quantity} over the year` : ''}${item.value_label ? ` · types the ${safeText(item.value_label)}` : ''}</td>
         <td>${safeText((item.level_names || []).join(', '))}</td>
         <td>${item.is_active ? '<span class="badge badge-green">in use</span>' : '<span class="badge badge-gen">off</span>'}</td>
         <td style="white-space:nowrap;">
@@ -11838,7 +11885,9 @@ function onRequirementKindChange() {
   // A certificate or a signed form is checked, never billed: no charge type to choose.
   const billed = document.getElementById('req-kind').value === 'billed';
   document.getElementById('req-charge-wrap').style.display = billed ? '' : 'none';
+  document.getElementById('req-value-wrap').style.display = billed ? 'none' : '';
   if (!billed) document.getElementById('req-charge').value = '';
+  else document.getElementById('req-value-label').value = '';
   showRequirementRates();
 }
 
@@ -11854,6 +11903,8 @@ function resetRequirementForm() {
   document.getElementById('req-name').value = '';
   document.getElementById('req-charge').value = '';
   document.getElementById('req-kind').value = 'check';
+  document.getElementById('req-quantity').value = 1;
+  document.getElementById('req-value-label').value = '';
   document.getElementById('req-frequency').value = 'each_semester';
   document.getElementById('req-active').checked = true;
   document.querySelectorAll('#req-levels input').forEach(box => { box.checked = false; });
@@ -11867,6 +11918,8 @@ function editRequirement(id) {
   document.getElementById('req-id').value = item.id;
   document.getElementById('req-name').value = item.name;
   document.getElementById('req-kind').value = item.kind || 'billed';
+  document.getElementById('req-quantity').value = item.quantity || 1;
+  document.getElementById('req-value-label').value = item.value_label || '';
   document.getElementById('req-charge').value = item.charge_type || '';
   document.getElementById('req-frequency').value = item.frequency;
   document.getElementById('req-active').checked = item.is_active;
@@ -11883,6 +11936,8 @@ async function saveRequirement(event) {
   const payload = {
     name: document.getElementById('req-name').value.trim(),
     kind: document.getElementById('req-kind').value,
+    quantity: Math.max(1, Math.min(10, Number(document.getElementById('req-quantity').value) || 1)),
+    value_label: document.getElementById('req-kind').value === 'check' ? document.getElementById('req-value-label').value.trim() : '',
     charge_type: document.getElementById('req-kind').value === 'billed' ? (document.getElementById('req-charge').value || null) : null,
     frequency: document.getElementById('req-frequency').value,
     applies_to_levels: [...document.querySelectorAll('#req-levels input:checked')].map(box => Number(box.value)),

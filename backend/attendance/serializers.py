@@ -1897,16 +1897,19 @@ class AdmissionRequirementSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdmissionRequirement
         fields = ['id', 'name', 'description', 'kind', 'kind_display', 'charge_type', 'charge_type_name',
-                  'frequency', 'applies_to_levels', 'level_names', 'mandatory',
+                  'frequency', 'quantity', 'value_label', 'applies_to_levels', 'level_names', 'mandatory',
                   'is_active', 'created_at']
         read_only_fields = ['id', 'created_at']
 
     kind_display = serializers.CharField(source='get_kind_display', read_only=True)
 
     def validate(self, attrs):
+        kind = attrs.get('kind', getattr(self.instance, 'kind', AdmissionRequirement.BILLED))
+        if (attrs.get('value_label') or '').strip() and kind != AdmissionRequirement.CHECK_ONLY:
+            raise serializers.ValidationError(
+                {'value_label': 'A value typed in (an admission code) is checked, never billed: make it "checked only".'})
         if self.instance is not None and 'kind' not in attrs and 'charge_type' not in attrs:
             return attrs                         # switching it on or off, renaming: billing untouched
-        kind = attrs.get('kind', getattr(self.instance, 'kind', AdmissionRequirement.BILLED))
         if kind == AdmissionRequirement.CHECK_ONLY:
             attrs['charge_type'] = None          # a form is checked, never billed
         elif not (attrs['charge_type'] if 'charge_type' in attrs else getattr(self.instance, 'charge_type', None)):
@@ -1925,7 +1928,7 @@ class RequirementCheckSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RequirementCheck
-        fields = ['id', 'requirement', 'requirement_name', 'status', 'charge',
+        fields = ['id', 'requirement', 'requirement_name', 'status', 'count', 'value', 'charge',
                   'charge_amount', 'note', 'checked_at']
         read_only_fields = fields
 
@@ -1981,6 +1984,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
 
     def get_details(self, obj):
         """Who the student is, as records took it down — read by every desk."""
+        from .admissions import typed_items
         profile = obj.profile
         return {
             'name': profile.name, 'phone': profile.phone, 'gender': profile.gender,
@@ -1997,6 +2001,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
                            'institution': row.institution, 'start_year': row.start_year,
                            'end_year': row.end_year, 'index_number': row.index_number}
                           for row in profile.education.all()],
+            'typed_items': typed_items(profile),
             'passport_url': (f'/api/student-records/{profile.id}/passport/?v='
                              f'{int(profile.passport_updated_at.timestamp()) if profile.passport_updated_at else 0}'
                              if profile.passport else ''),
