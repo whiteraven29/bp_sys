@@ -191,7 +191,11 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] PST students sign in with the college ID too (the password slip said so; only VETA could)
    - [x] Admitted but in no module (no password possible): named on the password desk; the merge
      enrolls this year's students of the merged programme in its modules
-   - [x] 1124 tests; screens checked in the browser
+   - [x] A module with no programme is the level's at admission; editing a module's programme / level /
+     semester enrolls the class; `manage.py enroll_registered` catches up those admitted before
+   - [x] 1128 tests; screens checked in the browser
+   - [ ] On the server: `enroll_registered` (B7); Level 5 modules created under PST; Level 4 modules set to PST;
+     then Issue passwords
    - [ ] On the server: run `merge_programmes` (release guide B6) after the deploy, before the next application
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,

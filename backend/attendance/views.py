@@ -4258,6 +4258,16 @@ class ModuleViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Modules are kept by the Head of Department, DPARC or the Principal.')
         return super().update(request, *args, **kwargs)
 
+    def perform_update(self, serializer):
+        before = Module.objects.filter(pk=serializer.instance.pk).values(
+            'programme_id', 'class_level_id', 'semester_id').first()
+        module = serializer.save()
+        # Given a programme, a level or a semester, the module now covers
+        # students it did not: they are enrolled, as when it is created.
+        if before != {'programme_id': module.programme_id, 'class_level_id': module.class_level_id,
+                      'semester_id': module.semester_id}:
+            progression.enroll_module(module, actor=self.request.user)
+
     def destroy(self, request, *args, **kwargs):
         if not runs_departments(request.user):
             raise PermissionDenied('Modules are kept by the Head of Department, DPARC or the Principal.')

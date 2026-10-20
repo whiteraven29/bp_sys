@@ -281,3 +281,59 @@ class JoiningYearTests(OfficeClients):
         listed = self.admission.get('/api/applications/').data
         rows = listed.get('results', listed) if isinstance(listed, dict) else listed
         self.assertEqual({r['kind_label'] for r in rows if r['id'] == application.id}, {'Continuing student'})
+
+
+class ModulesWithoutProgrammeTests(OfficeClients):
+    """The server on 20 October 2026: Level 4's modules had no programme and
+    Level 5 had none at all; two students admitted under PST were in no module,
+    so the password desk had no one to give a password to."""
+
+    def setUp(self):
+        super().setUp()
+        self.loose = Module.objects.create(name='Loose', code='PST04150', teacher='T', class_level=self.level4,
+                                           semester=self.sem1, programme=None, credits=3)
+        self.student = complete_record(StudentProfile.objects.create(nactvet_reg_no='NS0009/0001/2026',
+                                                                     name='Anitha Steven'))
+        self.registration = SemesterRegistration.objects.create(
+            profile=self.student, semester=self.sem1, programme=self.pst, class_level=self.level4,
+            kind=SemesterRegistration.NEW)
+
+    def enrolled_codes(self, profile=None):
+        from .models import Student
+        return sorted(Student.objects.filter(profile=profile or self.student).values_list('module__code', flat=True))
+
+    def test_admission_takes_a_module_with_no_programme(self):
+        progression.enroll_registration(self.registration)
+        self.assertIn('PST04150', self.enrolled_codes())
+
+    def test_the_command_catches_up_who_was_admitted_before(self):
+        dry = StringIO()
+        call_command('enroll_registered', stdout=dry)
+        self.assertIn('Anitha Steven', dry.getvalue())
+        self.assertEqual(self.enrolled_codes(), [])                       # a dry run writes nothing
+        call_command('enroll_registered', '--apply', stdout=StringIO())
+        self.assertIn('PST04150', self.enrolled_codes())
+        again = StringIO()
+        call_command('enroll_registered', '--apply', stdout=again)
+        self.assertIn('Nobody was missing', again.getvalue())             # never twice
+
+    def test_giving_a_module_its_level_enrolls_the_class(self):
+        level5_student = complete_record(StudentProfile.objects.create(nactvet_reg_no='NS0009/0002/2026',
+                                                                       name='Hanna Margwe'))
+        SemesterRegistration.objects.create(profile=level5_student, semester=self.sem1, programme=self.pst,
+                                            class_level=self.level5, kind=SemesterRegistration.NEW)
+        made = self.principal.patch(f'/api/modules/{self.loose.id}/',
+                                    {'class_level': self.level5.id, 'programme': self.pst.id}, format='json')
+        self.assertEqual(made.status_code, 200, made.data)
+        self.assertEqual(self.enrolled_codes(level5_student), ['PST04150'])
+
+    def test_a_new_level_five_module_enrolls_her(self):
+        level5_student = complete_record(StudentProfile.objects.create(nactvet_reg_no='NS0009/0003/2026',
+                                                                       name='Hanna Two'))
+        SemesterRegistration.objects.create(profile=level5_student, semester=self.sem1, programme=self.pst,
+                                            class_level=self.level5, kind=SemesterRegistration.NEW)
+        made = self.principal.post('/api/modules/', {
+            'name': 'Pharmaceutics I', 'code': 'PST05101', 'teacher': 'T', 'class_level': self.level5.id,
+            'semester': self.sem1.id, 'programme': self.pst.id, 'credits': 4}, format='json')
+        self.assertEqual(made.status_code, 201, made.data)
+        self.assertEqual(self.enrolled_codes(level5_student), ['PST05101'])

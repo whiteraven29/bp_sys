@@ -881,6 +881,8 @@ programme (PST: 4, 5, 6). *Continuing* and *Readmission* stay as they were.
 
 ### Q63. No password for students admitted on 19–20 October ✅
 
-They were admitted under PST04/05/06; the semester's modules are under PST, so they were enrolled in
-nothing, and a student in no module has no portal to give a password for. Fixed by the merge (release
-guide B6), which enrolls them; the password desk now names anybody admitted but in no module.
+The server's check (20 October): both under PST; Level 4's modules had no programme, Level 5 had no
+modules. A student in no module has no portal to give a password for. Admission now takes a module
+with no programme as the level's; editing a module enrolls the class; `enroll_registered` catches up
+(release guide B7); the Level 5 modules are to be created. The password desk names anybody admitted
+but in no module.

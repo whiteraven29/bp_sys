@@ -1153,9 +1153,13 @@ def enroll_registration(registration, *, actor=None, repeats=None, modules_by_se
     else:
         # The repeat row wins over the level's own copy of the same module, so
         # a re-sitting is billed as a repeat and not as a first attempt.
+        # A module with no programme is the level's, whoever's programme it is
+        # — as enroll_module already reads it. Both orders must end in the same
+        # place (said 20 October 2026: Level 4's modules had no programme, so a
+        # student admitted after them got none and no portal password).
         by_id = {module.id: module for module in modules_by_semester
                  if module.class_level_id == registration.class_level_id
-                 and module.programme_id == registration.programme_id}
+                 and module.programme_id in (registration.programme_id, None)}
         by_id.update({module.id: module for module in resitting})
         modules = list(by_id.values())
 
