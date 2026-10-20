@@ -71,7 +71,7 @@ class EnrolmentFormDetailsTests(RecordsBase):
         application = admissions.open_application(
             profile=newcomer, semester=self.sem1, programme=self.pst,
             class_level=self.level4, kind=Application.NEW, actor=self.officer)
-        admissions.record_details(newcomer, address='P.O. Box 12', sponsor_name='Ally Juma',
+        admissions.record_details(newcomer, fee_payer='family', address='P.O. Box 12', sponsor_name='Ally Juma',
                                   education=[{'level': 'o_level', 'institution': 'Mwenge Secondary'}])
         details = self.principal.get(f'/api/applications/{application.id}/').data['details']
         self.assertEqual((details['address'], details['sponsor_name'], details['education'][0]['institution']),

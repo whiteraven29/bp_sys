@@ -57,7 +57,8 @@ class ProgressionBase(TestCase):
             semester=semester, programme=self.pst, credits=credits)
 
     def student(self, reg_no, name='Asha Juma'):
-        return StudentProfile.objects.create(nactvet_reg_no=reg_no, name=name)
+        from .test_admissions import complete_record
+        return complete_record(StudentProfile.objects.create(nactvet_reg_no=reg_no, name=name))
 
     def register(self, profile, semester, level, kind=SemesterRegistration.CONTINUING):
         return SemesterRegistration.objects.create(
@@ -253,7 +254,7 @@ class ConfirmTests(ProgressionBase):
         progression.confirm_review(review, review.proposed, actor=self.officer)
 
         standing = profile.standing
-        self.assertEqual(standing.status, StudentStanding.DISCONTINUED)
+        self.assertEqual(standing.status, StudentStanding.FAILED)        # FAIL, readmitted (19 Oct 2026)
         self.assertEqual(standing.return_semester_number, 2)
         self.assertEqual(standing.return_year, next_year)
         self.assertEqual(standing.class_level, self.level4)
@@ -297,7 +298,7 @@ class ConfirmTests(ProgressionBase):
                                    reason='Senate decision 14/2026')
 
         change = profile.standing_changes.get()
-        self.assertEqual(change.to_status, StudentStanding.DISCONTINUED)
+        self.assertEqual(change.to_status, StudentStanding.FAILED)
         self.assertEqual(change.changed_by, self.officer)
         self.assertEqual(change.semester, self.sem2)
 
@@ -453,7 +454,7 @@ class AdvanceTests(ProgressionBase):
         self.assertEqual(summary['discontinued'], 1)
         self.assertFalse(SemesterRegistration.objects.filter(
             profile=profile, semester=self.next_sem1).exists())
-        self.assertEqual(profile.standing.status, StudentStanding.DISCONTINUED)
+        self.assertEqual(profile.standing.status, StudentStanding.FAILED)
         self.assertEqual(profile.standing.return_semester_number, 2)
         # Their enrollment and marks are exactly where they were.
         result.refresh_from_db()
@@ -598,7 +599,7 @@ class RepeatSittingTests(ProgressionBase):
         progression.confirm_review(review, review.proposed, actor=self.officer)
 
         profile.refresh_from_db()
-        self.assertEqual(profile.standing.status, StudentStanding.DISCONTINUED)
+        self.assertEqual(profile.standing.status, StudentStanding.FAILED)
         self.assertTrue(StudentResult.objects.filter(student=sitting, supplementary_mark=35).exists())
 
     def test_whatever_the_gpa(self):
@@ -850,7 +851,7 @@ class PortalAccessTests(ProgressionBase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('student_id', self.client.session)
-        self.assertIn('complete', response.context['error'].lower())
+        self.assertIn('closed', response.context['error'].lower())
 
     def test_archiving_a_signed_in_student_ends_their_session(self):
         self.sign_in()
@@ -1357,7 +1358,7 @@ class ResultStatementTests(ProgressionBase):
 
         statement = self.statements().context['result_statements'][0]
 
-        self.assertEqual(statement['remark'], 'DISCO')
+        self.assertEqual(statement['remark'], 'FAIL')                   # as the college says it (19 Oct 2026)
         self.assertEqual(statement['comment'], 'PST04201, PST04202')
 
     def test_a_module_to_repeat_reads_as_repeat_and_names_it(self):

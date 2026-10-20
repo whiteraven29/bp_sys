@@ -18,7 +18,7 @@ from rest_framework.response import Response
 
 from . import admissions, expenses, finance, passwords, veta
 from .models import (
-    AcademicYear, BankAccount, ChargeType, CourseApplication, CourseEnrollment, CourseFee,
+    AcademicYear, AdmissionRequirement, BankAccount, ChargeType, CourseApplication, CourseEnrollment, CourseFee,
     CourseFeeInstalment, CourseModule, Expense, ExpenseCategory, Intake, NextOfKin, PettyCashTopUp, Programme,
 )
 from .roles import (
@@ -27,7 +27,7 @@ from .roles import (
     can_issue_student_passwords,
 )
 from .views import (
-    pk_or_none,
+    pk_or_none, _record_details_from, profile_details,
     active_academic_year, can_see_admissions, can_work_desk, full_name_for,
     visible_application_states,
 )
@@ -266,9 +266,8 @@ def _application_row(app, user, *, full=False):
         return row
     profile = app.profile
     row.update({
-        'phone': profile.phone, 'gender': profile.gender, 'date_of_birth': profile.date_of_birth,
-        'next_of_kin': [{'position': k.position, 'name': k.name, 'phone': k.phone,
-                         'relationship': k.relationship} for k in profile.next_of_kin.all()],
+        **profile_details(profile), 'veta_only': True,
+        'items': veta.items_for(app),
         'blockers': veta.desk_blockers(app) if app.is_open else [],
         'can_refuse': app.is_open and (is_admission_officer(user) or is_principal(user)
                                        or is_break_glass(user)),
@@ -328,11 +327,19 @@ def course_application_action(request, pk, action=None):
             for entry in kin:
                 if entry.get('relationship') and entry['relationship'] not in dict(NextOfKin.RELATIONSHIP_CHOICES):
                     return _bad(f"{entry['relationship']!r} is not a relationship the form knows.")
-            admissions.record_details(
-                app.profile, name=request.data.get('name'), phone=request.data.get('phone'),
-                gender=request.data.get('gender'),
-                date_of_birth=parse_date(str(request.data['date_of_birth'])) if request.data.get('date_of_birth') else None,
-                next_of_kin=kin, actor=user)
+            # The same form as the PST records desk, with the admission
+            # form's details (said 19 October 2026).
+            _record_details_from(request, app.profile)
+        elif action == 'item':
+            # The admission desk checks the VETA items before admitting.
+            if not (app.state == CourseApplication.ADMISSION and can_work_desk(user, app.state)):
+                raise PermissionDenied('Items are checked at the admission desk.')
+            requirement = AdmissionRequirement.objects.filter(
+                id=pk_or_none(request.data.get('requirement_id'))).first()
+            if requirement is None:
+                return _bad('No such item.')
+            veta.record_item(app, requirement, str(request.data.get('status') or ''),
+                             value=str(request.data.get('value') or ''), actor=user)
         elif action == 'fees':
             if not can_work_desk(user, CourseApplication.FINANCE) or app.state != CourseApplication.FINANCE:
                 raise PermissionDenied('Finance raises the fees at its own desk.')

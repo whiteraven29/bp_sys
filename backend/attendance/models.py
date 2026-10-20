@@ -1286,6 +1286,28 @@ class StudentProfile(models.Model):
     address = models.CharField(max_length=300, blank=True)
     sponsor_name = models.CharField(max_length=200, blank=True, verbose_name='Guarantor / sponsor')
     sponsor_phone = models.CharField(max_length=30, blank=True)
+    # Who pays the fees (said 19 October 2026): asked of every student.
+    PAID_BY_FAMILY = 'family'
+    PAID_BY_SPONSOR = 'sponsor'
+    PAID_BY_SELF = 'self'
+    FEE_PAYER_CHOICES = [
+        (PAID_BY_FAMILY, 'Parents / guardian'),
+        (PAID_BY_SPONSOR, 'A sponsor'),
+        (PAID_BY_SELF, 'The student'),
+    ]
+    fee_payer = models.CharField(max_length=10, choices=FEE_PAYER_CHOICES, blank=True,
+                                 verbose_name='Fees paid by')
+    # The VETA admission form's (Fomu ya Kujiunga) — kept for every student.
+    birth_year = models.PositiveSmallIntegerField(null=True, blank=True,
+                                                  help_text='When only the year of birth is known.')
+    birth_place = models.CharField(max_length=120, blank=True, verbose_name='Place of birth')
+    religion = models.CharField(max_length=60, blank=True)
+    education_level = models.CharField(max_length=120, blank=True, verbose_name='Education level now',
+                                       help_text='e.g. Darasa la 7, Form Four')
+    has_chronic_condition = models.BooleanField(null=True, blank=True,
+                                                verbose_name='A long-term health problem (as declared)')
+    health_declaration = models.CharField(max_length=300, blank=True,
+                                          help_text='What the student declared on the form.')
     passport = models.FileField(upload_to='passports/%Y/', blank=True)
     passport_updated_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1325,6 +1347,26 @@ class StudentEducation(models.Model):
         return f'{self.get_level_display()}: {self.institution}'
 
 
+class StudentDetailChange(models.Model):
+    """One correction to a student's details: what it was, what it became,
+    who changed it and why (said 19 October 2026: records will make mistakes —
+    they are put right openly, never silently)."""
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='detail_changes')
+    field = models.CharField(max_length=80)
+    old_value = models.CharField(max_length=300, blank=True)
+    new_value = models.CharField(max_length=300, blank=True)
+    reason = models.CharField(max_length=200, blank=True)
+    changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='student_detail_changes')
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-changed_at', '-id']
+
+    def __str__(self):
+        return f'{self.profile} · {self.field}: {self.old_value!r} → {self.new_value!r}'
+
+
 class NextOfKin(models.Model):
     """Someone the college contacts about a student. The admission form takes two."""
     PARENT = 'parent'
@@ -1346,6 +1388,7 @@ class NextOfKin(models.Model):
     name = models.CharField(max_length=200)
     phone = models.CharField(max_length=30)
     relationship = models.CharField(max_length=20, choices=RELATIONSHIP_CHOICES)
+    address = models.CharField(max_length=200, blank=True, verbose_name='Where they live')
 
     class Meta:
         ordering = ['profile', 'position']
@@ -1445,26 +1488,46 @@ class StudentStanding(models.Model):
     ACTIVE = 'active'
     REPEATING = 'repeating'
     POSTPONED = 'postponed'
+    # Said 19 October 2026: failing academically (GPA below 2.0, or a repeat
+    # failed again) is FAIL, readmitted as before; "discontinued" is now the
+    # Principal's disciplinary decision (cheating, misconduct, per NACTVET's
+    # guidelines), after which the student may only apply again as new.
+    FAILED = 'failed'
     DISCONTINUED = 'discontinued'
     COMPLETED = 'completed'
     ARCHIVED = 'archived'
     NOT_REPORTED = 'not_reported'
+    ABSCONDED = 'absconded'
+    SUSPENDED = 'suspended'
+    DECEASED = 'deceased'
+    TERMINATED = 'terminated'
     STATUS_CHOICES = [
         (ACTIVE, 'Studying'),
         (REPEATING, 'Repeating failed modules'),
         (POSTPONED, 'Postponed'),
-        (DISCONTINUED, 'Discontinued — may return on readmission'),
+        (FAILED, 'FAIL — may return on readmission'),
+        (DISCONTINUED, 'Discontinued (disciplinary) — may apply again as new'),
         (COMPLETED, 'Finished studies, awaiting clearance'),
         (ARCHIVED, 'Cleared and archived'),
         (NOT_REPORTED, 'Did not report — may return'),
+        (ABSCONDED, 'Absconded (ABS) — may return after two years'),
+        (SUSPENDED, 'Suspended'),
+        (DECEASED, 'Deceased'),
+        (TERMINATED, 'Terminated — may not be admitted again'),
     ]
 
     #: Statuses whose students are expected back on a stated semester.
-    AWAY = {POSTPONED, DISCONTINUED, NOT_REPORTED}
-    #: Only an archived student is refused the portal. A discontinued or
-    #: postponed one still needs to see their results, their balance, and the
-    #: services they use to ask for readmission.
-    PORTAL_BLOCKED = {ARCHIVED}
+    AWAY = {POSTPONED, FAILED, NOT_REPORTED}
+    #: An archived student is refused the portal, and so is a deceased or a
+    #: terminated one's account. A failed or postponed one still needs to see
+    #: their results, their balance, and the services they use to come back.
+    PORTAL_BLOCKED = {ARCHIVED, DECEASED, TERMINATED}
+    #: Never admitted again.
+    NEVER_ADMITTED = {DECEASED, TERMINATED}
+    #: Set by the Principal (DPARC told); the others by records or admission too.
+    PRINCIPAL_DECIDES = {SUSPENDED, TERMINATED, DISCONTINUED}
+    #: What the status page records by hand.
+    RECORDED_BY_HAND = {DECEASED, ABSCONDED, SUSPENDED, TERMINATED, DISCONTINUED}
 
     profile = models.OneToOneField(StudentProfile, on_delete=models.CASCADE, related_name='standing')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=ACTIVE)
@@ -1480,6 +1543,10 @@ class StudentStanding(models.Model):
         null=True, blank=True, choices=Semester.NUMBER_CHOICES,
         help_text='The semester they return to — a student who failed semester 2 '
                   'comes back to semester 2, not to the start of the year.')
+    since = models.DateField(null=True, blank=True,
+                             help_text='When this status began: the two years an absconded or postponed '
+                                       'student may stay away are counted from it.')
+    until = models.DateField(null=True, blank=True, help_text='When a suspension ends.')
     note = models.CharField(max_length=300, blank=True)
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
@@ -1542,7 +1609,7 @@ class SemesterReview(models.Model):
     OUTCOME_CHOICES = [
         (CLEAR, 'Passed everything'),
         (REPEAT, 'Repeats the failed module(s)'),
-        (DISCONTINUED, 'Discontinued — GPA below 2.0'),
+        (DISCONTINUED, 'FAIL — GPA below 2.0 or a repeat failed: readmission'),
         (COMPLETED, 'Finished level 6'),
         (PENDING, 'Waiting for results'),
         (PROVISIONAL, 'Continues while supplementary results are awaited'),
@@ -1713,8 +1780,12 @@ class CollegeIdFormat(models.Model):
     next_number = models.PositiveIntegerField(default=1)
     veta_pattern = models.CharField(
         max_length=120, blank=True,
-        help_text='How a VETA course student\'s number is written. Blank: the same as above. '
-                  'Same pieces; the same counter.')
+        help_text='How a VETA course student\'s number is written. Blank: the same as above, on the same '
+                  'counter. Set: a series of its own, with its own counter.')
+    # VETA students' identity card numbers are a series of their own (said
+    # 19 October 2026): their own pattern and their own running number.
+    veta_starts_at = models.PositiveIntegerField(
+        default=1, help_text='Where each VETA programme\'s numbers start this year; each counts on its own.')
     sequence_width = models.PositiveSmallIntegerField(
         default=3, help_text='How many digits the running number is padded to.')
     updated_by = models.ForeignKey(
@@ -1728,6 +1799,10 @@ class CollegeIdFormat(models.Model):
     def __str__(self):
         return f'College ID · {self.academic_year} · {self.pattern}'
 
+    def veta_series(self, programme):
+        """Whether this programme's students are numbered in the VETA series."""
+        return bool(programme is not None and getattr(programme, 'is_veta', False) and self.veta_pattern)
+
     def render(self, number, programme=None):
         """One number, written out. Nothing here consumes the counter.
 
@@ -1735,9 +1810,7 @@ class CollegeIdFormat(models.Model):
         has set one; everybody else's, and theirs when it is blank, `pattern`.
         """
         opening = self.academic_year.name.split('/')[0]
-        pattern = self.pattern
-        if programme is not None and getattr(programme, 'is_veta', False) and self.veta_pattern:
-            pattern = self.veta_pattern
+        pattern = self.veta_pattern if self.veta_series(programme) else self.pattern
         return (pattern
                 .replace('{COLLEGE}', self.college_code)
                 .replace('{PROG}', programme.code if programme else '')
@@ -1751,9 +1824,27 @@ class CollegeIdFormat(models.Model):
         programme code so the office can see the whole thing rather than a gap
         where the programme goes."""
         from django.apps import apps
-        programme = apps.get_model('attendance', 'Programme').objects.filter(
-            is_active=True).order_by('code').first()
+        Programme = apps.get_model('attendance', 'Programme')
+        # A PST (semester) programme: a VETA course would show the VETA series,
+        # or its own code under the PST pattern, and mislead.
+        programme = (Programme.objects.filter(is_active=True, structure=Programme.SEMESTER).order_by('code').first()
+                     or Programme.objects.filter(is_active=True).order_by('code').first())
         return self.render(self.next_number, programme)
+
+
+class CollegeIdCounter(models.Model):
+    """A VETA programme's own running number for the year's identity card
+    numbers (said 19 October 2026: hair dressing and computer basics each count
+    from 001)."""
+    id_format = models.ForeignKey(CollegeIdFormat, on_delete=models.CASCADE, related_name='counters')
+    programme = models.ForeignKey('Programme', on_delete=models.CASCADE, related_name='id_counters')
+    next_number = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['id_format', 'programme'], name='one_id_counter_per_programme')]
+
+    def __str__(self):
+        return f'{self.programme.code} · {self.id_format.academic_year} · next {self.next_number}'
 
 
 class Application(models.Model):
@@ -1921,6 +2012,14 @@ class AdmissionRequirement(models.Model):
     name = models.CharField(max_length=120, unique=True)
     description = models.CharField(max_length=300, blank=True)
     kind = models.CharField(max_length=10, choices=KIND_CHOICES, default=BILLED)
+    # Which students it is asked of (said 19 October 2026): VETA courses have
+    # their own items, checked at their admission desk.
+    FOR_PST = 'pst'
+    FOR_VETA = 'veta'
+    FOR_BOTH = 'both'
+    APPLIES_CHOICES = [(FOR_PST, 'PST (NACTVET) students'), (FOR_VETA, 'VETA course students'),
+                       (FOR_BOTH, 'Both')]
+    applies_to = models.CharField(max_length=5, choices=APPLIES_CHOICES, default=FOR_PST)
     charge_type = models.ForeignKey(
         'ChargeType', on_delete=models.PROTECT, null=True, blank=True,
         related_name='requirements',
@@ -1968,7 +2067,11 @@ class RequirementCheck(models.Model):
     ]
 
     profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='requirement_checks')
-    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='requirement_checks')
+    # A VETA course student is checked on their course application, not in a semester.
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='requirement_checks',
+                                 null=True, blank=True)
+    course_application = models.ForeignKey('CourseApplication', on_delete=models.CASCADE, null=True, blank=True,
+                                           related_name='requirement_checks')
     application = models.ForeignKey(Application, on_delete=models.CASCADE, null=True, blank=True,
                                     related_name='requirement_checks')
     requirement = models.ForeignKey(AdmissionRequirement, on_delete=models.PROTECT, related_name='checks')
@@ -1989,6 +2092,9 @@ class RequirementCheck(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['profile', 'semester', 'requirement'],
                                     name='one_check_per_requirement_per_semester'),
+            models.UniqueConstraint(fields=['course_application', 'requirement'],
+                                    condition=Q(course_application__isnull=False),
+                                    name='one_check_per_requirement_per_course_application'),
         ]
 
     def __str__(self):
@@ -3641,6 +3747,7 @@ class Notification(models.Model):
     PROVISIONAL_SETTLED = 'provisional.settled'
     EXIT_REQUESTED = 'exit.requested'
     EXIT_DECIDED = 'exit.decided'
+    STATUS_RECORDED = 'status.recorded'
     DISPOSAL_PROPOSED = 'disposal.proposed'
     DISPOSAL_DECIDED = 'disposal.decided'
     PASSWORD_RESET = 'password.reset'
@@ -3664,6 +3771,7 @@ class Notification(models.Model):
         (PROVISIONAL_SETTLED, 'A provisional place was confirmed or changed'),
         (EXIT_REQUESTED, 'A student asked to finish after a level'),
         (EXIT_DECIDED, 'A request to finish after a level was decided'),
+        (STATUS_RECORDED, 'A student\'s status was recorded (deceased, absconded, suspended, terminated, discontinued)'),
         (DISPOSAL_PROPOSED, 'An asset disposal needs approval'),
         (DISPOSAL_DECIDED, 'An asset disposal was decided'),
         (PASSWORD_RESET, 'Your password was reset by the office'),

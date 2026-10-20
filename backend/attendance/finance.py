@@ -271,7 +271,7 @@ def _instalments(structure, schedule):
 
 @transaction.atomic
 def generate_charges(profile, academic_year, *, actor=None, class_level=None, programme=None,
-                     entry=None, readmitted=None):
+                     entry=None, readmitted=None, fresh=False):
     """Raise every automatic charge this student owes for the year, and the
     hostel fee when they live in the hostel.
 
@@ -322,7 +322,8 @@ def generate_charges(profile, academic_year, *, actor=None, class_level=None, pr
             if entry == PaymentSchedule.CONTINUING:
                 continue
             previous = StudentCharge.objects.filter(profile=profile, charge_type=structure.charge_type)
-            if readmitted and structure.charge_type.charged_again_on_readmission:
+            if fresh or (readmitted and structure.charge_type.charged_again_on_readmission):
+                # Back as new (said 19 October 2026): the one-time charges again.
                 previous = previous.filter(academic_year=academic_year)
             if previous.exists():
                 continue
@@ -1733,7 +1734,47 @@ def _charges_due(charges, semester, period, today):
 
 # ── the executive view ────────────────────────────────────────────────────────
 
-def executive_summary(academic_year):
+def programme_by_profile(profile_ids):
+    """Each student's programme (and through it, department), for the money
+    screens' filters (said 19 October 2026: income by department and by
+    programme). Read from what says it best: the standing, the latest
+    registration, a VETA course application, an admission application, then
+    the modules they sit. A student with none is under no programme."""
+    from .models import Application, CourseApplication, StudentStanding
+    ids = set(profile_ids)
+    found = {}
+
+    def take(rows):
+        for profile_id, programme in rows:
+            if profile_id in ids and profile_id not in found and programme is not None:
+                found[profile_id] = programme
+
+    take((r.profile_id, r.programme) for r in StudentStanding.objects
+         .filter(profile_id__in=ids, programme__isnull=False).select_related('programme__department'))
+    take((r.profile_id, r.programme) for r in SemesterRegistration.objects
+         .filter(profile_id__in=ids).select_related('programme__department')
+         .order_by('-semester__academic_year__name', '-semester__number'))
+    take((a.profile_id, a.intake.programme) for a in CourseApplication.objects
+         .filter(profile_id__in=ids).select_related('intake__programme__department').order_by('-created_at'))
+    take((a.profile_id, a.programme) for a in Application.objects
+         .filter(profile_id__in=ids).select_related('programme__department').order_by('-created_at'))
+    take((e.profile_id, e.module.programme) for e in Student.objects
+         .filter(profile_id__in=ids, module__programme__isnull=False)
+         .select_related('module__programme__department').order_by('-id'))
+    return found
+
+
+def profiles_in_scope(profile_ids, *, department_id=None, programme_id=None):
+    """Of these students, the ones in this department or programme."""
+    if not department_id and not programme_id:
+        return set(profile_ids)
+    where = programme_by_profile(profile_ids)
+    return {pid for pid, programme in where.items()
+            if (not programme_id or str(programme.id) == str(programme_id))
+            and (not department_id or str(programme.department_id) == str(department_id))}
+
+
+def executive_summary(academic_year, *, department_id=None, programme_id=None):
     """The college's money for one year, in totals: what was billed, waived,
     paid and is still owed — by kind of fee, by programme and level, by month
     received and by bank account. No student is named.
@@ -1748,6 +1789,11 @@ def executive_summary(academic_year):
     charges = StudentCharge.objects.filter(academic_year=academic_year)
     allocations = (PaymentAllocation.objects.filter(charge__academic_year=academic_year)
                    .exclude(payment__channel=Payment.CREDIT))
+    if department_id or programme_id:
+        scope = profiles_in_scope(set(charges.values_list('profile_id', flat=True)),
+                                  department_id=department_id, programme_id=programme_id)
+        charges = charges.filter(profile_id__in=scope)
+        allocations = allocations.filter(charge__profile_id__in=scope)
 
     def _row(billed, waived, paid):
         billed, waived, paid = billed or ZERO, waived or ZERO, paid or ZERO
@@ -1775,11 +1821,16 @@ def executive_summary(academic_year):
                        allocations.values('charge__profile_id').annotate(paid=Sum('amount'))}
     where = {s.profile_id: s for s in StudentStanding.objects.filter(profile_id__in=per_profile)
              .select_related('programme', 'class_level')}
+    # A VETA course student has no standing: their programme is their intake's.
+    programmes = programme_by_profile(per_profile)
     groups = {}
+    departments = {}
     owing = cleared = 0
     for profile_id, row in per_profile.items():
         standing = where.get(profile_id)
-        programme = standing.programme.code if standing and standing.programme_id else 'Not recorded'
+        found = programmes.get(profile_id)
+        programme = found.code if found else 'Not recorded'
+        department = found.department.name if found else 'Not recorded'
         level = standing.class_level.name if standing and standing.class_level_id else 'Not recorded'
         order = standing.class_level.order if standing and standing.class_level_id else 999
         paid = paid_by_profile.get(profile_id) or ZERO
@@ -1795,6 +1846,13 @@ def executive_summary(academic_year):
         group['billed'] += row['billed'] or ZERO
         group['waived'] += row['waived'] or ZERO
         group['paid'] += paid
+        dept = departments.setdefault(department, {'students': 0, 'billed': ZERO, 'waived': ZERO, 'paid': ZERO})
+        dept['students'] += 1
+        dept['billed'] += row['billed'] or ZERO
+        dept['waived'] += row['waived'] or ZERO
+        dept['paid'] += paid
+    by_department = [{'department': name, 'students': d['students'], **_row(d['billed'], d['waived'], d['paid'])}
+                     for name, d in sorted(departments.items())]
     by_programme = [
         {'programme': programme, 'class_level': level, 'students': group['students'],
          'owing': group['owing'], **_row(group['billed'], group['waived'], group['paid'])}
@@ -1823,6 +1881,7 @@ def executive_summary(academic_year):
         'totals': {**_row(totals['billed'], totals['waived'], paid_total),
                    'students': len(per_profile), 'owing': owing, 'cleared': cleared},
         'by_family': by_family,
+        'by_department': by_department,
         'by_programme': by_programme,
         'by_month': by_month,
         'by_account': by_account,

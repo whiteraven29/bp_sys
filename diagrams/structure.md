@@ -180,8 +180,13 @@ sign in.
   SemesterRegistration   profile + semester + programme + level + kind
                          (new / continuing / repeating / readmission)
   StudentStanding        where the person is now: active, repeating,
-                         postponed, discontinued, completed, archived,
-                         did not report
+                         postponed, FAIL (academic — readmission), discontinued
+                         (disciplinary — back as new), completed, archived,
+                         did not report, absconded (ABS — back after two years
+                         as new), suspended (until a date), deceased, terminated
+                         — with `since` (the two-year rules) and `until`
+  StudentDetailChange    every correction to a student's details: was, now,
+                         who, when, why
   Semester.provisional_cutoff   the exam officer's date for late results
   StandingChange         history of every change
   SemesterReview         proposed → confirmed outcome per semester

@@ -117,6 +117,16 @@ def mark_changed(user, *, must_change=False):
     return status
 
 
+def require_change(user):
+    """Ask for a new password at once, without moving the six-month clock —
+    a password that falls short of the rule (said 19 October 2026)."""
+    status = status_for(user)
+    if not status.must_change:
+        status.must_change = True
+        status.save(update_fields=['must_change'])
+    return status
+
+
 def mark_reset(user, *, by=None):
     """The office has given this account a temporary password: the holder
     picks their own at the next sign-in."""

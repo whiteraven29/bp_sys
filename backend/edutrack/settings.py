@@ -40,6 +40,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Five minutes without use ends the session, staff and student alike.
+    'attendance.middleware.IdleTimeoutMiddleware',
     # After authentication: it decorates request.user.
     'attendance.middleware.TeachingScopeMiddleware',
     # After it, so request.user is decorated before the password is judged.
@@ -88,6 +90,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'attendance.context_processors.session_policy',
             ],
         },
     },
@@ -149,6 +152,18 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 # And at most a working day: a browser left open on a shared office PC does not
 # stay signed in overnight.
 SESSION_COOKIE_AGE = config('SESSION_COOKIE_AGE', default=8 * 60 * 60, cast=int)
+# And five minutes without use ends it (said 19 October 2026;
+# attendance.middleware.IdleTimeoutMiddleware). The page sends a keep-alive while
+# somebody is working in it, so a long form is not lost.
+IDLE_TIMEOUT_SECONDS = config('IDLE_TIMEOUT_SECONDS', default=5 * 60, cast=int)
+
+# A form that was open too long, or a sign-in page restored from the browser's
+# cache, used to answer with Django's bare 403 "CSRF cookie not set". It now
+# explains and offers to reload (views.csrf_failure), and logs the cause.
+CSRF_FAILURE_VIEW = 'attendance.views.csrf_failure'
+# The site's own https address(es), e.g. https://edutrack.bphacoh.ac.tz — the
+# origin check of a form posted over https.
+CSRF_TRUSTED_ORIGINS = [origin for origin in config('CSRF_TRUSTED_ORIGINS', default='').split(',') if origin]
 
 # DRF
 REST_FRAMEWORK = {

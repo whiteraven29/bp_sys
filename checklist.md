@@ -153,6 +153,30 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] Counted items (rim paper: 2 a year — Brought 1 asks again next semester, 2 clears the year; never
      billed) and typed items (the NACTVET admission code, kept on the student's details), migration 0069;
      Items check opened to the admission office for checked-only items. 1063 tests, checked in the browser
+2q. **VETA identity card numbers — 19 Oct (not committed).** The VETA pattern (Window & ID numbers) is now a
+   series of its own: its own counter and starts-at (`CollegeIdFormat.veta_next_number` / `veta_starts_at`,
+   migration 0070), refused when identical to PST's, carried into the next year (it was dropped before).
+   - [x] Built and tested (1066 tests)
+2r. **First day of use, batch 2 — 19–20 Oct (not committed).** Your list of 13 and the statuses:
+   - [x] 1 VETA card numbers counted course by course (`CollegeIdCounter`; the pattern needs `{PROG}`)
+   - [x] 2 VETA records desk takes the admission form (Fomu ya Kujiunga): birth year/place, religion,
+     education level, parent/guardian with residence, who pays, health declared — the shared form
+   - [x] 3 department and programme filters: Finance Overview, Balances, Collections, Executive Summary
+   - [x] 4 VETA items (*Asked of*), checked at the VETA admission desk; missing/unchecked holds
+   - [x] 5 next of kin and who pays compulsory at every records desk (continuing and VETA); sponsor named
+   - [x] 6 every correction logged (`StudentDetailChange`), shown under the record with the reason
+   - [x] 7 invoices raised from the application window at the finance desk
+   - [x] 8 HOD sees only their department's staff (no accounts), gives only their modules
+   - [x] 9 no self-claiming of modules; My Profile is the password only
+   - [x] 10 five minutes without use signs out (staff and students; keep-alive while typing)
+   - [x] 11 staff passwords to the students' rule, changed once at the next sign-in
+   - [x] 12 CSRF: sign-in never cached, always sets its cookie, a refusal explained and logged;
+     `CSRF_TRUSTED_ORIGINS` in `.env`
+   - [x] 13 statuses: FAIL (academic, readmitted), Discontinued (disciplinary, back as new), Absconded
+     (back after two years as new), Suspended (place kept, no exams, ends by itself), Deceased,
+     Terminated (never again); postponed > 2 years and Level 5 finishers back as new — one-time
+     charges again, same ID. Postpone & Finish ▸ Student status.
+   - [x] Migrations 0071–0073; 1102 tests; every new screen checked in the browser
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

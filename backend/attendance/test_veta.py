@@ -87,7 +87,7 @@ class VetaBase(TestCase):
     def through_the_desks(self, intake, name='Neema Juma', residence='day'):
         app = self.apply(intake, name)
         self.admission.post(f'/api/course-applications/{app}/clear/', {}, format='json')
-        saved = self.records.post(f'/api/course-applications/{app}/details/', {'gender': 'F',
+        saved = self.records.post(f'/api/course-applications/{app}/details/', {'gender': 'F', 'fee_payer': 'family',
             'phone': '0712000000', 'next_of_kin': [
                 {'name': 'Mama Juma', 'phone': '0713000000', 'relationship': 'parent'}]}, format='json')
         self.assertEqual(saved.status_code, 200, saved.data)
@@ -190,7 +190,7 @@ class TheFourDesksTests(VetaBase):
         _, intake = self.course_with_fees()
         app = self.apply(intake)
         self.admission.post(f'/api/course-applications/{app}/clear/', {}, format='json')
-        self.records.post(f'/api/course-applications/{app}/details/', {'gender': 'F',
+        self.records.post(f'/api/course-applications/{app}/details/', {'gender': 'F', 'fee_payer': 'family',
             'next_of_kin': [{'name': 'Baba', 'phone': '07', 'relationship': 'parent'}]}, format='json')
         self.records.post(f'/api/course-applications/{app}/clear/', {}, format='json')
         refused = self.accountant.post(f'/api/course-applications/{app}/clear/', {}, format='json')
@@ -206,7 +206,7 @@ class TheFourDesksTests(VetaBase):
         self.assertEqual(self.records.post(f'/api/course-applications/{app}/clear/', {},
                                            format='json').status_code, 404)
         self.admission.post(f'/api/course-applications/{app}/clear/', {}, format='json')
-        self.records.post(f'/api/course-applications/{app}/details/', {'gender': 'F',
+        self.records.post(f'/api/course-applications/{app}/details/', {'gender': 'F', 'fee_payer': 'family',
             'next_of_kin': [{'name': 'Baba', 'phone': '07', 'relationship': 'parent'}]}, format='json')
         self.records.post(f'/api/course-applications/{app}/clear/', {}, format='json')
         self.assertEqual(CourseApplication.objects.get(id=app).state, 'finance')
@@ -242,7 +242,7 @@ class TheFourDesksTests(VetaBase):
         _, intake = self.course_with_fees()
         app = self.apply(intake)
         self.admission.post(f'/api/course-applications/{app}/clear/', {}, format='json')
-        self.records.post(f'/api/course-applications/{app}/details/', {'gender': 'F',
+        self.records.post(f'/api/course-applications/{app}/details/', {'gender': 'F', 'fee_payer': 'family',
             'next_of_kin': [{'name': 'Baba', 'phone': '07', 'relationship': 'parent'}]}, format='json')
         self.records.post(f'/api/course-applications/{app}/clear/', {}, format='json')
         self.accountant.post(f'/api/course-applications/{app}/fees/', {'residence': 'day'}, format='json')
@@ -318,6 +318,48 @@ class TheIdFormatTests(VetaBase):
         pst = Programme.objects.create(department=self.department, name='Pharm', code='PST')
         fmt.veta_pattern = '{COLLEGE}/VETA/{PROG}/{YY}/{SEQ}'
         self.assertEqual(fmt.render(7, pst), 'BPH/PST/2026/007')
+
+    def test_veta_card_numbers_are_a_series_of_their_own(self):
+        # Said 19 October 2026: a VETA student's identity card number differs from
+        # a PST student's, and runs on its own counter.
+        from . import admissions
+        from .models import StudentProfile
+        course = Programme.objects.get(id=self.define_course().data['id'])
+        pst = Programme.objects.create(department=self.department, name='Pharm', code='PST')
+        def issue(reg, programme):
+            profile = StudentProfile.objects.create(nactvet_reg_no=reg, name=reg)
+            return admissions.issue_college_id(profile, self.year, programme)
+        computer = Programme.objects.create(department=self.department, name='Computer basics', code='CB',
+                                            structure='short', duration_months=3)
+        self.assertEqual(issue('P1', pst), 'BPH/PST/2026/001')
+        self.assertEqual(issue('V1', course), 'BPH/VETA/HCT/26/001')
+        self.assertEqual(issue('P2', pst), 'BPH/PST/2026/002')
+        self.assertEqual(issue('V2', course), 'BPH/VETA/HCT/26/002')
+        # Each VETA course counts on its own (said 19 October 2026).
+        self.assertEqual(issue('C1', computer), 'BPH/VETA/CB/26/001')
+        self.assertEqual(issue('V3', course), 'BPH/VETA/HCT/26/003')
+
+    def test_the_veta_pattern_carries_into_the_next_year(self):
+        from . import admissions
+        nxt = AcademicYear.objects.create(name='2027/2028')
+        fmt = admissions.id_format_for(nxt)
+        self.assertEqual(fmt.veta_pattern, '{COLLEGE}/VETA/{PROG}/{YY}/{SEQ}')
+        self.assertEqual(fmt.next_number, 1)
+        self.assertFalse(fmt.counters.exists())
+
+    def test_the_veta_pattern_must_differ_and_starts_where_the_office_says(self):
+        fmt = CollegeIdFormat.objects.get(academic_year=self.year)
+        self.define_course()
+        same = self.admission.patch(f'/api/college-id-formats/{fmt.id}/',
+                                    {'veta_pattern': '{COLLEGE}/{PROG}/{YEAR}/{SEQ}'}, format='json')
+        self.assertEqual(same.status_code, 400)
+        without_code = self.admission.patch(f'/api/college-id-formats/{fmt.id}/',
+                                            {'veta_pattern': '{COLLEGE}/VETA/{YY}/{SEQ}'}, format='json')
+        self.assertEqual(without_code.status_code, 400)        # each course needs its own code
+        saved = self.admission.patch(f'/api/college-id-formats/{fmt.id}/', {'veta_starts_at': 500}, format='json')
+        self.assertEqual(saved.status_code, 200, saved.data)
+        self.assertEqual(saved.data['veta_example'], 'BPH/VETA/HCT/26/500')
+        self.assertEqual(saved.data['veta_counters'], [{'programme': 'HCT', 'next': 'BPH/VETA/HCT/26/500'}])
 
 
 class TheCosmetologyFormTests(VetaBase):

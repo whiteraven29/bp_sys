@@ -1080,14 +1080,23 @@ class AttendanceSecurityTests(TestCase):
 
     def test_authenticated_user_can_change_own_password(self):
         self.client.force_login(self.teacher)
+        weak = self.client.post('/api/change-password/', {
+            'current_password': 'safe-password', 'new_password': 'new-safe-password'}, format='json')
+        self.assertEqual(weak.status_code, 400)      # staff follow the password rule too (19 Oct 2026)
         response = self.client.post('/api/change-password/', {
             'current_password': 'safe-password',
-            'new_password': 'new-safe-password',
+            'new_password': 'New-Safe-2026!',
         }, format='json')
 
         self.assertEqual(response.status_code, 200)
         self.teacher.refresh_from_db()
-        self.assertTrue(self.teacher.check_password('new-safe-password'))
+        self.assertTrue(self.teacher.check_password('New-Safe-2026!'))
+
+    def test_a_weak_staff_password_is_changed_at_the_next_sign_in(self):
+        from . import passwords
+        self.client.post(reverse('login'), {'identifier': self.teacher.username, 'secret': 'safe-password'})
+        self.assertTrue(passwords.status_for(self.teacher).must_change)
+        self.assertRedirects(self.client.get('/'), reverse('password-change'), fetch_redirect_response=False)
 
     def test_student_can_change_pin_for_all_enrollments(self):
         second_enrollment = Student.objects.create(
@@ -1521,7 +1530,7 @@ class AuditFixRegressionTests(TestCase):
             f"{reverse('login')}?next=https://evil.example.com/phish",
             {'identifier': self.teacher.username, 'secret': 'safe-password'},
         )
-        self.assertRedirects(response, reverse('frontend'))
+        self.assertRedirects(response, reverse('frontend'), fetch_redirect_response=False)
 
     def test_login_next_param_honours_a_safe_local_url(self):
         response = self.client.post(
@@ -1586,12 +1595,13 @@ class AuditFixRegressionTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertNotIn(self.other_teacher, self.module.teachers.all())
 
-    def test_claiming_an_unclaimed_module_still_works(self):
+    def test_a_tutor_no_longer_claims_a_module(self):
+        # Said 19 October 2026: the HOD, DPARC or the Principal gives modules out.
         TeacherProfile.objects.get_or_create(user=self.other_teacher, defaults={'full_name': 'Other'})
         self.client.force_authenticate(self.other_teacher)
         response = self.client.post(f'/api/modules/{self.other_module.id}/claim/')
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(self.other_teacher, self.other_module.teachers.all())
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn(self.other_teacher, self.other_module.teachers.all())
 
     def test_only_a_tutor_claims_a_module(self):
         # Another office (here, no tutor role at all) would gain a class list

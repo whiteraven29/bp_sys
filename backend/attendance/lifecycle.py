@@ -219,6 +219,7 @@ def standing_banner(profile):
     standing = getattr(profile, 'standing', None)
     if standing is None:
         return None
+    standing = lift_suspension_if_over(standing)
     owed = list(profile.outstanding_repeats.filter(status=OutstandingRepeat.OPEN).values_list('module_code', flat=True))
     back = ''
     if standing.return_semester_number:
@@ -238,9 +239,19 @@ def standing_banner(profile):
                 'text': 'Repeating ' + ', '.join(sorted(owed)) if owed else 'Repeating'}
     if status == StudentStanding.POSTPONED:
         return {'tone': 'blue', 'status': status, 'text': 'Postponed' + (f' — due back: {back}' if back else '')}
+    if status == StudentStanding.FAILED:
+        return {'tone': 'red', 'status': status,
+                'text': 'FAIL' + (f' — readmission to {back}' if back else ' — you may be readmitted')}
     if status == StudentStanding.DISCONTINUED:
         return {'tone': 'red', 'status': status,
-                'text': 'Discontinued' + (f' — readmission to {back}' if back else '')}
+                'text': 'Discontinued by the Principal — you may apply again as a new student'}
+    if status == StudentStanding.SUSPENDED:
+        return {'tone': 'red', 'status': status,
+                'text': 'Suspended' + (f' until {standing.until:%d %B %Y}' if standing.until else '')
+                        + ' — no classes or examinations until then'}
+    if status == StudentStanding.ABSCONDED:
+        return {'tone': 'red', 'status': status,
+                'text': f'Absconded — you may return as a new student from {may_return_from(standing):%d %B %Y}'}
     if status == StudentStanding.COMPLETED:
         clearance = CompletionClearance.objects.filter(profile=profile).first()
         waiting = 'the Principal\'s declaration' if clearance and clearance.finance_cleared_at \
@@ -252,6 +263,103 @@ def standing_banner(profile):
         return {'tone': 'blue', 'status': status,
                 'text': 'You did not report' + (f' — you may return: {back}' if back else '')}
     return None
+
+
+# ── statuses recorded by hand (said 19 October 2026) ──────────────────────────
+#
+# Deceased and absconded (ABS) are recorded by records or admission;
+# suspension, termination and a disciplinary discontinuation are the
+# Principal's decision, and DPARC is told. Each takes a reason and a date.
+
+#: How long an absconded or postponed student may stay away; after it a
+#: postponed student, and from it an absconded one, comes back as new.
+AWAY_YEARS = 2
+
+
+def years_after(day, years):
+    try:
+        return day.replace(year=day.year + years)
+    except ValueError:                          # 29 February
+        return day.replace(year=day.year + years, day=28)
+
+
+def may_return_from(standing):
+    """The day an absconded student may come back."""
+    return years_after(standing.since or timezone.localdate(), AWAY_YEARS)
+
+
+def lift_suspension_if_over(standing):
+    """A suspension ends by itself on its end date: the student studies again."""
+    if (standing.status == StudentStanding.SUSPENDED and standing.until
+            and standing.until < timezone.localdate()):
+        return progression.set_standing(
+            standing.profile, StudentStanding.ACTIVE, reason=f'Suspension ended {standing.until}.')
+    return standing
+
+
+def is_suspended(profile):
+    standing = StudentStanding.objects.filter(profile=profile).first()   # never a stale copy
+    if standing is None or standing.status != StudentStanding.SUSPENDED:
+        return False
+    return lift_suspension_if_over(standing).status == StudentStanding.SUSPENDED
+
+
+@transaction.atomic
+def record_status(profile, status, *, actor=None, reason='', on_date=None, until=None):
+    """Write down that a student has died, absconded, been suspended,
+    terminated or discontinued.
+
+    Deceased, absconded, terminated and discontinued take the student off the
+    class from now — the current and later registrations cancelled, their
+    modules withdrawn (marks kept), open applications cancelled. Nothing is
+    deleted and no fee is reversed: the accountant decides. A suspension keeps
+    the place and the fees; the student cannot sit an examination until it
+    ends, and it ends by itself.
+    """
+    from .models import Semester
+    if status not in StudentStanding.RECORDED_BY_HAND:
+        raise LifecycleError('Deceased, absconded, suspended, terminated or discontinued.')
+    reason = (reason or '').strip()
+    if not reason:
+        raise LifecycleError('Say why — it stays on the student\'s record.')
+    on_date = on_date or timezone.localdate()
+    if on_date > timezone.localdate():
+        raise LifecycleError('The date cannot be in the future.')
+    if status == StudentStanding.SUSPENDED and (until is None or until <= on_date):
+        raise LifecycleError('A suspension needs the date it ends, after it starts.')
+    standing = progression.standing_for(profile)
+    if standing.status in StudentStanding.NEVER_ADMITTED:
+        raise LifecycleError(f'{profile.name} is already recorded as {standing.get_status_display().lower()}.')
+
+    label = dict(StudentStanding.STATUS_CHOICES)[status].split(' —')[0]
+    text = f'{label} ({on_date}): {reason}'
+    if status != StudentStanding.SUSPENDED:
+        active = Semester.objects.filter(is_active=True).select_related('academic_year').first()
+        later = SemesterRegistration.objects.filter(profile=profile).exclude(
+            status=SemesterRegistration.CANCELLED).select_related('semester__academic_year')
+        for registration in later:
+            sem = registration.semester
+            if active is None or (sem.academic_year.name, sem.number) >= (active.academic_year.name, active.number):
+                registration.status = SemesterRegistration.CANCELLED
+                registration.cancelled_reason = text[:300]
+                registration.save(update_fields=['status', 'cancelled_reason'])
+                progression.withdraw_enrollments(profile, sem, reason=text)
+        Application.objects.filter(profile=profile, state__in=sorted(Application.OPEN_STATES)).update(
+            state=Application.CANCELLED, decided_reason=text[:300])
+    standing = progression.set_standing(profile, status, actor=actor, reason=text, note=text,
+                                        since=on_date, until=until)
+    if status in StudentStanding.PRINCIPAL_DECIDES or status == StudentStanding.DECEASED:
+        notifications.notify(notifications.principal_and_dparc(), profile=None,
+                             kind=Notification.STATUS_RECORDED,
+                             title=f'{profile.name}: {label.lower()}',
+                             body=text[:300], link='status:standing')
+    logger.info('%s recorded as %s by %s', profile.nactvet_reg_no, status, getattr(actor, 'username', None))
+    return standing
+
+
+def hand_recorded_statuses():
+    return (StudentStanding.objects.filter(status__in=sorted(StudentStanding.RECORDED_BY_HAND))
+            .select_related('profile', 'class_level', 'programme').order_by('-since', 'profile__name'))
 
 
 # ── finishing after Level 5 ───────────────────────────────────────────────────

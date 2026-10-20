@@ -1865,21 +1865,51 @@ class CollegeIdFormatSerializer(serializers.ModelSerializer):
     class Meta:
         model = CollegeIdFormat
         fields = ['id', 'academic_year', 'academic_year_name', 'pattern', 'veta_pattern', 'college_code',
-                  'starts_at', 'next_number', 'sequence_width', 'example', 'veta_example', 'updated_at']
+                  'starts_at', 'next_number', 'veta_starts_at', 'sequence_width',
+                  'example', 'veta_example', 'veta_counters', 'updated_at']
         read_only_fields = ['id', 'updated_at']
 
     veta_example = serializers.SerializerMethodField()
+    veta_counters = serializers.SerializerMethodField()
+
+    def get_veta_counters(self, obj):
+        """Each VETA programme's next card number this year."""
+        if not obj.veta_pattern:
+            return []
+        taken = {c.programme_id: c.next_number for c in obj.counters.all()}
+        return [{'programme': course.code, 'next': obj.render(max(taken.get(course.id, 1), obj.veta_starts_at), course)}
+                for course in Programme.objects.filter(is_active=True).exclude(structure=Programme.SEMESTER)
+                .order_by('code')]
 
     def get_veta_example(self, obj):
         """The next number as a VETA course student would get it."""
         course = Programme.objects.filter(is_active=True).exclude(
             structure=Programme.SEMESTER).order_by('code').first()
-        return obj.render(obj.next_number, course) if course else ''
+        if not course:
+            return ''
+        if obj.veta_series(course):
+            counter = obj.counters.filter(programme=course).first()
+            number = max(counter.next_number if counter else 1, obj.veta_starts_at)
+        else:
+            number = obj.next_number
+        return obj.render(number, course)
+
+    def validate(self, attrs):
+        pattern = attrs.get('pattern', getattr(self.instance, 'pattern', ''))
+        veta = attrs.get('veta_pattern', getattr(self.instance, 'veta_pattern', ''))
+        if veta and veta.strip().upper() == (pattern or '').strip().upper():
+            raise serializers.ValidationError({'veta_pattern': 'Make the VETA pattern different from the one '
+                                               'above (e.g. {COLLEGE}/VETA/{PROG}/{YY}/{SEQ}) — or leave it blank.'})
+        return attrs
 
     def validate_veta_pattern(self, value):
         value = (value or '').strip()
         if value and '{SEQ}' not in value:
             raise serializers.ValidationError('The VETA pattern needs {SEQ} too.')
+        if value and '{PROG}' not in value:
+            # Each VETA programme counts from 001 on its own: without its code
+            # two programmes' cards would carry the same number.
+            raise serializers.ValidationError('The VETA pattern needs {PROG}: each course numbers its own cards.')
         return value
 
     def validate_pattern(self, value):
@@ -1897,7 +1927,7 @@ class AdmissionRequirementSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdmissionRequirement
         fields = ['id', 'name', 'description', 'kind', 'kind_display', 'charge_type', 'charge_type_name',
-                  'frequency', 'quantity', 'value_label', 'applies_to_levels', 'level_names', 'mandatory',
+                  'frequency', 'quantity', 'value_label', 'applies_to', 'applies_to_levels', 'level_names', 'mandatory',
                   'is_active', 'created_at']
         read_only_fields = ['id', 'created_at']
 
@@ -1984,28 +2014,13 @@ class ApplicationSerializer(serializers.ModelSerializer):
 
     def get_details(self, obj):
         """Who the student is, as records took it down — read by every desk."""
-        from .admissions import typed_items
+        from .views import profile_details
+        details = profile_details(obj.profile)
         profile = obj.profile
-        return {
-            'name': profile.name, 'phone': profile.phone, 'gender': profile.gender,
-            'gender_display': profile.get_gender_display() if profile.gender else '',
-            'form_four_index': profile.form_four_index,
-            'date_of_birth': profile.date_of_birth,
-            'next_of_kin': [{'position': kin.position, 'name': kin.name, 'phone': kin.phone,
-                             'relationship': kin.relationship,
-                             'relationship_display': kin.get_relationship_display()}
-                            for kin in profile.next_of_kin.all()],
-            'address': profile.address, 'sponsor_name': profile.sponsor_name,
-            'sponsor_phone': profile.sponsor_phone,
-            'education': [{'level': row.level, 'level_display': row.get_level_display(),
-                           'institution': row.institution, 'start_year': row.start_year,
-                           'end_year': row.end_year, 'index_number': row.index_number}
-                          for row in profile.education.all()],
-            'typed_items': typed_items(profile),
-            'passport_url': (f'/api/student-records/{profile.id}/passport/?v='
-                             f'{int(profile.passport_updated_at.timestamp()) if profile.passport_updated_at else 0}'
-                             if profile.passport else ''),
-        }
+        details['passport_url'] = (f'/api/student-records/{profile.id}/passport/?v='
+                                   f'{int(profile.passport_updated_at.timestamp()) if profile.passport_updated_at else 0}'
+                                   if profile.passport else '')
+        return details
 
     def get_missing_details(self, obj):
         from .admissions import missing_details

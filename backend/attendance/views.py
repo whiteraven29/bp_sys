@@ -17,7 +17,9 @@ from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidd
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
 from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework import mixins, viewsets, status
@@ -101,6 +103,16 @@ STUDENT_PASSWORD_MESSAGE = (
     'Password must be at least 8 characters and include an uppercase letter, '
     'a lowercase letter, a number, and a symbol.'
 )
+
+
+PASSWORD_RULE_MESSAGE = STUDENT_PASSWORD_MESSAGE
+
+
+def password_is_strong(password):
+    """The college's password rule, for staff and students alike (said
+    19 October 2026): 8 characters or more, an uppercase and a lowercase
+    letter, a number and a symbol."""
+    return student_password_is_strong(password)
 
 
 def student_password_is_strong(password):
@@ -443,7 +455,41 @@ def _student_scope_for_request(request):
 
 # ── AUTH VIEWS ─────────────────────────────────────────────────────────────────
 
+def csrf_failure(request, reason=''):
+    """A form refused for its security token — a page open too long, or a
+    sign-in page restored from Chrome's cache. Said plainly, with the way back,
+    and logged with what decides the cause (said 19 October 2026: staff saw
+    Django's bare "CSRF cookie not set")."""
+    from django.http import JsonResponse
+    security_log.warning('CSRF refused %s %s: %s (cookie %s, origin %r, referer %r, host %r, https %s)',
+                         request.method, request.path, reason,
+                         'sent' if request.COOKIES.get('csrftoken') else 'missing',
+                         request.META.get('HTTP_ORIGIN'), request.META.get('HTTP_REFERER'),
+                         request.get_host(), request.is_secure())
+    message = 'This page had been open too long or was reloaded from the browser. Reload it and try again.'
+    if request.path.startswith('/api/'):
+        return JsonResponse({'detail': message, 'csrf': True}, status=403)
+    if request.path.startswith('/login'):
+        return redirect('/login/?csrf=1')
+    return render(request, 'login.html', {'error': message}, status=403)
+
+
+def keep_alive(request):
+    """The page saying its user is still working in it (IdleTimeoutMiddleware
+    has already counted the request as use). POST only, with the CSRF token."""
+    from django.http import HttpResponseNotAllowed, JsonResponse
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    signed_in = bool(request.user.is_authenticated or request.session.get('student_id')
+                     or request.session.get('course_profile_id'))
+    return JsonResponse({'ok': signed_in}, status=200 if signed_in else 401)
+
+
+@never_cache
+@ensure_csrf_cookie
 def login_view(request):
+    # Never from the browser's cache (a sign-in page restored by Chrome carried
+    # a stale form and answered "CSRF cookie not set"), always with the cookie.
     if request.user.is_authenticated:
         return redirect('frontend')
     error = None
@@ -451,6 +497,10 @@ def login_view(request):
     if request.GET.get('expired'):
         error = ('Your password expired and the time to change it has passed. '
                  'See the administrator for a reset.')
+    elif request.GET.get('idle'):
+        error = 'You were signed out after 5 minutes without use. Sign in again.'
+    elif request.GET.get('csrf'):
+        error = 'That page had been open too long. Sign in again.'
 
     if request.method == 'POST':
         identifier = str(request.POST.get('identifier', '')).strip()
@@ -471,6 +521,11 @@ def login_view(request):
         if user is not None:
             passwords.clear_sign_in_failures(identifier)
             login(request, user)
+            # Staff move to the college's password rule (said 19 October 2026):
+            # one whose password falls short changes it now, once — the
+            # six-month clock is untouched until they do.
+            if not password_is_strong(secret):
+                passwords.require_change(user)
             next_url = request.GET.get('next', '')
             if next_url and url_has_allowed_host_and_scheme(
                 next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
@@ -507,7 +562,7 @@ def login_view(request):
             # A student who has been cleared and archived has finished with the
             # college. Their records stay — results, payments, the statement the
             # accountant printed — and the portal is where it stops.
-            error = ('Your studies are complete and your portal has been closed. '
+            error = ('Your portal has been closed. '
                      'The college keeps your records — contact the office if you need them.')
         else:
             reading = passwords.student_reading(student)
@@ -526,6 +581,7 @@ def login_view(request):
     return render(request, 'login.html', {'error': error, 'identifier': identifier})
 
 
+@never_cache
 @login_required
 def password_change_page(request):
     """Where a member of staff whose password has expired is sent.
@@ -596,7 +652,7 @@ def student_logout_view(request):
     # Invalidate the complete server-side session and rotate the cookie. Merely
     # removing the student keys would leave the old session identifier reusable.
     request.session.flush()
-    return redirect('login')
+    return redirect('/login/?idle=1' if request.GET.get('idle') else '/login/')
 
 
 @api_view(['POST'])
@@ -605,10 +661,13 @@ def change_password(request):
     new_password = str(request.data.get('new_password', '')).strip()
 
     if request.user.is_authenticated:
-        if len(new_password) < 6:
-            return Response({'detail': 'New password must be at least 6 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not password_is_strong(new_password):
+            return Response({'detail': PASSWORD_RULE_MESSAGE}, status=status.HTTP_400_BAD_REQUEST)
         if not request.user.check_password(current_password):
             return Response({'detail': 'Current password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
+        if current_password == new_password:
+            return Response({'detail': 'Choose a password different from the one you have now.'},
+                            status=status.HTTP_400_BAD_REQUEST)
         request.user.set_password(new_password)
         request.user.save(update_fields=['password'])
         passwords.mark_changed(request.user)
@@ -753,7 +812,7 @@ def _result_statements(modules, class_level):
         statement['failed'] = sorted(set(decision['failed'] + decision['failed_again']
                                          + decision['discontinued']))
         if remark == progression.DISCO:
-            remark, comment = 'DISCO', ', '.join(sorted(set(
+            remark, comment = 'FAIL', ', '.join(sorted(set(
                 decision['failed_again'] + decision['discontinued'] + decision['failed']
                 + decision['supp']))) or 'GPA below 2.0'
         elif remark == progression.REPEAT:
@@ -800,12 +859,14 @@ def _student_record_for_portal(profile):
         ],
         'missing': admissions.missing_details(profile),
         'address': profile.address, 'sponsor_name': profile.sponsor_name, 'sponsor_phone': profile.sponsor_phone,
+        'fee_payer_display': profile.get_fee_payer_display() if profile.fee_payer else '',
         'education': _education_rows(profile),
         'typed_items': admissions.typed_items(profile),
         'passport_url': f'/api/my-passport/?v={int(profile.passport_updated_at.timestamp()) if profile.passport_updated_at else 0}' if profile.passport else '',
     }
 
 
+@never_cache
 def course_portal(request):
     """The portal for a VETA course student: their course and intake, what they
     owe and have paid, the course's modules, and their details. A skeleton to
@@ -844,6 +905,7 @@ def course_portal(request):
     })
 
 
+@never_cache
 @student_login_required
 def student_dashboard(request):
     student = get_logged_student(request)
@@ -1234,7 +1296,7 @@ def student_dashboard(request):
 def logout_view(request):
     # Django logout flushes the complete session and rotates the session cookie.
     logout(request)
-    return redirect('login')
+    return redirect('/login/?idle=1' if request.GET.get('idle') else '/login/')
 
 
 def register_view(request):
@@ -1391,6 +1453,17 @@ def set_roles(user, roles, *, full_name=None, actor=None):
     return user
 
 
+def hod_only_departments(user):
+    """The departments a Head of Department sees the staff of — None for an
+    office that sees every account (the Principal, DPARC, the ICT officer).
+    Said 19 October 2026: an HOD sees no accounts, only the staff DPARC or the
+    Principal put in their department."""
+    if (is_principal(user) or is_dparc(user) or is_break_glass(user) or can_manage_accounts(user)
+            or not is_head_of_department(user)):
+        return None
+    return list(Department.objects.filter(hod=user))
+
+
 def staff_account_row(user):
     held = roles_for(user)
     return {
@@ -1490,6 +1563,9 @@ def create_staff_account(request):
             holds_one |= Q(**{f'{name}__isnull': False})
         users = (User.objects.filter(holds_one).distinct()
                  .prefetch_related('modules_taught').order_by('username'))
+        departments = hod_only_departments(request.user)
+        if departments is not None:
+            users = users.filter(departments__in=departments).exclude(is_superuser=True).distinct()
 
         return Response([staff_account_row(user) for user in users])
 
@@ -1560,7 +1636,9 @@ def executive_finance(request):
             or active_academic_year())
     if year is None:
         return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
-    return Response(finance.executive_summary(year))
+    return Response(finance.executive_summary(
+        year, department_id=pk_or_none(request.query_params.get('department_id')),
+        programme_id=pk_or_none(request.query_params.get('programme_id'))))
 
 
 @api_view(['POST'])
@@ -1817,6 +1895,20 @@ def set_staff_modules(request, user_id):
 
     module_ids = request.data.get('module_ids') or []
     modules = Module.objects.filter(id__in=module_ids)
+    departments = hod_only_departments(request.user)
+    if departments is not None:
+        # A Head of Department gives their own department's modules to their
+        # own department's staff — nobody else's.
+        if not user.departments.filter(pk__in=[d.pk for d in departments]).exists():
+            return Response({'detail': 'This member of staff is not in your department.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        outside = modules.exclude(programme__department__in=departments)
+        if outside.exists():
+            return Response({'detail': 'Only your department\'s modules: ' + ', '.join(m.code for m in outside)},
+                            status=status.HTTP_403_FORBIDDEN)
+        # Modules from other departments the tutor already teaches stay theirs.
+        keep = user.modules_taught.exclude(programme__department__in=departments)
+        modules = Module.objects.filter(pk__in=[m.pk for m in modules] + [m.pk for m in keep])
     user.modules_taught.set(modules)
     return Response({
         'detail': f'Updated modules for {user.profile.full_name}.',
@@ -2321,8 +2413,41 @@ def _record_details_from(request, profile):
         sponsor_name=data.get('sponsor_name'),
         sponsor_phone=data.get('sponsor_phone'),
         education=data.get('education') if isinstance(data.get('education'), list) else None,
+        fee_payer=data.get('fee_payer'), birth_year=data.get('birth_year'),
+        birth_place=data.get('birth_place'), religion=data.get('religion'),
+        education_level=data.get('education_level'),
+        has_chronic_condition=data.get('has_chronic_condition') if 'has_chronic_condition' in data else None,
+        health_declaration=data.get('health_declaration'),
+        reason=str(data.get('reason') or ''),
         actor=request.user,
     )
+
+
+def profile_details(profile):
+    """The details records keeps, as every desk's form reads them."""
+    return {
+        'name': profile.name, 'phone': profile.phone, 'gender': profile.gender,
+        'gender_display': profile.get_gender_display() if profile.gender else '',
+        'date_of_birth': profile.date_of_birth, 'form_four_index': profile.form_four_index,
+        'birth_year': profile.birth_year, 'birth_place': profile.birth_place, 'religion': profile.religion,
+        'education_level': profile.education_level, 'fee_payer': profile.fee_payer,
+        'fee_payer_display': profile.get_fee_payer_display() if profile.fee_payer else '',
+        'has_chronic_condition': {True: 'yes', False: 'no'}.get(profile.has_chronic_condition, ''),
+        'health_declaration': profile.health_declaration,
+        'address': profile.address, 'sponsor_name': profile.sponsor_name, 'sponsor_phone': profile.sponsor_phone,
+        'next_of_kin': [{'position': kin.position, 'name': kin.name, 'phone': kin.phone,
+                         'relationship': kin.relationship, 'address': kin.address,
+                         'relationship_display': kin.get_relationship_display()}
+                        for kin in profile.next_of_kin.all()],
+        'education': _education_rows(profile),
+        'typed_items': admissions.typed_items(profile),
+    }
+
+
+def detail_changes(profile, limit=50):
+    return [{'field': c.field, 'old': c.old_value, 'new': c.new_value, 'reason': c.reason,
+             'by': full_name_for(c.changed_by) if c.changed_by_id else '', 'at': c.changed_at}
+            for c in profile.detail_changes.select_related('changed_by')[:limit]]
 
 
 def _student_record_payload(profile):
@@ -2335,8 +2460,13 @@ def _student_record_payload(profile):
         'standing': standing.get_status_display() if standing else 'No standing recorded',
         'class_level': standing.class_level.name if standing and standing.class_level_id else '',
         'next_of_kin': [{'position': kin.position, 'name': kin.name, 'phone': kin.phone,
-                         'relationship': kin.relationship} for kin in profile.next_of_kin.all()],
+                         'relationship': kin.relationship, 'address': kin.address}
+                        for kin in profile.next_of_kin.all()],
         'missing': admissions.missing_details(profile),
+        **{key: value for key, value in profile_details(profile).items()
+           if key in ('birth_year', 'birth_place', 'religion', 'education_level', 'fee_payer', 'fee_payer_display',
+                      'has_chronic_condition', 'health_declaration')},
+        'changes': detail_changes(profile),
         'documents': StudentDocument.objects.filter(profile=profile).count(),
         'address': profile.address, 'sponsor_name': profile.sponsor_name, 'sponsor_phone': profile.sponsor_phone,
         'education': _education_rows(profile),
@@ -3065,6 +3195,56 @@ def release_results(request, pk):
 
 
 # ── POSTPONEMENT AND FINISHING ─────────────────────────────────────────────────
+
+def can_record_status(user, status):
+    """Deceased and absconded: records, admission or the Principal. A
+    suspension, a termination or a disciplinary discontinuation: the Principal
+    (said 19 October 2026)."""
+    if is_principal(user) or is_break_glass(user):
+        return True
+    if status in StudentStanding.PRINCIPAL_DECIDES:
+        return False
+    return is_records_officer(user) or is_admission_officer(user)
+
+
+def _status_row(standing):
+    from datetime import date as _date
+    row = {
+        'profile_id': standing.profile_id, 'reg_no': standing.profile.nactvet_reg_no,
+        'college_id': standing.profile.college_id or '', 'name': standing.profile.name,
+        'status': standing.status, 'status_display': standing.get_status_display(),
+        'since': standing.since, 'until': standing.until, 'note': standing.note,
+        'class_level': standing.class_level.name if standing.class_level_id else '',
+    }
+    if standing.status == StudentStanding.ABSCONDED:
+        row['may_return_from'] = lifecycle.may_return_from(standing)
+    return row
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def student_statuses(request):
+    """Deceased, absconded, suspended, terminated, discontinued: the list, and
+    recording one (lifecycle.record_status)."""
+    user = request.user
+    if not (can_record_status(user, StudentStanding.DECEASED) or is_dparc(user) or is_dean(user)):
+        raise PermissionDenied('For records, admission, the Principal, DPARC and the Dean.')
+    if request.method == 'GET':
+        return Response([_status_row(s) for s in lifecycle.hand_recorded_statuses()[:500]])
+    status_wanted = str(request.data.get('status') or '')
+    if not can_record_status(user, status_wanted):
+        raise PermissionDenied('Only the Principal suspends, terminates or discontinues a student.')
+    profile = get_object_or_404(StudentProfile, pk=pk_or_none(request.data.get('profile_id')))
+    try:
+        on_date = parse_date(str(request.data.get('on_date') or '')) if request.data.get('on_date') else None
+        until = parse_date(str(request.data.get('until') or '')) if request.data.get('until') else None
+        standing = lifecycle.record_status(profile, status_wanted, actor=user,
+                                           reason=str(request.data.get('reason') or ''),
+                                           on_date=on_date, until=until)
+    except (lifecycle.LifecycleError, ValueError) as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(_status_row(standing), status=status.HTTP_201_CREATED)
+
 
 def can_enter_postponement(user):
     """Records writes down a paper request; the Principal may too."""
@@ -3997,12 +4177,11 @@ class ModuleViewSet(viewsets.ModelViewSet):
         # yet. Once a module has a tutor, moving/adding tutors is an admin
         # action — otherwise any teacher account could grant themselves access
         # to another module's students, attendance and CA marks at will.
-        # Claiming is for tutors: any other office (the accountant, estate,
-        # the secretary) would otherwise gain a class list and its CA marks.
-        if not (runs_departments(request.user) or TeacherProfile.objects.filter(user=request.user).exists()):
-            raise PermissionDenied('Only a tutor can claim a module.')
-        if not runs_departments(request.user) and m.teachers.exists() and not m.teachers.filter(pk=request.user.pk).exists():
-            raise PermissionDenied('This module already has a tutor. Ask the administrator to add you.')
+        # Said 19 October 2026: tutors no longer pick their own modules. The
+        # Head of Department gives them out (to their department's staff), as
+        # do DPARC and the Principal — under Staff ▸ the tutor's modules.
+        if not runs_departments(request.user):
+            raise PermissionDenied('Your Head of Department, DPARC or the Principal gives out modules.')
         m.teachers.add(request.user)
         return Response({'detail': f'Claimed: {m.name}'})
 
@@ -4012,6 +4191,8 @@ class ModuleViewSet(viewsets.ModelViewSet):
             m = Module.objects.get(pk=pk)
         except Module.DoesNotExist:
             return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not runs_departments(request.user):
+            raise PermissionDenied('Your Head of Department, DPARC or the Principal gives out modules.')
         m.teachers.remove(request.user)
         return Response({'detail': f'Unclaimed: {m.name}'})
 
@@ -5554,6 +5735,9 @@ def ca_eligibility_for_student(student):
     total_ca, eligible, note = _ca_eligibility(student)
     if eligible and student.profile_id and progression.is_provisional(student.profile):
         return total_ca, False, 'Provisional place: the results of the level before are not settled yet'
+    # Suspended (said 19 October 2026): no examination until the suspension ends.
+    if eligible and student.profile_id and lifecycle.is_suspended(student.profile):
+        return total_ca, False, f'Suspended until {student.profile.standing.until}'
     return total_ca, eligible, note
 
 
@@ -8075,6 +8259,20 @@ def finance_students(request):
         )
 
     rows = _finance_rows(profiles, year, semester)
+    # Department and programme, for income kept apart (said 19 October 2026).
+    where = finance.programme_by_profile([r['profile_id'] for r in rows])
+    for row in rows:
+        programme = where.get(row['profile_id'])
+        row.update({'programme_id': programme.id if programme else None,
+                    'programme_code': programme.code if programme else '',
+                    'department_id': programme.department_id if programme else None,
+                    'department': programme.department.name if programme else ''})
+    department_id = pk_or_none(request.query_params.get('department_id'))
+    programme_id = pk_or_none(request.query_params.get('programme_id'))
+    if department_id:
+        rows = [r for r in rows if r['department_id'] == department_id]
+    if programme_id:
+        rows = [r for r in rows if r['programme_id'] == programme_id]
 
     level_id = request.query_params.get('class_level_id')
     if level_id:
@@ -8489,10 +8687,24 @@ def finance_collections(request):
         .prefetch_related('allocations__charge__charge_type')
         .order_by('-payment_date', '-created_at')
     )
+    # Department and programme (said 19 October 2026): what came in for each.
+    where = finance.programme_by_profile(set(payments.values_list('profile_id', flat=True)))
+    department_id = pk_or_none(request.query_params.get('department_id'))
+    programme_id = pk_or_none(request.query_params.get('programme_id'))
+    if department_id or programme_id:
+        keep = [pid for pid, programme in where.items()
+                if (not programme_id or programme.id == programme_id)
+                and (not department_id or programme.department_id == department_id)]
+        payments = payments.filter(profile_id__in=keep)
 
-    by_channel, by_family = {}, {}
+    by_channel, by_family, by_department, by_programme = {}, {}, {}, {}
     for payment in payments:
         by_channel[payment.channel] = by_channel.get(payment.channel, Decimal('0.00')) + payment.amount
+        programme = where.get(payment.profile_id)
+        department = programme.department.name if programme else 'Not recorded'
+        code = programme.code if programme else 'Not recorded'
+        by_department[department] = by_department.get(department, Decimal('0.00')) + payment.amount
+        by_programme[code] = by_programme.get(code, Decimal('0.00')) + payment.amount
         for allocation in payment.allocations.all():
             family = allocation.charge.charge_type.get_family_display()
             by_family[family] = by_family.get(family, Decimal('0.00')) + allocation.amount
@@ -8506,6 +8718,8 @@ def finance_collections(request):
         'missing_efd': payments.filter(efd_receipt_no='', reverses__isnull=True).count(),
         'by_channel': {k: str(v) for k, v in by_channel.items()},
         'by_family': {k: str(v) for k, v in by_family.items()},
+        'by_department': {k: str(v) for k, v in sorted(by_department.items())},
+        'by_programme': {k: str(v) for k, v in sorted(by_programme.items())},
         'payments': PaymentSerializer(payments, many=True).data,
     })
 

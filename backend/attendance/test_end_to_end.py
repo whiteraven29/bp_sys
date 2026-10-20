@@ -145,6 +145,7 @@ class FirstYearEndToEndTests(TestCase):
         self.ok(self.records.post(f'/api/applications/{app_id}/details/', {
             'phone': '0712000111', 'gender': 'F', 'date_of_birth': '2006-04-12',
             'form_four_index': 'S0101/0001/2025',
+            'fee_payer': 'family',
             'next_of_kin': [{'name': 'Mama Mtui', 'phone': '0713000222', 'relationship': 'parent'},
                             {'name': 'Baba Mtui', 'phone': '0714000333', 'relationship': 'parent'}],
         }, format='json'))

@@ -803,3 +803,49 @@ Level 5 depends on your Level 4 results."
 *In the system:* Admissions ▸ Did not report, from three months after the window's opening day: *Still expected* or *Did not report* (place and fees called off, standing "did not report", may return in a later year). Reminders stay as portal notifications; no SMS.
 
 *Also decided 18 October 2026, from the paper Student Enrolment Form:* the address, guarantor / sponsor and the schools before are now kept, with a passport photo; the name stays one field (First Middle Surname) and the declarations and signatures stay on paper.
+
+## O. Student statuses and the first day of use (19–20 October 2026)
+
+All answered; recorded here so the reasons stay with the rules.
+
+### Q53. Who records a status? ✅
+
+**Answer:** "Principal decides all (recommended)" — records or admission may enter *Deceased* and
+*Absconded (ABS)*; *Suspended*, *Terminated* and *Discontinued* (cheating, misconduct, per NACTVET's
+guidelines) are the Principal's decision, DPARC told. Each needs a reason and a date.
+
+*In the system:* Postpone & Finish ▸ Student status (`lifecycle.record_status`).
+
+### Q54. Failing academically ✅
+
+**Answer:** "a student failing their subjects due to GPA or failing a repeated module they are given
+FAIL status not discontinue, and so they can be readmitted."
+
+*In the system:* standing FAIL (readmission as before); existing academic discontinuations became
+FAIL at migration 0072. *Discontinued* is now only the Principal's disciplinary decision.
+
+### Q55. Coming back ✅
+
+**Answers:** a postponement may not run past two years — after it they are new; an absconded (ABS)
+student may return after two years; a disciplinary discontinuation comes back as a new applicant and
+keeps the old college ID; a Level 5 finisher comes back as new with one-time fees again. "As new":
+"As new, keep ID, one-time fees".
+
+*In the system:* `admissions.returns_as_new` — the application is made *First year* whatever kind
+the desk chose, the reason written on it; the one-time charges are billed again; the same record and
+college ID.
+
+### Q56. Suspension and termination ✅
+
+**Answers:** a suspension is for a defined period — "Place kept, fees stand (recommended)": no
+classes or examinations until it ends, then they carry on by themselves. Termination: "can never be
+admitted again in this college". A deceased student is recorded at admission.
+
+### Q57. The rest of the first day ✅
+
+VETA card numbers counted per course ("own counter per programme"); the VETA admission form's
+details kept; income filtered by department and programme; VETA items checked before admission (no
+code typed); next of kin and who pays compulsory in both PST and VETA; corrections logged; invoices
+from the application window; the HOD sees only their department's staff; tutors no longer claim
+modules; five minutes without use signs out; staff passwords to the students' rule ("all staff will
+reset to a new rule"); the CSRF error on Chrome explained, logged and prevented where it can be.

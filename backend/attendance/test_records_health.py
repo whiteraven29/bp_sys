@@ -95,7 +95,7 @@ class FormFourIndexTests(RecordsBase):
         admissions.complete_step(application, actor=self.officer)           # intake → records
         with self.assertRaisesMessage(admissions.AdmissionError, 'Form Four index number'):
             admissions.complete_step(application, actor=self.officer)
-        admissions.record_details(newcomer, form_four_index=next_index(), actor=self.officer)
+        admissions.record_details(newcomer, fee_payer='family', form_four_index=next_index(), actor=self.officer)
         self.assertEqual(admissions.complete_step(application, actor=self.officer).state,
                          Application.FINANCE)
 
@@ -113,7 +113,7 @@ class FormFourIndexTests(RecordsBase):
                                        starts_on=date(2026, 10, 19), ends_on=date(2027, 1, 19))
         person = StudentProfile.objects.create(nactvet_reg_no='VETA/TEMP/1', name='Kinyozi', phone='07')
         CourseApplication.objects.create(profile=person, intake=intake)
-        self.assertEqual(admissions.missing_details(person), ['gender', 'next of kin'])
+        self.assertEqual(admissions.missing_details(person), ['gender', 'next of kin', 'who pays the fees'])
 
 
 class HealthRecordTests(RecordsBase):

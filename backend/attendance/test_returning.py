@@ -23,7 +23,7 @@ from .models import (
     AcademicYear, Application, ChargeType, FeeStructure, OutstandingRepeat, Semester,
     SemesterRegistration, SemesterReview, Student, StudentCharge, StudentProfile, StudentStanding,
 )
-from .test_admissions import AdmissionBase, User
+from .test_admissions import AdmissionBase, User, complete_record
 from .views import set_roles
 
 
@@ -68,7 +68,7 @@ class ReturningBase(AdmissionBase):
 
     def take_back(self, kind):
         """What admission does from the Expected-back list."""
-        profile = StudentProfile.objects.get(nactvet_reg_no='NS0099/0001/2024')
+        profile = complete_record(StudentProfile.objects.get(nactvet_reg_no='NS0099/0001/2024'))
         application = admissions.open_application(
             profile=profile, semester=self.sem1, programme=self.pst, class_level=self.level4,
             kind=kind, actor=self.officer)
@@ -125,7 +125,7 @@ class ReadmissionTests(ReturningBase):
         self.assertTrue(self.record(kind='readmission').data['results'][0]['ok'])
         due = admissions.due_back(self.sem1)
         self.assertEqual([(s.profile.nactvet_reg_no, s.status) for s in due],
-                         [('NS0099/0001/2024', StudentStanding.DISCONTINUED)])
+                         [('NS0099/0001/2024', StudentStanding.FAILED)])
 
         profile, application = self.take_back(Application.READMISSION)
         billed = set(StudentCharge.objects.filter(profile=profile).values_list('charge_type__name', flat=True))

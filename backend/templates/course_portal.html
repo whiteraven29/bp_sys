@@ -152,5 +152,28 @@
   </section>
   {% endif %}
 </main>
+<script>
+// Five minutes without use signs the page out (said 19 October 2026). The
+// server is the rule (IdleTimeoutMiddleware); this tells it the person is
+// still working while they type, and leaves the page when they are not.
+(function () {
+  const limit = {{ IDLE_SECONDS|default:300 }} * 1000;
+  const leave = '/student-logout/?idle=1';
+  let lastUse = Date.now(), lastPing = Date.now();
+  const used = () => { lastUse = Date.now(); };
+  ['mousedown', 'keydown', 'touchstart', 'wheel', 'input'].forEach(name =>
+    document.addEventListener(name, used, { passive: true, capture: true }));
+  const token = () => { const m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/); return m ? decodeURIComponent(m[1]) : ''; };
+  setInterval(() => {
+    const now = Date.now();
+    if (now - lastUse > limit) { location.href = leave; return; }
+    if (lastUse > lastPing && now - lastPing > 60000) {
+      lastPing = now;
+      fetch('/keep-alive/', { method: 'POST', headers: { 'X-CSRFToken': token() }, credentials: 'same-origin' })
+        .then(r => { if (r.status === 401) location.href = '/login/?idle=1'; }).catch(() => {});
+    }
+  }, 10000);
+})();
+</script>
 </body>
 </html>

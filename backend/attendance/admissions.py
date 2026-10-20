@@ -88,9 +88,10 @@ def id_format_for(academic_year):
     return CollegeIdFormat.objects.create(
         academic_year=academic_year,
         pattern=previous.pattern if previous else '{COLLEGE}/{PROG}/{YEAR}/{SEQ}',
+        veta_pattern=previous.veta_pattern if previous else '',
         college_code=previous.college_code if previous else 'BPH',
         sequence_width=previous.sequence_width if previous else 3,
-        starts_at=1, next_number=1,
+        starts_at=1, next_number=1, veta_starts_at=1,
     )
 
 
@@ -107,7 +108,17 @@ def issue_college_id(profile, academic_year, programme):
 
     fmt = CollegeIdFormat.objects.select_for_update().get(
         pk=id_format_for(academic_year).pk)
-    number = max(fmt.next_number, fmt.starts_at)
+    # A VETA course student is numbered in the VETA series when the office has
+    # set its pattern: a different card number, a counter of its own.
+    veta = fmt.veta_series(programme)
+    if veta:
+        # Each VETA programme counts on its own (hair dressing 001…, computer basics 001…).
+        from .models import CollegeIdCounter
+        counter, _ = CollegeIdCounter.objects.select_for_update().get_or_create(
+            id_format=fmt, programme=programme, defaults={'next_number': fmt.veta_starts_at})
+        number = max(counter.next_number, fmt.veta_starts_at)
+    else:
+        number = max(fmt.next_number, fmt.starts_at)
     for _ in range(1000):
         candidate = fmt.render(number, programme)
         if not StudentProfile.objects.filter(college_id=candidate).exists():
@@ -118,8 +129,12 @@ def issue_college_id(profile, academic_year, programme):
 
     profile.college_id = candidate
     profile.save(update_fields=['college_id'])
-    fmt.next_number = number + 1
-    fmt.save(update_fields=['next_number', 'updated_at'])
+    if veta:
+        counter.next_number = number + 1
+        counter.save(update_fields=['next_number'])
+    else:
+        fmt.next_number = number + 1
+        fmt.save(update_fields=['next_number', 'updated_at'])
     logger.info('Issued college ID %s to %s', candidate, profile.nactvet_reg_no)
     return candidate
 
@@ -248,16 +263,44 @@ def is_veta_only(profile):
             and not Student.objects.filter(profile=profile).exists())
 
 
+def details_snapshot(profile):
+    """Every detail records keeps, in words — compared before and after a save
+    so each correction is written down (StudentDetailChange)."""
+    snap = {
+        'Name': profile.name, 'Phone': profile.phone, 'Gender': profile.get_gender_display() if profile.gender else '',
+        'Date of birth': str(profile.date_of_birth or ''), 'Year of birth': str(profile.birth_year or ''),
+        'Place of birth': profile.birth_place, 'Religion': profile.religion,
+        'Education level now': profile.education_level, 'Form Four index': profile.form_four_index,
+        'Address': profile.address, 'Fees paid by': profile.get_fee_payer_display() if profile.fee_payer else '',
+        'Guarantor / sponsor': profile.sponsor_name, "Sponsor's phone": profile.sponsor_phone,
+        'Long-term health problem': {True: 'Yes', False: 'No'}.get(profile.has_chronic_condition, ''),
+        'Health declared': profile.health_declaration,
+    }
+    for kin in profile.next_of_kin.all():
+        snap[f'Next of kin {kin.position}'] = ' · '.join(
+            part for part in (kin.name, kin.get_relationship_display(), kin.phone, kin.address) if part)
+    for row in profile.education.all():
+        snap[row.get_level_display()] = ' · '.join(
+            str(part) for part in (row.institution, row.start_year, row.end_year, row.index_number) if part)
+    return snap
+
+
 @transaction.atomic
 def record_details(profile, *, name=None, phone=None, gender=None, date_of_birth=None,
                    next_of_kin=None, form_four_index=None, address=None, sponsor_name=None,
-                   sponsor_phone=None, education=None, actor=None):
+                   sponsor_phone=None, education=None, fee_payer=None, birth_year=None,
+                   birth_place=None, religion=None, education_level=None, has_chronic_condition=None,
+                   health_declaration=None, reason='', actor=None):
     """The records desk writes down who the student is.
 
-    Name, phone, gender, date of birth, the Form Four index number and two next
-    of kin — kept by records, read by finance and admission. Only what is given
-    is changed; a next of kin left blank is left as it was.
+    Name, phone, gender, date of birth, the Form Four index number, two next
+    of kin, who pays the fees, and the admission form's other details — kept
+    by records, read by finance and admission. Only what is given is changed;
+    a next of kin left blank is left as it was. Every change is written down
+    with what it was before (StudentDetailChange).
     """
+    from django.utils import timezone as _tz
+    before = details_snapshot(profile)
     fields = []
     if form_four_index is not None:
         profile.form_four_index = clean_form_four_index(form_four_index, profile)
@@ -272,10 +315,34 @@ def record_details(profile, *, name=None, phone=None, gender=None, date_of_birth
         profile.gender = gender; fields.append('gender')
     if date_of_birth is not None:
         profile.date_of_birth = date_of_birth or None; fields.append('date_of_birth')
+    if fee_payer is not None:
+        if fee_payer not in ('', *dict(StudentProfile.FEE_PAYER_CHOICES)):
+            raise AdmissionError('Who pays the fees: parents / guardian, a sponsor or the student.')
+        profile.fee_payer = fee_payer; fields.append('fee_payer')
+    if birth_year is not None:
+        if birth_year in ('', 0):
+            profile.birth_year = None
+        else:
+            try:
+                year = int(birth_year)
+            except (TypeError, ValueError):
+                raise AdmissionError('Year of birth: a year, e.g. 1999.')
+            if not 1930 <= year <= _tz.localdate().year:
+                raise AdmissionError(f'Year of birth: {year} is not a year of birth.')
+            profile.birth_year = year
+        fields.append('birth_year')
+    if has_chronic_condition is not None:
+        profile.has_chronic_condition = {'yes': True, 'no': False, True: True, False: False}.get(
+            has_chronic_condition, None)
+        fields.append('has_chronic_condition')
     for field, value, limit in (('address', address, 300), ('sponsor_name', sponsor_name, 200),
-                                ('sponsor_phone', sponsor_phone, 30)):
+                                ('sponsor_phone', sponsor_phone, 30), ('birth_place', birth_place, 120),
+                                ('religion', religion, 60), ('education_level', education_level, 120),
+                                ('health_declaration', health_declaration, 300)):
         if value is not None:
             setattr(profile, field, str(value).strip()[:limit]); fields.append(field)
+    if profile.fee_payer == StudentProfile.PAID_BY_SPONSOR and not profile.sponsor_name.strip():
+        raise AdmissionError('A sponsor pays: name the sponsor.')
     if fields:
         profile.save(update_fields=fields)
         # Enrollments carry a copy of the name for the class lists.
@@ -291,11 +358,20 @@ def record_details(profile, *, name=None, phone=None, gender=None, date_of_birth
         NextOfKin.objects.update_or_create(
             profile=profile, position=position,
             defaults={'name': kin['name'].strip(), 'phone': (kin.get('phone') or '').strip(),
-                      'relationship': relationship},
+                      'relationship': relationship, 'address': (kin.get('address') or '').strip()[:200]},
         )
     for row in education or []:
         record_education(profile, **{key: row.get(key) for key in
                                      ('level', 'institution', 'start_year', 'end_year', 'index_number')})
+
+    after = details_snapshot(profile)
+    from .models import StudentDetailChange
+    StudentDetailChange.objects.bulk_create([
+        StudentDetailChange(profile=profile, field=label, old_value=str(before.get(label, ''))[:300],
+                            new_value=str(after.get(label, ''))[:300], reason=(reason or '').strip()[:200],
+                            changed_by=actor if getattr(actor, 'is_authenticated', False) else None)
+        for label in sorted(set(before) | set(after))
+        if (before.get(label) or '') != (after.get(label) or '')])
     logger.info('Details recorded for %s', profile.nactvet_reg_no)
     return profile
 
@@ -385,6 +461,8 @@ def missing_details(profile):
             missing.append('gender')
         if not profile.next_of_kin.exists():
             missing.append('next of kin')
+        if not profile.fee_payer:
+            missing.append('who pays the fees')
         return missing
     missing = []
     if not profile.phone:
@@ -397,13 +475,79 @@ def missing_details(profile):
         missing.append('Form Four index number')
     if profile.next_of_kin.count() < 2:
         missing.append('next of kin')
+    if not profile.fee_payer:
+        missing.append('who pays the fees')
     return missing
+
+
+def compulsory_missing(profile):
+    """What no student passes the records desk without (said 19 October 2026),
+    continuing students included: a next of kin, and who pays the fees."""
+    missing = []
+    if not profile.next_of_kin.exists():
+        missing.append('next of kin')
+    if not profile.fee_payer:
+        missing.append('who pays the fees')
+    return missing
+
+
+def returns_as_new(profile, *, today=None):
+    """Why a student already on file is taken back as a new student — or
+    None. Raises AdmissionError for one who may not be admitted (said
+    19 October 2026):
+
+      deceased, terminated            never admitted again
+      suspended                       still the college's: back when it ends
+      absconded (ABS)                 not before two years; then as new
+      discontinued (disciplinary)     as new
+      postponed more than two years   as new
+      finished after Level 5          as new (for Level 6, in any later year)
+
+    "As new": the first year's route and its one-time charges, on the same
+    record and the same college ID.
+    """
+    from . import lifecycle
+    standing = getattr(profile, 'standing', None)
+    if standing is None:
+        return None
+    today = today or timezone.localdate()
+    status = standing.status
+    if status in StudentStanding.NEVER_ADMITTED:
+        raise AdmissionError(f'{profile.name} is recorded as {standing.get_status_display().lower()} '
+                             f'and cannot be admitted.')
+    if status == StudentStanding.SUSPENDED:
+        standing = lifecycle.lift_suspension_if_over(standing)
+        if standing.status == StudentStanding.SUSPENDED:
+            raise AdmissionError(f'{profile.name} is suspended until {standing.until}; they carry on '
+                                 f'by themselves when it ends.')
+        return None
+    if status == StudentStanding.ABSCONDED:
+        back = lifecycle.may_return_from(standing)
+        if today < back:
+            raise AdmissionError(f'{profile.name} absconded on {standing.since}: they may come back '
+                                 f'from {back}, as a new student.')
+        return 'absconded more than two years ago'
+    if status == StudentStanding.DISCONTINUED:
+        return 'discontinued by the Principal'
+    if status == StudentStanding.POSTPONED and standing.since and \
+            today > lifecycle.years_after(standing.since, lifecycle.AWAY_YEARS):
+        return 'postponed more than two years ago'
+    if status in (StudentStanding.COMPLETED, StudentStanding.ARCHIVED) and standing.class_level_id \
+            and standing.class_level.order in lifecycle.EXIT_LEVELS:
+        return 'finished after Level 5'
+    return None
 
 
 @transaction.atomic
 def open_application(*, profile, semester, programme, class_level, kind,
                      returning_to=None, actor=None, note='', ignore_window=False):
     """Start one student's admission at the first desk of its route."""
+    why_new = returns_as_new(profile)
+    if why_new and kind != Application.NEW:
+        # They come back as a new student — the first year's route and charges
+        # — whatever kind the desk chose; the reason goes on the application.
+        kind = Application.NEW
+        note = f'Taken back as new: {why_new}. {note}'.strip()
     if not ignore_window and not admissions_are_open(semester):
         raise AdmissionError(
             f'Admissions are not open for {semester}. The admission officer opens the '
@@ -560,11 +704,17 @@ def _raise_charges(application, *, actor=None):
         finance.carry_residence(application.profile, year, actor=actor,
                                 class_level=application.class_level, programme=application.programme)
     try:
+        fresh = False
+        if application.kind == Application.NEW:
+            try:
+                fresh = returns_as_new(application.profile) is not None
+            except AdmissionError:
+                fresh = False
         created = finance.generate_charges(
             application.profile, year, actor=actor,
             class_level=application.class_level, programme=application.programme,
             entry=entry_of(application),
-            readmitted=application.kind == Application.READMISSION)
+            readmitted=application.kind == Application.READMISSION, fresh=fresh)
     except ValueError as exc:
         # No due dates set on the fee structure yet. The application still
         # stands; the accountant's bulk run catches it up.
@@ -716,6 +866,10 @@ def complete_step(application, *, actor=None, note=''):
         if missing:
             raise AdmissionError(
                 'Records has not finished this student: ' + ', '.join(missing) + ' still to record.')
+    if step == Application.RECORDS:
+        missing = compulsory_missing(application.profile)
+        if missing:
+            raise AdmissionError('Records still needs: ' + ', '.join(missing) + '.')
     # The one thing that holds a student: not having paid. Judged by the
     # college's own clearance rule on the charges marked "blocks registration",
     # the same rule every other screen uses — and the accountant's override
@@ -850,6 +1004,8 @@ def items_due(profile, semester, class_level, *, requirements=None, history=None
     if requirements is None:
         requirements = list(AdmissionRequirement.objects.filter(is_active=True)
                             .prefetch_related('applies_to_levels'))
+    # VETA courses have their own items, checked on their course application.
+    requirements = [r for r in requirements if r.applies_to != AdmissionRequirement.FOR_VETA]
     if history is None:
         history = list(RequirementCheck.objects.filter(profile=profile).exclude(semester=semester)
                        .select_related('semester'))
@@ -1265,7 +1421,7 @@ def record_returning_student(*, reg_no, name, programme, class_level, kind, retu
             profile.college_id = college_id[:40]
             profile.save(update_fields=['college_id'])
 
-    status = {'readmission': StudentStanding.DISCONTINUED, 'repeat': StudentStanding.REPEATING,
+    status = {'readmission': StudentStanding.FAILED, 'repeat': StudentStanding.REPEATING,
               'postponed': StudentStanding.POSTPONED}[kind]
     reason = f'From the paper record: {reference}'
     owed = []

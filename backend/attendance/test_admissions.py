@@ -39,6 +39,18 @@ def next_index():
     return f'S0101/{next(_FORM_FOUR):04d}/2025'
 
 
+def complete_record(profile):
+    """What no student passes records without (said 19 October 2026): a next
+    of kin and who pays the fees. For test students the rest of a test is about."""
+    if not profile.fee_payer:
+        profile.fee_payer = StudentProfile.PAID_BY_FAMILY
+        profile.save(update_fields=['fee_payer'])
+    if not profile.next_of_kin.exists():
+        NextOfKin.objects.create(profile=profile, position=1, name='Mzazi', phone='0713000000',
+                                 relationship=NextOfKin.PARENT)
+    return profile
+
+
 class AdmissionBase(TestCase):
     def setUp(self):
         self.year = AcademicYear.objects.create(name='2026/2027', is_active=True)
@@ -79,12 +91,12 @@ class AdmissionBase(TestCase):
         return charge_type
 
     def applicant(self, reg_no='NACTVET/PENDING/001', name='Rehema Mtui'):
-        return admissions.capture_student(
+        return complete_record(admissions.capture_student(
             nactvet_reg_no=reg_no, name=name, phone='0712000111', gender='F',
             date_of_birth=date(2006, 4, 12), actor=self.officer, form_four_index=next_index(),
             next_of_kin=[{'name': 'Mama Mtui', 'phone': '0713000222', 'relationship': 'parent'},
                          {'name': 'Baba Mtui', 'phone': '0714000333', 'relationship': 'parent'}],
-        )
+        ))
 
 
 # ── the route each kind takes ─────────────────────────────────────────────────
@@ -430,7 +442,7 @@ class DueBackTests(AdmissionBase):
 
         profile = self.applicant('NIT/PST/2025/010', 'Came Back')
         progression.set_standing(
-            profile, StudentStanding.DISCONTINUED, actor=self.officer,
+            profile, StudentStanding.FAILED, actor=self.officer,
             class_level=self.level4, programme=self.pst,
             return_year=self.year, return_semester_number=1)
 
@@ -445,7 +457,7 @@ class DueBackTests(AdmissionBase):
 
         profile = self.applicant('NIT/PST/2025/011', 'Already Applied')
         progression.set_standing(
-            profile, StudentStanding.DISCONTINUED, actor=self.officer,
+            profile, StudentStanding.FAILED, actor=self.officer,
             class_level=self.level4, programme=self.pst,
             return_year=self.year, return_semester_number=1)
         admissions.open_application(
@@ -498,6 +510,7 @@ class AdmissionApiTests(AdmissionBase):
             'date_of_birth': '2006-04-12', 'form_four_index': next_index(),
             'next_of_kin': [{'name': 'Mama Mtui', 'phone': '0713000222', 'relationship': 'parent'},
                             {'name': 'Baba Mtui', 'phone': '0714000333', 'relationship': 'parent'}],
+            'fee_payer': 'family',
         }, format='json')
         self.assertEqual(response.status_code, 200, response.data)
         return response
@@ -651,7 +664,7 @@ class AdmissionApiTests(AdmissionBase):
 
         returning = self.applicant('NIT/PST/2025/077', 'Coming Back')
         progression.set_standing(
-            returning, StudentStanding.DISCONTINUED, actor=self.admin,
+            returning, StudentStanding.FAILED, actor=self.admin,
             class_level=self.level4, programme=self.pst,
             return_year=self.year, return_semester_number=1)
 
@@ -1090,6 +1103,7 @@ class OfficeBoundaryTests(OfficeClients):
         self.admission.post(f'/api/applications/{application_id}/complete/', {}, format='json')
 
         saved = self.records.post(f'/api/applications/{application_id}/details/', {
+            'fee_payer': 'family',
             'phone': '0715000100', 'gender': 'M', 'date_of_birth': '2005-11-02',
             'form_four_index': 's0101 0777 2024',
             'next_of_kin': [{'name': 'Mama Laizer', 'phone': '0715000101', 'relationship': 'parent'},
@@ -1119,7 +1133,7 @@ class OfficeBoundaryTests(OfficeClients):
     def test_finance_sees_a_first_year_is_billed_full_fees(self):
         application_id = self.open_first_year()
         application = Application.objects.get(pk=application_id)
-        admissions.record_details(application.profile, phone='0715000100', gender='M',
+        admissions.record_details(application.profile, fee_payer='family', phone='0715000100', gender='M',
                                   date_of_birth=date(2005, 11, 2), actor=self.officer,
                                   form_four_index=next_index(),
                                   next_of_kin=[{'name': 'A', 'phone': '1', 'relationship': 'parent'},
@@ -1294,8 +1308,9 @@ class ContinuingHoldTests(AdmissionBase):
             billing_period=FeeStructure.ACADEMIC_YEAR, installments=1)
         finance.set_installment_schedule(structure, [_date.today() - timedelta(days=1)])
         # A continuing student the college already has — details incomplete.
-        self.student = StudentProfile.objects.create(nactvet_reg_no='NIT/PST/2025/0400',
-                                                     name='Continuing Student')
+        # Only what no student passes records without (19 Oct 2026); the rest incomplete.
+        self.student = complete_record(StudentProfile.objects.create(nactvet_reg_no='NIT/PST/2025/0400',
+                                                                     name='Continuing Student'))
         self.application = admissions.open_application(
             profile=self.student, semester=self.sem1, programme=self.pst,
             class_level=self.level5, kind=Application.CONTINUING, actor=self.officer)
@@ -1358,8 +1373,7 @@ class OfficeVisibilityTests(OfficeClients):
         admissions.complete_step(self.at_records_desk, actor=self.officer)   # → information
 
         self.at_finance = Application.objects.get(pk=self.open_first_year())
-        admissions.record_details(
-            self.at_finance.profile, phone='0715000100', gender='F',
+        admissions.record_details(self.at_finance.profile, fee_payer='family', phone='0715000100', gender='F',
             date_of_birth=date(2006, 1, 5), actor=self.officer, form_four_index=next_index(),
             next_of_kin=[{'name': 'A', 'phone': '1', 'relationship': 'parent'},
                          {'name': 'B', 'phone': '2', 'relationship': 'parent'}])
@@ -1401,8 +1415,8 @@ class OfficeVisibilityTests(OfficeClients):
         self.assertEqual(self.records.get('/api/applications/due-back/').status_code, 403)
 
     def test_records_finds_a_continuing_student_but_not_a_first_year_elsewhere(self):
-        continuing = StudentProfile.objects.create(nactvet_reg_no='NIT/PST/2025/0900',
-                                                   name='Finance Continuing')
+        continuing = complete_record(StudentProfile.objects.create(nactvet_reg_no='NIT/PST/2025/0900',
+                                                   name='Finance Continuing'))
         Student.objects.create(nactvet_reg_no=continuing.nactvet_reg_no, name=continuing.name,
                                profile=continuing, module=self.module('PST04199', self.level4, self.sem1))
         admissions.open_application(profile=continuing, semester=self.sem1, programme=self.pst,
@@ -1433,7 +1447,7 @@ class QueueContinuingTests(OfficeClients):
         self.undecided = self.last_years_student('NIT/PST/2025/0002', 'Undecided Two', None)
 
     def last_years_student(self, reg_no, name, outcome):
-        profile = StudentProfile.objects.create(nactvet_reg_no=reg_no, name=name)
+        profile = complete_record(StudentProfile.objects.create(nactvet_reg_no=reg_no, name=name))
         SemesterRegistration.objects.create(profile=profile, semester=self.last_sem2,
                                             programme=self.pst, class_level=self.level4,
                                             kind=SemesterRegistration.CONTINUING)
@@ -1588,8 +1602,8 @@ class ItemsTests(OfficeClients):
             name='Insurance', charge_type=self.medical,
             frequency=AdmissionRequirement.EVERY_YEAR)
 
-        self.student = StudentProfile.objects.create(nactvet_reg_no='NIT/PST/2025/0500',
-                                                     name='Items Student')
+        self.student = complete_record(StudentProfile.objects.create(nactvet_reg_no='NIT/PST/2025/0500',
+                                                                     name='Items Student'))
         self.application = admissions.open_application(
             profile=self.student, semester=self.sem1, programme=self.pst,
             class_level=self.level5, kind=Application.CONTINUING, actor=self.officer)

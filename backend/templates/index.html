@@ -538,7 +538,6 @@
   .row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
 
   /* Profile modules grid */
-  .claim-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 10px; }
   .claim-item {
     display: flex; align-items: center; gap: 8px;
     padding: 9px 11px; border-radius: var(--radius); border: 1px solid var(--border);
@@ -837,7 +836,7 @@
         <option value="mine">My modules only</option>
       </select>
     </label>
-    <div class="user-chip" onclick="openProfileModal()" title="My modules">
+    <div class="user-chip" onclick="openProfileModal()" title="My profile and password">
       <div class="user-avatar" id="user-avatar"><i class="bi bi-person"></i></div>
       <span class="uname" id="user-name">Me</span>
       <span class="role-badge" id="role-badge">—</span>
@@ -880,12 +879,13 @@
         <button class="nav-sub-btn" data-health-nav data-roles="dean principal records" onclick="showHealthSection(this)">Health records</button>
       </div>
     </div>
-    <div class="nav-group" id="status-nav-group" data-roles="principal dparc records finance dean">
+    <div class="nav-group" id="status-nav-group" data-roles="principal dparc records finance dean admission">
       <button class="nav-btn" data-page="status" onclick="toggleStatusMenu(event)"><span class="icon"><i class="bi bi-hourglass-split"></i></span> Postpone &amp; Finish <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-status-section="postpone" data-roles="principal dparc records dean" onclick="showStatusSection('postpone', this)">Postponements</button>
         <button class="nav-sub-btn" data-status-section="exits" data-roles="principal dparc dean records" onclick="showStatusSection('exits', this)">Finishing after Level 5</button>
         <button class="nav-sub-btn" data-status-section="finish" data-roles="principal finance" onclick="showStatusSection('finish', this)">Finishing</button>
+        <button class="nav-sub-btn" data-status-section="standing" data-roles="principal dparc records admission dean" onclick="showStatusSection('standing', this)">Student status</button>
       </div>
     </div>
     <button class="nav-btn" data-page="veta-courses" data-roles="coordinator principal dparc" onclick="showPage('veta-courses',this); loadVetaCourses()"><span class="icon"><i class="bi bi-scissors"></i></span> VETA Courses</button>
@@ -1051,7 +1051,7 @@
         <span style="font-size:1.2rem;flex-shrink:0;">ℹ️</span>
         <div>
           <strong style="color:var(--text);">Tutor access</strong> — You can take attendance for your assigned modules and view attendance reports.
-          Contact the administrator to add/remove modules, enrol or remove students, or manage eligibility lists.
+          Your Head of Department gives you your modules; DPARC or the Principal can too. Enrolling students and eligibility lists are theirs as well.
         </div>
       </div>
 
@@ -1177,6 +1177,7 @@
         </div>
         <div id="rec-editor-form"></div>
         <button class="btn btn-primary btn-sm" onclick="saveRecord(event)">Save details</button>
+        <div id="rec-editor-history"></div>
         <div class="block-title" style="margin-top:18px;">Documents</div>
         <div id="rec-editor-docs"></div>
         <div class="block-title" style="margin-top:18px;">Health
@@ -1212,7 +1213,7 @@
           <div class="field"><label>College ID No.</label><input id="ret-college-id" maxlength="40" placeholder="as on their college ID card"></div>
           <div class="field"><label>They are *</label>
             <select id="ret-kind" onchange="onReturningKindChange()">
-              <option value="readmission">Readmission — discontinued last year</option>
+              <option value="readmission">Readmission — FAIL last year</option>
               <option value="repeat">Repeating failed modules</option>
               <option value="postponed">Back from a postponement</option></select></div>
           <div class="field"><label>Programme *</label><select id="ret-programme"></select></div>
@@ -1407,6 +1408,35 @@
         </table></div>
       </div>
 
+      <div class="card" data-status-section="standing" data-roles="principal dparc records admission dean">
+        <div class="card-title">Record a status <span class="tip" tabindex="0" role="note" aria-label="Help: student status" data-tip="Deceased and absconded (ABS): records or admission records them. Suspended, terminated and discontinued (cheating, misconduct — NACTVET's guidelines): the Principal decides, and DPARC is told. Deceased, absconded, terminated and discontinued take the student off the class from now (marks kept, nothing deleted; fees are the accountant's). A suspension keeps the place and the fees, stops examinations, and ends by itself. Absconded students may come back only after two years, as new; discontinued, as new; deceased and terminated never.">?</span></div>
+        <div class="form-grid-3">
+          <div class="field"><label>Student *</label><input id="st-search" placeholder="Name or number" oninput="scheduleStatusSearch()"></div>
+          <div class="field" style="grid-column:span 2;"><label>Found</label><select id="st-profile"><option value="">— search first —</option></select></div>
+        </div>
+        <div class="form-grid-3">
+          <div class="field"><label>Status *</label>
+            <select id="st-status" onchange="onStatusKindChange()">
+              <option value="deceased">Deceased</option>
+              <option value="absconded">Absconded (ABS)</option>
+              <option value="suspended" data-principal="1">Suspended — the Principal</option>
+              <option value="terminated" data-principal="1">Terminated — the Principal</option>
+              <option value="discontinued" data-principal="1">Discontinued (disciplinary) — the Principal</option>
+            </select></div>
+          <div class="field"><label>Date *</label><input type="date" id="st-date"></div>
+          <div class="field" id="st-until-wrap" style="display:none;"><label>Suspended until *</label><input type="date" id="st-until"></div>
+        </div>
+        <div class="field"><label>Reason * <span style="font-weight:400;color:var(--muted)">(kept on the record — the letter, the case)</span></label><input id="st-reason" maxlength="250"></div>
+        <button class="btn btn-danger btn-sm" onclick="recordStudentStatus(event)">Record the status</button>
+      </div>
+      <div class="card" data-status-section="standing" data-roles="principal dparc records admission dean">
+        <div class="card-title">Recorded</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Reg. No.</th><th>Name</th><th>Status</th><th>Since</th><th>Until / may return</th><th>Why</th></tr></thead>
+          <tbody id="st-tbody"></tbody>
+        </table></div>
+      </div>
+
       <div class="card" data-status-section="finish" data-roles="principal finance">
         <div class="card-title">Finishing students <span class="tip" tabindex="0" role="note" aria-label="Help: finishing" data-tip="Students who finished level 6. Finance prints the statement of every year and clears them when nothing is owed; the Principal then declares them cleared, which archives them — the portal closes, the record stays.">?</span></div>
         <div class="table-wrap">
@@ -1426,6 +1456,8 @@
       <div class="card">
         <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
           <div class="field" style="max-width:220px;margin:0;"><label>Academic year</label><select id="exec-year" onchange="loadExecutiveFinance()"></select></div>
+          <div class="field" style="max-width:220px;margin:0;"><label>Department</label><select id="exec-dept" onchange="onScopeDepartment('exec'); loadExecutiveFinance()"><option value="">All departments</option></select></div>
+          <div class="field" style="max-width:220px;margin:0;"><label>Programme</label><select id="exec-prog" onchange="loadExecutiveFinance()"><option value="">All programmes</option></select></div>
         </div>
         <div class="quick-facts" id="exec-totals"></div>
       </div>
@@ -1450,6 +1482,14 @@
           <div class="card-title"><i class="bi bi-bar-chart-steps"></i> Paid and owed, by kind of fee</div>
           <div class="inventory-chart-wrap"><canvas id="exec-family-chart"></canvas></div>
         </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">By department</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Department</th><th>Students</th><th>Billed</th><th>Waived</th><th>Paid</th><th>Outstanding</th></tr></thead>
+          <tbody id="exec-department-tbody"></tbody>
+        </table></div>
       </div>
 
       <div class="dash-grid">
@@ -1842,25 +1882,35 @@
           <div class="field"><label>Looks like</label><input id="adm-id-example" readonly></div>
         </div>
         <div class="form-grid-3">
-          <div class="field" style="grid-column:span 2;"><label>Pattern for VETA courses <span class="tip" tabindex="0" role="note" aria-label="Help: VETA pattern" data-tip="The same pieces and the same counter. Leave it blank to number VETA students like everybody else.">?</span></label><input id="adm-id-veta-pattern" placeholder="blank: as above — e.g. {COLLEGE}/VETA/{PROG}/{YY}/{SEQ}"></div>
+          <div class="field" style="grid-column:span 2;"><label>ID card number for VETA courses <span class="tip" tabindex="0" role="note" aria-label="Help: VETA pattern" data-tip="VETA students' identity card numbers, a series apart from PST's: the same pieces, any letters you like (e.g. VETA), and {PROG} — each course (hair dressing, computer basics…) counts from its own first number. Leave it blank to number VETA students like PST students, on the same counter.">?</span></label><input id="adm-id-veta-pattern" placeholder="e.g. {COLLEGE}/VETA/{PROG}/{YY}/{SEQ} — blank: as above"></div>
           <div class="field"><label>A VETA number looks like</label><input id="adm-id-veta-example" readonly></div>
+        </div>
+        <div class="form-grid-3">
+          <div class="field"><label>Each VETA course starts at</label><input type="number" id="adm-id-veta-start" min="1"></div>
+          <div class="field" style="grid-column:span 2;"><label>Next card number, course by course</label><div id="adm-id-veta-counters" style="font-size:.8rem;"></div></div>
         </div>
         <button class="btn btn-secondary btn-sm" onclick="saveCollegeIdFormat()">Save the format</button>
         <div style="border-top:1px solid var(--border);margin:16px 0 12px;"></div>
         <div class="card-title" style="font-size:.9rem;">Required items <span class="tip" tabindex="0" role="note" aria-label="Help: required items" data-tip="What a student must have or hand in. Billed items (TPH book, calculator, rim paper, insurance): finance checks them, and one missing is added to the bill at the accountant's rate — never a hold. Checked-only items (certificates, signed forms): nothing is billed; the admission desk checks them before admitting, and one missing holds the student until it is brought. Records checks no items.">?</span></div>
         <div class="table-wrap" style="margin-bottom:12px;">
           <table>
-            <thead><tr><th>Item</th><th>When missing</th><th>Checked</th><th>Levels</th><th>Status</th><th></th></tr></thead>
-            <tbody id="req-tbody"><tr><td colspan="6" style="color:var(--muted);">No items yet</td></tr></tbody>
+            <thead><tr><th>Item</th><th>Asked of</th><th>When missing</th><th>Checked</th><th>Levels</th><th>Status</th><th></th></tr></thead>
+            <tbody id="req-tbody"><tr><td colspan="7" style="color:var(--muted);">No items yet</td></tr></tbody>
           </table>
         </div>
         <input type="hidden" id="req-id">
         <div class="form-grid-3">
           <div class="field"><label>Item *</label><input id="req-name" placeholder="e.g. TPH Book, or Birth certificate"></div>
+          <div class="field"><label>Asked of <span class="tip" tabindex="0" role="note" aria-label="Help: asked of" data-tip="PST (NACTVET) students, VETA course students, or both. A VETA course student's items are checked at their admission desk, and only checked-only ones — nothing is billed to them here.">?</span></label>
+            <select id="req-applies">
+              <option value="pst">PST (NACTVET) students</option>
+              <option value="veta">VETA course students</option>
+              <option value="both">Both</option>
+            </select></div>
           <div class="field"><label>When it is missing *</label>
             <select id="req-kind" onchange="onRequirementKindChange()">
-              <option value="check">Checked only — hold the student until it is brought</option>
-              <option value="billed">Billed — add it to the bill, never a hold</option>
+              <option value="check">Checked only — holds</option>
+              <option value="billed">Billed — on the bill</option>
             </select></div>
           <div class="field" id="req-charge-wrap"><label>Bills under <span class="tip" tabindex="0" role="note" aria-label="Help: bills under" data-tip="The accountant's charge type, whose rate is charged when the item is missing. Insurance: the medical fee, which is waived for a student with their own.">?</span></label>
             <select id="req-charge" onchange="showRequirementRates()"></select>
@@ -1905,7 +1955,7 @@
               <option value="">Everyone</option>
               <option value="pending">Waiting for results</option>
               <option value="repeat">Repeating</option>
-              <option value="discontinued">Discontinued</option>
+              <option value="discontinued">FAIL</option>
               <option value="clear">Passed everything</option>
               <option value="completed">Finished</option>
             </select>
@@ -1974,8 +2024,8 @@
     </div>
 
     <div class="page" id="page-accounts">
-      <div class="page-title">User Accounts</div>
-      <div class="page-sub">Staff logins and roles.</div>
+      <div class="page-title" id="accounts-title">User Accounts</div>
+      <div class="page-sub" id="accounts-sub">Staff logins and roles.</div>
 
       <div class="card account-manager-only">
         <div class="card-title">Create Staff Account <span class="tip" tabindex="0" role="note" aria-label="Help: who gives which role" data-tip="Tutor and secretary are given here. Every other role is an appointment: the Principal gives it, after the appointment letter is accepted.">?</span></div>
@@ -2571,6 +2621,10 @@
 
       <!-- OVERVIEW -->
       <div class="finance-section active" id="finance-section-overview">
+        <div class="form-grid-3" style="margin-bottom:10px;">
+            <div class="field"><label>Department</label><select id="fin-ov-scope-dept" onchange="onScopeDepartment('fin-ov-scope'); loadFinanceOverview()"><option value="">All departments</option></select></div>
+            <div class="field"><label>Programme</label><select id="fin-ov-scope-prog" onchange="loadFinanceOverview()"><option value="">All programmes</option></select></div>
+        </div>
         <div class="stats-grid">
           <div class="stat-card" style="--c:var(--accent)"><div class="label">Billed this year</div><div class="value" id="fin-stat-billed">—</div></div>
           <div class="stat-card" style="--c:var(--green)"><div class="label">Collected</div><div class="value" id="fin-stat-paid">—</div></div>
@@ -2660,7 +2714,7 @@
           </div>
           <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;margin-bottom:6px;cursor:pointer;">
             <input type="checkbox" id="fin-ct-charged_again_on_readmission" checked />
-            <span>Bill it again when a discontinued student is readmitted
+            <span>Bill it again when a FAIL student is readmitted
               <span style="color:var(--muted);font-size:.78rem;">(only matters for a charge billed Once)</span></span>
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;margin-bottom:6px;cursor:pointer;">
@@ -2856,6 +2910,8 @@
           <div class="form-grid-3">
             <div class="field"><label>From</label><input id="fin-coll-from" type="date" onchange="loadCollections()" /></div>
             <div class="field"><label>To</label><input id="fin-coll-to" type="date" onchange="loadCollections()" /></div>
+            <div class="field"><label>Department</label><select id="fin-coll-dept" onchange="onScopeDepartment('fin-coll'); loadCollections()"><option value="">All departments</option></select></div>
+            <div class="field"><label>Programme</label><select id="fin-coll-prog" onchange="loadCollections()"><option value="">All programmes</option></select></div>
           </div>
           <div class="stats-grid">
             <div class="stat-card" style="--c:var(--green)"><div class="label">Total received</div><div class="value" id="fin-coll-total">—</div></div>
@@ -2870,6 +2926,14 @@
             <div class="card" style="box-shadow:none;margin:0">
               <div class="card-title">By group</div>
               <div id="fin-coll-family"></div>
+            </div>
+            <div class="card" style="box-shadow:none;margin:0">
+              <div class="card-title">By department</div>
+              <div id="fin-coll-department"></div>
+            </div>
+            <div class="card" style="box-shadow:none;margin:0">
+              <div class="card-title">By programme</div>
+              <div id="fin-coll-programme"></div>
             </div>
           </div>
           <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
@@ -2886,6 +2950,8 @@
           <div class="form-grid-3">
             <div class="field"><label>Academic year</label><select id="fin-stu-year" onchange="loadFinanceStudents()"></select></div>
             <div class="field"><label>Class level</label><select id="fin-stu-level" onchange="loadFinanceStudents()"><option value="">All levels</option></select></div>
+            <div class="field"><label>Department</label><select id="fin-stu-dept" onchange="onScopeDepartment('fin-stu'); loadFinanceStudents()"><option value="">All departments</option></select></div>
+            <div class="field"><label>Programme</label><select id="fin-stu-prog" onchange="loadFinanceStudents()"><option value="">All programmes</option></select></div>
             <div class="field"><label>Show</label><select id="fin-stu-filter" onchange="renderFinanceStudents()"><option value="all">Everyone</option><option value="owing">Only those owing</option><option value="blocked">Only those blocked</option></select></div>
             <div class="field"><label>Search</label><input id="fin-stu-search" oninput="renderFinanceStudents()" placeholder="name or reg no" /></div>
           </div>
@@ -3726,20 +3792,12 @@
     <div id="veta-modal-summary" style="font-size:.84rem;margin-bottom:12px;"></div>
     <div id="veta-modal-blockers"></div>
     <div id="veta-modal-details" style="display:none;">
-      <div class="card-title" style="font-size:.9rem;">Details — the records desk</div>
-      <div class="form-grid-3">
-        <div class="field"><label>Phone</label><input id="veta-d-phone"></div>
-        <div class="field"><label>Gender</label><select id="veta-d-gender"><option value="">—</option><option value="M">Male</option><option value="F">Female</option></select></div>
-        <div class="field"><label>Date of birth</label><input type="date" id="veta-d-dob"></div>
-        <div class="field"><label>Next of kin *</label><input id="veta-d-kin-name" placeholder="Name"></div>
-        <div class="field"><label>Their phone</label><input id="veta-d-kin-phone"></div>
-        <div class="field"><label>Relationship</label><select id="veta-d-kin-rel">
-          <option value="parent">Parent</option><option value="guardian">Guardian</option><option value="spouse">Spouse</option>
-          <option value="sibling">Sibling</option><option value="relative">Other relative</option><option value="other">Other</option></select></div>
-      </div>
+      <div class="card-title" style="font-size:.9rem;">Details — the records desk <span class="tip" tabindex="0" role="note" aria-label="Help: VETA details" data-tip="The admission form (Fomu ya Kujiunga): who the student is, where they were born and live, their religion and education level, a parent or guardian, who pays the fees, and any long-term health problem they declare.">?</span></div>
+      <div id="veta-d-form"></div>
       <p class="help-note">No documents are needed for VETA courses.</p>
       <button class="btn btn-secondary btn-sm" onclick="saveVetaDetails(event)">Save the details</button>
     </div>
+    <div id="veta-modal-items" style="margin-top:12px;"></div>
     <div id="veta-modal-fees" style="display:none;margin-top:12px;">
       <div class="card-title" style="font-size:.9rem;">Fees — the finance desk</div>
       <div id="veta-modal-fee-list" style="font-size:.8rem;margin-bottom:8px;"></div>
@@ -3798,6 +3856,7 @@
       </div>
     </div>
     <div id="app-modal-residence" class="app-block"></div>
+    <div id="app-modal-invoices" class="app-block"></div>
     <div id="app-modal-owed" class="app-block"></div>
     <div id="app-modal-requirements" style="margin:12px 0 14px;"></div>
     <div id="app-modal-documents" style="margin-bottom:14px;"></div>
@@ -3827,7 +3886,7 @@
       <select id="review-outcome">
         <option value="clear">Passed everything</option>
         <option value="repeat">Repeats the failed module(s)</option>
-        <option value="discontinued">Discontinued — GPA below 2.0</option>
+        <option value="discontinued">FAIL — GPA below 2.0 or a repeat failed</option>
         <option value="completed">Finished level 6</option>
         <option value="provisional">Continues while supplementary results are awaited</option>
         <option value="postponed">Postponed</option>
@@ -3930,7 +3989,7 @@
 <div class="modal-overlay" id="profile-modal">
   <div class="modal">
     <div class="modal-title">
-      My Profile &amp; Modules
+      My Profile
       <button class="modal-close" onclick="closeProfileModal()">✕</button>
     </div>
     <div class="field" style="margin-bottom:10px;">
@@ -3939,21 +3998,10 @@
     </div>
     <div class="field" style="margin-bottom:12px;">
       <label>New Password</label>
-      <input id="profile-new-password" type="password" autocomplete="new-password" minlength="6" placeholder="At least 6 characters">
+      <input id="profile-new-password" type="password" autocomplete="new-password" minlength="8" placeholder="8+ characters: upper, lower, a number and a symbol">
     </div>
     <button class="btn btn-primary btn-sm" style="margin-bottom:18px;" onclick="changeOwnPassword()">Update Password</button>
-    <div style="font-size:.75rem;color:var(--muted);margin-bottom:8px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;">
-      Click a module to claim / unclaim it
-    </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-      <select id="profile-flt-sem" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:5px 8px;font-size:.75rem;" onchange="renderClaimGrid()">
-        <option value="">All Semesters</option>
-      </select>
-      <select id="profile-flt-level" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:5px 8px;font-size:.75rem;" onchange="renderClaimGrid()">
-        <option value="">All Levels</option>
-      </select>
-    </div>
-    <div class="claim-grid" id="claim-grid"></div>
+    <div style="font-size:.78rem;color:var(--muted);">Your modules are given to you by your Head of Department, DPARC or the Principal.</div>
   </div>
 </div>
 
@@ -4051,6 +4099,9 @@ async function api(method, path, body) {
   if (body !== undefined) opts.body = isUpload ? body : JSON.stringify(body);
   const r = await fetch(API + path, opts);
   const data = r.status === 204 ? null : await r.json().catch(() => null);
+  if (r.status === 401 && data?.idle) { location.href = '/login/?idle=1'; throw data; }
+  // A page open too long, or restored by the browser, sends a stale security token.
+  if (r.status === 403 && /^CSRF Failed/.test(data?.detail || '')) throw { detail: 'This page had been open too long. Reload it (F5) and try again.' };
   if (!r.ok) throw data || { detail: 'Unknown error' };
   return data;
 }
@@ -4411,6 +4462,7 @@ function showInventorySection(section, btn) {
   const copy = viewCopy[state.inventorySection] || viewCopy.overview;
   document.getElementById('inventory-view-title').textContent = copy[0];
   document.getElementById('inventory-view-subtitle').textContent = copy[1];
+  const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = copy[0];
   if (btn) btn.classList.add('active');
   if (['register', 'register-list'].includes(state.inventorySection)) {
     const group = document.getElementById('inventory-assets-nav-group');
@@ -4656,8 +4708,6 @@ function populateAllSelects() {
   buildLevelOptions(document.getElementById('elig-flt-level'), true);
   buildSemOptions(document.getElementById('sick-flt-sem'), true);
   buildLevelOptions(document.getElementById('sick-flt-level'), true);
-  buildSemOptions(document.getElementById('profile-flt-sem'), true);
-  buildLevelOptions(document.getElementById('profile-flt-level'), true);
 }
 
 // ── SIDEBAR ─────────────────────────────────────────────────────────────────────
@@ -6111,19 +6161,16 @@ function exportReport() {
 }
 
 // ── PROFILE MODAL ──────────────────────────────────────────────────────────────
-async function openProfileModal() {
+function openProfileModal() {
+  // Password only: modules are given by the HOD, DPARC or the Principal (said 19 October 2026).
   document.getElementById('profile-modal').classList.add('open');
-  try {
-    state.allModules = await api('GET', '/all-modules/');
-    renderClaimGrid();
-  } catch(e) { console.error(e); }
 }
 function closeProfileModal() { document.getElementById('profile-modal').classList.remove('open'); }
 async function changeOwnPassword() {
   const current = document.getElementById('profile-current-password').value;
   const next = document.getElementById('profile-new-password').value;
-  if (!current || next.trim().length < 6) {
-    toast('Enter current password and a new password of at least 6 characters', 'var(--red)');
+  if (!current || !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(next.trim())) {
+    toast('Enter your current password, and a new one of 8+ characters with upper and lower case, a number and a symbol', 'var(--red)');
     return;
   }
   try {
@@ -6133,40 +6180,6 @@ async function changeOwnPassword() {
     toast('Password updated', 'var(--green)');
   } catch(e) { toast(e?.detail || 'Could not update password', 'var(--red)'); }
 }
-function renderClaimGrid() {
-  const semId = document.getElementById('profile-flt-sem').value;
-  const lvlId = document.getElementById('profile-flt-level').value;
-  let mods = state.allModules;
-  if (semId) {
-    const sem = state.semesters.find(s => s.id == semId);
-    if (sem) mods = mods.filter(m => m.semester === sem.label);
-  }
-  if (lvlId) {
-    const lvl = state.levels.find(l => l.id == lvlId);
-    if (lvl) mods = mods.filter(m => m.class_level === lvl.name);
-  }
-  document.getElementById('claim-grid').innerHTML = mods.map(m =>
-    `<div class="claim-item ${m.claimed ? 'claimed' : ''}" onclick="toggleClaim(${m.id}, this)">
-      <div class="ci-dot"></div>
-      <div class="ci-info">
-        <div class="ci-name">${safeText(m.name)}</div>
-        <div class="ci-code">${m.code} · ${safeText(m.class_level)}</div>
-        <div class="ci-code">${m.semester}</div>
-      </div>
-    </div>`
-  ).join('') || '<div style="color:var(--muted);font-size:.83rem;padding:12px 0;">No modules found</div>';
-}
-async function toggleClaim(id, el) {
-  const claimed = el.classList.contains('claimed');
-  try {
-    await api('POST', `/modules/${id}/${claimed ? 'unclaim' : 'claim'}/`);
-    const mod = state.allModules.find(m => m.id === id);
-    if (mod) mod.claimed = !claimed;
-    el.classList.toggle('claimed');
-    buildSidebarModules();
-  } catch(e) { toast(e?.detail || 'Error', 'var(--red)'); }
-}
-
 // ── RESULTS / CA MARKS PAGE ────────────────────────────────────────────────────
 let resModuleInfo = null;   // {id, name, code, has_practical, class_level, semester}
 let resData = [];           // the chosen sitting's results (continuing or repeaters)
@@ -6288,7 +6301,7 @@ async function loadResultsSummary() {
       tile('Passed', c.PASS, '--green', pct(c.PASS)) +
       tile('Supplementary', c.SUPP, '--yellow', pct(c.SUPP)) +
       tile('Repeat', c.REPEAT, '--orange', pct(c.REPEAT)) +
-      tile('Discontinued', c.DISCO, '--red', pct(c.DISCO)) +
+      tile('FAIL', c.DISCO, '--red', pct(c.DISCO)) +
       tile('Waiting for results', c.INCOMPLETE, '--muted', c.withheld ? `${c.withheld} withheld on the portal` : '');
     document.getElementById('sum-modules').innerHTML = !data.modules
       ? '<tr><td colspan="8" style="color:var(--muted);">Each repeater is shown below with the semester their repeat completes.</td></tr>'
@@ -6322,7 +6335,7 @@ function renderSummaryStudents() {
       <td>${safeText(s.reg_no)}</td><td>${safeText(s.name)}${s.origin
         ? `<div style="font-size:.72rem;color:var(--muted)">completes ${safeText(s.origin)}</div>` : ''}</td>
       <td><strong>${s.gpa == null ? '—' : s.gpa.toFixed(1)}</strong></td>
-      <td><span class="badge ${REMARK_BADGES[s.remark] || 'badge-gen'}">${s.remark}</span> <span style="font-size:.75rem;">${detail}</span></td>
+      <td><span class="badge ${REMARK_BADGES[s.remark] || 'badge-gen'}">${s.remark === 'DISCO' ? 'FAIL' : s.remark}</span> <span style="font-size:.75rem;">${detail}</span></td>
       <td style="font-size:.75rem;">${grades}</td>
       <td style="white-space:nowrap;">${portal}</td></tr>`;
   }).join('') || '<tr><td colspan="6" style="color:var(--muted);">No students</td></tr>';
@@ -7527,6 +7540,8 @@ function showFinanceSection(section, btn) {
   const [title, sub] = FINANCE_COPY[state.financeSection] || FINANCE_COPY.overview;
   document.getElementById('finance-page-title').textContent = title;
   document.getElementById('finance-page-sub').textContent = sub;
+  // showPage copied the title before it changed: the breadcrumb said the screen before.
+  const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = title;
 }
 
 function toggleFinanceMenu(event, area = 'payments') {
@@ -7542,6 +7557,38 @@ function toggleFinanceMenu(event, area = 'payments') {
 }
 
 // ── shared lookups ────────────────────────────────────────────────────────────
+
+// Department and programme on the money screens (said 19 October 2026): income
+// kept apart by department, and within it by programme.
+async function fillScopeSelects(prefix) {
+  const dept = document.getElementById(`${prefix}-dept`);
+  if (!dept) return;
+  if (!state.departments) {
+    try { state.departments = await api('GET', '/departments/'); } catch (e) { state.departments = []; }
+  }
+  await ensureProgrammes();
+  if (dept.options.length <= 1) {
+    dept.innerHTML = '<option value="">All departments</option>' + (state.departments || [])
+      .map(d => `<option value="${d.id}">${safeText(d.name)}</option>`).join('');
+  }
+  onScopeDepartment(prefix);
+}
+
+function onScopeDepartment(prefix) {
+  const dept = document.getElementById(`${prefix}-dept`).value;
+  const prog = document.getElementById(`${prefix}-prog`);
+  const kept = prog.value;
+  prog.innerHTML = '<option value="">All programmes</option>' + (state.programmes || [])
+    .filter(p => !dept || String(p.department) === String(dept))
+    .map(p => `<option value="${p.id}">${safeText(p.code)} – ${safeText(p.name)}</option>`).join('');
+  prog.value = [...prog.options].some(o => o.value === kept) ? kept : '';
+}
+
+function scopeQuery(prefix) {
+  const dept = document.getElementById(`${prefix}-dept`)?.value;
+  const prog = document.getElementById(`${prefix}-prog`)?.value;
+  return (dept ? `department_id=${dept}&` : '') + (prog ? `programme_id=${prog}&` : '');
+}
 
 async function ensureFinanceLookups() {
   if (!state.academicYears) {
@@ -7624,6 +7671,7 @@ async function loadFinanceSection() {
 const STATUS_SECTIONS = {
   postpone: ['Postponements', 'Students asking to stop for a while. The Principal decides.'],
   exits: ['Finishing after Level 5', 'Students asking to finish with the Level 5 award. The Principal decides.'],
+  standing: ['Student status', 'Deceased, absconded, suspended, terminated or discontinued — with the reason and the date.'],
   finish: ['Finishing', 'Students who finished — after Level 6, or after Level 5 with approval: finance clears them, then the Principal declares them cleared.'],
 };
 
@@ -7651,7 +7699,67 @@ function showStatusSection(section, btn) {
   document.getElementById('status-nav-group').classList.add('open');
   if (btn) btn.classList.add('active');
   if (section === 'exits') return loadExitRequests();
+  if (section === 'standing') return loadStudentStatuses();
   return section === 'postpone' ? loadPostponements() : loadFinishing();
+}
+
+// ── statuses recorded by hand (said 19 October 2026) ─────────────────────────
+let statusSearchTimer;
+function scheduleStatusSearch() {
+  clearTimeout(statusSearchTimer);
+  statusSearchTimer = setTimeout(async () => {
+    const term = document.getElementById('st-search').value.trim();
+    const pick = document.getElementById('st-profile');
+    if (term.length < 2) return;
+    try {
+      const rows = await api('GET', `/student-records/search/?search=${encodeURIComponent(term)}`);
+      const list = rows.results ?? rows;
+      pick.innerHTML = list.length ? list.map(r => `<option value="${r.id}">${safeText(r.name)} · ${safeText(r.reg_no)}${r.college_id ? ' · ' + safeText(r.college_id) : ''}</option>`).join('')
+        : '<option value="">Nobody by that name or number</option>';
+    } catch (e) { pick.innerHTML = '<option value="">Could not search</option>'; }
+  }, 350);
+}
+
+function onStatusKindChange() {
+  document.getElementById('st-until-wrap').style.display = document.getElementById('st-status').value === 'suspended' ? '' : 'none';
+}
+
+async function loadStudentStatuses() {
+  const me = state.offices || {};
+  // The Principal decides suspension, termination and discontinuation.
+  document.querySelectorAll('#st-status option[data-principal]').forEach(o => { o.disabled = !me.principal; });
+  // Today in Tanzania, not in UTC (toISOString gives yesterday before 3am).
+  if (!document.getElementById('st-date').value) document.getElementById('st-date').value = new Date().toLocaleDateString('en-CA');
+  onStatusKindChange();
+  try {
+    const rows = await api('GET', '/student-statuses/');
+    document.getElementById('st-tbody').innerHTML = rows.length ? rows.map(r => `<tr>
+        <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}${r.college_id ? `<div style="font-size:.7rem;color:var(--muted)">${safeText(r.college_id)}</div>` : ''}</td>
+        <td>${safeText(r.name)}</td><td><span class="badge badge-red">${safeText(r.status_display.split(' —')[0])}</span></td>
+        <td>${safeText(r.since || '—')}</td>
+        <td>${safeText(r.until || r.may_return_from || '—')}</td>
+        <td style="font-size:.78rem;">${safeText(r.note || '')}</td></tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty">None recorded</div></td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load the statuses'), 'var(--red)'); }
+}
+
+async function recordStudentStatus(event) {
+  const profileId = document.getElementById('st-profile').value;
+  const status = document.getElementById('st-status').value;
+  const reason = document.getElementById('st-reason').value.trim();
+  if (!profileId || !reason) { toast('Find the student and give the reason', 'var(--red)'); return; }
+  const label = document.getElementById('st-status').selectedOptions[0].textContent.split(' —')[0];
+  const who = document.getElementById('st-profile').selectedOptions[0].textContent;
+  if (!confirm(`Record ${who} as ${label}?`)) return;
+  const done = working(event?.currentTarget, 'Recording…');
+  try {
+    await api('POST', '/student-statuses/', { profile_id: profileId, status, reason,
+      on_date: document.getElementById('st-date').value, until: document.getElementById('st-until').value || null });
+    toast(`Recorded: ${label}`, 'var(--green)');
+    document.getElementById('st-reason').value = '';
+    await loadStudentStatuses();
+  } catch (e) { toast(apiErrorText(e, 'Could not record it'), 'var(--red)'); }
+  finally { done(); }
 }
 
 async function loadExitRequests() {
@@ -7947,7 +8055,8 @@ async function decideHostel(id, decision) {
 }
 
 async function loadFinanceOverview() {
-  const data = await api('GET', '/finance/students/');
+  await fillScopeSelects('fin-ov-scope');
+  const data = await api('GET', `/finance/students/?${scopeQuery('fin-ov-scope')}`);
   state.financeProfiles = data.rows;
   state.financeYear = data.academic_year;
   document.getElementById('fin-stat-billed').textContent = money(data.totals.billed);
@@ -7960,7 +8069,7 @@ async function loadFinanceOverview() {
     <tr>
       <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.nactvet_reg_no)}</span></td>
       <td>${safeText(r.name)}</td>
-      <td>${safeText(r.class_level || '—')}</td>
+      <td>${safeText(r.class_level || '—')}${r.programme_code ? `<div style="font-size:.7rem;color:var(--muted)">${safeText(r.programme_code)}</div>` : ''}</td>
       <td>${money(r.billed)}</td>
       <td>${money(r.paid)}</td>
       <td><span class="badge badge-red">${money(r.balance)}</span></td>
@@ -8298,6 +8407,7 @@ const NOTIFICATION_LINKS = {
   'health': () => showHealthSection(),
   'review:provisional': () => showReviewSection('provisional', document.querySelector('[data-review-section="provisional"].nav-sub-btn')),
   'status:exits': () => showStatusSection('exits', document.querySelector('[data-status-section="exits"].nav-sub-btn')),
+  'status:standing': () => showStatusSection('standing', document.querySelector('[data-status-section="standing"].nav-sub-btn')),
   'status:finish': () => showStatusSection('finish', document.querySelector('[data-status-section="finish"].nav-sub-btn')),
   'finance:hostel': () => showFinanceSection('hostel', document.querySelector('[data-finance-section="hostel"].nav-sub-btn')),
 };
@@ -9757,7 +9867,8 @@ async function reversePayment(id) {
 // ── collections ───────────────────────────────────────────────────────────────
 
 async function loadCollections() {
-  let url = '/finance/collections/?';
+  await fillScopeSelects('fin-coll');
+  let url = `/finance/collections/?${scopeQuery('fin-coll')}`;
   const from = document.getElementById('fin-coll-from')?.value;
   const to = document.getElementById('fin-coll-to')?.value;
   if (from) url += `from=${from}&`;
@@ -9775,6 +9886,8 @@ async function loadCollections() {
     : '<div style="color:var(--muted);font-size:.8rem">Nothing in this range</div>';
   document.getElementById('fin-coll-channel').innerHTML = asList(data.by_channel);
   document.getElementById('fin-coll-family').innerHTML = asList(data.by_family);
+  document.getElementById('fin-coll-department').innerHTML = asList(data.by_department || {});
+  document.getElementById('fin-coll-programme').innerHTML = asList(data.by_programme || {});
 }
 
 // ── students ──────────────────────────────────────────────────────────────────
@@ -9782,7 +9895,8 @@ async function loadCollections() {
 async function loadFinanceStudents() {
   const yearId = document.getElementById('fin-stu-year')?.value;
   const levelId = document.getElementById('fin-stu-level')?.value;
-  let url = '/finance/students/?';
+  await fillScopeSelects('fin-stu');
+  let url = `/finance/students/?${scopeQuery('fin-stu')}`;
   if (yearId) url += `academic_year_id=${yearId}&`;
   if (levelId) url += `class_level_id=${levelId}&`;
   const data = await api('GET', url);
@@ -9803,7 +9917,7 @@ function renderFinanceStudents() {
     <tr>
       <td><span style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.nactvet_reg_no)}</span></td>
       <td>${safeText(r.name)}</td>
-      <td>${safeText(r.class_level || '—')}</td>
+      <td>${safeText(r.class_level || '—')}${r.programme_code ? `<div style="font-size:.7rem;color:var(--muted)">${safeText(r.programme_code)}</div>` : ''}</td>
       <td>${money(r.billed)}</td>
       <td>${money(r.paid)}</td>
       <td><span class="badge ${Number(r.balance) > 0 ? 'badge-red' : 'badge-green'}">${money(r.balance)}</span></td>
@@ -9894,7 +10008,30 @@ function closeStatementModal() {
   document.getElementById('statement-modal').classList.remove('open');
 }
 
-async function issueInvoiceFor(profileId, family, group) {
+// Invoices raised from the application itself, at the finance desk (said
+// 19 October 2026): no more closing it to find the student's statement.
+async function renderAppInvoices(application) {
+  const box = document.getElementById('app-modal-invoices');
+  const me = state.offices || {};
+  if (!(me.finance || me.principal) || application.state !== 'finance') { box.innerHTML = ''; return; }
+  try {
+    const s = await api('GET', `/finance/statement/${application.profile}/`);
+    const kinds = s.payment_kinds || [];
+    const button = kind => `<button class="btn btn-secondary btn-sm" data-family="${kind.family}" data-group="${safeText(kind.group)}"
+        onclick="issueInvoiceFor(${application.profile}, this.dataset.family, this.dataset.group, () => openApplicationModal(${application.id}))">
+        ${safeText(kind.label)} <span style="opacity:.75;">· owes ${money(kind.outstanding)}</span></button>`;
+    box.innerHTML = `<div class="card-title" style="font-size:.9rem;">Invoices <span class="tip" tabindex="0" role="note" aria-label="Help: invoices" data-tip="Raise the invoice the student takes to the bank: it opens ready to print, with its reference. One per payment for the year, reused for every instalment.">?</span></div>
+      ${s.invoices.length ? `<div class="table-wrap"><table class="compact"><thead><tr><th>Reference</th><th>Covers</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>
+        ${s.invoices.map(i => `<tr><td style="font-family:var(--font-mono)">${safeText(i.reference)}</td><td>${safeText(i.invoice_group || '—')}</td>
+          <td>${money(i.total)}</td><td><span class="badge ${i.status === 'paid' ? 'badge-green' : 'badge-yellow'}">${safeText(i.status.replace('_', ' '))}</span></td>
+          <td><a class="btn btn-ghost btn-sm" href="/invoice/${encodeURIComponent(i.reference)}/" target="_blank" rel="noopener">Print</a></td></tr>`).join('')}
+        </tbody></table></div>` : '<div style="font-size:.8rem;color:var(--muted);margin-bottom:6px;">No invoice yet.</div>'}
+      ${kinds.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">${kinds.map(button).join('')}
+        <button class="btn btn-primary btn-sm" onclick="issueInvoiceFor(${application.profile}, null, null, () => openApplicationModal(${application.id}))">Everything outstanding</button></div>` : ''}`;
+  } catch (e) { box.innerHTML = ''; }
+}
+
+async function issueInvoiceFor(profileId, family, group, after) {
   try {
     // One invoice per payment — tuition, direct costs, and each other fee on
     // its own — so the student makes a separate deposit for each.
@@ -9906,7 +10043,7 @@ async function issueInvoiceFor(profileId, family, group) {
       ? `Invoice ${list[0].reference} raised`
       : `${list.length} invoices raised — one per account`, 'var(--green)');
     list.forEach(i => window.open(`/invoice/${encodeURIComponent(i.reference)}/`, '_blank', 'noopener'));
-    openStatement(profileId);
+    if (after) after(); else openStatement(profileId);
   } catch (e) { toast(e?.detail || 'Failed to raise an invoice', 'var(--red)'); }
 }
 
@@ -10365,7 +10502,8 @@ async function openRecord(profileId) {
     document.getElementById('rec-editor-missing').innerHTML = (record.missing.length
       ? `<div class="missing-note">Still to record: ${safeText(record.missing.join(', '))}</div>` : '')
       + (record.typed_items || []).map(t => `<div style="font-size:.82rem;margin:4px 0"><span style="color:var(--muted)">${safeText(t.name)}:</span> <strong>${safeText(t.value)}</strong></div>`).join('');
-    document.getElementById('rec-editor-form').innerHTML = detailsFormHtml('rec-det', record);
+    document.getElementById('rec-editor-form').innerHTML = detailsFormHtml('rec-det', record, { withReason: true });
+    document.getElementById('rec-editor-history').innerHTML = recordHistoryHtml(record.changes || []);
     renderRecordPhoto(record);
     await renderRecordDocuments(profileId);
     await renderRecordHealth(profileId);
@@ -10389,6 +10527,17 @@ async function saveRecord(event) {
   } catch (e) {
     toast(apiErrorText(e, 'Could not save'), 'var(--red)');
   } finally { done(); }
+}
+
+// Every correction, with what it was before (said 19 October 2026: records
+// will make mistakes — they are put right openly).
+function recordHistoryHtml(changes) {
+  if (!changes.length) return '';
+  return `<details style="margin:8px 0 12px;font-size:.8rem;"><summary>Changes to these details (${changes.length})</summary>
+    <div class="table-wrap"><table class="compact"><thead><tr><th>When</th><th>What</th><th>Was</th><th>Now</th><th>By</th><th>Why</th></tr></thead><tbody>
+    ${changes.map(c => `<tr><td style="white-space:nowrap">${safeText(new Date(c.at).toLocaleString())}</td><td>${safeText(c.field)}</td>
+      <td>${safeText(c.old || '—')}</td><td>${safeText(c.new || '—')}</td><td>${safeText(c.by || '—')}</td><td>${safeText(c.reason || '')}</td></tr>`).join('')}
+    </tbody></table></div></details>`;
 }
 
 function renderRecordPhoto(record) {
@@ -10637,7 +10786,7 @@ const ADMISSION_SECTIONS = {
   desk: ['My desk', 'What is waiting on you.'],
   new: ['New application', 'Take a student on.'],
   all: ['All applications', 'Every application this semester.'],
-  dueback: ['Expected back', 'Discontinued and postponed students due this semester.'],
+  dueback: ['Expected back', 'FAIL and postponed students due this semester.'],
   settings: ['Window & ID numbers', 'When admissions run, and the college ID format.'],
   veta: ['VETA courses', 'Intakes, and students on their way through the desks.'],
   items: ['Items check', 'Items checked again each semester — the TPH book by finance, rim paper and the other checked items by the admission office.'],
@@ -11325,6 +11474,7 @@ async function openApplicationModal(id) {
     renderAcademicBlock(application.academic);
     renderDetailsBlock(application);
     renderResidence(application);
+    renderAppInvoices(application);
     renderItemsOwed(application);
     await renderRequirementChecklist(id);
     await renderStudentDocuments(application);
@@ -11426,10 +11576,11 @@ function renderAcademicBlock(academic) {
 const RELATIONSHIPS = [['parent', 'Parent'], ['guardian', 'Guardian'], ['spouse', 'Spouse'],
                        ['sibling', 'Sibling'], ['relative', 'Other relative'], ['other', 'Other']];
 
-function detailsFormHtml(prefix, details) {
+function detailsFormHtml(prefix, details, { withReason = false } = {}) {
   const kin = (n) => (details.next_of_kin || []).find(k => k.position === n) || {};
   const rel = (n) => RELATIONSHIPS.map(([v, l]) =>
     `<option value="${v}" ${kin(n).relationship === v ? 'selected' : ''}>${l}</option>`).join('');
+  const opt = (value, label, current) => `<option value="${value}" ${current === value ? 'selected' : ''}>${label}</option>`;
   return `
     <div class="form-grid-3">
       <div class="field"><label>Full name</label><input id="${prefix}-name" value="${safeText(details.name || '')}"></div>
@@ -11441,20 +11592,36 @@ function detailsFormHtml(prefix, details) {
     </div>
     <div class="form-grid-3">
       <div class="field"><label>Date of birth</label><input type="date" id="${prefix}-dob" value="${safeText(details.date_of_birth || '')}"></div>
+      <div class="field"><label title="When only the year is known">Or year of birth only</label>
+        <input id="${prefix}-birth-year" inputmode="numeric" maxlength="4" value="${safeText(details.birth_year || '')}"></div>
+      <div class="field"><label>Place of birth</label><input id="${prefix}-birth-place" maxlength="120" value="${safeText(details.birth_place || '')}"></div>
+    </div>
+    <div class="form-grid-3">
+      <div class="field"><label>Religion</label><input id="${prefix}-religion" maxlength="60" value="${safeText(details.religion || '')}"></div>
+      <div class="field"><label>Education level now</label><input id="${prefix}-education-level" maxlength="120" value="${safeText(details.education_level || '')}" placeholder="e.g. Darasa la 7, Form Four"></div>
       ${details.veta_only ? '' : `<div class="field"><label>Form Four index No. (CSEE)</label>
         <input id="${prefix}-f4" value="${safeText(details.form_four_index || '')}" placeholder="S0123/0045/2021"></div>`}
     </div>
-    ${[1, 2].map(n => `<div class="form-grid-3">
-      <div class="field"><label>Next of kin ${n}</label><input id="${prefix}-kin${n}-name" value="${safeText(kin(n).name || '')}"></div>
+    ${[1, 2].map(n => `<div class="form-grid-4">
+      <div class="field"><label>Next of kin ${n}${n === 1 ? ' *' : ''}</label><input id="${prefix}-kin${n}-name" value="${safeText(kin(n).name || '')}"></div>
       <div class="field"><label>Phone</label><input id="${prefix}-kin${n}-phone" value="${safeText(kin(n).phone || '')}"></div>
       <div class="field"><label>Relationship</label><select id="${prefix}-kin${n}-rel">${rel(n)}</select></div>
+      <div class="field"><label>Where they live</label><input id="${prefix}-kin${n}-address" maxlength="200" value="${safeText(kin(n).address || '')}"></div>
     </div>`).join('')}
     <div class="form-grid-3">
       <div class="field"><label>Address</label><input id="${prefix}-address" maxlength="300" value="${safeText(details.address || '')}" placeholder="P.O. Box, street, town"></div>
-      <div class="field"><label>Guarantor / sponsor</label><input id="${prefix}-sponsor" maxlength="200" value="${safeText(details.sponsor_name || '')}"></div>
-      <div class="field"><label>Sponsor's phone</label><input id="${prefix}-sponsor-phone" maxlength="30" value="${safeText(details.sponsor_phone || '')}"></div>
+      <div class="field"><label>Fees paid by *</label>
+        <select id="${prefix}-fee-payer"><option value="">—</option>
+          ${opt('family', 'Parents / guardian', details.fee_payer)}${opt('sponsor', 'A sponsor', details.fee_payer)}${opt('self', 'The student', details.fee_payer)}</select></div>
+      <div class="field"><label>Guarantor / sponsor</label><input id="${prefix}-sponsor" maxlength="200" value="${safeText(details.sponsor_name || '')}" placeholder="If a sponsor pays"></div>
     </div>
-    <div style="font-size:.78rem;font-weight:600;margin:6px 0 4px">Schools and colleges before</div>
+    <div class="form-grid-3">
+      <div class="field"><label>Sponsor's phone</label><input id="${prefix}-sponsor-phone" maxlength="30" value="${safeText(details.sponsor_phone || '')}"></div>
+      <div class="field"><label>A long-term health problem (declared)</label>
+        <select id="${prefix}-chronic"><option value="">—</option>${opt('no', 'No', details.has_chronic_condition)}${opt('yes', 'Yes', details.has_chronic_condition)}</select></div>
+      <div class="field"><label>If yes, what</label><input id="${prefix}-health" maxlength="300" value="${safeText(details.health_declaration || '')}"></div>
+    </div>
+    ${details.veta_only ? '' : `<div style="font-size:.78rem;font-weight:600;margin:6px 0 4px">Schools and colleges before</div>
     ${EDUCATION_LEVELS.map(([level, label]) => {
       const row = (details.education || []).find(e => e.level === level) || {};
       return `<div class="form-grid-4">
@@ -11462,36 +11629,47 @@ function detailsFormHtml(prefix, details) {
         <div class="field"><label>From (year)</label><input id="${prefix}-edu-${level}-from" inputmode="numeric" maxlength="4" value="${safeText(row.start_year || '')}"></div>
         <div class="field"><label>To (year)</label><input id="${prefix}-edu-${level}-to" inputmode="numeric" maxlength="4" value="${safeText(row.end_year || '')}"></div>
         <div class="field"><label>Index No.</label><input id="${prefix}-edu-${level}-index" value="${safeText(row.index_number || '')}"></div>
-      </div>`; }).join('')}`;
+      </div>`; }).join('')}`}
+    ${withReason ? `<div class="field"><label>Why the change <span style="font-weight:400;color:var(--muted)">(kept with the record — e.g. "typed wrongly at intake")</span></label>
+      <input id="${prefix}-reason" maxlength="200"></div>` : ''}`;
 }
 
 const EDUCATION_LEVELS = [['o_level', 'O-level'], ['a_level', 'A-level'], ['college', 'College']];
 
 function readDetailsForm(prefix) {
-  const value = (suffix) => document.getElementById(`${prefix}-${suffix}`).value.trim();
+  const field = (suffix) => document.getElementById(`${prefix}-${suffix}`);
+  const value = (suffix) => (field(suffix)?.value || '').trim();
   return {
     name: value('name'), phone: value('phone'), gender: value('gender'),
-    date_of_birth: value('dob'),
-    ...(document.getElementById(`${prefix}-f4`) ? { form_four_index: value('f4') } : {}),
+    date_of_birth: value('dob'), birth_year: value('birth-year'), birth_place: value('birth-place'),
+    religion: value('religion'), education_level: value('education-level'),
+    ...(field('f4') ? { form_four_index: value('f4') } : {}),
     next_of_kin: [1, 2].map(n => ({ name: value(`kin${n}-name`), phone: value(`kin${n}-phone`),
-                                    relationship: value(`kin${n}-rel`) })),
-    address: value('address'), sponsor_name: value('sponsor'), sponsor_phone: value('sponsor-phone'),
-    education: EDUCATION_LEVELS.map(([level]) => ({ level, institution: value(`edu-${level}-inst`),
-      start_year: value(`edu-${level}-from`), end_year: value(`edu-${level}-to`), index_number: value(`edu-${level}-index`) })),
+                                    relationship: value(`kin${n}-rel`), address: value(`kin${n}-address`) })),
+    address: value('address'), fee_payer: value('fee-payer'),
+    sponsor_name: value('sponsor'), sponsor_phone: value('sponsor-phone'),
+    has_chronic_condition: value('chronic'), health_declaration: value('health'),
+    ...(field('edu-o_level-inst') ? { education: EDUCATION_LEVELS.map(([level]) => ({ level, institution: value(`edu-${level}-inst`),
+      start_year: value(`edu-${level}-from`), end_year: value(`edu-${level}-to`), index_number: value(`edu-${level}-index`) })) } : {}),
+    ...(field('reason') ? { reason: value('reason') } : {}),
   };
 }
 
 function detailsReadOnlyHtml(details) {
   const kin = (details.next_of_kin || []).map(k =>
-    `${safeText(k.name)} (${safeText(k.relationship_display || k.relationship)}) · ${safeText(k.phone || '—')}`).join('<br>');
+    `${safeText(k.name)} (${safeText(k.relationship_display || k.relationship)}) · ${safeText(k.phone || '—')}${k.address ? ' · ' + safeText(k.address) : ''}`).join('<br>');
+  const row = (label, value) => value ? `<dt>${label}</dt><dd>${safeText(value)}</dd>` : '';
   return `${details.passport_url ? `<div class="rec-photo" style="float:right;margin:0 0 8px 12px"><img src="${safeText(details.passport_url)}" alt="Passport photo"></div>` : ''}<dl class="facts">
     <dt>Gender</dt><dd>${safeText(details.gender_display || details.gender || '—')}</dd>
-    <dt>Date of birth</dt><dd>${safeText(details.date_of_birth || '—')}</dd>
+    <dt>Date of birth</dt><dd>${safeText(details.date_of_birth || (details.birth_year ? `${details.birth_year} (year)` : '—'))}</dd>
+    ${row('Place of birth', details.birth_place)}${row('Religion', details.religion)}${row('Education level now', details.education_level)}
     <dt>Form Four index</dt><dd>${safeText(details.form_four_index || '—')}</dd>
     <dt>Phone</dt><dd>${safeText(details.phone || '—')}</dd>
     <dt>Next of kin</dt><dd>${kin || '—'}</dd>
     <dt>Address</dt><dd>${safeText(details.address || '—')}</dd>
+    <dt>Fees paid by</dt><dd>${safeText(details.fee_payer_display || '—')}</dd>
     <dt>Guarantor / sponsor</dt><dd>${safeText([details.sponsor_name, details.sponsor_phone].filter(Boolean).join(' · ') || '—')}</dd>
+    ${details.has_chronic_condition ? `<dt>Health (declared)</dt><dd>${details.has_chronic_condition === 'yes' ? 'Yes' : 'No'}${details.health_declaration ? ' — ' + safeText(details.health_declaration) : ''}</dd>` : ''}
     <dt>Schools before</dt><dd>${(details.education || []).map(e =>
       `${safeText(e.level_display)}: ${safeText(e.institution)}${e.start_year || e.end_year ? ` (${safeText(e.start_year || '?')}–${safeText(e.end_year || '?')})` : ''}${e.index_number ? ' · ' + safeText(e.index_number) : ''}`).join('<br>') || '—'}</dd>
     ${(details.typed_items || []).map(t => `<dt>${safeText(t.name)}</dt><dd>${safeText(t.value)}</dd>`).join('')}
@@ -11839,8 +12017,16 @@ async function loadAdmissionSettings() {
     document.getElementById('adm-id-example').value = fmt.example;
     document.getElementById('adm-id-veta-pattern').value = fmt.veta_pattern || '';
     document.getElementById('adm-id-veta-example').value = fmt.veta_example || '';
+    document.getElementById('adm-id-veta-start').value = fmt.veta_starts_at;
+    renderVetaCounters(fmt);
   } catch (e) { /* not this account's card */ }
   await loadRequirements();
+}
+
+function renderVetaCounters(fmt) {
+  document.getElementById('adm-id-veta-counters').innerHTML = (fmt.veta_counters || []).length
+    ? fmt.veta_counters.map(c => `<span class="badge badge-gen" style="margin:0 6px 4px 0">${safeText(c.programme)}: ${safeText(c.next)}</span>`).join('')
+    : '<span style="color:var(--muted)">Set the VETA pattern above (with {PROG}) to number each course on its own.</span>';
 }
 
 const FREQUENCY_LABELS = { each_semester: 'Every semester', each_year: 'Once a year', once: 'Once, when they join' };
@@ -11867,6 +12053,7 @@ async function loadRequirements() {
   document.getElementById('req-tbody').innerHTML = state.requirements.length
     ? state.requirements.map(item => `<tr>
         <td>${safeText(item.name)}</td>
+        <td>${safeText({ pst: 'PST', veta: 'VETA', both: 'PST and VETA' }[item.applies_to] || 'PST')}</td>
         <td>${item.kind === 'check' ? '<span class="badge badge-yellow">Held — checked only</span>'
               : item.charge_type_name ? `Billed under ${safeText(item.charge_type_name)}` : '<span style="color:var(--muted);">billed — no charge type</span>'}</td>
         <td>${safeText(FREQUENCY_LABELS[item.frequency] || item.frequency)}${item.quantity > 1 ? ` · ${item.quantity} over the year` : ''}${item.value_label ? ` · types the ${safeText(item.value_label)}` : ''}</td>
@@ -11877,7 +12064,7 @@ async function loadRequirements() {
           <button class="btn btn-ghost btn-sm" onclick="deleteRequirement(${item.id})">Delete</button>
         </td>
       </tr>`).join('')
-    : '<tr><td colspan="6" style="color:var(--muted);">No items yet</td></tr>';
+    : '<tr><td colspan="7" style="color:var(--muted);">No items yet</td></tr>';
   onRequirementKindChange();
 }
 
@@ -11903,6 +12090,7 @@ function resetRequirementForm() {
   document.getElementById('req-name').value = '';
   document.getElementById('req-charge').value = '';
   document.getElementById('req-kind').value = 'check';
+  document.getElementById('req-applies').value = 'pst';
   document.getElementById('req-quantity').value = 1;
   document.getElementById('req-value-label').value = '';
   document.getElementById('req-frequency').value = 'each_semester';
@@ -11918,6 +12106,7 @@ function editRequirement(id) {
   document.getElementById('req-id').value = item.id;
   document.getElementById('req-name').value = item.name;
   document.getElementById('req-kind').value = item.kind || 'billed';
+  document.getElementById('req-applies').value = item.applies_to || 'pst';
   document.getElementById('req-quantity').value = item.quantity || 1;
   document.getElementById('req-value-label').value = item.value_label || '';
   document.getElementById('req-charge').value = item.charge_type || '';
@@ -11936,6 +12125,7 @@ async function saveRequirement(event) {
   const payload = {
     name: document.getElementById('req-name').value.trim(),
     kind: document.getElementById('req-kind').value,
+    applies_to: document.getElementById('req-applies').value,
     quantity: Math.max(1, Math.min(10, Number(document.getElementById('req-quantity').value) || 1)),
     value_label: document.getElementById('req-kind').value === 'check' ? document.getElementById('req-value-label').value.trim() : '',
     charge_type: document.getElementById('req-kind').value === 'billed' ? (document.getElementById('req-charge').value || null) : null,
@@ -12026,11 +12216,13 @@ async function saveCollegeIdFormat() {
       starts_at: Number(document.getElementById('adm-id-start').value) || 1,
       next_number: Number(document.getElementById('adm-id-next').value) || 1,
       veta_pattern: document.getElementById('adm-id-veta-pattern').value.trim(),
+      veta_starts_at: Number(document.getElementById('adm-id-veta-start').value) || 1,
     });
+    renderVetaCounters(saved);
     state.collegeIdFormat = saved;
     document.getElementById('adm-id-example').value = saved.example;
     document.getElementById('adm-id-veta-example').value = saved.veta_example || '';
-    toast(`Saved — the next number is ${saved.example}`, 'var(--green)');
+    toast(`Saved — the next number is ${saved.example}${saved.veta_pattern && saved.veta_example ? `; the next VETA number ${saved.veta_example}` : ''}`, 'var(--green)');
   } catch (e) {
     toast(apiErrorText(e, 'Could not save the format'), 'var(--red)');
   }
@@ -12040,7 +12232,7 @@ async function saveCollegeIdFormat() {
 const REVIEW_LABELS = {
   clear: 'Passed everything',
   repeat: 'Repeats failed module(s)',
-  discontinued: 'Discontinued',
+  discontinued: 'FAIL',
   completed: 'Finished',
   pending: 'Waiting for results',
   provisional: 'Continues, results awaited',
@@ -12052,7 +12244,9 @@ const REVIEW_BADGE = {
 };
 const STANDING_LABELS = {
   active: 'Studying', repeating: 'Repeating', postponed: 'Postponed',
-  discontinued: 'Discontinued', completed: 'Finished, awaiting clearance', archived: 'Archived',
+  failed: 'FAIL', discontinued: 'Discontinued (disciplinary)', completed: 'Finished, awaiting clearance', archived: 'Archived',
+  not_reported: 'Did not report', absconded: 'Absconded (ABS)', suspended: 'Suspended', deceased: 'Deceased',
+  terminated: 'Terminated',
 };
 
 function outcomeBadge(outcome) {
@@ -12341,7 +12535,7 @@ async function saveReviewDecision() {
 
 async function loadStandings() {
   try {
-    const rows = await api('GET', '/student-standings/?status=repeating,postponed,discontinued,completed,archived');
+    const rows = await api('GET', '/student-standings/?status=repeating,postponed,failed,discontinued,completed,archived,absconded,suspended,deceased,terminated');
     const list = rows.results ?? rows;
     const tbody = document.getElementById('standing-tbody');
     if (!list.length) {
@@ -12382,7 +12576,7 @@ async function advanceSemester() {
     (plan.moves || []).forEach(move => { actions[move.action] = (actions[move.action] || 0) + 1; });
     const labels = {
       promoted: 'move up a level', continues: 'continue into semester 2', repeats: 'repeat failed module(s)',
-      discontinued: 'discontinued — return on readmission', completed: 'finished, awaiting clearance',
+      discontinued: 'FAIL — return on readmission', completed: 'finished, awaiting clearance',
       deferred: 'held back until semester 1 is passed', away: 'postponed',
     };
     const provisionalCount = (plan.moves || []).filter(move => move.provisional).length;
@@ -13550,15 +13744,8 @@ async function openVetaModal(id) {
     ? `<div class="missing-note" style="margin-bottom:10px;">${a.blockers.map(safeText).join(' ')}</div>` : '';
   const atRecords = a.can_work && a.state === 'information';
   document.getElementById('veta-modal-details').style.display = atRecords ? '' : 'none';
-  if (atRecords) {
-    document.getElementById('veta-d-phone').value = a.phone || '';
-    document.getElementById('veta-d-gender').value = a.gender || '';
-    document.getElementById('veta-d-dob').value = a.date_of_birth || '';
-    const first = a.next_of_kin[0] || {};
-    document.getElementById('veta-d-kin-name').value = first.name || '';
-    document.getElementById('veta-d-kin-phone').value = first.phone || '';
-    document.getElementById('veta-d-kin-rel').value = first.relationship || 'parent';
-  }
+  if (atRecords) document.getElementById('veta-d-form').innerHTML = detailsFormHtml('veta-d', { ...a, veta_only: true });
+  renderVetaItems(a);
   const atFinance = a.can_work && a.state === 'finance' && !a.fees_raised;
   document.getElementById('veta-modal-fees').style.display = atFinance ? '' : 'none';
   if (atFinance) {
@@ -13583,18 +13770,41 @@ async function openVetaModal(id) {
   document.getElementById('veta-app-modal').classList.add('open');
 }
 
+// VETA items (said 19 October 2026): checked at the admission desk before
+// admitting; one missing holds the student.
+function renderVetaItems(a) {
+  const box = document.getElementById('veta-modal-items');
+  const items = a.items || [];
+  if (!items.length) { box.innerHTML = ''; return; }
+  const canMark = a.can_work && a.state === 'admission';
+  const said = { has_it: 'Has it', missing: 'Missing — held', waived: 'Waived' };
+  box.innerHTML = `<div class="card-title" style="font-size:.9rem;">Items — checked before admitting</div>` + items.map(row => `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:.82rem;">
+      <span style="min-width:180px;">${safeText(row.name)}${row.value ? ` <span style="color:var(--muted)">${safeText(row.value)}</span>` : ''}</span>
+      ${canMark ? `
+        ${row.value_label ? `<input id="veta-item-${row.requirement}" placeholder="${safeText(row.value_label)}" value="${safeText(row.value || '')}" style="max-width:180px">` : ''}
+        <button class="btn ${row.status === 'has_it' ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="markVetaItem(${a.id}, ${row.requirement}, 'has_it')">${row.value_label ? 'Save' : 'Has it'}</button>
+        <button class="btn ${row.status === 'missing' ? 'btn-warning' : 'btn-ghost'} btn-sm" onclick="markVetaItem(${a.id}, ${row.requirement}, 'missing')">Missing — hold</button>
+        <button class="btn ${row.status === 'waived' ? 'btn-secondary' : 'btn-ghost'} btn-sm" onclick="markVetaItem(${a.id}, ${row.requirement}, 'waived')">Waive</button>`
+      : `<span>${said[row.status] || 'Checked at the admission desk'}</span>`}
+    </div>`).join('');
+}
+
+async function markVetaItem(id, requirementId, status) {
+  const value = document.getElementById(`veta-item-${requirementId}`)?.value || '';
+  try {
+    await api('POST', `/course-applications/${id}/item/`, { requirement_id: requirementId, status, value });
+    toast(status === 'missing' ? 'Recorded — held until it is brought' : 'Recorded', status === 'missing' ? 'var(--orange)' : 'var(--green)');
+    await openVetaModal(id);
+  } catch (e) { toast(apiErrorText(e, 'Could not record it'), 'var(--red)'); }
+}
+
 function closeVetaModal() { document.getElementById('veta-app-modal').classList.remove('open'); }
 
 async function saveVetaDetails(event) {
   const id = document.getElementById('veta-modal-id').value;
-  const kinName = document.getElementById('veta-d-kin-name').value.trim();
-  const payload = {
-    phone: document.getElementById('veta-d-phone').value.trim(),
-    gender: document.getElementById('veta-d-gender').value,
-    date_of_birth: document.getElementById('veta-d-dob').value || null,
-    next_of_kin: kinName ? [{ name: kinName, phone: document.getElementById('veta-d-kin-phone').value.trim(),
-                              relationship: document.getElementById('veta-d-kin-rel').value }] : [],
-  };
+  const payload = readDetailsForm('veta-d');
+  if (!payload.date_of_birth) payload.date_of_birth = null;
   const done = working(event?.currentTarget, 'Saving…');
   try { await api('POST', `/course-applications/${id}/details/`, payload); toast('Details saved', 'var(--green)'); await openVetaModal(id); }
   catch (e) { toast(apiErrorText(e, 'Could not save the details'), 'var(--red)'); }
@@ -13843,7 +14053,8 @@ async function loadExecutiveFinance() {
   }
   const empty = cols => `<tr><td colspan="${cols}" style="color:var(--muted);">Nothing billed yet</td></tr>`;
   try {
-    const data = await api('GET', `/executive/finance/${select.value ? `?academic_year_id=${select.value}` : ''}`);
+    await fillScopeSelects('exec');
+    const data = await api('GET', `/executive/finance/?${scopeQuery('exec')}${select.value ? `academic_year_id=${select.value}` : ''}`);
     const t = data.totals;
     const payable = Number(t.billed) - Number(t.waived);
     const rate = payable > 0 ? Math.round(Number(t.paid) / payable * 100) : 0;
@@ -13855,6 +14066,9 @@ async function loadExecutiveFinance() {
       <div class="qf-item"><span>Waived</span><strong>${money(t.waived)}</strong></div>
       <div class="qf-item"><span>Students billed</span><strong>${t.students}</strong></div>
       <div class="qf-item"><span>Still owing</span><strong>${t.owing}</strong></div>`;
+    document.getElementById('exec-department-tbody').innerHTML = (data.by_department || []).length ? data.by_department.map(r => `<tr>
+        <td>${safeText(r.department)}</td><td>${r.students}</td><td>${money(r.billed)}</td><td>${money(r.waived)}</td>
+        <td>${money(r.paid)}</td><td>${money(r.outstanding)}</td></tr>`).join('') : empty(6);
     document.getElementById('exec-family-tbody').innerHTML = data.by_family.length ? data.by_family.map(r => `<tr>
         <td>${safeText(r.family)}</td><td>${money(r.billed)}</td><td>${money(r.waived)}</td>
         <td>${money(r.paid)}</td><td>${money(r.outstanding)}</td></tr>`).join('') : empty(5);
@@ -14115,6 +14329,14 @@ installWebIconReplacements();
   if (isStaff) {
     document.body.classList.add('is-admin');
     if (isHod) document.body.classList.add('is-hod');
+    // A Head of Department sees no accounts, only the staff DPARC or the
+    // Principal put in their department, and gives them modules (said 19 October 2026).
+    if (isHod && !state.canManageAccounts && !isPrincipal && !offices.dparc) {
+      const nav = document.querySelector('[data-page="accounts"]');
+      if (nav) nav.lastChild.textContent = ' My department staff';
+      document.getElementById('accounts-title').textContent = 'My department staff';
+      document.getElementById('accounts-sub').textContent = 'The staff DPARC or the Principal put in your department. Give each tutor their modules.';
+    }
     else if (isPrincipal) document.body.classList.add('is-principal');
     document.getElementById('role-badge').textContent =
       isHod ? 'Head of Department' : isPrincipal ? 'Principal' : offices.dparc ? 'DPARC'
@@ -14144,6 +14366,29 @@ document.getElementById('fin-pay-date').value = new Date().toISOString().split('
 // flash open on every page load.
 restoreSidebarCollapsed();
 boot();
+</script>
+<script>
+// Five minutes without use signs the page out (said 19 October 2026). The
+// server is the rule (IdleTimeoutMiddleware); this tells it the person is
+// still working while they type, and leaves the page when they are not.
+(function () {
+  const limit = {{ IDLE_SECONDS|default:300 }} * 1000;
+  const leave = '/logout/?idle=1';
+  let lastUse = Date.now(), lastPing = Date.now();
+  const used = () => { lastUse = Date.now(); };
+  ['mousedown', 'keydown', 'touchstart', 'wheel', 'input'].forEach(name =>
+    document.addEventListener(name, used, { passive: true, capture: true }));
+  const token = () => { const m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/); return m ? decodeURIComponent(m[1]) : ''; };
+  setInterval(() => {
+    const now = Date.now();
+    if (now - lastUse > limit) { location.href = leave; return; }
+    if (lastUse > lastPing && now - lastPing > 60000) {
+      lastPing = now;
+      fetch('/keep-alive/', { method: 'POST', headers: { 'X-CSRFToken': token() }, credentials: 'same-origin' })
+        .then(r => { if (r.status === 401) location.href = '/login/?idle=1'; }).catch(() => {});
+    }
+  }, 10000);
+})();
 </script>
 </body>
 </html>

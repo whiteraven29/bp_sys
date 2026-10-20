@@ -24,6 +24,7 @@ from django.core.management import call_command
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from .test_admissions import complete_record
 from . import admissions, finance
 from .models import (
     Notification,
@@ -75,7 +76,7 @@ class ScheduleBase(TestCase):
         return profile
 
     def continuing_student(self, reg_no='NIT/PST/2025/0001'):
-        profile = StudentProfile.objects.create(nactvet_reg_no=reg_no, name='Continuing Student')
+        profile = complete_record(StudentProfile.objects.create(nactvet_reg_no=reg_no, name='Continuing Student'))
         # Studied here last year; last year's fees were kept in Excel, so no
         # charges exist for it.
         SemesterRegistration.objects.create(profile=profile, semester=self.last_sem2, programme=self.pst,
@@ -206,6 +207,7 @@ class FinanceDeskResidenceTests(ScheduleBase):
             date_of_birth=date(2006, 1, 1), actor=self.officer, form_four_index='S0101/0002/2025',
             next_of_kin=[{'name': 'A', 'phone': '1', 'relationship': 'parent'},
                          {'name': 'B', 'phone': '2', 'relationship': 'parent'}])
+        complete_record(self.profile)
         self.application = admissions.open_application(
             profile=self.profile, semester=self.sem1, programme=self.pst, class_level=self.level4,
             kind=Application.NEW, actor=self.officer)

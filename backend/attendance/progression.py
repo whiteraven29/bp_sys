@@ -951,7 +951,8 @@ def _discontinue(review, *, actor=None, known=None):
             repeat.note = (f'Discontinued in {review.semester}; sat afresh as a first sitting '
                            f'on readmission.')[:300]
             repeat.save(update_fields=['status', 'resolved_at', 'note'])
-    set_standing(review.profile, StudentStanding.DISCONTINUED, actor=actor,
+    # FAIL, not "discontinued" (said 19 October 2026): readmitted as before.
+    set_standing(review.profile, StudentStanding.FAILED, actor=actor,
                  semester=review.semester, class_level=review.class_level,
                  programme=review.programme, known=known,
                  return_semester_number=review.semester.number,
@@ -990,7 +991,8 @@ def standing_for(profile, *, class_level=None, programme=None, known=None):
 @transaction.atomic
 def set_standing(profile, status, *, actor=None, semester=None, reason='',
                  class_level=None, programme=None,
-                 return_year=None, return_semester_number=None, note='', known=None):
+                 return_year=None, return_semester_number=None, note='', known=None,
+                 since=None, until=None):
     """Move a student's standing and keep the trail.
 
     Every move is written to StandingChange with its reason, so a student who
@@ -1012,6 +1014,11 @@ def set_standing(profile, status, *, actor=None, semester=None, reason='',
         standing.return_semester_number = None
     if note:
         standing.note = note[:300]
+    # When this status began (the two-year rules count from it), and when a
+    # suspension ends.
+    if before != status or since is not None:
+        standing.since = since or timezone.localdate()
+    standing.until = until if status == StudentStanding.SUSPENDED else None
     standing.updated_by = actor
     standing.save()
 

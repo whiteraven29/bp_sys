@@ -27,8 +27,8 @@ from django.utils import timezone
 
 from . import admissions, finance
 from .models import (
-    CourseApplication, CourseApplicationStep, CourseEnrollment, CourseFee, Intake,
-    Programme, SemesterRegistration, StudentCharge, StudentProfile,
+    AdmissionRequirement, CourseApplication, CourseApplicationStep, CourseEnrollment, CourseFee, Intake,
+    Programme, RequirementCheck, SemesterRegistration, StudentCharge, StudentProfile,
 )
 
 logger = logging.getLogger(__name__)
@@ -127,18 +127,70 @@ def desk_blockers(application):
             missing.append('their gender')
         if not profile.next_of_kin.exists():
             missing.append('a next of kin')
-        return [f'Records still needs {" and ".join(missing)}.'] if missing else []
+        if not profile.fee_payer:
+            missing.append('who pays the fees')
+        if not missing:
+            return []
+        listed = missing[0] if len(missing) == 1 else ', '.join(missing[:-1]) + ' and ' + missing[-1]
+        return [f'Records still needs {listed}.']
     if state == CourseApplication.FINANCE:
         if not application.residence:
             return ['Finance states day or hostel.']
         if application.fees_raised_at is None:
             return ['Finance raises the course fees.']
     if state == CourseApplication.ADMISSION:
+        blockers = []
         unpaid = unpaid_before_admission(application)
         if unpaid:
-            return ['To be paid before admission: '
-                    + '; '.join(f'{name} {amount:,.2f}' for name, amount in unpaid) + '.']
+            blockers.append('To be paid before admission: '
+                            + '; '.join(f'{name} {amount:,.2f}' for name, amount in unpaid) + '.')
+        items = items_for(application)
+        missing = [row['name'] for row in items if row['status'] == RequirementCheck.MISSING]
+        unchecked = [row['name'] for row in items if not row['status'] and row['mandatory']]
+        if missing:
+            blockers.append(f'On hold — missing: {", ".join(missing)}.')
+        if unchecked:
+            blockers.append(f'Check first: {", ".join(unchecked)}.')
+        return blockers
     return []
+
+
+# ── the items a VETA course asks for (said 19 October 2026) ─────────────────
+
+def requirements_for(application):
+    """The checked-only items asked of VETA course students: the same as the
+    PST ones, marked for VETA (or both), checked at the admission desk."""
+    return list(AdmissionRequirement.objects.filter(
+        is_active=True, kind=AdmissionRequirement.CHECK_ONLY,
+        applies_to__in=[AdmissionRequirement.FOR_VETA, AdmissionRequirement.FOR_BOTH]))
+
+
+def items_for(application):
+    checks = {c.requirement_id: c for c in RequirementCheck.objects.filter(course_application=application)}
+    return [{'requirement': r.id, 'name': r.name, 'mandatory': r.mandatory, 'value_label': r.value_label,
+             'status': checks[r.id].status if r.id in checks else '',
+             'value': checks[r.id].value if r.id in checks else ''}
+            for r in requirements_for(application)]
+
+
+@transaction.atomic
+def record_item(application, requirement, status, *, value='', actor=None):
+    """The admission desk marks a VETA item: has it, missing (which holds the
+    student — they cannot be admitted), or waived."""
+    if application.state != CourseApplication.ADMISSION:
+        raise VetaError('Items are checked at the admission desk, before admitting.')
+    if requirement not in requirements_for(application):
+        raise VetaError(f'{requirement.name} is not asked of VETA course students.')
+    if status not in dict(RequirementCheck.STATUS_CHOICES):
+        raise VetaError('Has it, missing or waived.')
+    value = (value or '').strip()
+    if requirement.value_label and status == RequirementCheck.HAS_IT and not value:
+        raise VetaError(f'Type the {requirement.value_label}.')
+    check, _ = RequirementCheck.objects.update_or_create(
+        course_application=application, requirement=requirement,
+        defaults={'profile': application.profile, 'status': status, 'checked_by': actor,
+                  'value': value[:120] if status == RequirementCheck.HAS_IT else ''})
+    return check
 
 
 def unpaid_before_admission(application):

@@ -76,3 +76,50 @@ class PasswordExpiryMiddleware:
         if reading['must_change']:
             return redirect('password-change')
         return self.get_response(request)
+
+
+class IdleTimeoutMiddleware:
+    """A session nobody has used for five minutes ends (said 19 October 2026).
+
+    Staff and students alike: a shared office PC or a phone left on a desk does
+    not stay signed in. "Used" means a request the person made — the
+    notification poll every minute is the page talking to itself and does not
+    count. The page sends a small keep-alive while somebody is actually typing
+    or clicking, so a long form is not lost to it.
+    """
+
+    #: Polls the pages make by themselves: they neither count as use nor, after
+    #: the limit, keep anybody signed in.
+    BACKGROUND = ('/api/notifications/', '/api/my-notifications/')
+    STAMP = 'last_activity'
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        import time
+
+        from django.conf import settings
+        from django.contrib.auth import logout
+        from django.http import JsonResponse
+        from django.shortcuts import redirect
+
+        session = getattr(request, 'session', None)
+        user = getattr(request, 'user', None)
+        signed_in = bool(user is not None and getattr(user, 'is_authenticated', False)) or bool(
+            session is not None and (session.get('student_id') or session.get('course_profile_id')))
+        if not signed_in or request.path.startswith(('/static/', '/login', '/logout', '/student-logout')):
+            return self.get_response(request)
+
+        limit = getattr(settings, 'IDLE_TIMEOUT_SECONDS', 300)
+        now = time.time()
+        last = session.get(self.STAMP)
+        if last is not None and now - last > limit:
+            logout(request)                     # flushes the session, staff or student
+            if request.path.startswith('/api/') or request.path == '/keep-alive/':
+                return JsonResponse({'detail': 'You were signed out after 5 minutes without use. Sign in again.',
+                                     'idle': True}, status=401)
+            return redirect('/login/?idle=1')
+        if request.path not in self.BACKGROUND and (last is None or now - last > 15):
+            session[self.STAMP] = now           # written at most every 15 seconds
+        return self.get_response(request)
