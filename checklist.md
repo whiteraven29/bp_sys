@@ -188,7 +188,10 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      level) apart from *Continuing* and *Readmission* — the admission officer's suggestion
    - [x] `merge_programmes` into an existing programme (server: PST04/05/06 → PST): shows departments,
      active state and fee clashes; keeps the merged programme active
-   - [x] 1122 tests; screens checked in the browser
+   - [x] PST students sign in with the college ID too (the password slip said so; only VETA could)
+   - [x] Admitted but in no module (no password possible): named on the password desk; the merge
+     enrolls this year's students of the merged programme in its modules
+   - [x] 1124 tests; screens checked in the browser
    - [ ] On the server: run `merge_programmes` (release guide B6) after the deploy, before the next application
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,

@@ -878,3 +878,9 @@ The admission officer asked (20 October 2026) for *Second year* and *Third year*
 so a newcomer joining at Level 5 or 6 is not mistaken for a continuing or readmitted student. All
 three are new students (first years' desks, one-time charges); the year sets the level from the
 programme (PST: 4, 5, 6). *Continuing* and *Readmission* stay as they were.
+
+### Q63. No password for students admitted on 19–20 October ✅
+
+They were admitted under PST04/05/06; the semester's modules are under PST, so they were enrolled in
+nothing, and a student in no module has no portal to give a password for. Fixed by the merge (release
+guide B6), which enrolls them; the password desk now names anybody admitted but in no module.

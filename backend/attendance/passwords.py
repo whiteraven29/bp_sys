@@ -267,6 +267,25 @@ def students_without_password():
     return (pst | veta).distinct().order_by('name')
 
 
+def admitted_without_modules():
+    """PST students admitted this year who are in no module of the semester
+    they were admitted to — so nothing to sign in through, and no password to
+    give yet. Admission enrolls a student in the modules of their programme,
+    level and semester; none there, none made (said 20 October 2026: three
+    admitted under per-level programmes whose modules sat under PST)."""
+    from django.db.models import Exists, OuterRef
+    from .models import AcademicYear, Programme, SemesterRegistration
+    year = AcademicYear.objects.filter(is_active=True).first()
+    if year is None:
+        return SemesterRegistration.objects.none()
+    return (SemesterRegistration.objects
+            .filter(semester__academic_year=year, programme__structure=Programme.SEMESTER)
+            .exclude(status=SemesterRegistration.CANCELLED)
+            .exclude(Exists(Student.objects.filter(profile=OuterRef('profile'), module__semester=OuterRef('semester'))))
+            .select_related('profile', 'programme', 'class_level', 'semester')
+            .order_by('profile__name'))
+
+
 def issue_missing_student_passwords(*, actor, ip=None):
     """Every student in `students_without_password` gets a password of their
     own — never one shared by the class. Returns the list, the only time the
@@ -291,7 +310,15 @@ def student_for_sign_in(reg_no, secret):
     Enrollments from before passwords were dated count as they always did."""
     from django.contrib.auth.hashers import check_password
     from django.db.models import F
-    rows = list(Student.objects.filter(nactvet_reg_no__iexact=str(reg_no).strip())
+    reg_no = str(reg_no).strip()
+    if reg_no and not Student.objects.filter(nactvet_reg_no__iexact=reg_no).exists():
+        # The college ID works too, as the password slip says (said 20 October
+        # 2026): a first year's registration number is temporary until NACTVET's
+        # arrives; the college ID they were admitted with does not change.
+        profile = StudentProfile.objects.filter(college_id__iexact=reg_no).exclude(college_id='').first()
+        if profile is not None:
+            reg_no = profile.nactvet_reg_no
+    rows = list(Student.objects.filter(nactvet_reg_no__iexact=reg_no)
                 .exclude(portal_pin_hash='')
                 .order_by(F('portal_pin_set_at').desc(nulls_last=True), '-id'))
     dated = [row for row in rows if row.portal_pin_set_at is not None]

@@ -1856,7 +1856,13 @@ def issue_student_passwords(request):
         waiting = passwords.students_without_password()
         return Response({'count': waiting.count(), 'students': [
             {'name': p.name, 'reg_no': p.nactvet_reg_no, 'college_id': p.college_id or ''}
-            for p in waiting[:500]]})
+            for p in waiting[:500]],
+            # Admitted but in no module: no password can be given until they are.
+            'no_modules': [
+                {'name': r.profile.name, 'reg_no': r.profile.nactvet_reg_no,
+                 'college_id': r.profile.college_id or '', 'programme': r.programme.code,
+                 'class_level': r.class_level.name, 'semester': str(r.semester)}
+                for r in passwords.admitted_without_modules()[:200]]})
     issued = passwords.issue_missing_student_passwords(actor=request.user, ip=finance.client_ip(request))
     security_log.info('%s issued portal passwords to %d student(s)', request.user.username, len(issued))
     return Response({'issued': issued})

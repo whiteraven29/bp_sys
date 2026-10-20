@@ -8,7 +8,7 @@ the grace run out is the administrator's to reset.
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -172,6 +172,15 @@ class StudentPasswordTests(TestCase):
     def sign_in(self):
         return self.client.post('/login/', {'identifier': self.profile.nactvet_reg_no,
                                             'secret': 'Portal#2026'})
+
+    def test_the_college_id_signs_in_too(self):
+        """As the password slip says: registration number or college ID."""
+        StudentProfile.objects.filter(pk=self.profile.pk).update(college_id='BPH/PST/2026/014')
+        response = self.client.post('/login/', {'identifier': 'bph/pst/2026/014', 'secret': 'Portal#2026'})
+        self.assertRedirects(response, '/student-dashboard/', fetch_redirect_response=False)
+        self.assertEqual(self.client.session['student_id'], self.student.id)
+        wrong = Client().post('/login/', {'identifier': 'BPH/PST/2026/014', 'secret': 'Wrong#2026'})
+        self.assertEqual(wrong.status_code, 200)                       # refused, back on the form
 
     def test_setting_a_portal_password_stamps_the_day(self):
         self.assertIsNotNone(self.student.portal_pin_set_at)

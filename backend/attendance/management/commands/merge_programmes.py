@@ -18,7 +18,11 @@ levels; then the --from programmes are deleted. A fee cell both programmes
 have for the same charge, level and year: the --into cell is kept, the
 charges billed from the other are pointed at it — and when the two amounts
 differ the run says so, to be checked before --apply. If any merged
-programme was active, the one that stays is active. Students' college ID
+programme was active, the one that stays is active. Last, this year's students
+of the merged programme are enrolled in its modules they are not in yet — a
+student admitted under a per-level programme whose modules sat under another
+got none, and so no portal password (said 20 October 2026); the charges that
+raises are counted. Students' college ID
 numbers are left as they were issued; their results, marks and payments are
 not touched.
 """
@@ -90,9 +94,37 @@ class Command(BaseCommand):
                 target.is_active = True
             target.save()
             self.stdout.write(f'Now:    {self._describe(target)}')
+            self._enroll(target)
             if not apply:
                 transaction.set_rollback(True)
         self.stdout.write('Done.' if apply else 'Dry run only. Add --apply to write it.')
+
+    def _enroll(self, target):
+        from attendance import progression
+        from attendance.models import AcademicYear, StudentCharge
+        year = AcademicYear.objects.filter(is_active=True).first()
+        if year is None:
+            return
+        registrations = (SemesterRegistration.objects
+                         .filter(programme=target, semester__academic_year=year)
+                         .exclude(status=SemesterRegistration.CANCELLED)
+                         .select_related('profile', 'programme', 'class_level', 'semester'))
+        profiles = [r.profile_id for r in registrations]
+        charges_before = StudentCharge.objects.filter(profile_id__in=profiles).count()
+        enrolled = {}
+        for registration in registrations:
+            made = progression.enroll_registration(registration)
+            if made:
+                enrolled[registration.profile.name] = len(made)
+        if enrolled:
+            self.stdout.write('  enrolled in their modules: ' + '; '.join(
+                f'{name} ({count})' for name, count in sorted(enrolled.items())))
+        else:
+            self.stdout.write('  enrolled in their modules: nobody was missing any')
+        added = StudentCharge.objects.filter(profile_id__in=profiles).count() - charges_before
+        if added:
+            self.stdout.write(self.style.WARNING(f'  ! {added} new charge(s) raised by that enrolment — '
+                                                 f'check them in Finance'))
 
     def _describe(self, programme):
         levels = ', '.join(l.name for l in programme.levels.order_by('order')) or 'none'
