@@ -91,8 +91,8 @@ class FeesLedgerAPITests(TestCase):
 
     def test_payments_cannot_be_edited_or_deleted_through_the_api(self):
         self._setup_fees()
-        self.api.post('/api/finance/generate-charges/',
-                      {'academic_year': self.year.id, 'class_level': self.level4.id}, format='json')
+        # The finance desk bills the year at admission (the bulk run is gone).
+        finance.generate_charges(self.asha, self.year, class_level=self.level4)
         charge = StudentCharge.objects.filter(profile=self.asha).order_by('due_date').first()
         created = self.api.post('/api/payments/record/', {
             'profile': self.asha.id, 'amount': str(charge.amount),
@@ -119,8 +119,8 @@ class FeesLedgerAPITests(TestCase):
 
     def test_a_receipt_can_only_be_banked_once(self):
         self._setup_fees()
-        self.api.post('/api/finance/generate-charges/',
-                      {'academic_year': self.year.id, 'class_level': self.level4.id}, format='json')
+        # The finance desk bills the year at admission (the bulk run is gone).
+        finance.generate_charges(self.asha, self.year, class_level=self.level4)
         payload = {
             'profile': self.asha.id, 'amount': '180000.00', 'payment_date': '2025-09-28',
             'bank_reference': 'CRDB-88291', 'efd_receipt_no': 'EFD-0034127',
@@ -142,12 +142,9 @@ class FeesLedgerAPITests(TestCase):
     def test_the_full_scenario_from_invoice_to_clearance(self):
         self._setup_fees()
 
-        # 1. The accountant bills the level.
-        generated = self.api.post('/api/finance/generate-charges/', {
-            'academic_year': self.year.id, 'class_level': self.level4.id,
-        }, format='json')
-        self.assertEqual(generated.status_code, 200, generated.data)
-        self.assertEqual(generated.data['charges_raised'], 5)
+        # 1. The finance desk bills her year, once, at admission.
+        generated = finance.generate_charges(self.asha, self.year, class_level=self.level4)
+        self.assertEqual(len(generated), 5)
 
         # 2. The student sees what she owes and is blocked from CAT 1.
         portal = Client()
@@ -211,8 +208,8 @@ class FeesLedgerAPITests(TestCase):
     def test_a_student_cannot_read_or_invoice_another_students_fees(self):
         self._setup_fees()
         self.api.force_authenticate(self.admin)
-        self.api.post('/api/finance/generate-charges/',
-                      {'academic_year': self.year.id, 'class_level': self.level4.id}, format='json')
+        # The finance desk bills the year at admission (the bulk run is gone).
+        finance.generate_charges(self.asha, self.year, class_level=self.level4)
 
         other_enrollment = Student.objects.create(
             nactvet_reg_no='REG/002', name='Baraka Simon', module=self.module)
@@ -274,8 +271,8 @@ class FeesLedgerAPITests(TestCase):
 
     def test_reversing_a_payment_restores_the_balance_and_keeps_the_record(self):
         self._setup_fees()
-        self.api.post('/api/finance/generate-charges/',
-                      {'academic_year': self.year.id, 'class_level': self.level4.id}, format='json')
+        # The finance desk bills the year at admission (the bulk run is gone).
+        finance.generate_charges(self.asha, self.year, class_level=self.level4)
 
         recorded = self.api.post('/api/payments/record/', {
             'profile': self.asha.id, 'amount': '180000.00', 'payment_date': '2025-09-29',
@@ -295,8 +292,8 @@ class FeesLedgerAPITests(TestCase):
 
     def test_collections_report_flags_payments_missing_an_efd_number(self):
         self._setup_fees()
-        self.api.post('/api/finance/generate-charges/',
-                      {'academic_year': self.year.id, 'class_level': self.level4.id}, format='json')
+        # The finance desk bills the year at admission (the bulk run is gone).
+        finance.generate_charges(self.asha, self.year, class_level=self.level4)
         self.api.post('/api/payments/record/', {
             'profile': self.asha.id, 'amount': '100000.00', 'payment_date': '2025-09-29',
             'efd_receipt_no': 'EFD-1',
@@ -363,8 +360,8 @@ class FeesLedgerAPITests(TestCase):
 
     def test_a_charge_type_in_use_cannot_be_deleted(self):
         type_id, _ = self._setup_fees()
-        self.api.post('/api/finance/generate-charges/',
-                      {'academic_year': self.year.id, 'class_level': self.level4.id}, format='json')
+        # The finance desk bills the year at admission (the bulk run is gone).
+        finance.generate_charges(self.asha, self.year, class_level=self.level4)
         response = self.api.delete(f'/api/charge-types/{type_id}/')
         self.assertEqual(response.status_code, 403)
         self.assertTrue(ChargeType.objects.filter(id=type_id).exists())
@@ -602,9 +599,6 @@ class FinanceRoleSeparationTests(TestCase):
         self.assertEqual(self.api.post('/api/payments/record/', {
             'profile': self.asha.id, 'amount': '1000.00', 'payment_date': '2025-09-29',
         }, format='json').status_code, 403)
-        self.assertEqual(self.api.post('/api/finance/generate-charges/', {
-            'academic_year': self.year.id,
-        }, format='json').status_code, 403)
         self.assertEqual(self.api.post('/api/finance/raise-charge/', {
             'profile': self.asha.id, 'academic_year': self.year.id,
         }, format='json').status_code, 403)
@@ -614,12 +608,14 @@ class FinanceRoleSeparationTests(TestCase):
         for url in self.FINANCE_URLS:
             self.assertEqual(self.api.get(url).status_code, 200, url)
 
-    def test_the_accountant_bills_the_level_not_the_exam_officer(self):
+    def test_nobody_bills_a_whole_level_any_more(self):
+        """The year's bill is raised at the finance desk, at admission, once
+        (said 20 October 2026); the accountant's bulk run is gone."""
         self.api.force_authenticate(self.accountant)
         response = self.api.post('/api/finance/generate-charges/', {
             'academic_year': self.year.id, 'class_level': self.level.id,
         }, format='json')
-        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.status_code, 404)
 
     def test_the_exam_officer_still_owns_results_and_eligibility(self):
         self.api.force_authenticate(self.exam_officer)
@@ -1545,17 +1541,18 @@ class BillingFollowsEnrollmentTests(TestCase):
         return Student.objects.create(nactvet_reg_no=reg_no, name='Late Arrival',
                                       module=module or self.module)
 
-    def test_a_newly_enrolled_student_already_owes_the_years_fees(self):
+    def test_a_module_links_and_bills_nothing(self):
+        """Said 20 October 2026: putting a student in a module only links them.
+        The year's bill is the finance desk's, raised once at admission — billing
+        again here billed a part twice when the schedule had changed since."""
         student = self._enroll('BPH/2026/050')
         profile = finance.profile_for_student(student)
+        self.assertFalse(StudentCharge.objects.filter(profile=profile).exists())
 
+        # Billed by the desk, they owe the year and are blocked once it falls due.
+        finance.generate_charges(profile, self.year, class_level=self.level)
         totals = finance.balance_for(profile, self.year)
         self.assertEqual(totals['billed'], Decimal('2495000.00'))   # 1,600,000 + 895,000
-        self.assertEqual(totals['balance'], Decimal('2495000.00'))
-        self.assertTrue(StudentCharge.objects.filter(profile=profile).exists())
-
-        # And once the first instalment falls due they are correctly blocked,
-        # rather than reading as paid up.
         clearance = finance.exam_clearance(profile, self.year, ChargeType.CAT1,
                                            semester=self.sem, today=date(2026, 10, 1))
         self.assertFalse(clearance['cleared'])
@@ -1571,28 +1568,16 @@ class BillingFollowsEnrollmentTests(TestCase):
 
         self.assertEqual(finance.balance_for(profile, self.year)['billed'], billed)
 
-    def test_a_student_added_through_the_roster_import_is_billed_too(self):
-        StudentProfile.objects.create(nactvet_reg_no='BPH/2026/052', name='Imported Student')   # admitted
+    def test_the_roster_import_is_closed_and_bills_nobody(self):
+        profile = StudentProfile.objects.create(nactvet_reg_no='BPH/2026/052', name='Imported Student')
         response = self.api.post('/api/students/bulk_create/', {
             'module': self.module.id,
             'students': [{'nactvet_reg_no': 'BPH/2026/052', 'name': 'Imported Student'}],
         }, format='json')
-        self.assertIn(response.status_code, (200, 201), response.data)
-
-        profile = StudentProfile.objects.get(nactvet_reg_no='BPH/2026/052')
-        self.assertEqual(finance.balance_for(profile, self.year)['billed'],
-                         Decimal('2495000.00'))
-
-    def test_the_accountants_bulk_run_still_works_and_adds_nothing(self):
-        """It stays the way to catch students up after a structure changes, and
-        must remain safe to press twice."""
-        self._enroll('BPH/2026/053')
-        self.api.force_authenticate(self.accountant)
-        response = self.api.post('/api/finance/generate-charges/', {
-            'academic_year': self.year.id, 'class_level': self.level.id,
-        }, format='json')
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['charges_raised'], 0)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Admissions', response.data['detail'])
+        self.assertFalse(Student.objects.filter(nactvet_reg_no='BPH/2026/052').exists())
+        self.assertEqual(finance.balance_for(profile, self.year)['billed'], Decimal('0'))
 
     def test_registration_survives_a_fee_structure_with_no_due_dates(self):
         """Half-configured finance must not stop the college enrolling anyone."""
@@ -1693,6 +1678,7 @@ class CorrectingAChargeTypeTests(TestCase):
         student = Student.objects.create(nactvet_reg_no='BPH/2026/060', name='Asha',
                                          module=self.module)
         profile = finance.profile_for_student(student)
+        finance.generate_charges(profile, self.year, class_level=self.level)   # the finance desk
         billed = finance.balance_for(profile, self.year)['billed']
         self.assertEqual(billed, Decimal('1600000.00'))
 

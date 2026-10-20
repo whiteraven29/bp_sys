@@ -109,17 +109,21 @@ class TheExamOfficeWorksFromTheDepartmentsListsTests(OfficesBase):
 
     def test_registers_no_module_and_enrolls_nobody(self):
         self.assertEqual(self.new_module(self.exam, 'PST04150').status_code, 403)
-        self.assertEqual(self.exam.post('/api/students/', {
+        self.assertIn(self.exam.post('/api/students/', {
             'nactvet_reg_no': 'NIT/PST/2026/0900', 'name': 'X', 'module': self.m1.id,
-        }, format='json').status_code, 403)
+        }, format='json').status_code, (400, 403))
 
     def test_the_departments_still_do(self):
         self.assertEqual(self.new_module(self.hod, 'PST04151').status_code, 201)
         self.assertEqual(self.new_module(self.dparc, 'PST04152').status_code, 201)
+        # Nobody adds a student to a module by hand (said 20 October 2026):
+        # admission links them, and a module set up for their level does.
         StudentProfile.objects.create(nactvet_reg_no='NIT/PST/2026/0901', name='Y')               # admitted
-        self.assertEqual(self.hod.post('/api/students/', {
+        refused = self.hod.post('/api/students/', {
             'nactvet_reg_no': 'NIT/PST/2026/0901', 'name': 'Y', 'module': self.m1.id,
-        }, format='json').status_code, 201)
+        }, format='json')
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('Admissions', str(refused.data))
 
     def test_no_staff_list_forms_requests_or_sick_records(self):
         self.assertEqual(self.exam.get('/api/staff-accounts/').status_code, 403)

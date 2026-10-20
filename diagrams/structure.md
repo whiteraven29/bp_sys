@@ -191,6 +191,11 @@ sign in.
                          the year end moves a student to the next level of it;
                          never one programme per level; level_for_year(n) /
                          year_of(level) — a new student joins in year 1, 2, 3
+  Payment.bank_account   the account the money went into; money beyond the
+                         bill is credit on it (finance.on_account)
+  StudentProfile.portal_pin_hash   VETA students' password, and every admitted
+                         PST student's too (signs in before modules exist)
+  semester_pass.py       the semester pass: status, check code, verify
   Application.kind_label  "First year" | "Second year (new) — joins at NTA
                          Level 5" | "Continuing student" | "Readmission"
   Semester.provisional_cutoff   the exam officer's date for late results

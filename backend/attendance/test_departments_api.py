@@ -298,7 +298,8 @@ class CollegeIdImportTests(ApiBase):
         super().setUp()
         module = Module.objects.create(name='M', code='PST04101', teacher='T', class_level=self.level4, semester=self.sem)
         for reg in ('REG/001', 'REG/002', 'REG/003'):
-            Student.objects.create(nactvet_reg_no=reg, name=reg, module=module)
+            profile = StudentProfile.objects.create(nactvet_reg_no=reg, name=reg)
+            Student.objects.create(nactvet_reg_no=reg, name=reg, module=module, profile=profile)
         StudentProfile.objects.filter(nactvet_reg_no='REG/003').update(college_id='BPH/PST/25/0003')
         self.records, self.records_client = self.account('records_officer', 'records')
 

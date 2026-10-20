@@ -862,6 +862,7 @@
         <button class="nav-sub-btn" data-adm-section="desk" data-roles="principal admission records finance" onclick="showAdmissionSection('desk', this)">My desk</button>
         <button class="nav-sub-btn" data-adm-section="new" data-roles="principal admission" onclick="showAdmissionSection('new', this)">New application</button>
         <button class="nav-sub-btn" data-adm-section="all" onclick="showAdmissionSection('all', this)">All applications</button>
+        <button class="nav-sub-btn" data-adm-section="pass" data-roles="principal admission" onclick="showAdmissionSection('pass', this)">Semester pass</button>
         <button class="nav-sub-btn" data-adm-section="dueback" data-roles="principal admission" onclick="showAdmissionSection('dueback', this)">Expected back</button>
         <button class="nav-sub-btn" data-adm-section="noshow" data-roles="principal admission" onclick="showAdmissionSection('noshow', this)">Did not report</button>
         <button class="nav-sub-btn" data-adm-section="items" data-roles="principal finance admission" onclick="showAdmissionSection('items', this)">Items check</button>
@@ -1753,6 +1754,17 @@
         <button class="btn btn-primary btn-sm" onclick="openApplication(event)"><i class="bi bi-person-plus"></i> Open the application</button>
       </div>
 
+      <div class="card" data-adm-section="pass">
+        <div class="card-title">Semester pass <span class="tip" tabindex="0" role="note" aria-label="Help: semester pass" data-tip="Given to a student registered for this semester, still studying, and paid up to what the payment schedule says is due by the semester's first instalment. The pass carries a check code only the college can make: an edited copy fails the check. Students can also download their own from the portal.">?</span></div>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+          <div class="field" style="margin:0;min-width:260px;"><label>Registration number or college ID</label>
+            <input id="pass-q" placeholder="e.g. BPHIST/PST/SEPT/2026/0001" onkeydown="if (event.key === 'Enter') findSemesterPass(event)"></div>
+          <button class="btn btn-primary btn-sm" onclick="findSemesterPass(event)">Find</button>
+          <a class="btn btn-ghost btn-sm" href="/semester-pass/check/" target="_blank" rel="noopener">Check a pass</a>
+        </div>
+        <div id="pass-result" style="margin-top:12px;"></div>
+      </div>
+
       <div class="card" data-adm-section="dueback">
         <div class="card-title">Expected back <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— discontinued and postponed students due this semester</span></div>
         <div class="table-wrap">
@@ -2195,15 +2207,6 @@
       <div class="page-sub">Who sits which module. New students come in through Admissions.</div>
 
       <div class="student-subview active" id="student-section-manage">
-        <div class="card">
-          <div class="card-title">Add a student to a module <span class="tip" tabindex="0" role="note" aria-label="Help: add to a module" data-tip="A correction, for a student already admitted who is missing from one of their modules. New students come in through Admissions, which puts them in their modules itself.">?</span></div>
-          <div class="form-grid">
-            <div class="field"><label>Module *</label><select id="add-stu-module"><option value="">— select module —</option></select></div>
-            <div class="field"><label>NACTVET Reg. No. *</label><input id="add-stu-regno" placeholder="e.g. NS0001/0046/2025" /></div>
-            <div class="field"><label>Student Name *</label><input id="add-stu-name" placeholder="As on their record" /></div>
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="addSingleStudent()">Add to the module</button>
-        </div>
         <div class="card">
           <div class="card-title">Filters</div>
           <div class="form-grid">
@@ -2841,19 +2844,6 @@
           </div>
         </div>
 
-        <div class="card finance-only">
-          <div class="card-title">Bill the students</div>
-          <div class="form-grid-3">
-            <div class="field"><label>Academic year</label><select id="fin-gen-year"></select></div>
-            <div class="field"><label>Class level</label><select id="fin-gen-level"><option value="">All levels</option></select></div>
-          </div>
-          <button class="btn btn-green btn-sm" onclick="generateCharges()">Generate charges</button>
-          <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
-            Raises every automatic charge for the students at that level. Safe to run again after
-            adding students — nobody is billed twice.
-          </div>
-          <div id="fin-gen-result" style="margin-top:10px"></div>
-        </div>
       </div>
 
       <!-- RECORD A PAYMENT -->
@@ -4669,7 +4659,7 @@ async function boot() {
     }
 
     populateAllSelects();
-    await refreshModuleDropdowns('', '', 'add-stu-module', 'stu-flt-module');
+    await refreshModuleDropdowns('', '', 'stu-flt-module');
     buildSidebarModules();
     if (!state.isStaff && state.isAccountant) {
       showPage('finance', document.querySelector('[data-page="finance"]'));
@@ -4921,15 +4911,15 @@ async function loadWaitingForPasswords() {
       ? `${data.count} student(s) have no portal password yet (newly admitted).`
       : 'Every current student has a portal password.';
     document.getElementById('pwd-issue-btn').style.display = data.count ? '' : 'none';
-    // Admitted but in no module: the portal opens through a module, so they
-    // get a password once the modules of their programme and level are set up.
+    // Admitted but in no module yet: they get a password all the same (said 20
+    // October 2026 — admission and finance make them our students) and sign in
+    // to their programme and bill; their modules join when the department sets them up.
     const stuck = data.no_modules || [];
     document.getElementById('pwd-no-modules').innerHTML = stuck.length ? `
-      <div class="missing-note" style="margin-top:10px;">${stuck.length} admitted student(s) are in no module yet, so
-        they cannot be given a password: ${stuck.map(r => `<b>${safeText(r.name)}</b>
-        (${safeText(r.college_id || r.reg_no)} — ${safeText(r.programme)}, ${safeText(r.class_level)})`).join('; ')}.
-        Their semester has no modules under that programme and level. Once the modules are there
-        (the programmes merged, or the examination officer adds them) they are enrolled and listed above.</div>` : '';
+      <div class="help-note" style="margin-top:10px;">${stuck.length} admitted student(s) have no modules yet:
+        ${stuck.map(r => `<b>${safeText(r.name)}</b> (${safeText(r.college_id || r.reg_no)} — ${safeText(r.programme)},
+        ${safeText(r.class_level)})`).join('; ')}. They are given a password like everybody else; their modules
+        are linked when the department sets up that level's modules.</div>` : '';
   } catch (e) { label.textContent = ''; }
 }
 
@@ -5775,22 +5765,6 @@ async function saveStudentEdit() {
   } catch(e) {
     toast(e?.detail || 'Could not update student', 'var(--red)');
   }
-}
-
-async function addSingleStudent() {
-  const moduleId = document.getElementById('add-stu-module').value;
-  const regNo = document.getElementById('add-stu-regno').value.trim().toUpperCase();
-  const name = document.getElementById('add-stu-name').value.trim();
-  if (!moduleId || !regNo || !name) { toast('Module, registration number and name are required', 'var(--red)'); return; }
-  try {
-    const result = await api('POST', '/students/bulk_create/', { module: parseInt(moduleId, 10), students: [{ nactvet_reg_no: regNo, name }] });
-    if (result.not_admitted?.length) { toast(result.detail, 'var(--red)'); return; }
-    if (!result.added) { toast('Already in that module', 'var(--orange)'); return; }
-    toast('Added to the module', 'var(--green)');
-    document.getElementById('add-stu-regno').value = '';
-    document.getElementById('add-stu-name').value = '';
-    loadStudents();
-  } catch(e) { toast(e?.detail || 'Error', 'var(--red)'); }
 }
 
 async function setStudentPin(id, name) {
@@ -7645,7 +7619,7 @@ async function ensureFinanceLookups() {
     || state.academicYears.find(y => y.is_active)?.id
     || state.academicYears[0]?.id;
 
-  ['fin-fs-year', 'fin-gen-year', 'fin-stu-year', 'fin-ps-year'].forEach(id => {
+  ['fin-fs-year', 'fin-stu-year', 'fin-ps-year'].forEach(id => {
     const el = document.getElementById(id);
     if (!el || el.dataset.filled) return;
     el.innerHTML = state.academicYears.map(y =>
@@ -7653,7 +7627,7 @@ async function ensureFinanceLookups() {
     ).join('');
     el.dataset.filled = '1';
   });
-  ['fin-gen-level', 'fin-stu-level'].forEach(id => {
+  ['fin-stu-level'].forEach(id => {
     const el = document.getElementById(id);
     if (!el || el.dataset.filled) return;
     el.innerHTML = '<option value="">All levels</option>' + state.levels.map(l =>
@@ -9702,24 +9676,6 @@ async function saveFeeCell() {
   }
 }
 
-async function generateCharges() {
-  const academic_year = document.getElementById('fin-gen-year').value;
-  const class_level = document.getElementById('fin-gen-level').value || null;
-  if (!academic_year) { toast('Pick an academic year', 'var(--red)'); return; }
-  if (!confirm('Raise this year’s charges for these students? Running it again will not bill anyone twice.')) return;
-  try {
-    const result = await api('POST', '/finance/generate-charges/', { academic_year, class_level });
-    document.getElementById('fin-gen-result').innerHTML =
-      `<div class="badge badge-green">${safeText(result.detail)}</div>`
-      + (result.failures?.length
-        ? `<div style="margin-top:8px;font-size:.78rem;color:var(--red)">${result.failures.map(f =>
-            `${safeText(f.student)}: ${safeText(f.detail)}`).join('<br>')}</div>`
-        : '');
-    toast(result.detail, 'var(--green)');
-    state.financeProfiles = null;
-  } catch (e) { toast(e?.detail || 'Failed to generate charges', 'var(--red)'); }
-}
-
 // ── recording a payment ───────────────────────────────────────────────────────
 
 async function lookupInvoice() {
@@ -9977,6 +9933,7 @@ async function openStatement(profileId) {
         <div class="stat-card" style="--c:var(--accent)"><div class="label">Billed</div><div class="value">${money(s.totals.billed)}</div></div>
         <div class="stat-card" style="--c:var(--green)"><div class="label">Paid</div><div class="value">${money(s.totals.paid)}</div></div>
         <div class="stat-card" style="--c:var(--red)"><div class="label">Outstanding</div><div class="value">${money(s.totals.balance)}</div></div>
+        ${Number(s.on_account) > 0 ? `<div class="stat-card" style="--c:var(--green)"><div class="label">Paid ahead (on account)</div><div class="value">${money(s.on_account)}</div></div>` : ''}
       </div>
 
       <div class="card-title" style="margin-top:16px">Clearance</div>
@@ -10860,6 +10817,7 @@ const ADMISSION_SECTIONS = {
   desk: ['My desk', 'What is waiting on you.'],
   new: ['New application', 'Take a student on.'],
   all: ['All applications', 'Every application this semester.'],
+  pass: ['Semester pass', 'Paid up to the semester\'s first instalment: print their pass. Students can download it from the portal.'],
   dueback: ['Expected back', 'FAIL and postponed students due this semester.'],
   settings: ['Window & ID numbers', 'When admissions run, and the college ID format.'],
   veta: ['VETA courses', 'Intakes, and students on their way through the desks.'],
@@ -11460,6 +11418,25 @@ async function loadDueBack() {
         </tr>`).join('')
       : '<tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-people"></i></div>Nobody outstanding</div></td></tr>';
   } catch (e) { /* the list is a convenience */ }
+}
+
+async function findSemesterPass(event) {
+  const q = document.getElementById('pass-q').value.trim();
+  const box = document.getElementById('pass-result');
+  if (!q) { toast('Type the registration number or college ID', 'var(--red)'); return; }
+  const done = working(event?.currentTarget, 'Finding…');
+  try {
+    const r = await api('GET', `/semester-pass/?q=${encodeURIComponent(q)}`);
+    box.innerHTML = `<div class="missing-note" style="border-left-color:${r.ok ? 'var(--green)' : 'var(--red)'}">
+      <strong>${safeText(r.name)}</strong> · ${safeText(r.college_id || r.reg_no)}${r.programme_code ? ` · ${safeText(r.programme_code)} ${safeText(r.class_level)}` : ''}
+      · ${safeText(r.semester || '')}<br>
+      ${r.ok ? `Paid up to ${safeText(r.due_by)}${r.overridden ? ' (let through by an override)' : ''}.
+          <div style="margin-top:8px;"><a class="btn btn-primary btn-sm" href="/semester-pass/${r.profile_id}/" target="_blank" rel="noopener"><i class="bi bi-printer"></i> Print the pass</a></div>`
+        : `<span style="color:var(--red)">${safeText(r.reason)}</span>`}</div>`;
+  } catch (e) {
+    box.innerHTML = '';
+    toast(apiErrorText(e, 'Could not find that student'), 'var(--red)');
+  } finally { done(); }
 }
 
 async function startReadmission(regNo, levelId, programmeId, name, status) {

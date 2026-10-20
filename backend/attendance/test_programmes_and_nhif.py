@@ -116,26 +116,6 @@ class MergeProgrammesTests(OfficeClients):
         self.assertEqual(sorted(pst.levels.values_list('order', flat=True)), [4, 6])
         self.assertEqual(SemesterRegistration.objects.get(profile=self.student).programme, pst)
 
-    def test_admitted_without_modules_shows_at_the_password_desk_and_the_merge_enrolls_them(self):
-        """The server's case: admitted under PST04 while the modules sat under PST — no
-        enrollment, so no password to give and nothing at the desk said why."""
-        pst = Programme.objects.create(department=self.department, name='Old PST', code='PSTX')
-        pst.levels.set([self.level4])
-        Module.objects.filter(pk=self.btc_module.pk).update(programme=pst)      # modules under PST
-        ict = self.office_user('ict', 'ict_officer')
-        desk = ict.get('/api/student-passwords/issue/').data
-        self.assertEqual(desk['count'], 0)
-        self.assertEqual([(r['name'], r['programme']) for r in desk['no_modules']], [('Asha', 'BTC')])
-
-        report = StringIO()
-        call_command('merge_programmes', '--into', 'PSTX', '--from', 'BTC', '--apply', stdout=report)
-        self.assertIn('enrolled in their modules: Asha (1)', report.getvalue())
-        desk = ict.get('/api/student-passwords/issue/').data
-        self.assertEqual((desk['count'], desk['no_modules']), (1, []))
-        again = StringIO()
-        call_command('merge_programmes', '--into', 'PSTX', '--from', 'OD', '--apply', stdout=again)
-        self.assertNotIn('Asha', again.getvalue())                               # never twice
-
     def office_user(self, username, role):
         from django.contrib.auth import get_user_model
         from rest_framework.test import APIClient
@@ -305,17 +285,6 @@ class ModulesWithoutProgrammeTests(OfficeClients):
     def test_admission_takes_a_module_with_no_programme(self):
         progression.enroll_registration(self.registration)
         self.assertIn('PST04150', self.enrolled_codes())
-
-    def test_the_command_catches_up_who_was_admitted_before(self):
-        dry = StringIO()
-        call_command('enroll_registered', stdout=dry)
-        self.assertIn('Anitha Steven', dry.getvalue())
-        self.assertEqual(self.enrolled_codes(), [])                       # a dry run writes nothing
-        call_command('enroll_registered', '--apply', stdout=StringIO())
-        self.assertIn('PST04150', self.enrolled_codes())
-        again = StringIO()
-        call_command('enroll_registered', '--apply', stdout=again)
-        self.assertIn('Nobody was missing', again.getvalue())             # never twice
 
     def test_giving_a_module_its_level_enrolls_the_class(self):
         level5_student = complete_record(StudentProfile.objects.create(nactvet_reg_no='NS0009/0002/2026',

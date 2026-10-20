@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Course — EduTrack</title>
+<title>{% if registration %}My Programme{% else %}My Course{% endif %} — EduTrack</title>
 <link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet">
 <style>
   /* The same tokens as the student portal, so both read as one system. */
@@ -64,7 +64,7 @@
 </head>
 <body>
 <header>
-  <strong><i class="bi bi-mortarboard"></i> EduTrack · My Course</strong>
+  <strong><i class="bi bi-mortarboard"></i> EduTrack · {% if registration %}My Programme{% else %}My Course{% endif %}</strong>
   <a href="{% url 'student-logout' %}">Sign out</a>
 </header>
 <main>
@@ -88,8 +88,18 @@
   {% else %}
 
   <section class="panel">
-    <h2>My course</h2>
-    {% if enrollment %}
+    <h2>{% if registration %}My programme{% else %}My course{% endif %}</h2>
+    {% if registration %}
+    <div class="facts">
+      <div><span>Programme</span><strong>{{ registration.programme.name }}</strong></div>
+      <div><span>Level</span><strong>{{ registration.class_level.name }}</strong></div>
+      <div><span>Semester</span><strong>{{ registration.semester }}</strong></div>
+      <div><span>College ID</span><strong>{{ profile.college_id|default:"—" }}</strong></div>
+    </div>
+    <p style="margin:10px 0 0;"><a href="{% url 'my-semester-pass' %}" target="_blank" rel="noopener">My semester pass</a></p>
+    <p class="muted" style="font-size:.85rem;margin:10px 0 0;">You are admitted. Your modules, timetable and
+      results open here once your department has set this semester's modules up — sign in again then.</p>
+    {% elif enrollment %}
     <div class="facts">
       <div><span>Course</span><strong>{{ enrollment.intake.programme.name }}</strong></div>
       <div><span>Intake</span><strong>{{ enrollment.intake }}</strong></div>
@@ -126,7 +136,7 @@
       <thead><tr><th>Code</th><th>Module</th>{% if enrollment.nva_level %}<th>Level</th>{% endif %}</tr></thead>
       <tbody>
       {% for m in modules %}<tr><td>{{ m.code }}</td><td>{{ m.name }}</td>{% if enrollment.nva_level %}<td>{{ m.nva_level|default:"—" }}</td>{% endif %}</tr>
-      {% empty %}<tr><td colspan="3" class="muted">The course coordinator has not listed the modules yet.</td></tr>{% endfor %}
+      {% empty %}<tr><td colspan="3" class="muted">{% if registration %}Your department has not set up this semester's modules yet.{% else %}The course coordinator has not listed the modules yet.{% endif %}</td></tr>{% endfor %}
       </tbody>
     </table></div>
   </section>

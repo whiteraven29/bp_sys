@@ -91,18 +91,21 @@ class LevelLookupTests(ProgrammeBillingBase):
 
         self.assertEqual(finance.programme_for(profile, self.year), self.pst)
 
-    def test_enrolling_a_registered_student_in_a_lower_level_module_bills_their_own_level(self):
-        # Billing happens automatically when an enrollment is created. It used
-        # to bill at the module's level, so a level 5 student's first enrollment
-        # being a level 4 repeat charged them level 4 fees for the year.
+    def test_a_registered_student_in_a_lower_level_module_is_billed_at_their_own_level(self):
+        # The bill reads the student's registration, not a module's level: a
+        # level 5 student whose first enrollment was a level 4 repeat was once
+        # charged level 4 fees. (A module bills nothing since 20 October 2026;
+        # the finance desk's billing is what is checked here.)
         self.fee(self.tuition, self.level4, '1000000', programme=self.pst)
         self.fee(self.tuition, self.level5, '1200000', programme=self.pst)
         profile = StudentProfile.objects.create(nactvet_reg_no='REG/009', name='Asha Juma')
         SemesterRegistration.objects.create(profile=profile, semester=self.sem1, programme=self.pst,
                                             class_level=self.level5, kind=SemesterRegistration.CONTINUING)
 
-        Student.objects.create(nactvet_reg_no='REG/009', name='Asha Juma',
+        Student.objects.create(nactvet_reg_no='REG/009', name='Asha Juma', profile=profile,
                                module=self.module('PST04101', self.level4, programme=self.pst))
+        self.assertFalse(StudentCharge.objects.filter(profile=profile).exists())   # the module billed nothing
+        finance.generate_charges(profile, self.year)
 
         charges = StudentCharge.objects.filter(profile=profile, charge_type=self.tuition)
         self.assertEqual([c.amount for c in charges], [TZS('1200000.00')])

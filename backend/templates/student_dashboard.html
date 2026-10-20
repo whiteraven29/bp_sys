@@ -868,7 +868,13 @@
           <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-check-circle"></i></div></div><strong>{{ finance_paid|floatformat:2 }}</strong><p>Total paid</p></article>
           {% if finance_waived %}<article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-hand-thumbs-up"></i></div></div><strong>{{ finance_waived|floatformat:2 }}</strong><p>Waived</p></article>{% endif %}
           <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-exclamation-circle"></i></div></div><strong>{{ finance_balance|floatformat:2 }}</strong><p>Outstanding</p></article>
+          {% if finance_on_account %}<article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-piggy-bank"></i></div></div><strong>{{ finance_on_account|floatformat:2 }}</strong><p>Paid ahead — used on your next bill</p></article>{% endif %}
         </div>
+        <section class="panel">
+          <div class="panel-head"><h2>Semester pass</h2><span>Your pass to classes and exams this semester</span></div>
+          <p style="margin:0 0 10px;">Paid what is due by this semester's first instalment? Download your pass and print it — no queue at the admission office.</p>
+          <a class="btn" href="{% url 'my-semester-pass' %}" target="_blank" rel="noopener"><i class="bi bi-ticket-perforated"></i> My semester pass</a>
+        </section>
         <section class="panel">
           <div class="panel-head"><h2>My charges</h2><span>School fees, direct costs, and other payments</span></div>
           <div class="table-wrap"><table><thead><tr><th>What it is</th><th>Invoice group</th><th>Installment</th><th>Due</th><th>Amount</th><th>Outstanding</th><th>Status</th></tr></thead><tbody>

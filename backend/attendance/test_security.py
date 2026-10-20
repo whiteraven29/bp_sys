@@ -87,12 +87,12 @@ class StudentTakeoverTests(SecurityBase):
             'module': self.maths.id,
             'students': [{'nactvet_reg_no': self.victim.nactvet_reg_no, 'name': 'x', 'portal_pin': 'Chosen#123'}],
         }, format='json')
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual((response.data['added'], response.data['pin_skipped']), (1, 1))
+        # Nobody adds students to modules by hand any more (said 20 October 2026).
+        self.assertEqual((response.status_code, response.data['added']), (400, 0))
 
         signed_in = self.sign_in(self.victim.nactvet_reg_no, 'Chosen#123')
         self.assertNotEqual(signed_in.get('Location'), '/student-dashboard/')
-        # The new enrollment carries the student's own password, so they still sign in.
+        # The student's own password still signs them in.
         self.assertEqual(self.sign_in(self.victim.nactvet_reg_no, 'Victim#2026').get('Location'),
                          '/student-dashboard/')
 
@@ -114,14 +114,20 @@ class StudentTakeoverTests(SecurityBase):
         self.assertEqual(response.status_code, 403)
 
     def test_the_principal_may_still_issue_a_first_password(self):
+        """At the password desk — to an admitted student with no module yet,
+        too (said 20 October 2026): admission makes them our student."""
+        from .models import SemesterRegistration
         principal = self.office('boss', 'principal')
-        StudentProfile.objects.create(nactvet_reg_no='NS0002/0002/2024', name='New One')        # admitted
-        response = self.api(principal).post('/api/students/bulk_create/', {
-            'module': self.maths.id,
-            'students': [{'nactvet_reg_no': 'NS0002/0002/2024', 'name': 'New One', 'portal_pin': 'First#2026'}],
-        }, format='json')
-        self.assertEqual((response.status_code, response.data['pin_skipped']), (201, 0))
-        self.assertTrue(Student.objects.get(nactvet_reg_no='NS0002/0002/2024').check_portal_pin('First#2026'))
+        new_one = StudentProfile.objects.create(nactvet_reg_no='NS0002/0002/2024', name='New One',
+                                                college_id='BPH/PST/2026/0099')
+        SemesterRegistration.objects.create(profile=new_one, semester=self.sem, programme=self.pst,
+                                            class_level=self.level, kind=SemesterRegistration.NEW)
+        issued = self.api(principal).post('/api/student-passwords/issue/', {}, format='json').data['issued']
+        pin = {row['reg_no']: row['password'] for row in issued}['NS0002/0002/2024']
+        self.assertFalse(Student.objects.filter(nactvet_reg_no='NS0002/0002/2024').exists())   # no module
+        for identifier in ('NS0002/0002/2024', 'BPH/PST/2026/0099'):
+            self.assertEqual(self.sign_in(identifier, pin).get('Location'), '/course-portal/', identifier)
+        self.assertNotEqual(self.sign_in('NS0002/0002/2024', 'Wrong#2026').get('Location'), '/course-portal/')
 
 
 class SignInTests(SecurityBase):

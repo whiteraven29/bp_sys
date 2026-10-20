@@ -1007,7 +1007,9 @@ class AttendanceSecurityTests(TestCase):
             {'module': self.other_module.id},
             format='json',
         )
-        self.assertEqual(response.status_code, 403)
+        # Refused for everybody now (said 20 October 2026): modules are linked
+        # by admission and by module setup, never moved by hand.
+        self.assertIn(response.status_code, (400, 403))
         self.student.refresh_from_db()
         self.assertEqual(self.student.module, self.module)
 
@@ -1611,31 +1613,19 @@ class AuditFixRegressionTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertNotIn(self.other_teacher, self.other_module.teachers.all())
 
-    # ── bulk student import no longer resets an existing student's PIN ──────
-    def test_bulk_create_does_not_reset_an_existing_students_pin(self):
-        self.client.force_authenticate(self.admin)
-        response = self.client.post('/api/students/bulk_create/', {
-            'module': self.module.id,
-            'students': [{'nactvet_reg_no': 'REG-001', 'name': 'Asha Mollel', 'portal_pin': '999999'}],
-        }, format='json')
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['skipped'], 1)
-        self.student.refresh_from_db()
-        self.assertTrue(self.student.check_portal_pin('482913'))
-        self.assertFalse(self.student.check_portal_pin('999999'))
-
-    def test_bulk_create_keeps_the_student_when_the_pin_is_too_short(self):
+    # ── the bulk student import is closed (said 20 October 2026) ────────────
+    def test_bulk_create_is_closed_and_touches_no_pin(self):
         self.client.force_authenticate(self.admin)
         StudentProfile.objects.create(nactvet_reg_no='REG-002', name='New Student')               # admitted
         response = self.client.post('/api/students/bulk_create/', {
             'module': self.module.id,
-            'students': [{'nactvet_reg_no': 'REG-002', 'name': 'New Student', 'portal_pin': '123'}],
+            'students': [{'nactvet_reg_no': 'REG-001', 'name': 'Asha Mollel', 'portal_pin': '999999'},
+                         {'nactvet_reg_no': 'REG-002', 'name': 'New Student', 'portal_pin': '123'}],
         }, format='json')
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['added'], 1)
-        self.assertEqual(response.data['pin_skipped'], 1)
-        created = Student.objects.get(nactvet_reg_no='REG-002')
-        self.assertFalse(created.has_portal_pin)
+        self.assertEqual((response.status_code, response.data['added']), (400, 0))
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.check_portal_pin('482913'))
+        self.assertFalse(Student.objects.filter(nactvet_reg_no='REG-002').exists())
 
     # ── students filter: bulk PIN reset now respects the Module filter ──────
     def test_bulk_set_pin_respects_the_module_filter(self):

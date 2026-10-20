@@ -271,7 +271,7 @@ def _instalments(structure, schedule):
 
 @transaction.atomic
 def generate_charges(profile, academic_year, *, actor=None, class_level=None, programme=None,
-                     entry=None, readmitted=None, fresh=False):
+                     entry=None, readmitted=None, fresh=False, full_year=False):
     """Raise every automatic charge this student owes for the year, and the
     hostel fee when they live in the hostel.
 
@@ -298,7 +298,9 @@ def generate_charges(profile, academic_year, *, actor=None, class_level=None, pr
     # instead of a year of programme fees. Once they pass and go back to a full
     # semester their registration says so, and the year's charges are raised
     # then — a fresh start, as the college bills it.
-    if registration is not None and registration.kind == registration.REPEATING:
+    # `full_year`: the finance desk says so — a repeater who passed and now
+    # studies a full semester, whose last registration is still the repeat.
+    if registration is not None and registration.kind == registration.REPEATING and not full_year:
         audit('charges.skip_repeat', 'StudentProfile', actor=actor, profile=profile,
               summary=f'{academic_year}: repeat semester, billed per module only')
         return []
@@ -854,6 +856,72 @@ def outstanding_charges(profile, academic_year=None):
     if academic_year is not None:
         qs = qs.filter(academic_year=academic_year)
     return [c for c in qs if charge_balance(c) > ZERO]
+
+
+# ── money on account ──────────────────────────────────────────────────────────
+#
+# A slip for more than the bill — Level 5 and Level 6 tuition paid at once —
+# used to settle what was billed and leave the rest on the payment, assigned to
+# nothing: the college had the money, the student's statement did not show it.
+# Now the rest is credit on account (said 20 October 2026): shown on the
+# statement, and used when the next bill is raised at the finance desk, only
+# for charges paid into the same bank account — tuition money pays tuition.
+
+def _payment_account_id(payment):
+    if payment.bank_account_id:
+        return payment.bank_account_id
+    return payment.invoice.bank_account_id if payment.invoice_id else None
+
+
+def on_account(profile):
+    """[(payment, left over)] — each payment's money not yet assigned to a
+    charge, oldest first. Reversed payments and reversals carry none."""
+    payments = list(Payment.objects.filter(profile=profile, amount__gt=ZERO, reverses__isnull=True,
+                                           reversal__isnull=True)
+                    .select_related('invoice').order_by('payment_date', 'id'))
+    assigned = dict(PaymentAllocation.objects.filter(payment__in=payments).order_by()
+                    .values('payment').annotate(total=Sum('amount')).values_list('payment', 'total'))
+    rows = []
+    for payment in payments:
+        left = money(payment.amount - (assigned.get(payment.id) or ZERO))
+        if left > ZERO:
+            rows.append((payment, left))
+    return rows
+
+
+def on_account_total(profile):
+    return money(sum((left for _, left in on_account(profile)), ZERO))
+
+
+@transaction.atomic
+def apply_on_account(profile, *, actor=None):
+    """Settle what is owed with money already on account, oldest charge first,
+    each payment only against charges of its own bank account (any, for a slip
+    recorded before the account was kept). Returns the amount used."""
+    rows = on_account(profile)
+    if not rows:
+        return ZERO
+    owed = sorted(outstanding_charges(profile), key=lambda c: (c.due_date, c.id))
+    left_on = {charge.id: charge_balance(charge) for charge in owed}
+    used, plan = ZERO, []
+    for payment, left in rows:
+        account = _payment_account_id(payment)
+        for charge in owed:
+            if left <= ZERO:
+                break
+            if account is not None and charge.charge_type.bank_account_id != account:
+                continue
+            take = min(left, left_on[charge.id])
+            if take > ZERO:
+                plan.append(PaymentAllocation(payment=payment, charge=charge, amount=money(take)))
+                left_on[charge.id] -= take
+                left -= take
+                used += take
+    if plan:
+        PaymentAllocation.objects.bulk_create(plan)
+        audit('credit.on_account', 'StudentProfile', actor=actor, profile=profile,
+              summary=f'{money(used)} of money on account settled {len(plan)} charge(s)')
+    return money(used)
 
 
 def balance_for(profile, academic_year=None):
@@ -1426,6 +1494,7 @@ def record_payment(profile, amount, payment_date, *, recorded_by, invoice=None,
 
     payment = Payment.objects.create(
         profile=profile, invoice=invoice, amount=amount, payment_date=payment_date,
+        bank_account=bank_account or (invoice.bank_account if invoice is not None else None),
         channel=channel, bank_reference=bank_reference.strip(),
         efd_receipt_no=efd_receipt_no.strip(), payer_name=payer_name.strip(),
         payer_relation=payer_relation, proof=proof, note=note, recorded_by=recorded_by,

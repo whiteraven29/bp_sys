@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% if mode == 'check' %}Check a semester pass{% else %}Semester pass — {{ profile.name }}{% endif %}</title>
+<style>
+  :root { --ink:#13233a; --muted:#5b6b80; --line:#c9d3df; --ok:#137a3f; --bad:#b42318; --paper:#fff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eef2f6; color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .sheet { max-width: 640px; margin: 24px auto; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
+  .head { display: flex; gap: 14px; align-items: center; border-bottom: 2px solid var(--ink); padding-bottom: 12px; }
+  .head img { width: 64px; height: 64px; object-fit: contain; }
+  .head h1 { font-size: 1.05rem; margin: 0; letter-spacing: .02em; text-transform: uppercase; }
+  .head p { margin: 2px 0 0; color: var(--muted); font-size: .85rem; }
+  h2 { font-size: 1.3rem; margin: 18px 0 4px; }
+  .who { display: flex; gap: 18px; margin-top: 14px; }
+  .photo { width: 120px; height: 150px; border: 1px solid var(--line); border-radius: 6px; object-fit: cover; background: #f4f6f9; flex: none; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: .75rem; text-align: center; }
+  .facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; align-content: start; }
+  .facts span { color: var(--muted); }
+  .code { margin-top: 18px; padding: 12px; border: 1px dashed var(--ink); border-radius: 8px; text-align: center; }
+  .code b { font: 700 1.6rem/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .12em; }
+  .code small { display: block; color: var(--muted); margin-top: 4px; word-break: break-all; }
+  .verdict { margin-top: 16px; padding: 12px 14px; border-radius: 8px; font-weight: 600; }
+  .verdict.ok { background: #e7f6ec; color: var(--ok); }
+  .verdict.bad { background: #fdecea; color: var(--bad); }
+  form { display: grid; gap: 10px; margin-top: 14px; }
+  input { font: inherit; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; width: 100%; }
+  button, .btn { font: inherit; padding: 9px 14px; border: 0; border-radius: 6px; background: var(--ink); color: #fff; cursor: pointer; text-decoration: none; display: inline-block; }
+  .actions { margin-top: 16px; display: flex; gap: 10px; }
+  @media (max-width: 520px) { .who { flex-direction: column; } .sheet { margin: 0; border-radius: 0; } }
+  @media print { body { background: #fff; } .sheet { border: 0; margin: 0; } .actions { display: none; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="head">
+    {% if logo %}<img src="{{ logo }}" alt="">{% endif %}
+    <div><h1>{{ college }}</h1><p>Admission office</p></div>
+  </div>
+
+  {% if mode == 'pass' %}
+    <h2>Semester pass</h2>
+    <div style="color:var(--muted)">{{ result.semester }} — valid for classes and examinations of this semester</div>
+    <div class="who">
+      {% if photo %}<img class="photo" src="{{ photo }}" alt="Passport photo">{% else %}<div class="photo">No photo on record</div>{% endif %}
+      <div class="facts">
+        <span>Name</span><strong>{{ result.name }}</strong>
+        <span>College ID</span><strong>{{ result.college_id|default:"—" }}</strong>
+        <span>Reg. No.</span><strong>{{ result.reg_no }}</strong>
+        <span>Programme</span><strong>{{ result.programme }}</strong>
+        <span>Level</span><strong>{{ result.class_level }}</strong>
+        <span>Paid up to</span><strong>{{ result.due_by|date:"j M Y" }}</strong>
+      </div>
+    </div>
+    <div class="code">
+      Check code <b>{{ result.code }}</b>
+      <small>Staff check this pass at {{ check_url }}</small>
+    </div>
+    <div class="actions"><button onclick="window.print()">Print / save as PDF</button></div>
+
+  {% elif mode == 'refused' %}
+    <h2>No semester pass</h2>
+    <div class="verdict bad">{{ result.reason }}</div>
+    <p style="color:var(--muted)">Pay at the bank, bring the slip to the Accounts Office, then download the pass again.</p>
+
+  {% else %}
+    <h2>Check a semester pass</h2>
+    <form method="get">
+      <input name="id" value="{{ identifier }}" placeholder="College ID or registration number on the pass" required>
+      <input name="code" value="{{ code }}" placeholder="Check code, e.g. 4F2A1-C9D03" required>
+      <button type="submit">Check</button>
+    </form>
+    {% if checked %}
+      {% if checked.genuine %}
+        {% if checked.now.ok %}
+          <div class="verdict ok">Genuine — {{ checked.now.name }} may attend {{ checked.now.semester }}.</div>
+        {% else %}
+          <div class="verdict bad">Issued by the college, but no longer valid: {{ checked.now.reason }}</div>
+        {% endif %}
+        <div class="who">
+          {% if photo %}<img class="photo" src="{{ photo }}" alt="Passport photo">{% else %}<div class="photo">No photo on record</div>{% endif %}
+          <div class="facts">
+            <span>Name</span><strong>{{ profile.name }}</strong>
+            <span>College ID</span><strong>{{ profile.college_id|default:"—" }}</strong>
+            <span>Reg. No.</span><strong>{{ profile.nactvet_reg_no }}</strong>
+            {% if checked.now.programme %}<span>Programme</span><strong>{{ checked.now.programme }}</strong>
+            <span>Level</span><strong>{{ checked.now.class_level }}</strong>{% endif %}
+          </div>
+        </div>
+      {% else %}
+        <div class="verdict bad">Not genuine. {{ checked.reason }}</div>
+      {% endif %}
+    {% endif %}
+  {% endif %}
+</div>
+</body>
+</html>

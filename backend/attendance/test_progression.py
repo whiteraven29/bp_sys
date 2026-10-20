@@ -23,7 +23,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from . import finance, progression
+from . import admissions, finance, progression
 from .models import (
     AcademicYear, ChargeType, ClassLevel, Department, FeeStructure, Module,
     OutstandingRepeat, Programme, Semester, SemesterRegistration, SemesterReview,
@@ -1108,7 +1108,10 @@ class AuthorityRepeatRuleTests(ProgressionBase):
         # The whole year's fees used to be raised on top of the repeat rate.
         self.assertNotIn(tuition.id, charges)
 
-    def test_a_repeat_semester_also_bills_the_repeaters_direct_cost(self):
+    def test_a_repeat_semester_bills_the_module_and_leaves_the_direct_cost_to_finance(self):
+        """The repeat module is owed because of the module, so linking it bills
+        it. The repeaters' flat direct cost is part of the year's bill, raised at
+        the finance desk (said 20 October 2026) — not by the module."""
         profile = self.student('REG/063')
         failed = self.enrol(profile, self.module('PST04101', self.level4, self.sem1))
         OutstandingRepeat.objects.create(
@@ -1128,6 +1131,11 @@ class AuthorityRepeatRuleTests(ProgressionBase):
 
         progression.enroll_registration(registration, actor=self.officer)
 
+        billed = sorted(StudentCharge.objects.filter(profile=profile, academic_year=self.next_year)
+                        .values_list('amount', flat=True))
+        self.assertEqual(billed, [Decimal('200000.00')])
+        finance.charge_repeater_costs(profile, self.next_year, class_level=self.level4,
+                                      programme=self.pst, semester=self.next_sem1)   # the finance desk
         billed = sorted(StudentCharge.objects.filter(profile=profile, academic_year=self.next_year)
                         .values_list('amount', flat=True))
         self.assertEqual(billed, [Decimal('200000.00'), Decimal('280000.00')])
@@ -1179,18 +1187,27 @@ class AuthorityRepeatRuleTests(ProgressionBase):
 
         progression.apply_advance(self.next_sem1, self.next_sem2, actor=self.officer)
 
-        resumed = SemesterRegistration.objects.get(profile=profile, semester=self.next_sem2)
-        self.assertEqual(resumed.kind, SemesterRegistration.CONTINUING)
-        self.assertEqual(resumed.class_level, self.level4)      # still level 4
+        # Their year's bill was never raised (they paid per module), so they go
+        # to the finance desk for semester 2 rather than straight in.
+        from .models import Application
+        waiting = Application.objects.get(profile=profile, semester=self.next_sem2)
+        self.assertEqual((waiting.kind, waiting.state), (Application.CONTINUING, Application.FINANCE))
+        self.assertEqual(waiting.class_level, self.level4)      # still level 4
         self.assertEqual(OutstandingRepeat.objects.get(profile=profile).status,
                          OutstandingRepeat.PASSED)
         # Read back from the database: this test has held a standing object
         # since before the advance, and it is that copy that would be stale.
         self.assertEqual(StudentStanding.objects.get(profile=profile).status,
                          StudentStanding.ACTIVE)
-        # A fresh start: the semester's charges are raised now.
+        # A fresh start: the finance desk raised the semester's charges.
         self.assertTrue(StudentCharge.objects.filter(
             profile=profile, charge_type=tuition, academic_year=self.next_year).exists())
+        while waiting.is_open:
+            if waiting.state == Application.FINANCE:
+                for charge in StudentCharge.objects.filter(profile=profile):
+                    finance.waive_charge(charge, charge.amount, 'test: paid', actor=self.officer)
+            admissions.complete_step(waiting, actor=self.officer)
+            waiting.refresh_from_db()
         self.assertEqual([row.module.code for row in Student.objects.filter(
             profile=profile, module__semester=self.next_sem2)], ['PST04201'])
 

@@ -235,36 +235,73 @@ def reset_student_password(profile, *, actor, ip=None, first=False):
     if not can_issue_student_passwords(actor):
         raise PasswordResetError('Student passwords are reset by the ICT officer.')
     enrollments = list(Student.objects.filter(nactvet_reg_no__iexact=profile.nactvet_reg_no))
-    is_veta = bool(profile.portal_pin_hash) or profile.course_enrollments.exists()
-    if not enrollments and not is_veta:
-        raise PasswordResetError(f'{profile.name} has nothing to sign in to yet.')
+    if not enrollments and not is_admitted(profile):
+        raise PasswordResetError(f'{profile.name} has not been admitted.')
     pin = generate_portal_pin()
     for enrollment in enrollments:
         enrollment.set_portal_pin(pin, require_change=True)
         enrollment.save(update_fields=['portal_pin_hash', 'must_change_portal_password', 'portal_pin_set_at'])
-    if is_veta:
-        from . import veta
-        veta.set_portal_pin(profile, pin, require_change=True)
+    # Kept on their record too (said 20 October 2026): admission and finance
+    # make somebody our student, not a module — a PST student admitted before
+    # their modules are set up signs in with it, and their modules take it on
+    # when they come. A VETA student has only this one.
+    from . import veta
+    veta.set_portal_pin(profile, pin, require_change=True)
     _record_reset(kind='student', actor=actor, profile=profile, ip=ip, first=first)
     return pin
 
 
+def is_admitted(profile):
+    """Our student: admitted this year (PST — a registration the admission
+    desk made), or on a VETA course. Modules are not the test."""
+    from .models import AcademicYear, SemesterRegistration
+    if profile.course_enrollments.exists():
+        return True
+    year = AcademicYear.objects.filter(is_active=True).first()
+    return year is not None and SemesterRegistration.objects.filter(
+        profile=profile, semester__academic_year=year).exclude(
+        status=SemesterRegistration.CANCELLED).exists()
+
+
 def students_without_password():
-    """Current students who have no portal password yet: PST students enrolled
-    this year, and admitted VETA course students. Newly admitted students land
-    here — the password desk gives them theirs."""
-    from .models import AcademicYear, CourseEnrollment
+    """Current students who have no portal password yet: PST students admitted
+    or enrolled this year, and admitted VETA course students. Newly admitted
+    students land here, modules or not — the password desk gives them theirs."""
+    from .models import AcademicYear, CourseEnrollment, SemesterRegistration
     year = AcademicYear.objects.filter(is_active=True).first()
     with_password = set(Student.objects.exclude(portal_pin_hash='').filter(profile_id__isnull=False)
                         .values_list('profile_id', flat=True))
     pst = StudentProfile.objects.none()
     if year is not None:
-        pst = StudentProfile.objects.filter(
-            enrollments__module__semester__academic_year=year,
-            enrollments__withdrawn_at__isnull=True).exclude(id__in=with_password)
+        admitted = SemesterRegistration.objects.filter(semester__academic_year=year).exclude(
+            status=SemesterRegistration.CANCELLED).values('profile_id')
+        enrolled = Student.objects.filter(module__semester__academic_year=year,
+                                          withdrawn_at__isnull=True).values('profile_id')
+        pst = (StudentProfile.objects.filter(models.Q(id__in=admitted) | models.Q(id__in=enrolled))
+               .filter(portal_pin_hash='').exclude(id__in=with_password))
     veta = StudentProfile.objects.filter(
         id__in=CourseEnrollment.objects.values('profile_id'), portal_pin_hash='')
     return (pst | veta).distinct().order_by('name')
+
+
+def profile_for_sign_in(identifier, secret):
+    """An admitted PST student with no module yet, signing in with the
+    password kept on their record — by registration number or college ID.
+    Only while no module carries a password: from then on the enrollments are
+    what sign them in, as before."""
+    from django.contrib.auth.hashers import check_password
+    reg = str(identifier or '').strip()
+    if not reg:
+        return None
+    profile = (StudentProfile.objects.filter(models.Q(nactvet_reg_no__iexact=reg) | models.Q(college_id__iexact=reg))
+               .exclude(portal_pin_hash='').first())
+    if profile is None or profile.course_enrollments.exists():
+        return None
+    if Student.objects.filter(nactvet_reg_no__iexact=profile.nactvet_reg_no).exclude(portal_pin_hash='').exists():
+        return None
+    if not is_admitted(profile) or not check_password(str(secret), profile.portal_pin_hash):
+        return None
+    return profile
 
 
 def admitted_without_modules():

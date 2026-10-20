@@ -189,14 +189,23 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] `merge_programmes` into an existing programme (server: PST04/05/06 → PST): shows departments,
      active state and fee clashes; keeps the merged programme active
    - [x] PST students sign in with the college ID too (the password slip said so; only VETA could)
-   - [x] Admitted but in no module (no password possible): named on the password desk; the merge
-     enrolls this year's students of the merged programme in its modules
    - [x] A module with no programme is the level's at admission; editing a module's programme / level /
-     semester enrolls the class; `manage.py enroll_registered` catches up those admitted before
-   - [x] 1128 tests; screens checked in the browser
-   - [ ] On the server: `enroll_registered` (B7); Level 5 modules created under PST; Level 4 modules set to PST;
-     then Issue passwords
+     semester links the class
+2t. **Admission and finance make a student ours — 20 Oct (not committed).**
+   - [x] The year's bill only at the finance desk: a module links and bills nothing (repeat module aside);
+     the enrollment billing hook removed; a repeater back to a full semester 2 goes to finance
+   - [x] Closed: add a student to a module (single, bulk, moving), the accountant's *Generate charges*;
+     `enroll_registered` and the merge's enrolment removed
+   - [x] An admitted student gets a password with no modules (kept on their record; portal page with
+     programme, bill, details); later modules take it on
+   - [x] Paid beyond the bill: credit on account (statement, portal), used on the next bill at the
+     finance desk, same bank account only (migration 0075: the payment's account)
+   - [x] Semester pass: admission desk prints, students download; registered, studying, billed, paid
+     up to the semester's first instalment; check code catches an edited copy (*Check a pass*)
+   - [x] 1138 tests; screens checked in the browser (password with no modules, pass, check, forged code)
    - [ ] On the server: run `merge_programmes` (release guide B6) after the deploy, before the next application
+   - [ ] On the server (B7): issue passwords; HOD sets PST on Level 4 modules and creates Level 5's;
+     accountant confirms no new charges
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

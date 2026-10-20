@@ -886,3 +886,15 @@ modules. A student in no module has no portal to give a password for. Admission 
 with no programme as the level's; editing a module enrolls the class; `enroll_registered` catches up
 (release guide B7); the Level 5 modules are to be created. The password desk names anybody admitted
 but in no module.
+
+### Q64. What proves a student is ours? ✅
+
+**Answer (20 October 2026):** admission and finance — the year's bill raised at the finance desk and
+the first payment. A module only links a student and bills nothing (a repeated module aside); the
+roster add and the accountant's bulk billing are closed. An admitted student gets a password before
+modules exist. Semester 1 → 2 carries everybody for results; at each semester's start they come
+through the desks and get a **semester pass** (admission prints, the student may download; a check code
+stops forgery) only when paid up to the semester's first instalment, else no pass and no exams. The
+year's parts stay dated instalments on one invoice; money paid beyond the bill is credit for next
+year's bill, same bank account. Charges during the year: supp/special exams, repeat modules, a hostel
+place taken later, the TPH book if missing (uniform, coat, insurance stay *Has it* options).

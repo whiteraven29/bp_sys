@@ -3,8 +3,8 @@ through Admissions only (said 13 October 2026):
 
   * one Students menu — Find a student, Enrollments, College ID import — not a
     Students menu and a Student Records menu for the same people;
-  * no "Upload / Register": adding someone to a module is only for a student
-    already admitted, refused on the server for anybody else;
+  * no "Upload / Register", and since 20 October 2026 no adding anybody to a
+    module by hand: admission links them, and a module set up for their level;
   * Results: the authority grade import and the mark entry windows are their own
     items, and every card says which items it belongs to; the role rule that
     showed office-only cards in every item no longer overrides that;
@@ -56,7 +56,7 @@ class AdmittedOnlyTests(TestCase):
 
     def test_nobody_new_through_the_roster(self):
         response = self.bulk('NS9999/0001/2026')
-        self.assertEqual((response.data['added'], response.data['not_admitted']), (0, ['NS9999/0001/2026']))
+        self.assertEqual((response.status_code, response.data['added']), (400, 0))
         self.assertIn('Admissions', response.data['detail'])
         self.assertFalse(Student.objects.filter(nactvet_reg_no='NS9999/0001/2026').exists())
 
@@ -66,9 +66,12 @@ class AdmittedOnlyTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('Admissions', str(response.data))
 
-    def test_an_admitted_student_missing_a_module_is_added(self):
+    def test_nor_an_admitted_one_by_hand(self):
+        """Said 20 October 2026: admission links a student to their modules,
+        and so does a module set up for their level — nobody does it by hand."""
         StudentProfile.objects.create(nactvet_reg_no='NS0001/0001/2026', name='Admitted')
-        self.assertEqual(self.bulk('ns0001/0001/2026').data['added'], 1)
+        self.assertEqual(self.bulk('ns0001/0001/2026').data['added'], 0)
+        self.assertFalse(Student.objects.filter(nactvet_reg_no__iexact='NS0001/0001/2026').exists())
 
 
 class OneMenuItemOneViewTests(TestCase):

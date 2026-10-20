@@ -747,7 +747,8 @@ def _raise_charges(application, *, actor=None):
             application.profile, year, actor=actor,
             class_level=application.class_level, programme=application.programme,
             entry=entry_of(application),
-            readmitted=application.kind == Application.READMISSION, fresh=fresh)
+            readmitted=application.kind == Application.READMISSION, fresh=fresh,
+            full_year=True)
     except ValueError as exc:
         # No due dates set on the fee structure yet. The application still
         # stands; the accountant's bulk run catches it up.
@@ -762,8 +763,10 @@ def _raise_charges(application, *, actor=None):
                            reason=f'joins in {application.semester.label}',
                            charges=[charge for charge in created
                                     if finance.charge_semester_number(charge, sem2) == 1])
-    # What they paid before a postponement settles the new bill.
+    # What they paid before a postponement settles the new bill, and so does
+    # money paid beyond an earlier bill (Level 5 and 6 tuition paid at once).
     finance.apply_credit(application.profile, actor=actor)
+    finance.apply_on_account(application.profile, actor=actor)
     return created
 
 

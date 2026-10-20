@@ -3275,6 +3275,12 @@ class Payment(models.Model):
         'self', on_delete=models.PROTECT, null=True, blank=True, related_name='reversal',
     )
     reversal_reason = models.CharField(max_length=300, blank=True)
+    # The account the money went into — the invoice's, or the one the
+    # accountant named. Money beyond the bill stays as credit on this account
+    # and pays only charges paid into it (said 20 October 2026).
+    bank_account = models.ForeignKey(
+        BankAccount, on_delete=models.PROTECT, null=True, blank=True, related_name='payments',
+    )
     recorded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='ledger_payments_recorded',
     )

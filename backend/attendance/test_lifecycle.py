@@ -60,6 +60,8 @@ class LifecycleBase(ScheduleBase):
             Student.objects.create(nactvet_reg_no=reg_no, name=profile.name, profile=profile, module=self.m2)
         enrollment.set_portal_pin('Portal#2026', require_change=False)
         enrollment.save()
+        # Admitted: the finance desk billed the year (a module bills nothing).
+        finance.generate_charges(profile, self.sem1.academic_year)
         return profile, enrollment
 
     def portal_for(self, enrollment):

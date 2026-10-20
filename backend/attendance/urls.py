@@ -111,6 +111,7 @@ urlpatterns = [
     path('cat-number-format/', views.cat_number_format, name='cat-number-format'),
     path('cat-numbers/', views.cat_numbers, name='cat-numbers'),
     path('student-passwords/issue/', views.issue_student_passwords, name='student-passwords-issue'),
+    path('semester-pass/', views.semester_pass_status, name='semester-pass-status'),
     path('staff-accounts/<int:user_id>/set-modules/', views.set_staff_modules, name='staff-set-modules'),
     path('staff-accounts/<int:user_id>/roles/', views.set_staff_roles, name='staff-set-roles'),
     path('module-scope/', views.set_module_scope, name='module-scope'),
@@ -141,7 +142,6 @@ urlpatterns = [
     # Fees ledger
     path('finance/students/', views.finance_students, name='finance-students'),
     path('finance/statement/<int:profile_id>/', views.finance_statement, name='finance-statement'),
-    path('finance/generate-charges/', views.finance_generate_charges, name='finance-generate-charges'),
     path('finance/raise-charge/', views.finance_raise_charge, name='finance-raise-charge'),
     path('exam-declarations/', views.exam_declarations, name='exam-declarations'),
     path('student-records/college-ids/', views.import_college_ids, name='import-college-ids'),

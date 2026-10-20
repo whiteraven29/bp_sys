@@ -1108,10 +1108,13 @@ def carry_modules(target, *, source=None, actor=None, dry_run=False):
 
 def _portal_credentials(profile):
     """The password the student already uses, so a new year's enrollments do not
-    lock them out. Login checks the PIN on the enrollment rows themselves."""
+    lock them out. Login checks the PIN on the enrollment rows themselves; a
+    student given theirs before they had any module has it on their record."""
     existing = (profile.enrollments.exclude(portal_pin_hash='')
                 .order_by('-created_at').first())
     if existing is None:
+        if profile.portal_pin_hash:
+            return profile.portal_pin_hash, profile.must_change_portal_password
         return '', True
     return existing.portal_pin_hash, existing.must_change_portal_password
 
@@ -1122,8 +1125,8 @@ def enroll_registration(registration, *, actor=None, repeats=None, modules_by_se
 
     A continuing student gets every module of their programme, level and
     semester. A repeating student gets only the modules they failed, marked as
-    repeat sittings and billed at the accountant's per-module repeat rate rather
-    than a fresh set of programme fees.
+    repeat sittings and billed at the accountant's per-module repeat rate — the
+    only charge raised here; the year's bill is the finance desk's.
     """
     if registration.status == SemesterRegistration.CANCELLED:
         return []
@@ -1178,11 +1181,7 @@ def enroll_registration(registration, *, actor=None, repeats=None, modules_by_se
             attempt=Student.REPEAT if repeat else Student.NORMAL,
             repeat_of=repeat.origin_enrollment if repeat else None,
         )
-        # Billing is raised once for the registration below, not once for each
-        # module: enrolling a class of 500 into six modules each ran the fee
-        # generator three thousand times for five hundred students' worth of
-        # charges. A student sitting a module again pays the accountant's rate
-        # for that module and no programme fees at all.
+        # A module never raises the year's bill (see the end of this function).
         enrollment.skip_auto_billing = True
         enrollment.save()
         made.append(enrollment)
@@ -1200,20 +1199,13 @@ def enroll_registration(registration, *, actor=None, repeats=None, modules_by_se
                 logger.warning('No repeat charge for %s on %s: %s',
                                profile.nactvet_reg_no, module.code, exc)
 
-    if made and registration.kind == SemesterRegistration.REPEATING:
-        # No programme fees, but the year's flat direct cost for repeaters.
-        finance.charge_repeater_costs(profile, semester.academic_year,
-                                      class_level=registration.class_level,
-                                      programme=registration.programme, semester=semester,
-                                      actor=actor)
-    if made and registration.kind != SemesterRegistration.REPEATING:
-        try:
-            finance.generate_charges(profile, semester.academic_year, actor=actor)
-        except ValueError as exc:
-            # The fee structure has no due dates yet. Registration must not
-            # fail over that; the accountant's bulk run catches them up.
-            logger.warning('Could not bill %s for %s: %s',
-                           profile.nactvet_reg_no, semester.academic_year, exc)
+    # Nothing else is billed here (said 20 October 2026). A module links the
+    # student to it and no more: the year's bill — fees, direct costs, a
+    # repeater's flat cost — is raised once, at the finance desk, when they are
+    # admitted. Billing again here re-ran the fee generator against whatever
+    # the fee setup and schedule said that day, and billed a part twice when
+    # they had changed since. The repeat-module charge above stays: that fee is
+    # owed because of the module.
     return made
 
 
@@ -1605,7 +1597,14 @@ def apply_advance(semester, target, *, actor=None):
         if programme is None or to_level is None:
             raise ProgressionError(f'{profile.nactvet_reg_no} ({profile.name}): {NO_PROGRAMME}.')
 
-        if semester.number == Semester.SEM2:
+        # A repeater who passed the module they repeated and now studies a
+        # full semester 2 was billed this year per module only: their year's
+        # bill has not been raised. A module bills nothing (said 20 October
+        # 2026), so they go to the finance desk for it, as at a new year.
+        first_full_bill = (semester.number == Semester.SEM1 and registration is not None
+                           and registration.kind == SemesterRegistration.REPEATING
+                           and kind == SemesterRegistration.CONTINUING)
+        if semester.number == Semester.SEM2 or first_full_bill:
             # A new academic year. The student is not registered here: they go
             # to admissions — pay, records double-checks them, admission
             # confirms they are here — and admission registers them.

@@ -33,7 +33,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import admissions, analytics, classlists, inventory, registers, evaluations, finance, lifecycle, notifications, passwords, progression, veta, health
+from . import admissions, analytics, classlists, inventory, registers, evaluations, finance, lifecycle, notifications, passwords, progression, semester_pass, veta, health
 from .roles import (
     OPEN_ROLES, can_advance_semester, can_appoint, can_confirm_reviews, can_decide_requests,
     can_handle_requests, can_manage_accounts, can_manage_departments, can_manage_exams,
@@ -73,7 +73,7 @@ from .models import (
 from .serializers import (
     AcademicYearSerializer, SemesterSerializer, ClassLevelSerializer,
     ModuleSerializer, StudentSerializer,
-    SessionSerializer, SessionCreateSerializer, BulkStudentSerializer,
+    SessionSerializer, SessionCreateSerializer,
     StudentResultSerializer, AttendanceRecordSerializer,
     FinanceStudentSerializer, PaymentCategorySerializer,
     StudentFinanceObligationSerializer, StudentPaymentSerializer,
@@ -547,6 +547,10 @@ def login_view(request):
             candidate = veta.veta_profile_for_login(reg_no)
             if candidate is not None and check_password(str(secret), candidate.portal_pin_hash):
                 course_profile = candidate
+        if student is None and course_profile is None:
+            # Admitted, no module yet: their own record signs them in (said 20
+            # October 2026 — admission and finance make them our student).
+            course_profile = passwords.profile_for_sign_in(reg_no, secret)
 
         if course_profile is not None:
             passwords.clear_sign_in_failures(identifier)
@@ -689,6 +693,11 @@ def change_password(request):
     for enrollment in Student.objects.filter(nactvet_reg_no__iexact=student.nactvet_reg_no):
         enrollment.set_portal_pin(new_password, require_change=False)
         enrollment.save(update_fields=['portal_pin_hash', 'must_change_portal_password', 'portal_pin_set_at'])
+    profile = finance.profile_for_student(student)
+    if profile is not None and profile.portal_pin_hash:
+        # The copy on their record follows, so the next module they are put in
+        # takes the password they chose, not the one they were first given.
+        veta.set_portal_pin(profile, new_password, require_change=False)
     return Response({'detail': 'Portal password updated.', 'updated': updated})
 
 
@@ -888,9 +897,19 @@ def course_portal(request):
             veta.set_portal_pin(profile, new, require_change=False)
             message = 'Password changed.'
     enrollment = veta.current_enrollment(profile)
+    # A PST student admitted before their modules were set up signs in here
+    # too (said 20 October 2026): their programme and this year's bill.
+    registration = None
+    if enrollment is None:
+        registration = (SemesterRegistration.objects.filter(profile=profile)
+                        .exclude(status=SemesterRegistration.CANCELLED)
+                        .select_related('programme', 'class_level', 'semester__academic_year')
+                        .order_by('-semester__academic_year__name', '-semester__number').first())
+    owed = StudentCharge.objects.filter(profile=profile, intake__isnull=False)
+    if registration is not None:
+        owed = StudentCharge.objects.filter(profile=profile, academic_year=registration.semester.academic_year)
     charges = list(finance.with_balances(
-        StudentCharge.objects.filter(profile=profile, intake__isnull=False)
-        .select_related('charge_type__bank_account', 'intake')).order_by('due_date', 'id'))
+        owed.select_related('charge_type__bank_account', 'intake')).order_by('due_date', 'id'))
     rows = [{'name': c.charge_type.name, 'due': c.due_date, 'amount': c.payable,
              'balance': finance.charge_balance(c),
              'account': (f'{c.charge_type.bank_account.bank_name} · {c.charge_type.bank_account.account_number}'
@@ -901,7 +920,7 @@ def course_portal(request):
         'profile': profile, 'enrollment': enrollment, 'charges': rows,
         'billed': sum((r['amount'] for r in rows), Decimal('0')),
         'owing': sum((r['balance'] for r in rows), Decimal('0')),
-        'modules': modules, 'next_of_kin': profile.next_of_kin.all(),
+        'modules': modules, 'next_of_kin': profile.next_of_kin.all(), 'registration': registration,
         'must_change': profile.must_change_portal_password, 'message': message, 'error': error,
     })
 
@@ -1286,6 +1305,7 @@ def student_dashboard(request):
         'finance_required': finance_required,
         'finance_paid': finance_paid,
         'finance_balance': finance_balance,
+        'finance_on_account': finance.on_account_total(ledger_profile) if ledger_profile else 0,
         'academic_year': (
             active_sem.academic_year.name
             if active_sem else student.module.semester.academic_year.name
@@ -4353,19 +4373,19 @@ class StudentViewSet(viewsets.ModelViewSet):
             qs = qs.filter(Q(nactvet_reg_no__icontains=search) | Q(name__icontains=search))
         return qs
 
+    LINKED_BY_ADMISSION = ('A student is put in their modules by Admissions when admitted, and by a module '
+                           'being set up for their level and programme — not by hand (said 20 October 2026).')
+
     def perform_create(self, serializer):
-        module = serializer.validated_data.get('module')
-        # Enrolling is the departments' work; a tutor adds to their own module
-        # only. The examination officer reads class lists and changes none.
-        if not runs_departments(self.request.user):
-            allowed_module_ids = self.request.user.modules_taught.values_list('id', flat=True)
-            if module is None or module.id not in allowed_module_ids:
-                raise PermissionDenied('Only tutors for this module can add students.')
-        enrollment = serializer.save()
-        # Somebody already on file keeps the password they have (passwords.py).
-        passwords.copy_student_password(enrollment)
+        # The only ways into a module are admission and the module itself
+        # being created or edited for the level: then the student is linked and
+        # nothing is billed. By hand, here, a student went in without either.
+        raise ValidationError({'detail': self.LINKED_BY_ADMISSION})
 
     def update(self, request, *args, **kwargs):
+        target = request.data.get('module')
+        if target not in (None, '') and str(target) != str(self.get_object().module_id):
+            raise ValidationError({'detail': self.LINKED_BY_ADMISSION})
         if not runs_departments(request.user):
             obj = self.get_object()
             allowed_module_ids = set(self.request.user.modules_taught.values_list('id', flat=True))
@@ -4391,10 +4411,7 @@ class StudentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='bulk_create')
     def bulk_create(self, request):
-        serializer = BulkStudentSerializer(data=request.data, context={'user': request.user})
-        serializer.is_valid(raise_exception=True)
-        result = serializer.save()
-        return Response(result, status=status.HTTP_201_CREATED)
+        return Response({'detail': self.LINKED_BY_ADMISSION, 'added': 0}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['get'], url_path='people')
     def people(self, request):
@@ -8497,6 +8514,8 @@ def _statement_payload(profile, year, semester):
         },
         'academic_year': {'id': year.id, 'name': year.name} if year else None,
         'totals': {k: str(v) for k, v in totals.items()},
+        # Paid beyond the bill: used when the next bill is raised (said 20 October 2026).
+        'on_account': str(finance.on_account_total(profile)),
         'charges': StudentChargeSerializer(charges, many=True).data,
         'payments': PaymentSerializer(payments, many=True).data,
         'invoices': InvoiceSerializer(invoices, many=True).data,
@@ -8521,42 +8540,6 @@ def _statement_payload(profile, year, semester):
             for period in CLEARANCE_PERIODS
         } if year else {},
     }
-
-
-@api_view(['POST'])
-def finance_generate_charges(request):
-    """Raise the year's automatic charges for a whole class level at once.
-
-    Idempotent — running it again after adding students bills only the new
-    ones, because a charge is unique per student, type, year and installment.
-    """
-    if not can_manage_finance(request.user):
-        raise PermissionDenied('Only the accountant can generate charges.')
-
-    year = get_object_or_404(AcademicYear, pk=pk_or_none(request.data.get('academic_year')))
-    level = ClassLevel.objects.filter(id=pk_or_none(request.data.get('class_level'))).first()
-
-    profiles = StudentProfile.objects.prefetch_related('enrollments__module__class_level')
-    if level:
-        profiles = profiles.filter(enrollments__module__class_level=level).distinct()
-
-    raised, billed, failures = 0, 0, []
-    for profile in profiles:
-        try:
-            created = finance.generate_charges(profile, year, actor=request.user, class_level=level)
-        except ValueError as exc:
-            failures.append({'student': profile.nactvet_reg_no, 'detail': str(exc)})
-            continue
-        if created:
-            billed += 1
-            raised += len(created)
-
-    return Response({
-        'students_billed': billed,
-        'charges_raised': raised,
-        'failures': failures,
-        'detail': f'Raised {raised} charge(s) across {billed} student(s).',
-    }, status=status.HTTP_200_OK if not failures else status.HTTP_207_MULTI_STATUS)
 
 
 @api_view(['GET', 'POST'])
@@ -9621,3 +9604,109 @@ def submit_my_form(request, slug):
               if form.kind == Form.REQUEST
               else 'Thank you — your response has been recorded.')
     return Response({'detail': detail}, status=status.HTTP_201_CREATED)
+
+
+# ── the semester pass ─────────────────────────────────────────────────────────
+#
+# Given to a student registered for the semester and paid up to what is due by
+# its first instalment (said 20 October 2026). Printed at the admission desk or
+# downloaded from the portal; its check code is the college's, so an edited
+# copy is caught at /semester-pass/check/. See semester_pass.py.
+
+_LOGO_URI = None
+
+
+def _pass_logo():
+    global _LOGO_URI
+    if _LOGO_URI is None:
+        import base64
+        from .registers import LOGO
+        try:
+            _LOGO_URI = 'data:image/png;base64,' + base64.b64encode(LOGO.read_bytes()).decode()
+        except OSError:
+            _LOGO_URI = ''
+    return _LOGO_URI
+
+
+def _pass_photo(profile):
+    import base64
+    import mimetypes
+    if not profile.passport:
+        return ''
+    try:
+        with profile.passport.open('rb') as handle:
+            data = handle.read()
+    except (OSError, ValueError):
+        return ''
+    kind = mimetypes.guess_type(profile.passport.name)[0] or 'image/jpeg'
+    return f'data:{kind};base64,' + base64.b64encode(data).decode()
+
+
+def _render_pass(request, profile, result):
+    from urllib.parse import urlencode
+    check_url = request.build_absolute_uri('/semester-pass/check/') + '?' + urlencode(
+        {'id': profile.college_id or profile.nactvet_reg_no, 'code': result.get('code', '')})
+    response = render(request, 'semester_pass.html', {
+        'mode': 'pass' if result['ok'] else 'refused', 'result': result, 'profile': profile,
+        'photo': _pass_photo(profile) if result['ok'] else '', 'logo': _pass_logo(),
+        'college': COLLEGE_NAME, 'check_url': check_url,
+    })
+    response['Cache-Control'] = 'no-store'
+    return response
+
+
+COLLEGE_NAME = 'Blue Pharma Institute of Science and Technology'
+
+
+def can_give_passes(user):
+    return can_work_desk(user, Application.ADMISSION)
+
+
+@api_view(['GET'])
+def semester_pass_status(request):
+    """The admission desk: may this student have the semester pass?"""
+    if not can_give_passes(request.user):
+        raise PermissionDenied('The admission office gives semester passes.')
+    profile = semester_pass.find_profile(request.query_params.get('q'))
+    if profile is None:
+        return Response({'detail': 'No student with that registration number or college ID.'}, status=404)
+    result = semester_pass.status(profile)
+    result.pop('profile', None)
+    if 'due_by' in result:
+        result['due_by'] = result['due_by'].isoformat()
+    if 'balance' in result:
+        result['balance'] = str(result['balance'])
+    return Response(result)
+
+
+@login_required
+def semester_pass_print(request, profile_id):
+    if not can_give_passes(request.user):
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden('The admission office gives semester passes.')
+    profile = get_object_or_404(StudentProfile, pk=profile_id)
+    return _render_pass(request, profile, semester_pass.status(profile))
+
+
+def my_semester_pass(request):
+    """The student's own pass, from the portal — the same pass, the same rule."""
+    student = get_logged_student(request)
+    profile = finance.profile_for_student(student) if student is not None else (
+        StudentProfile.objects.filter(id=request.session.get('course_profile_id')).first())
+    if profile is None:
+        return redirect('login')
+    return _render_pass(request, profile, semester_pass.status(profile))
+
+
+@login_required
+def semester_pass_check(request):
+    """Anybody on the staff checks a pass they are shown."""
+    identifier = request.GET.get('id', '')
+    code = request.GET.get('code', '')
+    checked = semester_pass.verify(identifier, code) if identifier and code else None
+    profile = checked.get('profile') if checked else None
+    return render(request, 'semester_pass.html', {
+        'mode': 'check', 'checked': checked, 'identifier': identifier, 'code': code,
+        'profile': profile, 'photo': _pass_photo(profile) if profile else '', 'logo': _pass_logo(),
+        'college': COLLEGE_NAME,
+    })
