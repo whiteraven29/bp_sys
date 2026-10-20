@@ -82,7 +82,7 @@ class OneMenuItemOneViewTests(TestCase):
         self.assertEqual(self.html.count('id="students-nav-group"'), 1)
         group = self.html.split('id="students-nav-group"')[1].split('</div>\n    </div>')[0]
         self.assertEqual(re.findall(r'>([^<>]+)</button>', group),
-                         ['Find a student', 'Enrollments', 'College ID import', 'Health records'])
+                         ['Find a student', 'Enrollments', 'College ID import', 'NHIF sheets', 'Health records'])
         self.assertNotIn('data-page="health"', self.html)        # not a menu item of its own
         self.assertNotIn('Upload / Register', self.html)
         self.assertNotIn('Bulk Upload via Excel', self.html)

@@ -1,6 +1,7 @@
 """Rules from the first day of use (said 19 October 2026):
 
-  * five minutes without use ends a session, staff and student — the page's
+  * thirty minutes without use ends a session (five at first; too short —
+    said 20 October 2026), staff and student — the page's
     own notification poll does not count as use, a keep-alive does;
   * a form refused for its security token says so and offers the way back,
     instead of Django's bare 403;
@@ -10,6 +11,7 @@
 
 import time
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from rest_framework.test import APIClient
@@ -35,21 +37,24 @@ class IdleTimeoutTests(TestCase):
         session['last_activity'] = time.time() - seconds
         session.save()
 
-    def test_five_minutes_unused_signs_staff_out(self):
+    def test_thirty_minutes_unused_signs_staff_out(self):
+        self.assertEqual(settings.IDLE_TIMEOUT_SECONDS, 30 * 60)
         self.assertEqual(self.client.get('/').status_code, 200)
-        self.idle_for(301)
+        self.idle_for(30 * 60 + 1)
         page = self.client.get('/')
         self.assertRedirects(page, '/login/?idle=1', fetch_redirect_response=False)
         self.assertEqual(self.client.get('/').status_code, 302)     # signed out for good
 
     def test_an_api_call_after_the_limit_says_why(self):
-        self.idle_for(301)
+        self.idle_for(30 * 60 + 1)
         response = self.client.get('/api/notifications/')
         self.assertEqual(response.status_code, 401)
         self.assertTrue(response.json()['idle'])
+        self.assertIn('30 minutes', response.json()['detail'])
+        self.assertContains(self.client.get('/login/?idle=1'), 'after 30 minutes without use')
 
     def test_under_the_limit_carries_on(self):
-        self.idle_for(240)
+        self.idle_for(29 * 60)          # five minutes used to sign them out
         self.assertEqual(self.client.get('/').status_code, 200)
 
     def test_the_notification_poll_is_not_use(self):
@@ -75,7 +80,7 @@ class IdleTimeoutTests(TestCase):
         portal = Client()
         session = portal.session
         session['student_id'] = enrollment.id
-        session['last_activity'] = time.time() - 400
+        session['last_activity'] = time.time() - (30 * 60 + 60)
         session.save()
         page = portal.get('/student-dashboard/')
         self.assertRedirects(page, '/login/?idle=1', fetch_redirect_response=False)

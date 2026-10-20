@@ -1927,7 +1927,7 @@ class AdmissionRequirementSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdmissionRequirement
         fields = ['id', 'name', 'description', 'kind', 'kind_display', 'charge_type', 'charge_type_name',
-                  'frequency', 'quantity', 'value_label', 'applies_to', 'applies_to_levels', 'level_names', 'mandatory',
+                  'frequency', 'quantity', 'value_label', 'applies_to', 'new_students_only', 'applies_to_levels', 'level_names', 'mandatory',
                   'is_active', 'created_at']
         read_only_fields = ['id', 'created_at']
 
@@ -1986,6 +1986,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     programme_code = serializers.CharField(source='programme.code', read_only=True)
     class_level_name = serializers.CharField(source='class_level.name', read_only=True)
     kind_display = serializers.CharField(source='get_kind_display', read_only=True)
+    kind_label = serializers.CharField(read_only=True)
     state_display = serializers.CharField(source='get_state_display', read_only=True)
     steps = ApplicationStepSerializer(many=True, read_only=True)
     requirement_checks = RequirementCheckSerializer(many=True, read_only=True)
@@ -2002,7 +2003,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Application
         fields = [
-            'id', 'kind', 'kind_display', 'state', 'state_display', 'profile', 'reg_no',
+            'id', 'kind', 'kind_display', 'kind_label', 'state', 'state_display', 'profile', 'reg_no',
             'college_id', 'student_name', 'phone', 'semester', 'semester_label',
             'programme', 'programme_code', 'class_level', 'class_level_name',
             'returning_to', 'registration', 'note', 'decided_reason', 'steps',

@@ -498,7 +498,8 @@ def login_view(request):
         error = ('Your password expired and the time to change it has passed. '
                  'See the administrator for a reset.')
     elif request.GET.get('idle'):
-        error = 'You were signed out after 5 minutes without use. Sign in again.'
+        from .middleware import idle_message
+        error = idle_message()
     elif request.GET.get('csrf'):
         error = 'That page had been open too long. Sign in again.'
 
@@ -2418,6 +2419,9 @@ def _record_details_from(request, profile):
         education_level=data.get('education_level'),
         has_chronic_condition=data.get('has_chronic_condition') if 'has_chronic_condition' in data else None,
         health_declaration=data.get('health_declaration'),
+        first_name=data.get('first_name'), middle_name=data.get('middle_name'), last_name=data.get('last_name'),
+        marital_status=data.get('marital_status'), national_id=data.get('national_id'),
+        nhif_card_no=data.get('nhif_card_no'),
         reason=str(data.get('reason') or ''),
         actor=request.user,
     )
@@ -2427,6 +2431,10 @@ def profile_details(profile):
     """The details records keeps, as every desk's form reads them."""
     return {
         'name': profile.name, 'phone': profile.phone, 'gender': profile.gender,
+        'first_name': profile.first_name, 'middle_name': profile.middle_name, 'last_name': profile.last_name,
+        'marital_status': profile.marital_status,
+        'marital_status_display': profile.get_marital_status_display() if profile.marital_status else '',
+        'national_id': profile.national_id, 'nhif_card_no': profile.nhif_card_no,
         'gender_display': profile.get_gender_display() if profile.gender else '',
         'date_of_birth': profile.date_of_birth, 'form_four_index': profile.form_four_index,
         'birth_year': profile.birth_year, 'birth_place': profile.birth_place, 'religion': profile.religion,
@@ -2465,7 +2473,8 @@ def _student_record_payload(profile):
         'missing': admissions.missing_details(profile),
         **{key: value for key, value in profile_details(profile).items()
            if key in ('birth_year', 'birth_place', 'religion', 'education_level', 'fee_payer', 'fee_payer_display',
-                      'has_chronic_condition', 'health_declaration')},
+                      'has_chronic_condition', 'health_declaration', 'first_name', 'middle_name', 'last_name',
+                      'marital_status', 'marital_status_display', 'national_id', 'nhif_card_no')},
         'changes': detail_changes(profile),
         'documents': StudentDocument.objects.filter(profile=profile).count(),
         'address': profile.address, 'sponsor_name': profile.sponsor_name, 'sponsor_phone': profile.sponsor_phone,
@@ -2745,9 +2754,10 @@ def item_checks(request):
 
     rows = []
     for registration in registrations:
-        due = admissions.items_due(registration.profile, semester, registration.class_level,
-                                   requirements=requirements,
-                                   history=history.get(registration.profile_id, []))
+        due = [r for r in admissions.items_due(registration.profile, semester, registration.class_level,
+                                               requirements=requirements,
+                                               history=history.get(registration.profile_id, []))
+               if not r.new_students_only]      # uniforms and the like are asked when joining
         items = []
         for requirement in due:
             check = checks.get((registration.profile_id, requirement.id))
@@ -3195,6 +3205,88 @@ def release_results(request, pk):
 
 
 # ── POSTPONEMENT AND FINISHING ─────────────────────────────────────────────────
+
+def _nhif_date(day):
+    return day.strftime('%d/%m/%Y') if day else ''
+
+
+@api_view(['GET'])
+@login_required
+def nhif_sheet(request):
+    """The NHIF registration sheets, filled from the records (said 20 October
+    2026): "new" — the year's first years, at any level — and "continuing"
+    (NHIF's "Continuous") with their card numbers. Only PST students who pay
+    the college's medical fee: one who brought their own NHIF card has the
+    fee waived and is left out. Dates DD/MM/YYYY, gender Male / Female."""
+    user = request.user
+    if not (is_records_officer(user) or is_admission_officer(user) or is_principal(user)
+            or is_dparc(user) or is_break_glass(user)):
+        raise PermissionDenied('For records, admission, the Principal and DPARC.')
+    year = (AcademicYear.objects.filter(id=pk_or_none(request.query_params.get('academic_year_id'))).first()
+            or active_academic_year())
+    if year is None:
+        return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
+    sheet = 'continuing' if request.query_params.get('sheet') == 'continuing' else 'new'
+
+    registrations = (SemesterRegistration.objects
+                     .filter(semester__academic_year=year, programme__structure=Programme.SEMESTER)
+                     .exclude(status=SemesterRegistration.CANCELLED)
+                     .select_related('profile', 'programme__department', 'class_level')
+                     .order_by('created_at'))
+    first = {}
+    for registration in registrations:
+        first.setdefault(registration.profile_id, registration)      # their first semester of the year
+
+    medical = Q(charge_type__name__icontains='medical') | Q(charge_type__name__icontains='insurance') \
+        | Q(charge_type__name__icontains='nhif')
+    paying = set()
+    for charge in StudentCharge.objects.filter(medical, academic_year=year, profile_id__in=first):
+        if charge.amount - (charge.waived_amount or 0) > 0:
+            paying.add(charge.profile_id)
+
+    level_span = {}
+    rows = []
+    for profile_id, registration in first.items():
+        if profile_id not in paying:
+            continue
+        is_new = registration.kind == SemesterRegistration.NEW
+        if (sheet == 'new') != is_new:
+            continue
+        profile, programme = registration.profile, registration.programme
+        if programme.id not in level_span:
+            orders = sorted(programme.levels.values_list('order', flat=True)) or [registration.class_level.order]
+            level_span[programme.id] = orders
+        orders = level_span[programme.id]
+        year_of_study = (orders.index(registration.class_level.order) + 1
+                         if registration.class_level.order in orders else '')
+        first_name, middle_name, last_name = (profile.first_name, profile.middle_name, profile.last_name)
+        if not (first_name or last_name):
+            first_name, middle_name, last_name = StudentProfile.split_name(profile.name)
+        if sheet == 'new':
+            row = {
+                'FormFourIndexNo': profile.form_four_index, 'FirstName': first_name, 'MiddleName': middle_name,
+                'LastName': last_name, 'DateOfBirth': _nhif_date(profile.date_of_birth),
+                'MaritalStatus': profile.get_marital_status_display() if profile.marital_status else '',
+                'Gender': profile.get_gender_display() if profile.gender else '',
+                'AdmissionDate': _nhif_date(timezone.localtime(registration.created_at).date()),
+                'MobileNo': profile.phone, 'CourseName': programme.name,
+                'CollegeFaculty': programme.department.name if programme.department_id else '',
+                'YearOfStudy': year_of_study, 'CourseDuration': len(orders),
+                'NationalID': profile.national_id, 'AdmissionNo': profile.college_id or '',
+            }
+        else:
+            row = {'FormFourIndexNo': profile.form_four_index, 'MobileNo': profile.phone,
+                   'CardNo': profile.nhif_card_no, 'NationalID': profile.national_id,
+                   'YearOfStudy': year_of_study}
+        rows.append({'profile_id': profile_id, 'name': profile.name, 'reg_no': profile.nactvet_reg_no,
+                     'row': row, 'missing': [key for key, value in row.items() if value in ('', None)]})
+    rows.sort(key=lambda r: (r['row'].get('YearOfStudy') or 0, r['name']))
+    columns = (['FormFourIndexNo', 'FirstName', 'MiddleName', 'LastName', 'DateOfBirth', 'MaritalStatus', 'Gender',
+                'AdmissionDate', 'MobileNo', 'CourseName', 'CollegeFaculty', 'YearOfStudy', 'CourseDuration',
+                'NationalID', 'AdmissionNo'] if sheet == 'new'
+               else ['FormFourIndexNo', 'MobileNo', 'CardNo', 'NationalID', 'YearOfStudy'])
+    return Response({'academic_year': year.name, 'sheet': sheet, 'columns': columns, 'rows': rows})
+
 
 def can_record_status(user, status):
     """Deceased and absconded: records, admission or the Principal. A
@@ -3757,7 +3849,7 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
               .select_related('profile', 'semester__academic_year', 'programme', 'class_level',
                               'registration')
               .prefetch_related('steps__done_by', 'requirement_checks__requirement',
-                                'requirement_checks__charge'))
+                                'requirement_checks__charge', 'programme__levels'))
         visible = visible_application_states(self.request.user)
         if visible is not None:
             qs = qs.filter(state__in=sorted(visible))
@@ -3799,14 +3891,30 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         semester = Semester.objects.filter(id=pk_or_none(data.get('semester_id'))).first() or active_semester()
         programme = Programme.objects.filter(id=pk_or_none(data.get('programme_id'))).first()
         class_level = ClassLevel.objects.filter(id=pk_or_none(data.get('class_level_id'))).first()
+        # A new student is taken on into a year of the course — first, second
+        # or third — and the year gives the level: Second year of PST is NTA
+        # Level 5 (said 20 October 2026, so the officer does not reach for
+        # "Continuing" for somebody joining at Level 5 from another college).
+        year = pk_or_none(data.get('year_of_study'))
+        if kind == Application.NEW and year and programme is not None:
+            class_level = programme.level_for_year(int(year))
+            if class_level is None:
+                return Response({'detail': f'{programme.code} has {programme.levels.count()} levels; '
+                                           f'there is no year {year} to join.'},
+                                status=status.HTTP_400_BAD_REQUEST)
         if semester is None or programme is None or class_level is None:
             return Response({'detail': 'A semester, a programme and a level are all needed.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if kind == Application.NEW and programme.levels.exists() and programme.year_of(class_level) is None:
+            return Response({'detail': f'{programme.code} does not run {class_level.name}.'},
                             status=status.HTTP_400_BAD_REQUEST)
         try:
             with transaction.atomic():
                 profile = admissions.capture_student(
                     nactvet_reg_no=data.get('nactvet_reg_no', ''),
                     name=data.get('name', ''),
+                    first_name=str(data.get('first_name') or ''), middle_name=str(data.get('middle_name') or ''),
+                    last_name=str(data.get('last_name') or ''),
                     phone=data.get('phone', ''),
                     gender=data.get('gender', ''),
                     date_of_birth=data.get('date_of_birth') or None,

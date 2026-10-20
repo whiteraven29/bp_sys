@@ -187,6 +187,12 @@ sign in.
                          — with `since` (the two-year rules) and `until`
   StudentDetailChange    every correction to a student's details: was, now,
                          who, when, why
+  Programme              one course of study across its levels (PST: 4, 5, 6) —
+                         the year end moves a student to the next level of it;
+                         never one programme per level; level_for_year(n) /
+                         year_of(level) — a new student joins in year 1, 2, 3
+  Application.kind_label  "First year" | "Second year (new) — joins at NTA
+                         Level 5" | "Continuing student" | "Readmission"
   Semester.provisional_cutoff   the exam officer's date for late results
   StandingChange         history of every change
   SemesterReview         proposed → confirmed outcome per semester

@@ -20,6 +20,7 @@ from . import admissions, expenses, finance, passwords, veta
 from .models import (
     AcademicYear, AdmissionRequirement, BankAccount, ChargeType, CourseApplication, CourseEnrollment, CourseFee,
     CourseFeeInstalment, CourseModule, Expense, ExpenseCategory, Intake, NextOfKin, PettyCashTopUp, Programme,
+    StudentProfile,
 )
 from .roles import (
     can_approve_expenses, can_manage_exams, can_view_expenses, is_accountant, is_admission_officer,
@@ -299,8 +300,12 @@ def course_applications(request):
     if intake is None:
         return _bad('Pick the intake.')
     try:
+        # First, middle and last name (said 20 October 2026), or a whole name.
+        name = StudentProfile.join_name(str(request.data.get('first_name') or ''),
+                                        str(request.data.get('middle_name') or ''),
+                                        str(request.data.get('last_name') or '')) or str(request.data.get('name') or '')
         app = veta.open_application(
-            intake=intake, name=str(request.data.get('name') or ''),
+            intake=intake, name=name,
             phone=str(request.data.get('phone') or ''),
             registration_number=str(request.data.get('registration_number') or ''),
             note=str(request.data.get('note') or ''), actor=user)

@@ -161,13 +161,14 @@ dialog button { position: absolute; top: 8px; right: 8px; background: #0f1a1d; c
       <h3><span class="num">02</span>Take a new student on</h3>
       <p>Open <span class="path">Admissions ▸ New application</span>.</p>
       <ol>
-        <li><b>Kind:</b> First year (or Continuing / Readmission for someone already on file).</li>
-        <li><b>Registration number:</b> leave blank for a first year. EduTrack gives a temporary one.</li>
-        <li><b>Full name:</b> exactly as on the certificate, first, middle, surname.</li>
-        <li><b>Programme</b> and <b>Level</b>, then the <b>Form Four index No.</b> written like <code>S0123/0045/2021</code>.</li>
+        <li><b>Kind:</b> under <i>New to the college</i> — <b>First year · Level 4</b>, <b>Second year · Level 5</b> or <b>Third year · Level 6</b> for someone joining from another college. Under <i>Already a student here</i> — Continuing or Readmission.</li>
+        <li><b>Registration number:</b> leave blank for a new student. EduTrack gives a temporary one.</li>
+        <li><b>First name, Middle name, Last name:</b> exactly as on the certificate (NHIF's sheets need them apart).</li>
+        <li><b>Programme</b>, then the <b>Form Four index No.</b> written like <code>S0123/0045/2021</code>. For a new student the <b>Level</b> fills itself from the year and is locked; for Continuing or Readmission choose it.</li>
         <li>Press <span class="ui">Open the application</span>.</li>
       </ol>
-      <p>A first year goes through these desks, in order:</p>
+      <p>Second and third year students are new students too: they go the same way as a first year and pay the one-time charges. The desks show them as <i>Second year (new) — joins at NTA Level 5</i>.</p>
+      <p>A new student goes through these desks, in order:</p>
       <div class="route"><span>Admission (intake)</span><i>→</i><span>Records</span><i>→</i><span>Finance</span><i>→</i><span>Admission</span><i>→</i><span>Admitted</span></div>
       <p>A continuing student starts at finance:</p>
       <div class="route"><span>Finance</span><i>→</i><span>Records</span><i>→</i><span>Admission</span><i>→</i><span>Admitted</span></div>
@@ -232,6 +233,7 @@ dialog button { position: absolute; top: 8px; right: 8px; background: #0f1a1d; c
         <tr><th>All applications</th><td>Every application this semester, at any desk.</td></tr>
         <tr><th>Expected back</th><td>Postponed, FAIL and returning students due this semester. <span class="ui">Start their return</span> opens their application.</td></tr>
         <tr><th>Back as new</th><td>Some come back as a <b>first year</b> whatever kind you choose — EduTrack switches it and says why on the application: absconded (ABS) after two years, postponed more than two years, discontinued by the Principal, finished after Level 5. They pay the one-time charges again and keep their college ID. A deceased or terminated student cannot be taken on; an absconded one not before two years.</td></tr>
+        <tr><th>Joining at Level 5 or 6</th><td>Uniforms and the clinical coat they already have: finance marks <i>Has it</i> on the items for new students only, and the charge comes off before the invoice. Students with their own NHIF card: the <i>Insurance</i> item, marked <i>Has it</i>, takes the medical fee off.</td></tr>
         <tr><th>Student status</th><td><span class="path">Postpone &amp; Finish ▸ Student status</span>: record a student as <b>Deceased</b> or <b>Absconded (ABS)</b> with the reason and date. Suspension, termination and discontinuation are the Principal's.</td></tr>
         <tr><th>VETA courses</th><td>Records takes the admission form (Fomu ya Kujiunga): birth year and place, religion, education level, the parent or guardian and where they live, who pays, any long-term health problem. Items marked <i>Asked of: VETA</i> are checked at your desk before admitting, as for PST.</td></tr>
         <tr><th>Items check</th><td>Billed items (TPH book, calculator, rim paper, insurance): a missing one becomes a debt and never stops admission. Checked-only items (certificates, signed forms) you add under Window &amp; ID numbers ▸ Required items with <i>When it is missing: Checked only</i>. You check them at your desk, the last stage, before admitting; one marked <i>Missing</i> puts the student on hold until it is brought. Finance checks only the billed items, and the application shows you whether a missing TPH book is paid. Records checks no items. Rim paper is counted: mark <i>Brought 1</i> or <i>Brought 2</i>; one asks for the next ream in semester 2 (Items check). The NACTVET admission code: type it in and press <i>Save</i>; it stays on the student's details.</td></tr>
@@ -473,7 +475,7 @@ dialog button { position: absolute; top: 8px; right: 8px; background: #0f1a1d; c
       <h3><span class="num">05</span>Good to know</h3>
       <div class="tablewrap"><table class="faq">
         <tr><th>Forgot your password</th><td>See the ICT officer. Only the ICT officer and the Principal reset passwords.</td></tr>
-        <tr><th>Signed out by itself</th><td>After 5 minutes without use the portal signs you out, to protect your account on a shared or lost phone. Sign in again.</td></tr>
+        <tr><th>Signed out by itself</th><td>After 30 minutes without use the portal signs you out, to protect your account on a shared or lost phone. Sign in again.</td></tr>
         <tr><th>You cannot come this semester</th><td>Ask to postpone under Request a Service, or tell the admission office. A continuing student who does not come for three months loses the place, and may come back in a later year.</td></tr>
         <tr><th>Paying fees</th><td>Generate the invoice under Payments and pay at CRDB with its reference. Mobile money is not accepted. Bring the original slip to the accounts office.</td></tr>
       </table></div>
@@ -497,6 +499,7 @@ dialog button { position: absolute; top: 8px; right: 8px; background: #0f1a1d; c
         <li><span class="ui">Upload passport photo…</span> when the student has not added one. Any JPG or PNG; the page makes it 300 × 300 before sending.</li>
         <li>From the paper <b>Student Enrolment Form</b>: <b>Address</b>, <b>Guarantor / sponsor</b> and phone, and <b>Schools and colleges before</b> (O-level, A-level, college: school, from and to years, index number).</li>
         <li><b>Compulsory for every student</b> — continuing and VETA too: a next of kin and <b>Fees paid by</b> (parents / guardian, a sponsor — then name the sponsor — or the student). Without them the records desk cannot be cleared.</li>
+        <li>For NHIF: <b>Marital status</b>, <b>National ID (NIDA)</b> and, for continuing students, the <b>NHIF card No.</b> Then <span class="path">Students ▸ NHIF sheets</span> gives NHIF's <i>New Students</i> and <i>Continuous Students</i> sheets, filled from the records, ready to download; rows with something missing are marked.</li>
         <li>A mistake? Correct it here and write <b>Why the change</b>. Every change is kept — what it was, what it became, who, when and why — under <i>Changes to these details</i>.</li>
         <li>Press <span class="ui">Save details</span>. A wrong year is refused and nothing of that save is kept.</li>
       </ul>

@@ -78,8 +78,18 @@ class PasswordExpiryMiddleware:
         return self.get_response(request)
 
 
+def idle_message(limit=None):
+    """What the sign-in page and the API say after an idle sign-out."""
+    if limit is None:
+        from django.conf import settings
+        limit = getattr(settings, 'IDLE_TIMEOUT_SECONDS', 30 * 60)
+    minutes = max(1, round(limit / 60))
+    return f'You were signed out after {minutes} minute{"s" if minutes != 1 else ""} without use. Sign in again.'
+
+
 class IdleTimeoutMiddleware:
-    """A session nobody has used for five minutes ends (said 19 October 2026).
+    """A session nobody has used for thirty minutes ends (said 19 October 2026;
+    thirty since 20 October — five was too short). IDLE_TIMEOUT_SECONDS sets it.
 
     Staff and students alike: a shared office PC or a phone left on a desk does
     not stay signed in. "Used" means a request the person made — the
@@ -111,13 +121,13 @@ class IdleTimeoutMiddleware:
         if not signed_in or request.path.startswith(('/static/', '/login', '/logout', '/student-logout')):
             return self.get_response(request)
 
-        limit = getattr(settings, 'IDLE_TIMEOUT_SECONDS', 300)
+        limit = getattr(settings, 'IDLE_TIMEOUT_SECONDS', 30 * 60)
         now = time.time()
         last = session.get(self.STAMP)
         if last is not None and now - last > limit:
             logout(request)                     # flushes the session, staff or student
             if request.path.startswith('/api/') or request.path == '/keep-alive/':
-                return JsonResponse({'detail': 'You were signed out after 5 minutes without use. Sign in again.',
+                return JsonResponse({'detail': idle_message(limit),
                                      'idle': True}, status=401)
             return redirect('/login/?idle=1')
         if request.path not in self.BACKGROUND and (last is None or now - last > 15):

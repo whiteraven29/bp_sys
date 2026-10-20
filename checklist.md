@@ -168,7 +168,8 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] 7 invoices raised from the application window at the finance desk
    - [x] 8 HOD sees only their department's staff (no accounts), gives only their modules
    - [x] 9 no self-claiming of modules; My Profile is the password only
-   - [x] 10 five minutes without use signs out (staff and students; keep-alive while typing)
+   - [x] 10 thirty minutes without use signs out (staff and students; keep-alive while typing) — five
+     at first, made thirty on 20 Oct as too short
    - [x] 11 staff passwords to the students' rule, changed once at the next sign-in
    - [x] 12 CSRF: sign-in never cached, always sets its cookie, a refusal explained and logged;
      `CSRF_TRUSTED_ORIGINS` in `.env`
@@ -177,6 +178,18 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      Terminated (never again); postponed > 2 years and Level 5 finishers back as new — one-time
      charges again, same ID. Postpone & Finish ▸ Student status.
    - [x] Migrations 0071–0073; 1102 tests; every new screen checked in the browser
+2s. **PST as one programme, names, NHIF, opt-outs — 20 Oct (not committed).**
+   - [x] `manage.py merge_programmes` (dry run, then --apply): three per-level PST programmes into one
+     across Levels 4–6 — rehearsed on a copy of the live situation (Level 4 admitted, Level 6 in process)
+   - [x] Names in three parts at admission, records and VETA intake; existing names split (migration 0074)
+   - [x] Items for new students only (uniforms, clinical coat at Levels 5/6); NHIF card → *Insurance* item
+   - [x] NHIF New / Continuous students sheets (Students ▸ NHIF sheets); marital status, NIDA, NHIF card No.
+   - [x] New application kind: *First / Second / Third year* (new to the college; the year sets the
+     level) apart from *Continuing* and *Readmission* — the admission officer's suggestion
+   - [x] `merge_programmes` into an existing programme (server: PST04/05/06 → PST): shows departments,
+     active state and fee clashes; keeps the merged programme active
+   - [x] 1122 tests; screens checked in the browser
+   - [ ] On the server: run `merge_programmes` (release guide B6) after the deploy, before the next application
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

@@ -252,6 +252,18 @@ class Programme(models.Model):
     def is_veta(self):
         return self.structure in (self.SHORT, self.NVA)
 
+    def level_for_year(self, year):
+        """The level a student starts at in the given year of the course —
+        year 1 is the programme's first level. None past its last."""
+        levels = list(self.levels.order_by('order'))
+        return levels[year - 1] if 1 <= year <= len(levels) else None
+
+    def year_of(self, class_level):
+        """Which year of the course a level is (1 for the first); None when
+        the programme does not run that level."""
+        orders = sorted(level.order for level in self.levels.all())     # prefetch-friendly
+        return orders.index(class_level.order) + 1 if class_level and class_level.order in orders else None
+
     class Meta:
         ordering = ['department__name', 'name']
         constraints = [
@@ -1286,6 +1298,18 @@ class StudentProfile(models.Model):
     address = models.CharField(max_length=300, blank=True)
     sponsor_name = models.CharField(max_length=200, blank=True, verbose_name='Guarantor / sponsor')
     sponsor_phone = models.CharField(max_length=30, blank=True)
+    # The name in its parts (said 20 October 2026: admission takes first,
+    # middle and last name, as NHIF's sheets want them). `name` stays the whole
+    # name every list and sheet already reads; the parts are written with it.
+    first_name = models.CharField(max_length=80, blank=True)
+    middle_name = models.CharField(max_length=80, blank=True)
+    last_name = models.CharField(max_length=80, blank=True)
+    # For NHIF (said 20 October 2026).
+    SINGLE, MARRIED, DIVORCED, WIDOWED = 'single', 'married', 'divorced', 'widowed'
+    MARITAL_CHOICES = [(SINGLE, 'Single'), (MARRIED, 'Married'), (DIVORCED, 'Divorced'), (WIDOWED, 'Widowed')]
+    marital_status = models.CharField(max_length=10, choices=MARITAL_CHOICES, blank=True)
+    national_id = models.CharField(max_length=30, blank=True, verbose_name='National ID (NIDA)')
+    nhif_card_no = models.CharField(max_length=30, blank=True, verbose_name='NHIF card No.')
     # Who pays the fees (said 19 October 2026): asked of every student.
     PAID_BY_FAMILY = 'family'
     PAID_BY_SPONSOR = 'sponsor'
@@ -1319,6 +1343,27 @@ class StudentProfile(models.Model):
             models.UniqueConstraint(fields=['form_four_index'], condition=~Q(form_four_index=''),
                                     name='one_profile_per_form_four_index'),
         ]
+
+    @staticmethod
+    def split_name(name):
+        """First, middle and last name from a whole name: the first word, the
+        words between, the last word."""
+        words = (name or '').split()
+        if not words:
+            return '', '', ''
+        return words[0], ' '.join(words[1:-1]) if len(words) > 2 else '', words[-1] if len(words) > 1 else ''
+
+    @staticmethod
+    def join_name(first, middle, last):
+        return ' '.join(part.strip() for part in (first, middle, last) if part and part.strip())
+
+    def save(self, *args, **kwargs):
+        # A name written whole (an import, an old path) gets its parts.
+        if self.name and not (self.first_name or self.last_name):
+            self.first_name, self.middle_name, self.last_name = self.split_name(self.name)
+            if kwargs.get('update_fields') is not None:
+                kwargs['update_fields'] = list(set(kwargs['update_fields']) | {'first_name', 'middle_name', 'last_name'})
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.nactvet_reg_no} – {self.name}'
@@ -1945,6 +1990,20 @@ class Application(models.Model):
     def __str__(self):
         return f'{self.profile.nactvet_reg_no} · {self.get_kind_display()} · {self.get_state_display()}'
 
+    YEAR_WORDS = {1: 'First', 2: 'Second', 3: 'Third', 4: 'Fourth'}
+
+    @property
+    def kind_label(self):
+        """How the desks name it. A new student joining past the first level
+        is "Second year (new) — joins at NTA Level 5": new to the college, so
+        not to be mistaken for a continuing student (said 20 October 2026)."""
+        if self.kind != self.NEW:
+            return self.get_kind_display()
+        year = self.programme.year_of(self.class_level) if self.programme_id else None
+        if not year or year == 1:
+            return 'First year'
+        return f'{self.YEAR_WORDS.get(year, f"Year {year}")} year (new) — joins at {self.class_level.name}'
+
     @property
     def route(self):
         return self.ROUTES[self.kind]
@@ -2020,6 +2079,10 @@ class AdmissionRequirement(models.Model):
     APPLIES_CHOICES = [(FOR_PST, 'PST (NACTVET) students'), (FOR_VETA, 'VETA course students'),
                        (FOR_BOTH, 'Both')]
     applies_to = models.CharField(max_length=5, choices=APPLIES_CHOICES, default=FOR_PST)
+    # Uniforms, the clinical coat (said 20 October 2026): a student joining at
+    # Level 5 or 6 may already have them. Asked of new students only.
+    new_students_only = models.BooleanField(
+        default=False, help_text='Asked only of a student joining the college (a first year at any level).')
     charge_type = models.ForeignKey(
         'ChargeType', on_delete=models.PROTECT, null=True, blank=True,
         related_name='requirements',

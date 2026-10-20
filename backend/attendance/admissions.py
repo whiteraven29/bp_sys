@@ -187,8 +187,9 @@ def set_nactvet_number(profile, number, *, actor=None):
 
 
 @transaction.atomic
-def capture_student(*, nactvet_reg_no, name, phone='', gender='', date_of_birth=None,
-                    next_of_kin=(), form_four_index='', actor=None):
+def capture_student(*, nactvet_reg_no, name='', phone='', gender='', date_of_birth=None,
+                    next_of_kin=(), form_four_index='', actor=None,
+                    first_name='', middle_name='', last_name=''):
     """Write down a person the college has not met before.
 
     A person on file is not yet a student: they have no registration, no
@@ -197,6 +198,14 @@ def capture_student(*, nactvet_reg_no, name, phone='', gender='', date_of_birth=
     so a placeholder is accepted and corrected later.
     """
     reg_no = (nactvet_reg_no or '').strip().upper()
+    # First, middle and last name (said 20 October 2026); a whole name is split.
+    if (first_name or '').strip() or (last_name or '').strip():
+        if not ((first_name or '').strip() and (last_name or '').strip()):
+            raise AdmissionError('The first name and the last name are both needed.')
+        name = StudentProfile.join_name(first_name, middle_name, last_name)
+        parts = (first_name.strip(), (middle_name or '').strip(), last_name.strip())
+    else:
+        parts = StudentProfile.split_name(name)
     if not (name or '').strip():
         raise AdmissionError('A name is needed.')
     if not reg_no:
@@ -210,15 +219,18 @@ def capture_student(*, nactvet_reg_no, name, phone='', gender='', date_of_birth=
     profile, created = StudentProfile.objects.get_or_create(
         nactvet_reg_no=reg_no,
         defaults={'name': name.strip(), 'phone': phone, 'gender': gender,
-                  'date_of_birth': date_of_birth, 'form_four_index': index},
+                  'date_of_birth': date_of_birth, 'form_four_index': index,
+                  'first_name': parts[0][:80], 'middle_name': parts[1][:80], 'last_name': parts[2][:80]},
     )
     if not created:
         profile.name = name.strip() or profile.name
+        profile.first_name, profile.middle_name, profile.last_name = (part[:80] for part in parts)
         profile.phone = phone or profile.phone
         profile.gender = gender or profile.gender
         profile.date_of_birth = date_of_birth or profile.date_of_birth
         profile.form_four_index = index or profile.form_four_index
-        profile.save(update_fields=['name', 'phone', 'gender', 'date_of_birth', 'form_four_index'])
+        profile.save(update_fields=['name', 'phone', 'gender', 'date_of_birth', 'form_four_index',
+                                    'first_name', 'middle_name', 'last_name'])
 
     for position, kin in enumerate(next_of_kin, start=1):
         if not kin:
@@ -272,6 +284,8 @@ def details_snapshot(profile):
         'Place of birth': profile.birth_place, 'Religion': profile.religion,
         'Education level now': profile.education_level, 'Form Four index': profile.form_four_index,
         'Address': profile.address, 'Fees paid by': profile.get_fee_payer_display() if profile.fee_payer else '',
+        'Marital status': profile.get_marital_status_display() if profile.marital_status else '',
+        'National ID': profile.national_id, 'NHIF card No.': profile.nhif_card_no,
         'Guarantor / sponsor': profile.sponsor_name, "Sponsor's phone": profile.sponsor_phone,
         'Long-term health problem': {True: 'Yes', False: 'No'}.get(profile.has_chronic_condition, ''),
         'Health declared': profile.health_declaration,
@@ -290,7 +304,9 @@ def record_details(profile, *, name=None, phone=None, gender=None, date_of_birth
                    next_of_kin=None, form_four_index=None, address=None, sponsor_name=None,
                    sponsor_phone=None, education=None, fee_payer=None, birth_year=None,
                    birth_place=None, religion=None, education_level=None, has_chronic_condition=None,
-                   health_declaration=None, reason='', actor=None):
+                   health_declaration=None, reason='', actor=None,
+                   first_name=None, middle_name=None, last_name=None,
+                   marital_status=None, national_id=None, nhif_card_no=None):
     """The records desk writes down who the student is.
 
     Name, phone, gender, date of birth, the Form Four index number, two next
@@ -305,8 +321,24 @@ def record_details(profile, *, name=None, phone=None, gender=None, date_of_birth
     if form_four_index is not None:
         profile.form_four_index = clean_form_four_index(form_four_index, profile)
         fields.append('form_four_index')
-    if name is not None and name.strip():
+    if first_name is not None or last_name is not None:
+        # The name in its parts (said 20 October 2026); the whole name follows.
+        first = (first_name if first_name is not None else profile.first_name).strip()
+        middle = (middle_name if middle_name is not None else profile.middle_name).strip()
+        last = (last_name if last_name is not None else profile.last_name).strip()
+        if not (first and last):
+            raise AdmissionError('The first name and the last name are both needed.')
+        profile.first_name, profile.middle_name, profile.last_name = first[:80], middle[:80], last[:80]
+        profile.name = StudentProfile.join_name(first, middle, last)
+        fields += ['first_name', 'middle_name', 'last_name', 'name']
+    elif name is not None and name.strip():
         profile.name = name.strip(); fields.append('name')
+        profile.first_name, profile.middle_name, profile.last_name = StudentProfile.split_name(profile.name)
+        fields += ['first_name', 'middle_name', 'last_name']
+    if marital_status is not None:
+        if marital_status not in ('', *dict(StudentProfile.MARITAL_CHOICES)):
+            raise AdmissionError('Marital status: single, married, divorced or widowed.')
+        profile.marital_status = marital_status; fields.append('marital_status')
     if phone is not None:
         profile.phone = phone.strip(); fields.append('phone')
     if gender is not None:
@@ -338,7 +370,8 @@ def record_details(profile, *, name=None, phone=None, gender=None, date_of_birth
     for field, value, limit in (('address', address, 300), ('sponsor_name', sponsor_name, 200),
                                 ('sponsor_phone', sponsor_phone, 30), ('birth_place', birth_place, 120),
                                 ('religion', religion, 60), ('education_level', education_level, 120),
-                                ('health_declaration', health_declaration, 300)):
+                                ('health_declaration', health_declaration, 300),
+                                ('national_id', national_id, 30), ('nhif_card_no', nhif_card_no, 30)):
         if value is not None:
             setattr(profile, field, str(value).strip()[:limit]); fields.append(field)
     if profile.fee_payer == StudentProfile.PAID_BY_SPONSOR and not profile.sponsor_name.strip():
@@ -1053,8 +1086,13 @@ def still_needed(requirement, profile, semester):
 
 
 def requirements_for(application):
-    """What this student has to have for the semester they are applying for."""
-    return items_due(application.profile, application.semester, application.class_level)
+    """What this student has to have for the semester they are applying for.
+    An item for new students only (uniforms, the clinical coat) is asked only
+    of a first year — at Level 4, 5 or 6."""
+    due = items_due(application.profile, application.semester, application.class_level)
+    if application.kind != Application.NEW:
+        due = [requirement for requirement in due if not requirement.new_students_only]
+    return due
 
 
 def _billed_by_default(requirement, profile, academic_year):

@@ -100,6 +100,7 @@ urlpatterns = [
     path('provisional/settle-passes/', views.provisional_settle_passes, name='provisional-settle-passes'),
     path('provisional/cutoff/', views.provisional_cutoff, name='provisional-cutoff'),
     path('student-statuses/', views.student_statuses, name='student-statuses'),
+    path('nhif-sheet/', views.nhif_sheet, name='nhif-sheet'),
     path('exit-requests/', views.exit_requests, name='exit-requests'),
     path('exit-requests/<int:pk>/decide/', views.decide_exit_request, name='exit-request-decide'),
     path('not-reported/', views.not_reported_list, name='not-reported'),

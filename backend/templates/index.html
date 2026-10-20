@@ -876,6 +876,7 @@
         <button class="nav-sub-btn" data-rec-section="find" data-roles="principal dparc records" onclick="showRecordsSection('find', this)">Find a student</button>
         <button class="nav-sub-btn" data-student-section="manage" data-roles="runs" onclick="showStudentSection('manage', this)">Enrollments</button>
         <button class="nav-sub-btn" data-rec-section="ids" data-roles="principal records admission" onclick="showRecordsSection('ids', this)">College ID import</button>
+        <button class="nav-sub-btn" data-rec-section="nhif" data-roles="principal dparc records admission" onclick="showRecordsSection('nhif', this)">NHIF sheets</button>
         <button class="nav-sub-btn" data-health-nav data-roles="dean principal records" onclick="showHealthSection(this)">Health records</button>
       </div>
     </div>
@@ -1184,6 +1185,21 @@
           <span class="tip" tabindex="0" role="note" aria-label="Help: health records" data-tip="A health problem is written down only against a medical certificate: upload it above as a Medical form and mark it seen, then record the condition here. The Dean of Students is told and reads it for reference. Finance and tutors never see it.">?</span>
         </div>
         <div id="rec-editor-health"></div>
+      </div>
+
+      <div class="card" data-rec-section="nhif">
+        <div class="card-title">NHIF registration sheets <span class="tip" tabindex="0" role="note" aria-label="Help: NHIF" data-tip="NHIF's two sheets, filled from the records: New Students (the year's first years, at any level) and Continuous Students (continuing, with their NHIF card number). Only PST students who pay the college's medical fee — one who brought their own NHIF card has it waived and is left out. A row with something missing is marked: fill it in at Find a student, then download again.">?</span></div>
+        <div class="form-grid-3">
+          <div class="field"><label>Academic year</label><select id="nhif-year" onchange="loadNhifSheet()"></select></div>
+          <div class="field"><label>Sheet</label>
+            <select id="nhif-sheet" onchange="loadNhifSheet()">
+              <option value="new">New students</option>
+              <option value="continuing">Continuous (continuing) students</option>
+            </select></div>
+          <div class="field" style="justify-content:flex-end;"><label>&nbsp;</label><button class="btn btn-primary btn-sm" onclick="downloadNhifSheet()">⬇ Download Excel</button></div>
+        </div>
+        <div id="nhif-note" style="margin-bottom:10px;"></div>
+        <div class="table-wrap"><table class="compact"><thead id="nhif-thead"></thead><tbody id="nhif-tbody"></tbody></table></div>
       </div>
 
       <div class="card" data-rec-section="ids">
@@ -1704,23 +1720,33 @@
       </div>
 
       <div class="card" data-adm-section="new">
-        <div class="card-title">Open an application <span class="tip" tabindex="0" role="note" aria-label="Help: who fills what" data-tip="Admission takes them on here. The records office then takes down their details and next of kin. A first year may have no number yet — it is written in at intake.">?</span></div>
+        <div class="card-title">Open an application <span class="tip" tabindex="0" role="note" aria-label="Help: who fills what" data-tip="Admission takes them on here. The records office then takes down their details and next of kin. First, second and third year are all new to the college — the year sets the level they join at. Continuing and Readmission are for students the college already has. A new student may have no number yet — it is written in at intake.">?</span></div>
         <div class="form-grid-3">
           <div class="field"><label>Kind *</label>
-            <select id="adm-kind">
-              <option value="new">First year</option>
-              <option value="continuing">Continuing student</option>
-              <option value="readmission">Readmission</option>
+            <select id="adm-kind" onchange="syncAdmissionYear()">
+              <optgroup label="New to the college">
+                <option value="new:1">First year</option>
+                <option value="new:2">Second year</option>
+                <option value="new:3">Third year</option>
+              </optgroup>
+              <optgroup label="Already a student here">
+                <option value="continuing">Continuing student</option>
+                <option value="readmission">Readmission</option>
+              </optgroup>
             </select>
           </div>
           <div class="field"><label>Registration number</label>
-            <input id="adm-regno" placeholder="Blank for a first year" oninput="scheduleApplicantLookup()">
+            <input id="adm-regno" placeholder="Blank for a new student" oninput="scheduleApplicantLookup()">
             <span id="adm-lookup" style="font-size:.72rem;color:var(--muted);margin-top:3px;"></span>
           </div>
-          <div class="field"><label>Full name *</label><input id="adm-name" placeholder="As on the certificate"></div>
         </div>
         <div class="form-grid-3">
-          <div class="field"><label>Programme *</label><select id="adm-programme"></select></div>
+          <div class="field"><label>First name *</label><input id="adm-name-first" placeholder="As on the certificate"></div>
+          <div class="field"><label>Middle name</label><input id="adm-name-middle"></div>
+          <div class="field"><label>Last name *</label><input id="adm-name-last"></div>
+        </div>
+        <div class="form-grid-3">
+          <div class="field"><label>Programme *</label><select id="adm-programme" onchange="syncAdmissionYear()"></select></div>
           <div class="field"><label>Level *</label><select id="adm-level"></select></div>
           <div class="field"><label>Form Four index No.</label><input id="adm-f4" placeholder="S0123/0045/2021"></div>
         </div>
@@ -1837,8 +1863,12 @@
         <div class="card-title">Take someone on <span class="tip" tabindex="0" role="note" aria-label="Help: taking someone on" data-tip="Same desks as a first year: records takes the details and a next of kin (no documents needed), finance states day or hostel and raises the fees, then admission admits. The college ID number comes at admission.">?</span></div>
         <div class="form-grid-3">
           <div class="field"><label>Intake *</label><select id="veta-app-intake"></select></div>
-          <div class="field"><label>Full name *</label><input id="veta-app-name"></div>
           <div class="field"><label>Phone</label><input id="veta-app-phone"></div>
+        </div>
+        <div class="form-grid-3">
+          <div class="field"><label>First name *</label><input id="veta-app-name-first"></div>
+          <div class="field"><label>Middle name</label><input id="veta-app-name-middle"></div>
+          <div class="field"><label>Last name *</label><input id="veta-app-name-last"></div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="createVetaApplication(event)">Start the application</button>
       </div>
@@ -1933,6 +1963,7 @@
         </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:.84rem;">
           <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="req-active" checked style="width:auto;"> In use</label>
+          <label style="display:flex;align-items:center;gap:6px;" title="Uniforms, the clinical coat: a student joining at Level 5 or 6 may have them already. Has it takes the charge off their bill before the invoice."><input type="checkbox" id="req-new-only" style="width:auto;"> New students only (first years at any level)</label>
         </div>
         <div style="display:flex;gap:10px;">
           <button class="btn btn-secondary btn-sm" onclick="saveRequirement(event)" id="req-save">Add the item</button>
@@ -10448,6 +10479,7 @@ async function labMove(event, kind) {
 const RECORD_SECTIONS = {
   find: ['Find a student', 'Look a student up, and keep their details.'],
   ids: ['College ID import', 'Record the college ID numbers students already carry.'],
+  nhif: ['NHIF sheets', 'NHIF\'s New and Continuous students sheets, filled from the records.'],
 };
 
 function showRecordsSection(section, btn) {
@@ -10462,6 +10494,38 @@ function showRecordsSection(section, btn) {
   showPage('student-records', document.querySelector('#students-nav-group .nav-btn'));
   document.getElementById('students-nav-group').classList.add('open');
   if (btn) btn.classList.add('active');
+  if (section === 'nhif') loadNhifSheet();
+}
+
+// NHIF's sheets (said 20 October 2026), as NHIF's own templates have them.
+async function loadNhifSheet() {
+  const yearSelect = document.getElementById('nhif-year');
+  if (!yearSelect.options.length) {
+    if (!state.academicYears) {
+      try { const years = await api('GET', '/academic-years/'); state.academicYears = years.results ?? years; } catch (e) { state.academicYears = []; }
+    }
+    yearSelect.innerHTML = (state.academicYears || []).map(y => `<option value="${y.id}" ${y.is_active ? 'selected' : ''}>${safeText(y.name)}</option>`).join('');
+  }
+  try {
+    const data = await api('GET', `/nhif-sheet/?academic_year_id=${yearSelect.value}&sheet=${document.getElementById('nhif-sheet').value}`);
+    state.nhifSheet = data;
+    document.getElementById('nhif-thead').innerHTML = `<tr>${data.columns.map(c => `<th>${safeText(c)}</th>`).join('')}</tr>`;
+    document.getElementById('nhif-tbody').innerHTML = data.rows.length ? data.rows.map(r => `<tr>
+        ${data.columns.map(c => r.missing.includes(c) ? '<td style="background:var(--yellow-soft, #fff4d6)">—</td>' : `<td>${safeText(r.row[c])}</td>`).join('')}</tr>`).join('')
+      : `<tr><td colspan="${data.columns.length}"><div class="empty">Nobody on this sheet for ${safeText(data.academic_year)}</div></td></tr>`;
+    const gaps = data.rows.filter(r => r.missing.length).length;
+    document.getElementById('nhif-note').innerHTML = `<div class="missing-note" style="border-left-color:${gaps ? 'var(--orange)' : 'var(--green)'}">${data.rows.length} student(s)${gaps ? ` · ${gaps} with something missing (marked) — fill it in at Find a student` : ' · nothing missing'}.</div>`;
+  } catch (e) { toast(apiErrorText(e, 'Could not build the sheet'), 'var(--red)'); }
+}
+
+function downloadNhifSheet() {
+  const data = state.nhifSheet;
+  if (!data) return;
+  const ws = XLSX.utils.json_to_sheet(data.rows.map(r => r.row), { header: data.columns });
+  ws['!cols'] = data.columns.map(() => ({ wch: 18 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  XLSX.writeFile(wb, `NHIF_${data.sheet === 'new' ? 'NEW' : 'CONTINUOUS'}_STUDENTS_${data.academic_year.replace('/', '-')}.xlsx`);
 }
 
 let recordSearchTimer;
@@ -10823,6 +10887,7 @@ async function showAdmissionSection(section, btn) {
     await ensureProgrammes(true);
     buildProgrammeOptions(document.getElementById('adm-programme'), '— pick a programme —');
     buildLevelOptions(document.getElementById('adm-level'), false);
+    syncAdmissionYear();
   }
   if (section === 'all') {
     // The queue says which desks this office sees, which trims the filter.
@@ -10961,7 +11026,7 @@ function applicationRow(row, { showDesk = true } = {}) {
   return `<tr>
     <td>${safeText(row.reg_no)}${row.college_id ? `<div style="font-size:.68rem;color:var(--muted);">${safeText(row.college_id)}</div>` : ''}</td>
     <td>${safeText(row.student_name)}${provisionalTag(row)}</td>
-    <td>${safeText(KIND_LABELS[row.kind] || row.kind)}</td>
+    <td>${safeText(row.kind_label || KIND_LABELS[row.kind] || row.kind)}</td>
     <td>${safeText(row.class_level_name || '—')}</td>
     ${showDesk ? `<td>${deskLabel(row)}</td>` : ''}
     <td>${safeText(row.balance)}</td>
@@ -10980,7 +11045,7 @@ async function loadMyDesk() {
       ? list.map(row => `<tr>
           <td>${safeText(row.reg_no)}</td>
           <td>${safeText(row.student_name)}${provisionalTag(row)}</td>
-          <td>${safeText(KIND_LABELS[row.kind] || row.kind)}</td>
+          <td>${safeText(row.kind_label || KIND_LABELS[row.kind] || row.kind)}</td>
           <td>${safeText(row.class_level_name || '—')}</td>
           <td>${safeText(row.balance)}</td>
           <td>${deskLabel(row)}</td>
@@ -11393,9 +11458,10 @@ async function startReadmission(regNo, levelId, programmeId, name, status) {
   // one is readmitted, and pays as a new student.
   document.getElementById('adm-kind').value = ['postponed', 'repeating'].includes(status) ? 'continuing' : 'readmission';
   document.getElementById('adm-regno').value = regNo;
-  document.getElementById('adm-name').value = name;
-  if (levelId) document.getElementById('adm-level').value = levelId;
+  fillNameParts('adm-name', name);
   if (programmeId) document.getElementById('adm-programme').value = programmeId;
+  syncAdmissionYear();
+  if (levelId) document.getElementById('adm-level').value = levelId;
   lookupApplicant();
 }
 
@@ -11414,22 +11480,59 @@ async function lookupApplicant() {
     const match = (rows || []).find(row => row.reg_no.toLowerCase() === regNo.toLowerCase());
     if (!match) { found.textContent = 'Not on file — they will be written down as a new student.'; return; }
     found.textContent = `On file: ${match.name}${match.college_id ? ' · ' + match.college_id : ''} · ${match.standing_display}`;
-    document.getElementById('adm-name').value = match.name;
-    if (match.class_level_id) document.getElementById('adm-level').value = match.class_level_id;
+    fillNameParts('adm-name', match.name);
     if (match.programme_id) document.getElementById('adm-programme').value = match.programme_id;
+    syncAdmissionYear();
+    if (match.class_level_id && !admissionYear()) document.getElementById('adm-level').value = match.class_level_id;
   } catch (e) { found.textContent = ''; }
 }
 
+// A new student joins in a year of the course, and the year is the level:
+// the programme's first level is the first year (said 20 October 2026 — the
+// admission officer took "Continuing" for a newcomer joining at Level 5).
+function admissionYear() {
+  const [kind, year] = document.getElementById('adm-kind').value.split(':');
+  return kind === 'new' ? Number(year) : 0;
+}
+
+function programmeLevels(programmeId) {
+  const programme = (state.programmes || []).find(p => String(p.id) === String(programmeId));
+  if (!programme) return null;
+  return (state.levels || []).filter(l => (programme.levels || []).map(String).includes(String(l.id)))
+    .sort((a, b) => a.order - b.order);
+}
+
+function syncAdmissionYear() {
+  const kindEl = document.getElementById('adm-kind');
+  const levelEl = document.getElementById('adm-level');
+  const levels = programmeLevels(document.getElementById('adm-programme').value);
+  ['First', 'Second', 'Third'].forEach((word, i) => {
+    const option = kindEl.querySelector(`option[value="new:${i + 1}"]`);
+    const level = levels && levels[i];
+    option.textContent = levels && levels.length
+      ? (level ? `${word} year · ${level.name.replace(/^NTA /, '')}` : `${word} year · not run`)
+      : `${word} year`;
+    option.disabled = Boolean(levels && levels.length && !level);
+  });
+  if (kindEl.selectedOptions[0]?.disabled) kindEl.value = 'new:1';
+  const year = admissionYear();
+  const fixed = year && levels && levels.length ? levels[year - 1] : null;
+  if (fixed) levelEl.value = fixed.id;
+  levelEl.disabled = Boolean(fixed);       // the year chose it
+}
+
 async function openApplication(event) {
+  const [kind] = document.getElementById('adm-kind').value.split(':');
   const payload = {
-    kind: document.getElementById('adm-kind').value,
+    kind,
+    year_of_study: admissionYear() || '',
     nactvet_reg_no: document.getElementById('adm-regno').value.trim(),
-    name: document.getElementById('adm-name').value.trim(),
+    ...readNameParts('adm-name'),
     programme_id: document.getElementById('adm-programme').value,
     class_level_id: document.getElementById('adm-level').value,
     form_four_index: document.getElementById('adm-f4').value.trim(),
   };
-  if (!payload.name) { toast('A name is needed', 'var(--red)'); return; }
+  if (!payload.first_name || !payload.last_name) { toast('The first and the last name are needed', 'var(--red)'); return; }
   if (!payload.programme_id || !payload.class_level_id) { toast('Choose the programme and the level', 'var(--red)'); return; }
   if (!payload.nactvet_reg_no && payload.kind !== 'new') {
     toast('A continuing or readmitted student is found by their registration number', 'var(--red)');
@@ -11438,8 +11541,8 @@ async function openApplication(event) {
   const done = working(event?.currentTarget, 'Opening…');
   try {
     const application = await api('POST', '/applications/capture/', payload);
-    toast(`${application.student_name} is now with ${DESK_LABELS[application.state]}`, 'var(--green)');
-    ['adm-regno', 'adm-name', 'adm-f4'].forEach(id => { document.getElementById(id).value = ''; });
+    toast(`${application.student_name} (${application.kind_label || KIND_LABELS[application.kind]}) is now with ${DESK_LABELS[application.state]}`, 'var(--green)');
+    ['adm-regno', 'adm-name-first', 'adm-name-middle', 'adm-name-last', 'adm-f4'].forEach(id => { document.getElementById(id).value = ''; });
     document.getElementById('adm-lookup').textContent = '';
     await refreshAdmissions();
   } catch (e) {
@@ -11455,7 +11558,7 @@ async function openApplicationModal(id) {
     document.getElementById('app-modal-title').textContent =
       `${application.reg_no} — ${application.student_name}`;
     document.getElementById('app-modal-summary').innerHTML = `
-      ${safeText(KIND_LABELS[application.kind] || application.kind)} ·
+      ${safeText(application.kind_label || KIND_LABELS[application.kind] || application.kind)} ·
       ${safeText(application.programme_code || '')} ${safeText(application.class_level_name || '')} ·
       ${safeText(application.semester_label)}${provisionalTag(application)}<br>
       <strong>Where it is:</strong> ${safeText(DESK_LABELS[application.state] || application.state)}
@@ -11576,19 +11679,49 @@ function renderAcademicBlock(academic) {
 const RELATIONSHIPS = [['parent', 'Parent'], ['guardian', 'Guardian'], ['spouse', 'Spouse'],
                        ['sibling', 'Sibling'], ['relative', 'Other relative'], ['other', 'Other']];
 
+// The name in its parts (said 20 October 2026): first, middle, last.
+function splitName(name) {
+  const words = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return ['', '', ''];
+  return [words[0], words.length > 2 ? words.slice(1, -1).join(' ') : '', words.length > 1 ? words[words.length - 1] : ''];
+}
+function fillNameParts(prefix, name) {
+  const [first, middle, last] = splitName(name);
+  document.getElementById(`${prefix}-first`).value = first;
+  document.getElementById(`${prefix}-middle`).value = middle;
+  document.getElementById(`${prefix}-last`).value = last;
+}
+function readNameParts(prefix) {
+  const value = part => (document.getElementById(`${prefix}-${part}`)?.value || '').trim();
+  return { first_name: value('first'), middle_name: value('middle'), last_name: value('last') };
+}
+
 function detailsFormHtml(prefix, details, { withReason = false } = {}) {
   const kin = (n) => (details.next_of_kin || []).find(k => k.position === n) || {};
   const rel = (n) => RELATIONSHIPS.map(([v, l]) =>
     `<option value="${v}" ${kin(n).relationship === v ? 'selected' : ''}>${l}</option>`).join('');
   const opt = (value, label, current) => `<option value="${value}" ${current === value ? 'selected' : ''}>${label}</option>`;
+  const [first, middle, last] = details.first_name || details.last_name
+    ? [details.first_name || '', details.middle_name || '', details.last_name || ''] : splitName(details.name);
   return `
     <div class="form-grid-3">
-      <div class="field"><label>Full name</label><input id="${prefix}-name" value="${safeText(details.name || '')}"></div>
+      <div class="field"><label>First name *</label><input id="${prefix}-name-first" value="${safeText(first)}"></div>
+      <div class="field"><label>Middle name</label><input id="${prefix}-name-middle" value="${safeText(middle)}"></div>
+      <div class="field"><label>Last name *</label><input id="${prefix}-name-last" value="${safeText(last)}"></div>
+    </div>
+    <div class="form-grid-3">
       <div class="field"><label>Phone</label><input id="${prefix}-phone" value="${safeText(details.phone || '')}"></div>
       <div class="field"><label>Gender</label>
         <select id="${prefix}-gender"><option value="">—</option>
           <option value="F" ${details.gender === 'F' ? 'selected' : ''}>Female</option>
           <option value="M" ${details.gender === 'M' ? 'selected' : ''}>Male</option></select></div>
+      <div class="field"><label>Marital status</label>
+        <select id="${prefix}-marital"><option value="">—</option>
+          ${opt('single', 'Single', details.marital_status)}${opt('married', 'Married', details.marital_status)}${opt('divorced', 'Divorced', details.marital_status)}${opt('widowed', 'Widowed', details.marital_status)}</select></div>
+    </div>
+    <div class="form-grid-3">
+      <div class="field"><label>National ID (NIDA)</label><input id="${prefix}-national-id" maxlength="30" value="${safeText(details.national_id || '')}"></div>
+      <div class="field"><label>NHIF card No.</label><input id="${prefix}-nhif" maxlength="30" value="${safeText(details.nhif_card_no || '')}" placeholder="For NHIF's continuing sheet"></div>
     </div>
     <div class="form-grid-3">
       <div class="field"><label>Date of birth</label><input type="date" id="${prefix}-dob" value="${safeText(details.date_of_birth || '')}"></div>
@@ -11640,7 +11773,8 @@ function readDetailsForm(prefix) {
   const field = (suffix) => document.getElementById(`${prefix}-${suffix}`);
   const value = (suffix) => (field(suffix)?.value || '').trim();
   return {
-    name: value('name'), phone: value('phone'), gender: value('gender'),
+    ...readNameParts(`${prefix}-name`), phone: value('phone'), gender: value('gender'),
+    marital_status: value('marital'), national_id: value('national-id'), nhif_card_no: value('nhif'),
     date_of_birth: value('dob'), birth_year: value('birth-year'), birth_place: value('birth-place'),
     religion: value('religion'), education_level: value('education-level'),
     ...(field('f4') ? { form_four_index: value('f4') } : {}),
@@ -11661,6 +11795,7 @@ function detailsReadOnlyHtml(details) {
   const row = (label, value) => value ? `<dt>${label}</dt><dd>${safeText(value)}</dd>` : '';
   return `${details.passport_url ? `<div class="rec-photo" style="float:right;margin:0 0 8px 12px"><img src="${safeText(details.passport_url)}" alt="Passport photo"></div>` : ''}<dl class="facts">
     <dt>Gender</dt><dd>${safeText(details.gender_display || details.gender || '—')}</dd>
+    ${row('Marital status', details.marital_status_display)}${row('National ID', details.national_id)}${row('NHIF card No.', details.nhif_card_no)}
     <dt>Date of birth</dt><dd>${safeText(details.date_of_birth || (details.birth_year ? `${details.birth_year} (year)` : '—'))}</dd>
     ${row('Place of birth', details.birth_place)}${row('Religion', details.religion)}${row('Education level now', details.education_level)}
     <dt>Form Four index</dt><dd>${safeText(details.form_four_index || '—')}</dd>
@@ -12053,7 +12188,7 @@ async function loadRequirements() {
   document.getElementById('req-tbody').innerHTML = state.requirements.length
     ? state.requirements.map(item => `<tr>
         <td>${safeText(item.name)}</td>
-        <td>${safeText({ pst: 'PST', veta: 'VETA', both: 'PST and VETA' }[item.applies_to] || 'PST')}</td>
+        <td>${safeText({ pst: 'PST', veta: 'VETA', both: 'PST and VETA' }[item.applies_to] || 'PST')}${item.new_students_only ? '<div style="font-size:.7rem;color:var(--muted)">new students only</div>' : ''}</td>
         <td>${item.kind === 'check' ? '<span class="badge badge-yellow">Held — checked only</span>'
               : item.charge_type_name ? `Billed under ${safeText(item.charge_type_name)}` : '<span style="color:var(--muted);">billed — no charge type</span>'}</td>
         <td>${safeText(FREQUENCY_LABELS[item.frequency] || item.frequency)}${item.quantity > 1 ? ` · ${item.quantity} over the year` : ''}${item.value_label ? ` · types the ${safeText(item.value_label)}` : ''}</td>
@@ -12091,6 +12226,7 @@ function resetRequirementForm() {
   document.getElementById('req-charge').value = '';
   document.getElementById('req-kind').value = 'check';
   document.getElementById('req-applies').value = 'pst';
+  document.getElementById('req-new-only').checked = false;
   document.getElementById('req-quantity').value = 1;
   document.getElementById('req-value-label').value = '';
   document.getElementById('req-frequency').value = 'each_semester';
@@ -12107,6 +12243,7 @@ function editRequirement(id) {
   document.getElementById('req-name').value = item.name;
   document.getElementById('req-kind').value = item.kind || 'billed';
   document.getElementById('req-applies').value = item.applies_to || 'pst';
+  document.getElementById('req-new-only').checked = !!item.new_students_only;
   document.getElementById('req-quantity').value = item.quantity || 1;
   document.getElementById('req-value-label').value = item.value_label || '';
   document.getElementById('req-charge').value = item.charge_type || '';
@@ -12126,6 +12263,7 @@ async function saveRequirement(event) {
     name: document.getElementById('req-name').value.trim(),
     kind: document.getElementById('req-kind').value,
     applies_to: document.getElementById('req-applies').value,
+    new_students_only: document.getElementById('req-new-only').checked,
     quantity: Math.max(1, Math.min(10, Number(document.getElementById('req-quantity').value) || 1)),
     value_label: document.getElementById('req-kind').value === 'check' ? document.getElementById('req-value-label').value.trim() : '',
     charge_type: document.getElementById('req-kind').value === 'billed' ? (document.getElementById('req-charge').value || null) : null,
@@ -13700,13 +13838,13 @@ async function setIntakeOpen(id, open) {
 
 async function createVetaApplication(event) {
   const payload = { intake: Number(document.getElementById('veta-app-intake').value),
-                    name: document.getElementById('veta-app-name').value.trim(),
+                    ...readNameParts('veta-app-name'),
                     phone: document.getElementById('veta-app-phone').value.trim() };
-  if (!payload.intake || !payload.name) { toast('Pick the intake and give the name', 'var(--red)'); return; }
+  if (!payload.intake || !payload.first_name || !payload.last_name) { toast('Pick the intake and give the first and last name', 'var(--red)'); return; }
   const done = working(event?.currentTarget, 'Starting…');
   try {
     const made = await api('POST', '/course-applications/', payload);
-    ['veta-app-name', 'veta-app-phone'].forEach(id => document.getElementById(id).value = '');
+    ['veta-app-name-first', 'veta-app-name-middle', 'veta-app-name-last', 'veta-app-phone'].forEach(id => document.getElementById(id).value = '');
     toast('Application started — at the intake desk', 'var(--green)');
     await loadVeta();
     openVetaModal(made.id);
@@ -14368,11 +14506,11 @@ restoreSidebarCollapsed();
 boot();
 </script>
 <script>
-// Five minutes without use signs the page out (said 19 October 2026). The
+// Thirty minutes without use signs the page out (said 19 October 2026; thirty from 20 October). The
 // server is the rule (IdleTimeoutMiddleware); this tells it the person is
 // still working while they type, and leaves the page when they are not.
 (function () {
-  const limit = {{ IDLE_SECONDS|default:300 }} * 1000;
+  const limit = {{ IDLE_SECONDS|default:1800 }} * 1000;
   const leave = '/logout/?idle=1';
   let lastUse = Date.now(), lastPing = Date.now();
   const used = () => { lastUse = Date.now(); };

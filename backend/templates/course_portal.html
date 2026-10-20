@@ -153,11 +153,11 @@
   {% endif %}
 </main>
 <script>
-// Five minutes without use signs the page out (said 19 October 2026). The
+// Thirty minutes without use signs the page out (said 19 October 2026; thirty from 20 October). The
 // server is the rule (IdleTimeoutMiddleware); this tells it the person is
 // still working while they type, and leaves the page when they are not.
 (function () {
-  const limit = {{ IDLE_SECONDS|default:300 }} * 1000;
+  const limit = {{ IDLE_SECONDS|default:1800 }} * 1000;
   const leave = '/student-logout/?idle=1';
   let lastUse = Date.now(), lastPing = Date.now();
   const used = () => { lastUse = Date.now(); };

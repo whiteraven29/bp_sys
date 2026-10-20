@@ -847,5 +847,34 @@ VETA card numbers counted per course ("own counter per programme"); the VETA adm
 details kept; income filtered by department and programme; VETA items checked before admission (no
 code typed); next of kin and who pays compulsory in both PST and VETA; corrections logged; invoices
 from the application window; the HOD sees only their department's staff; tutors no longer claim
-modules; five minutes without use signs out; staff passwords to the students' rule ("all staff will
+modules; thirty minutes without use signs out (five at first — too short, 20 October); staff passwords to the students' rule ("all staff will
 reset to a new rule"); the CSRF error on Chrome explained, logged and prevented where it can be.
+
+### Q58. One programme or one per level? ✅
+
+**Answer (20 October 2026):** one programme, "Ordinary Diploma in PST", across Levels 4–6; the three
+created one per level are merged into it (`manage.py merge_programmes`). The student already admitted
+at Level 4 keeps the college ID number issued ("Keep the number they have").
+
+### Q59. Joining at Level 5 or 6 ✅
+
+New application, kind *Second year* (Level 5) or *Third year* (Level 6) — see Q62. Uniforms and the clinical coat they already have
+come off the bill through items for new students only; an own NHIF card through the *Insurance* item.
+
+### Q60. NHIF sheets ✅
+
+**Answers:** students paying the college's medical fee ("Paying the medical fee"); dates DD/MM/YYYY,
+gender Male / Female. First years on the New Students sheet, continuing students (with the NHIF card
+number) on the Continuous sheet.
+
+### Q61. Names ✅
+
+Admission takes first, middle and last name; existing names were split (first word / middle words /
+last word) and records corrects any wrong split.
+
+### Q62. Second and third year at admission ✅
+
+The admission officer asked (20 October 2026) for *Second year* and *Third year* beside *First year*,
+so a newcomer joining at Level 5 or 6 is not mistaken for a continuing or readmitted student. All
+three are new students (first years' desks, one-time charges); the year sets the level from the
+programme (PST: 4, 5, 6). *Continuing* and *Readmission* stay as they were.

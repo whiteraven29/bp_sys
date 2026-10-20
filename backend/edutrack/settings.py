@@ -152,10 +152,10 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 # And at most a working day: a browser left open on a shared office PC does not
 # stay signed in overnight.
 SESSION_COOKIE_AGE = config('SESSION_COOKIE_AGE', default=8 * 60 * 60, cast=int)
-# And five minutes without use ends it (said 19 October 2026;
-# attendance.middleware.IdleTimeoutMiddleware). The page sends a keep-alive while
+# And thirty minutes without use ends it (said 19 October 2026 as five; made
+# thirty on 20 October — five was too short; attendance.middleware.IdleTimeoutMiddleware). The page sends a keep-alive while
 # somebody is working in it, so a long form is not lost.
-IDLE_TIMEOUT_SECONDS = config('IDLE_TIMEOUT_SECONDS', default=5 * 60, cast=int)
+IDLE_TIMEOUT_SECONDS = config('IDLE_TIMEOUT_SECONDS', default=30 * 60, cast=int)
 
 # A form that was open too long, or a sign-in page restored from the browser's
 # cache, used to answer with Django's bare 403 "CSRF cookie not set". It now
