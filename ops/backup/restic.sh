@@ -22,4 +22,5 @@ set -a
 source "$CONFIG"
 set +a
 
-exec restic "$@"
+# Wait longer than restic's one minute for Google Drive (see edutrack-backup).
+exec restic -o "rclone.timeout=${RESTIC_RCLONE_TIMEOUT:-5m}" "$@"

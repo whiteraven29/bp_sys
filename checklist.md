@@ -245,6 +245,10 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      admitted 19–20 Oct, bills nothing); the accountant confirms no new charges on their statements
    - [ ] Next of kin still "Parent / Sibling / Spouse": list them (release guide command); records corrects
    - [ ] Retake the desk manual's screenshots in the new look and republish it
+   - [ ] Backups (21 Oct: Google Drive throttled rclone's shared sign-in, the nightly upload failed): give
+     rclone its own Google sign-in — ops/guides/01-backups.md step 5b — and reinstall the scripts after the
+     deploy: `sudo install -o root -g root -m 700 /var/www/edutrack/ops/backup/backup.sh /usr/local/sbin/edutrack-backup`
+     and the same for `restic.sh` → `/usr/local/sbin/edutrack-restic`; then `sudo systemctl start edutrack-backup`
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

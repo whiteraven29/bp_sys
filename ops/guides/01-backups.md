@@ -162,8 +162,8 @@ Answer the questions like this (the exact wording differs a little between versi
 | `n) New remote` … `n/s/q>` | `n` | |
 | `name>` | `gdrive` | The scripts expect this name |
 | `Storage>` | `drive` | Type the word; the numbers change between versions |
-| `client_id>` | *(press Enter)* | Use rclone's own |
-| `client_secret>` | *(press Enter)* | |
+| `client_id>` | the Client ID from step 5b | rclone's own is shared by everybody and gets throttled |
+| `client_secret>` | the Client secret from step 5b | |
 | `scope>` | `1` (Full access all files) | This account holds only backups, so full access loses nothing |
 | `service_account_file>` | *(press Enter)* | |
 | `Edit advanced config?` | `n` | |
@@ -209,6 +209,59 @@ at drive.google.com when signed in as the backup account.
 > **If `rclone authorize` fails** because the laptop's rclone is much newer than
 > the server's, run `rclone authorize "drive"` on the laptop without the long
 > code. It produces the same kind of token.
+
+## Step 5b — rclone's own Google sign-in (free, needed)
+
+Pressing Enter at `client_id>` uses the Google sign-in built into rclone, which
+every rclone user in the world shares. When they use it up, Google throttles
+everybody. On 21 October 2026 the nightly backup failed with
+`context deadline exceeded`, and `edutrack-restic snapshots` showed
+`403 Quota exceeded … consumer project_number:202264815644`: that is rclone's
+shared sign-in. Your own costs nothing and needs no billing.
+
+**laptop, browser, signed in as the backup Google account:**
+
+1. https://console.cloud.google.com → the project picker at the top → **New project** → name
+   `edutrack-backup` → **Create**, then select it.
+2. **APIs & Services → Library** → search **Google Drive API** → **Enable**.
+3. **APIs & Services → OAuth consent screen** (also called *Google Auth Platform*) → **Get started**:
+   app name `EduTrack backup`, support email the backup account, audience **External**, contact
+   email the backup account, agree → **Create**.
+4. **Data Access → Add or remove scopes**: tick `.../auth/drive` → **Update** → **Save**.
+5. **Audience → Publish app → Confirm.** Do not skip this: while the app is *Testing*, Google
+   ends the sign-in after 7 days and the backup fails every week. Published but unverified is
+   fine for your own account.
+6. **Clients** (or *Credentials*) → **Create client** → type **Desktop app**, name `rclone` →
+   **Create**. Copy the **Client ID** and **Client secret** into your password manager.
+
+**server:** put them into the existing `gdrive` remote and sign in again (the repository, its
+password and the backups in Drive stay exactly as they are — never `restic init` again):
+
+```
+$ sudo rclone config --config /etc/edutrack/rclone.conf
+```
+
+| rclone asks | You type |
+|---|---|
+| `e/n/d/r/c/s/q>` | `e` (edit), then the number of `gdrive` |
+| `client_id>` | the Client ID |
+| `client_secret>` | the Client secret |
+| `scope>` | *(press Enter — keep it)* |
+| `service_account_file>` | *(press Enter)* |
+| `Edit advanced config?` | `n` |
+| `Already have a token - refresh?` | `y` |
+| `Use web browser…` / `Use auto config?` | `n` |
+
+Then do the laptop part of step 5: run the `rclone authorize "drive" "…"` command it prints,
+sign in **as the backup account**. Google warns *Google hasn't verified this app* — it is your own
+app: **Advanced → Go to EduTrack backup → Continue**. Paste the result back, answer `n` to Shared
+Drive, `y` to keep, `q` to quit. Check:
+
+```
+$ sudo rclone --config /etc/edutrack/rclone.conf lsd gdrive:           # lists edutrack-backups
+$ sudo edutrack-restic snapshots --latest 3                           # no "Quota exceeded" lines
+$ sudo systemctl start edutrack-backup && sudo journalctl -u edutrack-backup -f
+```
 
 ## Step 6 — Create the encryption password
 
@@ -411,6 +464,13 @@ was created with. Put back the one from your password manager.
 sign-in expired or was removed (for example, the backup account's access list was
 cleared). Sign in again: `sudo rclone config reconnect gdrive: --config /etc/edutrack/rclone.conf`,
 then do the laptop part of step 5 again.
+
+**`context deadline exceeded` / `error talking HTTP to rclone`, and `Quota exceeded` /
+`rateLimitExceeded` / `403` from Google**: Google Drive is throttling the sign-in rclone uses. If
+the consumer number is `202264815644` it is rclone's shared one: do step 5b. Since 21 October 2026
+the backup waits up to 5 minutes for Drive (`RESTIC_RCLONE_TIMEOUT` in ops.env) and tries the upload
+three times, ten minutes apart, before it reports a failure. Run it again by hand:
+`sudo systemctl start edutrack-backup`.
 
 **`repository is already locked`**: an earlier run was killed halfway. The next
 backup clears the lock itself. To clear it now: `sudo edutrack-restic unlock`.

@@ -40,6 +40,12 @@ set +a
 : "${NGINX_SITE:=/etc/nginx/sites-available/edutrack}"
 : "${POSTGRES_RUN_AS=postgres}"     # empty = connect as yourself (PGHOST, PGUSER …)
 
+# restic gives rclone one minute to answer by default. Google Drive sometimes
+# takes longer when it is throttling (21 Oct 2026: "context deadline exceeded"),
+# so wait longer before calling it a failure.
+: "${RESTIC_RCLONE_TIMEOUT:=5m}"
+restic() { command restic -o "rclone.timeout=$RESTIC_RCLONE_TIMEOUT" "$@"; }
+
 BACKEND=$REPO_DIR/backend
 DAILY=$BACKUP_ROOT/daily
 STAGING=$BACKUP_ROOT/staging       # what gets sent to Google Drive, laid out flat
@@ -137,9 +143,18 @@ sed 's/^/    /' "$STAGING/MANIFEST.txt"
 # ── 4. Send it to Google Drive ───────────────────────────────────────────────
 [[ -r ${RESTIC_PASSWORD_FILE:-} ]] || die "no restic password file — see ops/guides/01-backups.md, step 6"
 log "4/5 Sending an encrypted snapshot to $RESTIC_REPOSITORY"
-restic unlock                     # clears a lock left behind by a run that was killed
-# --host is fixed so snapshots from a rebuilt server continue the same history.
-restic backup --host edutrack --tag nightly "$STAGING"
+# Google Drive throttles now and then — a few minutes later it answers again.
+# Three tries, ten minutes apart, before the backup is reported as failed.
+for attempt in 1 2 3; do
+    # unlock clears a lock left behind by a run that was killed.
+    # --host is fixed so snapshots from a rebuilt server continue the same history.
+    if restic unlock && restic backup --host edutrack --tag nightly "$STAGING"; then
+        break
+    fi
+    (( attempt < 3 )) || die "Google Drive did not take the snapshot after 3 tries"
+    log "    Google Drive did not answer (try $attempt of 3). Trying again in 10 minutes."
+    sleep 600
+done
 restic forget --host edutrack --group-by host \
     --keep-daily "$KEEP_DAILY" --keep-weekly "$KEEP_WEEKLY" --keep-monthly "$KEEP_MONTHLY"
 
