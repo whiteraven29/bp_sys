@@ -21,7 +21,7 @@ from rest_framework.test import APIClient
 from . import admissions, finance, passwords, progression, semester_pass
 from .models import (
     AcademicYear, Application, BankAccount, ChargeType, ClassLevel, FeeStructure, Module, PaymentSchedule,
-    PaymentStep, Semester, SemesterRegistration, Student, StudentCharge, StudentProfile,
+    PaymentStep, Semester, SemesterRegistration, Student, StudentCharge, StudentPass, StudentProfile,
 )
 from .test_admissions import AdmissionBase, complete_record
 from .views import set_roles
@@ -157,6 +157,19 @@ class OnAccountTests(Accounts):
         finance.reverse_payment(payment, 'wrong student', actor=self.accountant)
         self.assertEqual(finance.on_account_total(self.profile), Decimal('0.00'))
 
+    def test_the_accountant_sees_who_paid_beyond_the_invoice(self):
+        invoice = finance.issue_invoice(self.profile, list(StudentCharge.objects.filter(
+            profile=self.profile, charge_type=self.tuition)), self.year)
+        finance.record_payment(self.profile, Decimal('1600000'), date(2026, 10, 20), recorded_by=self.accountant,
+                               invoice=invoice, bank_reference='CRDB-INV')
+        _, accounts = office('money3', 'accountant')
+        rows = accounts.get('/api/finance/overpayments/').data
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0]['invoice'], Decimal(rows[0]['invoice_total']), Decimal(rows[0]['excess'])),
+                         (invoice.reference, Decimal('1000000.00'), Decimal('600000.00')))
+        _, records = office('rec3', 'records_officer')
+        self.assertEqual(records.get('/api/finance/overpayments/').status_code, 403)
+
     def test_the_statement_shows_it(self):
         self.pay('1500000', self.tuition_account, 'CRDB-Y')
         _, accounts = office('money2', 'accountant')
@@ -165,9 +178,11 @@ class OnAccountTests(Accounts):
 
 
 class SemesterPassTests(Accounts):
+    """Said 21 October 2026: the pass runs window by window, as paid."""
+
     def setUp(self):
         super().setUp()
-        # Two instalments: semester 1's and semester 2's.
+        # Two windows: semester 1's instalment and semester 2's.
         self.price(self.tuition, '1000000', self.year, self.level4, [date(2026, 10, 15), date(2027, 3, 1)])
         self.profile = complete_record(StudentProfile.objects.create(
             nactvet_reg_no='NS0300/0001/2026', name='Asha Pass', college_id='BPH/PST/2026/0300'))
@@ -178,56 +193,93 @@ class SemesterPassTests(Accounts):
                                  programme=self.pst, reason='Admitted.')
         finance.generate_charges(self.profile, self.year, class_level=self.level4)
         self.accountant, _ = office('money', 'accountant')
-        Semester.objects.filter(pk=self.sem1.pk).update(is_active=False)
-        Semester.objects.filter(pk=self.sem2.pk).update(is_active=True)
 
-    def pay(self, amount, reference):
-        finance.record_payment(self.profile, Decimal(amount), date(2026, 10, 10), recorded_by=self.accountant,
+    def pay(self, amount, reference, on=date(2026, 10, 10)):
+        finance.record_payment(self.profile, Decimal(amount), on, recorded_by=self.accountant,
                                bank_account=self.tuition_account, bank_reference=reference)
 
-    def test_semester_two_needs_the_second_instalment(self):
-        self.pay('500000', 'CRDB-1')
-        when = date(2027, 3, 2)
-        refused = semester_pass.status(self.profile, self.sem2, today=when)
-        self.assertFalse(refused['ok'])
-        self.assertIn('500000', refused['reason'].replace(',', ''))
-        self.pay('500000', 'CRDB-2')
-        granted = semester_pass.status(self.profile, self.sem2, today=when)
-        self.assertTrue(granted['ok'])
-        self.assertEqual(granted['code'], semester_pass.check_code(self.profile, self.sem2))
+    def status(self, today):
+        return semester_pass.status(self.profile, self.sem1, today=today)
 
-    def test_the_schedules_semester_two_date_is_the_yardstick_even_before_it(self):
-        schedule = PaymentSchedule.objects.create(academic_year=self.year, entry=PaymentSchedule.NEW)
-        PaymentStep.objects.create(schedule=schedule, number=1, due_date=date(2026, 10, 15), semester_number=1)
-        PaymentStep.objects.create(schedule=schedule, number=2, due_date=date(2027, 3, 1), semester_number=2)
+    def test_the_first_window_runs_to_the_day_before_the_second(self):
+        self.assertFalse(self.status(date(2026, 10, 20))['ok'])                 # nothing paid
         self.pay('500000', 'CRDB-1')
-        early = semester_pass.status(self.profile, self.sem2, today=date(2027, 2, 20))
-        self.assertFalse(early['ok'])                          # semester 2's instalment is asked for now
-        self.assertEqual(early['due_by'], date(2027, 3, 1))
+        first = self.status(date(2026, 11, 1))
+        self.assertTrue(first['ok'])
+        self.assertEqual(first['valid_until'], date(2027, 2, 28))
+        late = self.status(date(2027, 3, 2))
+        self.assertFalse(late['ok'])
+        self.assertIn('500,000.00', late['reason'])
 
-    def test_an_edited_pass_fails_the_check(self):
+    def test_every_window_in_parts_runs_a_year_from_the_first(self):
+        self.pay('500000', 'CRDB-1')
+        self.pay('500000', 'CRDB-2', on=date(2027, 2, 20))
+        self.assertEqual(self.status(date(2027, 3, 2))['valid_until'], date(2027, 10, 14))
+
+    def test_the_whole_year_at_once_runs_a_year_from_that_day(self):
         self.pay('1000000', 'CRDB-ALL')
-        code = semester_pass.check_code(self.profile, self.sem2)
-        self.assertTrue(semester_pass.verify('BPH/PST/2026/0300', code)['genuine'])
-        other = StudentProfile.objects.create(nactvet_reg_no='NS0300/0002/2026', name='Forger',
-                                              college_id='BPH/PST/2026/0301')
-        self.assertFalse(semester_pass.verify('BPH/PST/2026/0301', code)['genuine'])   # someone else's code
-        self.assertFalse(semester_pass.verify('BPH/PST/2026/0300', 'AAAAA-BBBBB')['genuine'])
-        self.assertNotEqual(semester_pass.check_code(self.profile, self.sem1), code)    # another semester
+        result = self.status(date(2026, 10, 20))
+        self.assertEqual(result['valid_until'], date(2027, 10, 10))
+        self.assertIn('at once', result['basis'])
+
+    def test_new_and_continuing_windows_never_mix(self):
+        """Each student's windows are their own bill's dates — raised from the
+        schedule for their entry — never the other schedule's."""
+        continuing = complete_record(StudentProfile.objects.create(
+            nactvet_reg_no='NS0300/0009/2025', name='Old Hand'))
+        SemesterRegistration.objects.create(profile=continuing, semester=self.sem1, programme=self.pst,
+                                            class_level=self.level4, kind=SemesterRegistration.CONTINUING)
+        progression.set_standing(continuing, 'active', semester=self.sem1, class_level=self.level4,
+                                 programme=self.pst, reason='Continuing.')
+        schedule = PaymentSchedule.objects.create(academic_year=self.year, entry=PaymentSchedule.CONTINUING)
+        from .models import PaymentStepAmount
+        for number, when, amount in ((1, date(2026, 10, 1), '400000'), (2, date(2027, 1, 15), '600000')):
+            step = PaymentStep.objects.create(schedule=schedule, number=number, due_date=when,
+                                              semester_number=1 if number == 1 else 2)
+            PaymentStepAmount.objects.create(step=step, charge_type=self.tuition, amount=Decimal(amount))
+        finance.generate_charges(continuing, self.year, class_level=self.level4)
+        finance.record_payment(continuing, Decimal('400000'), date(2026, 10, 1), recorded_by=self.accountant,
+                               bank_account=self.tuition_account, bank_reference='CRDB-C1')
+        self.pay('500000', 'CRDB-N1')
+        self.assertEqual(semester_pass.status(continuing, self.sem1, today=date(2026, 11, 1))['valid_until'],
+                         date(2027, 1, 14))                                         # the continuing schedule
+        self.assertEqual(self.status(date(2026, 11, 1))['valid_until'], date(2027, 2, 28))   # the new one
+
+    def test_an_override_runs_to_its_date(self):
+        from .models import FinanceOverride
+        FinanceOverride.objects.create(profile=self.profile, academic_year=self.year, period=ChargeType.REGISTRATION,
+                                       status=FinanceOverride.CLEARED, reason='Sponsor letter',
+                                       expires_on=date(2026, 12, 31), approved_by=self.accountant)
+        result = self.status(date(2026, 10, 20))
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['valid_until'], date(2026, 12, 31))
+
+    def test_the_code_alone_checks_it_and_a_new_payment_gives_a_new_pass(self):
+        self.pay('500000', 'CRDB-1')
+        first, _ = semester_pass.issue(self.profile, semester=self.sem1, today=date(2026, 11, 1))
+        again, _ = semester_pass.issue(self.profile, semester=self.sem1, today=date(2026, 11, 2))
+        self.assertEqual(first.pk, again.pk)                                      # the same pass, not a new code
+        checked = semester_pass.verify(first.code.lower().replace('-', ''), today=date(2026, 11, 1))
+        self.assertTrue(checked['genuine'] and checked['valid'])
+        self.assertFalse(semester_pass.verify('AAAA-BBBB')['genuine'])
+        self.pay('500000', 'CRDB-2', on=date(2027, 2, 20))
+        later, _ = semester_pass.issue(self.profile, semester=self.sem1, today=date(2027, 2, 21))
+        self.assertNotEqual(later.code, first.code)
+        self.assertEqual(later.valid_until, date(2027, 10, 14))
+        old = semester_pass.verify(first.code, today=date(2027, 3, 2))
+        self.assertTrue(old['genuine'])
+        self.assertFalse(old['valid'])                                            # the old date has passed
 
     def test_not_registered_not_billed_or_not_studying_gets_none(self):
         stranger = StudentProfile.objects.create(nactvet_reg_no='NS0300/0003/2026', name='Stranger')
-        self.assertFalse(semester_pass.status(stranger, self.sem2)['ok'])
-        # Registered but never billed: owing nothing is not having paid.
+        self.assertFalse(semester_pass.status(stranger, self.sem1)['ok'])
         unbilled = StudentProfile.objects.create(nactvet_reg_no='NS0300/0004/2026', name='Unbilled')
-        SemesterRegistration.objects.create(profile=unbilled, semester=self.sem2, programme=self.pst,
+        SemesterRegistration.objects.create(profile=unbilled, semester=self.sem1, programme=self.pst,
                                             class_level=self.level4, kind=SemesterRegistration.NEW)
-        refused = semester_pass.status(unbilled, self.sem2)
-        self.assertFalse(refused['ok'])
-        self.assertIn('No bill', refused['reason'])
+        self.assertIn('No bill', semester_pass.status(unbilled, self.sem1)['reason'])
         self.pay('1000000', 'CRDB-ALL')
         progression.set_standing(self.profile, 'suspended', reason='Discipline.')
-        self.assertIn('Suspended', semester_pass.status(self.profile, self.sem2)['reason'])
+        self.assertIn('Suspended', semester_pass.status(self.profile, self.sem1)['reason'])
 
     def test_the_admission_desk_prints_it_and_records_cannot(self):
         self.pay('1000000', 'CRDB-ALL')
@@ -239,7 +291,10 @@ class SemesterPassTests(Accounts):
         found.force_login(admission)
         self.assertTrue(found.get('/api/semester-pass/?q=bph/pst/2026/0300').data['ok'])
         page = desk.get(f'/semester-pass/{self.profile.id}/')
-        self.assertContains(page, semester_pass.check_code(self.profile, self.sem2))
+        issued = StudentPass.objects.get(profile=self.profile)
+        self.assertContains(page, issued.code)
+        self.assertNotContains(page, '/semester-pass/check/')                    # no link on the card
+        self.assertEqual(issued.issued_by, admission)
         records = User.objects.create_user('rec', password='pw')
         set_roles(records, ['records_officer'], full_name='Records')
         other = Client()
@@ -247,26 +302,107 @@ class SemesterPassTests(Accounts):
         self.assertEqual(other.get(f'/semester-pass/{self.profile.id}/').status_code, 403)
 
     def test_the_student_downloads_their_own(self):
-        module = Module.objects.create(name='Dispensing', code='PST04201', teacher='T', class_level=self.level4,
-                                       semester=self.sem2, programme=self.pst, credits=3)
+        module = Module.objects.create(name='Anatomy', code='PST04101', teacher='T', class_level=self.level4,
+                                       semester=self.sem1, programme=self.pst, credits=3)
         enrollment = Student.objects.create(nactvet_reg_no=self.profile.nactvet_reg_no, name=self.profile.name,
                                             profile=self.profile, module=module)
         portal = Client()
         session = portal.session
         session['student_id'] = enrollment.id
         session.save()
-        self.assertContains(portal.get('/my-semester-pass/'), 'No semester pass')
+        self.assertContains(portal.get('/my-semester-pass/'), 'No student pass')
         self.pay('1000000', 'CRDB-ALL')
-        self.assertContains(portal.get('/my-semester-pass/'), semester_pass.check_code(self.profile, self.sem2))
+        page = portal.get('/my-semester-pass/')
+        self.assertContains(page, StudentPass.objects.get(profile=self.profile, source=StudentPass.PORTAL).code)
 
-    def test_checking_a_pass_is_for_staff(self):
+    def test_checking_a_pass_is_for_staff_by_code_alone(self):
         self.pay('1000000', 'CRDB-ALL')
-        code = semester_pass.check_code(self.profile, self.sem2)
-        url = f'/semester-pass/check/?id=BPH/PST/2026/0300&code={code}'
+        issued, _ = semester_pass.issue(self.profile)
+        url = f'/semester-pass/check/?code={issued.code}'
         self.assertEqual(Client().get(url).status_code, 302)                      # sign in first
         tutor = User.objects.create_user('tutor', password='pw')
         set_roles(tutor, ['tutor'], full_name='Tutor')
         staff = Client()
         staff.force_login(tutor)
         self.assertContains(staff.get(url), 'Genuine')
-        self.assertContains(staff.get(url.replace(code, 'AAAAA-BBBBB')), 'Not genuine')
+        self.assertContains(staff.get('/semester-pass/check/?code=AAAA-BBBB'), 'Not genuine')
+
+
+class ShortfallWaiverTests(Accounts):
+    """Said 21 October 2026: a shortfall waived on tuition or direct costs
+    waits for DPFPA; the student waits at the finance desk meanwhile; other
+    waivers are as they were."""
+
+    def setUp(self):
+        super().setUp()
+        self.price(self.tuition, '1000000', self.year, self.level4, [date(2026, 10, 15), date(2027, 3, 1)])
+        self.profile = self.applicant('NACTVET/PENDING/900', 'Short Payer')
+        self.application = admissions.open_application(profile=self.profile, semester=self.sem1, programme=self.pst,
+                                                       class_level=self.level4, kind=Application.NEW,
+                                                       actor=self.officer)
+        while self.application.state != Application.FINANCE:
+            admissions.complete_step(self.application, actor=self.officer)
+        admissions.set_residence(self.application, 'day', actor=self.officer)
+        self.charge = StudentCharge.objects.filter(profile=self.profile, charge_type=self.tuition).order_by('due_date').first()
+        self.accountant, self.accounts = office('money', 'accountant')
+        self.dpfpa_user, self.dpfpa = office('dpf', 'dpfpa')
+        _, self.principal = office('boss2', 'principal')
+
+    def ask(self, amount='20000', reason='20,000 short on the first instalment'):
+        return self.accounts.post(f'/api/student-charges/{self.charge.id}/waive/',
+                                  {'amount': amount, 'reason': reason}, format='json')
+
+    def test_it_waits_for_dpfpa_and_changes_nothing_meanwhile(self):
+        from .models import Notification, WaiverRequest
+        asked = self.ask()
+        self.assertEqual(asked.status_code, 202, asked.data)
+        self.charge.refresh_from_db()
+        self.assertEqual(self.charge.waived_amount, Decimal('0'))
+        self.assertEqual(WaiverRequest.objects.get().status, WaiverRequest.PENDING)
+        self.assertTrue(Notification.objects.filter(user=self.dpfpa_user, kind=Notification.WAIVER_REQUESTED).exists())
+        with self.assertRaises(admissions.AdmissionError) as held:
+            admissions.complete_step(self.application, actor=self.officer)
+        self.assertIn('DPFPA', str(held.exception))
+        self.assertEqual(self.ask('30000').status_code, 400)                    # one at a time on a charge
+
+    def test_dpfpa_approves_and_it_is_applied(self):
+        from .models import WaiverRequest
+        self.ask()
+        waiver = WaiverRequest.objects.get()
+        decided = self.dpfpa.post(f'/api/waiver-requests/{waiver.id}/decide/', {'approve': True}, format='json')
+        self.assertEqual(decided.status_code, 200, decided.data)
+        self.charge.refresh_from_db()
+        self.assertEqual(self.charge.waived_amount, Decimal('20000.00'))
+        self.assertIn('approved by', self.charge.waived_reason)
+        self.assertFalse(finance.pending_waivers(self.profile).exists())
+
+    def test_a_refusal_needs_a_reason_and_leaves_the_bill(self):
+        from .models import WaiverRequest
+        self.ask()
+        waiver = WaiverRequest.objects.get()
+        self.assertEqual(self.dpfpa.post(f'/api/waiver-requests/{waiver.id}/decide/', {'approve': False},
+                                         format='json').status_code, 400)
+        refused = self.dpfpa.post(f'/api/waiver-requests/{waiver.id}/decide/',
+                                  {'approve': False, 'note': 'Pay the balance first'}, format='json')
+        self.assertEqual(refused.data['status'], WaiverRequest.REFUSED)
+        self.charge.refresh_from_db()
+        self.assertEqual(self.charge.waived_amount, Decimal('0'))
+
+    def test_only_dpfpa_decides(self):
+        from .models import WaiverRequest
+        self.ask()
+        waiver = WaiverRequest.objects.get()
+        for client in (self.accounts, self.principal):
+            self.assertEqual(client.post(f'/api/waiver-requests/{waiver.id}/decide/', {'approve': True},
+                                         format='json').status_code, 403)
+        self.assertEqual(len(self.principal.get('/api/waiver-requests/?status=pending').data), 1)   # can see
+
+    def test_other_charges_are_waived_as_before(self):
+        exam = ChargeType.objects.create(name='Supplementary exam', family=ChargeType.OTHER,
+                                         applies=ChargeType.ON_REQUEST)
+        other = finance.raise_charge(self.profile, exam, self.year, Decimal('50000'), date(2026, 11, 1))
+        done = self.accounts.post(f'/api/student-charges/{other.id}/waive/', {'amount': '50000', 'reason': 'Sick'},
+                                  format='json')
+        self.assertEqual(done.status_code, 200, done.data)
+        other.refresh_from_db()
+        self.assertEqual(other.waived_amount, Decimal('50000.00'))

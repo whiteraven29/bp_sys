@@ -89,7 +89,7 @@ class VetaBase(TestCase):
         self.admission.post(f'/api/course-applications/{app}/clear/', {}, format='json')
         saved = self.records.post(f'/api/course-applications/{app}/details/', {'gender': 'F', 'fee_payer': 'family',
             'phone': '0712000000', 'next_of_kin': [
-                {'name': 'Mama Juma', 'phone': '0713000000', 'relationship': 'parent'}]}, format='json')
+                {'name': 'Mama Juma', 'phone': '0713000000', 'relationship': 'mother'}]}, format='json')
         self.assertEqual(saved.status_code, 200, saved.data)
         self.records.post(f'/api/course-applications/{app}/clear/', {}, format='json')
         self.accountant.post(f'/api/course-applications/{app}/fees/', {'residence': residence}, format='json')
@@ -191,7 +191,7 @@ class TheFourDesksTests(VetaBase):
         app = self.apply(intake)
         self.admission.post(f'/api/course-applications/{app}/clear/', {}, format='json')
         self.records.post(f'/api/course-applications/{app}/details/', {'gender': 'F', 'fee_payer': 'family',
-            'next_of_kin': [{'name': 'Baba', 'phone': '07', 'relationship': 'parent'}]}, format='json')
+            'next_of_kin': [{'name': 'Baba', 'phone': '07', 'relationship': 'mother'}]}, format='json')
         self.records.post(f'/api/course-applications/{app}/clear/', {}, format='json')
         refused = self.accountant.post(f'/api/course-applications/{app}/clear/', {}, format='json')
         self.assertEqual(refused.status_code, 400)
@@ -207,7 +207,7 @@ class TheFourDesksTests(VetaBase):
                                            format='json').status_code, 404)
         self.admission.post(f'/api/course-applications/{app}/clear/', {}, format='json')
         self.records.post(f'/api/course-applications/{app}/details/', {'gender': 'F', 'fee_payer': 'family',
-            'next_of_kin': [{'name': 'Baba', 'phone': '07', 'relationship': 'parent'}]}, format='json')
+            'next_of_kin': [{'name': 'Baba', 'phone': '07', 'relationship': 'mother'}]}, format='json')
         self.records.post(f'/api/course-applications/{app}/clear/', {}, format='json')
         self.assertEqual(CourseApplication.objects.get(id=app).state, 'finance')
         self.assertEqual(self.admission.post(f'/api/course-applications/{app}/clear/', {},
@@ -243,7 +243,7 @@ class TheFourDesksTests(VetaBase):
         app = self.apply(intake)
         self.admission.post(f'/api/course-applications/{app}/clear/', {}, format='json')
         self.records.post(f'/api/course-applications/{app}/details/', {'gender': 'F', 'fee_payer': 'family',
-            'next_of_kin': [{'name': 'Baba', 'phone': '07', 'relationship': 'parent'}]}, format='json')
+            'next_of_kin': [{'name': 'Baba', 'phone': '07', 'relationship': 'mother'}]}, format='json')
         self.records.post(f'/api/course-applications/{app}/clear/', {}, format='json')
         self.accountant.post(f'/api/course-applications/{app}/fees/', {'residence': 'day'}, format='json')
         self.admission.post(f'/api/course-applications/{app}/refuse/', {'note': 'Withdrew'}, format='json')

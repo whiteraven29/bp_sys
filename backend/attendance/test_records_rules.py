@@ -42,7 +42,7 @@ class CompulsoryDetailsTests(ItemsTests):
 
     def test_a_student_who_pays_their_own_fees_needs_no_sponsor(self):
         bare = StudentProfile.objects.create(nactvet_reg_no='NIT/PST/2025/0601', name='Pays Himself')
-        NextOfKin.objects.create(profile=bare, position=1, name='Mzazi', phone='07', relationship=NextOfKin.PARENT)
+        NextOfKin.objects.create(profile=bare, position=1, name='Mzazi', phone='07', relationship=NextOfKin.MOTHER)
         admissions.record_details(bare, fee_payer='self', actor=self.officer)
         self.assertEqual(admissions.compulsory_missing(bare), [])
         bare.refresh_from_db()
@@ -90,7 +90,7 @@ class VetaDetailsAndItemsTests(VetaBase):
             'gender': 'F', 'phone': '0684233559', 'fee_payer': 'family', 'birth_year': 1999,
             'birth_place': 'Singida', 'religion': 'Mkristo', 'address': 'Unyankindy',
             'education_level': 'Darasa la 7', 'has_chronic_condition': 'no',
-            'next_of_kin': [{'name': 'Neema Salmu', 'phone': '0684233559', 'relationship': 'parent',
+            'next_of_kin': [{'name': 'Neema Salmu', 'phone': '0684233559', 'relationship': 'mother',
                              'address': 'Unyankindy'}]}, format='json')
         self.assertEqual(saved.status_code, 200, saved.data)
         profile = CourseApplication.objects.get(pk=app).profile
@@ -104,7 +104,7 @@ class VetaDetailsAndItemsTests(VetaBase):
         self.admission.post(f'/api/course-applications/{app}/clear/', {}, format='json')   # → records
         saved = self.records.post(f'/api/course-applications/{app}/details/', {
             'gender': 'F', 'fee_payer': 'self',
-            'next_of_kin': [{'name': 'Baba', 'phone': '07', 'relationship': 'parent'}]}, format='json')
+            'next_of_kin': [{'name': 'Baba', 'phone': '07', 'relationship': 'mother'}]}, format='json')
         self.assertEqual(saved.status_code, 200, saved.data)
         self.assertEqual(saved.data['blockers'], [])
         self.assertEqual(saved.data['fee_payer_display'], 'The student')
@@ -136,3 +136,47 @@ class VetaDetailsAndItemsTests(VetaBase):
 
 for _name in [n for n in dir(VetaBase) if n.startswith('test_')]:
     setattr(VetaDetailsAndItemsTests, _name, None)
+
+
+class RelationshipTests(ItemsTests):
+    """Said 21 October 2026: mother or father, sister or brother, husband or
+    wife — "parent", "sibling" and "spouse" stay readable on records already
+    taken, are not offered again, and are asked of records to correct."""
+
+    def setUp(self):
+        super().setUp()
+        from .models import NextOfKin, StudentProfile
+        self.NextOfKin = NextOfKin
+        self.profile = complete_record(StudentProfile.objects.create(nactvet_reg_no='NS0700/0001/2025', name='Old Record'))
+        self.profile.next_of_kin.all().delete()
+        NextOfKin.objects.create(profile=self.profile, position=1, name='Mama', phone='0713', relationship=NextOfKin.PARENT)
+        NextOfKin.objects.create(profile=self.profile, position=2, name='Kaka', phone='0714', relationship=NextOfKin.SIBLING)
+
+    def kin(self, first, second):
+        return [{'name': 'Mama', 'phone': '0713', 'relationship': first},
+                {'name': 'Kaka', 'phone': '0714', 'relationship': second}]
+
+    def test_the_new_ones_are_offered_and_the_old_are_not(self):
+        offered = dict(self.NextOfKin.OFFERED)
+        for value in ('mother', 'father', 'sister', 'brother', 'husband', 'wife', 'guardian'):
+            self.assertIn(value, offered)
+        for value in ('parent', 'sibling', 'spouse'):
+            self.assertNotIn(value, offered)
+
+    def test_an_old_record_still_reads_and_records_is_asked_to_correct_it(self):
+        self.assertEqual(self.profile.next_of_kin.get(position=1).get_relationship_display(), 'Parent')
+        missing = admissions.missing_details(self.profile)
+        self.assertIn('next of kin 1: Parent → Mother or Father', missing)
+        self.assertIn('next of kin 2: Sibling → Sister or Brother', missing)
+        # Saving other details leaves an old value as it is…
+        admissions.record_details(self.profile, phone='0712999999', next_of_kin=self.kin('parent', 'sibling'),
+                                  actor=self.officer)
+        # …and correcting it clears the flag.
+        admissions.record_details(self.profile, next_of_kin=self.kin('mother', 'brother'), actor=self.officer)
+        self.assertFalse([m for m in admissions.missing_details(self.profile) if 'next of kin' in m])
+
+    def test_an_old_value_is_never_written_anew(self):
+        admissions.record_details(self.profile, next_of_kin=self.kin('mother', 'brother'), actor=self.officer)
+        with self.assertRaises(admissions.AdmissionError) as refused:
+            admissions.record_details(self.profile, next_of_kin=self.kin('mother', 'spouse'), actor=self.officer)
+        self.assertIn('Husband or Wife', str(refused.exception))

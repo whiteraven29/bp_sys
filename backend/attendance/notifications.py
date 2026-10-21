@@ -49,6 +49,11 @@ def expense_approvers():
     return _users_holding(PrincipalProfile, DeputyFinanceProfile)
 
 
+def dpfpa():
+    """DPFPA approves a shortfall waiver on tuition or direct costs."""
+    return _users_holding(DeputyFinanceProfile)
+
+
 def dparc():
     return _users_holding(DeputyAcademicProfile)
 

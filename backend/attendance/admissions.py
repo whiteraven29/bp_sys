@@ -388,6 +388,11 @@ def record_details(profile, *, name=None, phone=None, gender=None, date_of_birth
         relationship = kin.get('relationship') or NextOfKin.GUARDIAN
         if relationship not in dict(NextOfKin.RELATIONSHIP_CHOICES):
             raise AdmissionError(f'{relationship!r} is not a relationship the form knows.')
+        if relationship in NextOfKin.OLD and not NextOfKin.objects.filter(
+                profile=profile, position=position, relationship=relationship).exists():
+            # Kept on a record taken before, never written anew (said 21 October 2026).
+            raise AdmissionError(f'Next of kin {position}: choose {NextOfKin.OLD[relationship]}, '
+                                 f'not "{dict(NextOfKin.RELATIONSHIP_CHOICES)[relationship]}".')
         NextOfKin.objects.update_or_create(
             profile=profile, position=position,
             defaults={'name': kin['name'].strip(), 'phone': (kin.get('phone') or '').strip(),
@@ -496,7 +501,7 @@ def missing_details(profile):
             missing.append('next of kin')
         if not profile.fee_payer:
             missing.append('who pays the fees')
-        return missing
+        return missing + old_relationships(profile)
     missing = []
     if not profile.phone:
         missing.append('phone')
@@ -510,7 +515,16 @@ def missing_details(profile):
         missing.append('next of kin')
     if not profile.fee_payer:
         missing.append('who pays the fees')
+    missing += old_relationships(profile)
     return missing
+
+
+def old_relationships(profile):
+    """Next of kin taken down as "parent", "sibling" or "spouse" before
+    mother/father, sister/brother and husband/wife (said 21 October 2026):
+    the records office corrects them."""
+    return [f'next of kin {kin.position}: {kin.get_relationship_display()} → {NextOfKin.OLD[kin.relationship]}'
+            for kin in profile.next_of_kin.all() if kin.relationship in NextOfKin.OLD]
 
 
 def compulsory_missing(profile):
@@ -906,6 +920,11 @@ def complete_step(application, *, actor=None, note=''):
         missing = compulsory_missing(application.profile)
         if missing:
             raise AdmissionError('Records still needs: ' + ', '.join(missing) + '.')
+    if step == Application.FINANCE:
+        waiting = finance.pending_waivers(application.profile).count()
+        if waiting:
+            # Said 21 October 2026: the student waits at finance until DPFPA decides.
+            raise AdmissionError(f'{waiting} waiver(s) on this student are waiting for DPFPA to approve or refuse.')
     # The one thing that holds a student: not having paid. Judged by the
     # college's own clearance rule on the charges marked "blocks registration",
     # the same rule every other screen uses — and the accountant's override
@@ -1368,11 +1387,12 @@ def admit(application, *, actor=None, note=''):
         profile, StudentStanding.ACTIVE, actor=actor, semester=application.semester,
         class_level=application.class_level, programme=application.programme,
         reason=f'Admitted for {application.semester}.')
+    # The first password is their last name in capitals, to be changed at the
+    # first sign-in (said 21 October 2026); set before the modules so they
+    # carry it. A returning student keeps the one they have.
+    from . import passwords
+    passwords.give_first_password(profile, actor=actor)
     enrolled = progression.enroll_registration(registration, actor=actor)
-
-    # No password here: the ICT officer (or the Principal) gives every student
-    # theirs at the password desk, and nobody else sees one (said 8 October
-    # 2026). A returning student keeps the one they have.
     application.portal_pin = None
 
     ApplicationStep.objects.create(

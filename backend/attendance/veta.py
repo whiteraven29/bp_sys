@@ -119,6 +119,8 @@ def desk_blockers(application):
     """What stops the current desk from clearing, in words."""
     state = application.state
     profile = application.profile
+    if state == CourseApplication.FINANCE and finance.pending_waivers(profile).exists():
+        return ['A waiver on this student is waiting for DPFPA to approve or refuse.']
     if state == CourseApplication.INFORMATION:
         missing = []
         if not profile.phone:
@@ -339,8 +341,8 @@ def set_portal_pin(profile, pin, *, require_change=True):
 @transaction.atomic
 def admit(application, *, actor=None):
     """The last desk: the college ID (the VETA pattern, the college's counter)
-    and the enrollment. The portal password comes from the ICT officer's
-    password desk, not from here (said 8 October 2026)."""
+    and the enrollment. The first portal password is the student's last name
+    in capitals, changed at the first sign-in (said 21 October 2026)."""
     intake = application.intake
     unpaid = unpaid_before_admission(application)
     if unpaid:
@@ -361,7 +363,9 @@ def admit(application, *, actor=None):
     )
     application.state = CourseApplication.ADMITTED
     application.save(update_fields=['state', 'updated_at'])
-    application.issued_pin = None         # the password desk gives it
+    from . import passwords
+    passwords.give_first_password(profile, actor=actor)
+    application.issued_pin = None
     logger.info('Admitted %s to %s', profile.nactvet_reg_no, intake)
     return enrollment
 

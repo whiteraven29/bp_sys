@@ -13,25 +13,25 @@
        shadows. Borders are dark enough to actually see — the structure comes
        from rules and edges, not from rounding and glow. */
     --bg: #eceff3; --surface: #ffffff; --surface2: #f3f5f7; --border: #ccd4dc;
-    --accent: #1565c0; --accent-dark: #10529e; --accent2: #1d4ed8;
+    --accent: #123F80; --accent-dark: #0C2D5E; --accent2: #1d4ed8;
     --green: #16a34a; --red: #dc2626;
     --yellow: #b45309; --orange: #c2410c; --text: #2b3440; --muted: #71808f;
     --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --radius: 3px; --sidebar-w: 250px; --header-h: 56px;
     --shadow: rgba(0,0,0,.08); --row-hover: #f5f9fd;
-    --accent-soft: #e8f1fb; --green-soft: #f1faf4;
+    --accent-soft: #EFF6FF; --green-soft: #f1faf4;
     --yellow-soft: #fdf3e7; --red-soft: #fdeded;
     /* Fills: a colour with white text on it. Kept deep enough in both themes
        for the text to read (4.5:1 or better). */
-    --accent-fill: #1565c0; --accent2-fill: #1d4ed8; --green-fill: #15803d;
+    --accent-fill: #123F80; --accent2-fill: #1d4ed8; --green-fill: #15803d;
     --red-fill: #b91c1c; --yellow-fill: #b45309; --orange-fill: #c2410c;
     --grey-fill: #5b6b7a; --on-fill: #ffffff;
     --toast-bg: #2b3440; --toast-ink: #ffffff;
   }
   /* Dark is the same layout with the ground and the ink swapped. Only the
      palette moves: every rule below reads these, so nothing else needs a
-     second version of itself. The accent lightens because #1565c0 on a dark
+     second version of itself. The accent lightens because #123F80 on a dark
      ground fails contrast — the blue has to come up to meet it. */
   html[data-theme="dark"] {
     --bg: #10151b; --surface: #171d26; --surface2: #1e2632; --border: #303b4a;
@@ -362,13 +362,13 @@
     outline: none; transition: border .13s; width: 100%;
   }
   .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
-  .inventory-bulk-toggle { display:flex; align-items:flex-start; gap:10px; padding:12px; margin:0 0 14px; border:1px solid rgba(21,101,192,.35); border-radius:var(--radius); background:rgba(21,101,192,.08); cursor:pointer; }
+  .inventory-bulk-toggle { display:flex; align-items:flex-start; gap:10px; padding:12px; margin:0 0 14px; border:1px solid rgba(18,63,128,.35); border-radius:var(--radius); background:rgba(18,63,128,.08); cursor:pointer; }
   .inventory-bulk-toggle input { width:17px; height:17px; margin-top:2px; accent-color:var(--accent); }
   .inventory-bulk-toggle strong { display:block; font-size:.84rem; color:var(--accent); }
   .inventory-bulk-toggle small { display:block; margin-top:2px; color:var(--muted); line-height:1.4; }
   .inventory-filter-bar { display:grid; grid-template-columns:minmax(220px,2fr) repeat(3,minmax(140px,1fr)) auto; gap:9px; width:100%; margin:4px 0 14px; }
   .inventory-filter-control { background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:var(--radius); padding:9px 12px; font-family:var(--font-sans); font-size:.82rem; outline:none; min-width:0; }
-  .inventory-filter-control:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(21,101,192,.1); }
+  .inventory-filter-control:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(18,63,128,.1); }
   .inventory-filter-control option { background:var(--surface2); }
   .asset-map-layout { display:grid; grid-template-columns:minmax(0,1fr) 260px; gap:14px; }
   .asset-map-canvas { min-height:390px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius); background:radial-gradient(circle at 1px 1px,rgba(107,114,128,.15) 1px,transparent 0); background-size:22px 22px; }
@@ -376,8 +376,8 @@
   .asset-map-line { stroke:#c3cad2; stroke-width:2; }
   .asset-map-line.attention { stroke:rgba(220,38,38,.65); }
   .asset-map-node { cursor:pointer; outline:none; }
-  .asset-map-node rect { fill:#f1f4f6; stroke:#1565c0; stroke-width:1.5; transition:.15s; }
-  .asset-map-node:hover rect, .asset-map-node:focus rect { fill:#e8f1fb; stroke:#10529e; stroke-width:2.5; filter:drop-shadow(0 0 7px rgba(21,101,192,.35)); }
+  .asset-map-node rect { fill:#f1f4f6; stroke:#123F80; stroke-width:1.5; transition:.15s; }
+  .asset-map-node:hover rect, .asset-map-node:focus rect { fill:#EFF6FF; stroke:#0C2D5E; stroke-width:2.5; filter:drop-shadow(0 0 7px rgba(18,63,128,.35)); }
   .asset-map-node.asset rect { stroke:#6b7280; }
   .asset-map-node.asset.good rect { stroke:#16a34a; }
   .asset-map-node.asset.fair rect { stroke:#b45309; }
@@ -415,7 +415,7 @@
   .password-wrap { position: relative; width: 100%; }
   .password-wrap > input { padding-right: 42px !important; }
   .password-toggle { position: absolute; top: 50%; right: 7px; transform: translateY(-50%); display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius); color: var(--accent); background: transparent; cursor: pointer; font-size: 1rem; }
-  .password-toggle:hover, .password-toggle:focus-visible { background: rgba(21,101,192,.14); outline: none; }
+  .password-toggle:hover, .password-toggle:focus-visible { background: rgba(18,63,128,.14); outline: none; }
   .field select option { background: var(--surface2); }
   .field-full { grid-column: 1 / -1; }
   .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
@@ -492,7 +492,7 @@
   .att-toggle button.st-a { background: var(--red-fill); color: var(--on-fill); }
 
   .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 30px 20px; text-align: center; cursor: pointer; transition: all .2s; }
-  .upload-zone:hover { border-color: var(--accent); background: rgba(21,101,192,.04); }
+  .upload-zone:hover { border-color: var(--accent); background: rgba(18,63,128,.04); }
   .upload-zone .uz-icon { font-size: 2rem; margin-bottom: 8px; }
   .upload-zone .uz-title { font-weight: 600; margin-bottom: 4px; font-size: .9rem; }
   .upload-zone .uz-sub { font-size: .77rem; color: var(--muted); }
@@ -519,6 +519,15 @@
   .level-tab.active { background: var(--surface); color: var(--accent-dark); border-color: var(--border); font-weight: 600; }
   /* Blocks inside the application window. */
   .app-block { margin-bottom: 14px; }
+  /* The application window's sections, as panels (said 21 October 2026). */
+  .modal .app-block, #app-modal-requirements:not(:empty), #app-modal-documents:not(:empty), #app-modal-number {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin: 0 0 12px; }
+  .modal .app-block .card-title, #app-modal-requirements .card-title, #app-modal-documents .card-title, #app-modal-number .card-title {
+    margin: 0 0 10px; padding: 0; border: 0; font-size: .72rem !important; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 700; }
+  .sum-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  .sum-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+  .sum-tile > span { display: block; font-size: .62rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; margin-bottom: 5px; }
+  .sum-sub { margin: 8px 0 14px; color: var(--muted); font-size: .78rem; }
   .app-block:empty { display: none; }
   .app-block .block-title { font-size: .86rem; font-weight: 600; margin-bottom: 8px; }
   .facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: .82rem; }
@@ -703,6 +712,203 @@
   .elig-na  { color: var(--muted); font-size: .78rem; }
 
   /* ── PRINT STYLES ── */
+  /* ════════════════════════════════════════════════════════════════════════
+     DESIGN SYSTEM (said 21 October 2026)
+     Primary blue  #123F80 — sidebar, main actions, active navigation
+     Light blue    #EFF6FF — selected rows, filters, subtle highlights
+     White         #FFFFFF — main workspace and table surfaces
+     Cool grey     #F1F5F9 — page background, borders, secondary sections
+     A light workspace on a blue sidebar: white cards with soft shadows and
+     rounded corners, quiet tables, pills for status, tiles for counts. The
+     rules above stay as the structure; this layer is the look, and it comes
+     before @media print so printouts keep their own plain style.
+     ════════════════════════════════════════════════════════════════════════ */
+  :root {
+    --bg: #F1F5F9; --surface: #FFFFFF; --surface2: #F8FAFC; --border: #E2E8F0; --border-strong: #CBD5E1;
+    --accent: #123F80; --accent-dark: #0C2D5E; --accent2: #1E5BB8;
+    --accent-soft: #EFF6FF; --row-hover: #EFF6FF;
+    --text: #1E293B; --muted: #64748B;
+    --green: #15803D; --red: #DC2626; --yellow: #B45309; --orange: #C2410C;
+    --green-soft: #ECFDF3; --yellow-soft: #FFF7ED; --red-soft: #FEF2F2;
+    --accent-fill: #123F80; --accent2-fill: #1E5BB8; --green-fill: #15803D;
+    --red-fill: #C62828; --yellow-fill: #B45309; --orange-fill: #C2410C; --grey-fill: #64748B;
+    --radius: 10px; --radius-sm: 8px; --header-h: 60px;
+    --side-bg: #123F80; --side-deep: #0E3470; --side-ink: rgba(255,255,255,.80);
+    --side-dim: rgba(255,255,255,.58); --side-hover: rgba(255,255,255,.08); --side-active: rgba(255,255,255,.16);
+    --shadow-1: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06);
+    --shadow-2: 0 10px 30px rgba(15,23,42,.12);
+    --toast-bg: #0F172A; --toast-ink: #ffffff;
+  }
+  html[data-theme="dark"] {
+    --bg: #0B1220; --surface: #111A2C; --surface2: #162138; --border: #22314D; --border-strong: #2E4166;
+    --accent: #7CB0FF; --accent-dark: #A4C8FF; --accent2: #8FB7FF;
+    --accent-soft: #15284A; --row-hover: #15284A;
+    --text: #E2E8F0; --muted: #94A3B8;
+    --green: #4ADE80; --red: #F87171; --yellow: #FBBF24; --orange: #FB923C;
+    --green-soft: #10291C; --yellow-soft: #2E2410; --red-soft: #321A1A;
+    --accent-fill: #2B5BA8; --accent2-fill: #3466B8;
+    --side-bg: #0A1A36; --side-deep: #071329;
+    --shadow-1: 0 1px 2px rgba(0,0,0,.4); --shadow-2: 0 14px 40px rgba(0,0,0,.55);
+    --toast-bg: #E2E8F0; --toast-ink: #0B1220;
+  }
+  body { -webkit-font-smoothing: antialiased; }
+
+  /* Top bar: white, the brand is the sidebar. */
+  header { background: var(--surface); border-bottom: 1px solid var(--border); box-shadow: var(--shadow-1); }
+  .logo { color: var(--accent); font-weight: 800; letter-spacing: -.01em; font-size: 1.12rem; }
+  .logo span { color: var(--text); font-weight: 600; }
+  .hamburger:hover { background: var(--accent-soft); }
+  .hamburger span { background: var(--text); }
+  .sem-badge { background: var(--accent-soft); color: var(--accent); border: 0; border-radius: 999px; padding: 4px 11px; font-weight: 600; }
+  .sem-badge.active { background: var(--accent-soft); color: var(--accent); border: 0; }
+  .icon-btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: var(--radius); width: 38px; height: 38px; }
+  .icon-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .user-chip { border: 1px solid var(--border); color: var(--text); background: var(--surface); border-radius: 999px; padding: 4px 12px 4px 4px; }
+  .user-chip:hover { border-color: var(--border-strong); background: var(--surface2); }
+  .user-avatar { width: 30px; height: 30px; background: var(--accent-fill); color: #fff; }
+  .role-badge, .role-badge.admin, .role-badge.tutor { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 2px 9px; }
+  .logout-btn { border: 1px solid var(--border); color: var(--text); background: var(--surface); border-radius: 999px; padding: 6px 13px; }
+  .logout-btn:hover { background: var(--red-soft); color: var(--red); border-color: transparent; }
+  .scope-switch { border-color: var(--border); background: var(--surface2); }
+  .scope-switch span { color: var(--muted); }
+  .crumb-bar { background: transparent; border-bottom: 0; padding: 14px 28px 0; }
+
+  /* Sidebar: primary blue, rounded rows, white for where you are. */
+  aside { background: var(--side-bg); border-right: 0; padding: 10px 10px 20px; }
+  aside::-webkit-scrollbar { width: 6px; } aside::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }
+  .aside-label, .sidebar-level { color: var(--side-dim); text-transform: uppercase; letter-spacing: .08em; font-size: .64rem; }
+  .nav-btn { border: 0; border-radius: var(--radius-sm); color: var(--side-ink); padding: 10px 12px; margin: 1px 0; font-size: .85rem; }
+  .nav-btn .icon { color: var(--side-dim); }
+  .nav-btn:hover { background: var(--side-hover); color: #fff; }
+  .nav-btn:hover .icon { color: #fff; }
+  .nav-btn.active { background: var(--side-active); color: #fff; border-left: 0; font-weight: 600; box-shadow: inset 3px 0 0 #fff; }
+  .nav-btn.active .icon { color: #fff; }
+  .nav-caret { color: var(--side-dim); }
+  .nav-submenu { background: var(--side-deep); border: 0; border-radius: var(--radius-sm); margin: 2px 0 6px; padding: 4px 0; }
+  .nav-sub-btn { color: var(--side-dim); padding: 7px 12px 7px 44px; position: relative; border-radius: var(--radius-sm); }
+  .nav-sub-btn:hover { color: #fff; background: var(--side-hover); }
+  .nav-sub-btn.active { color: #fff; font-weight: 600; }
+  .nav-sub-btn.active::before { content: ''; position: absolute; left: 26px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: #fff; }
+  .sidebar-module { color: var(--side-ink); }
+  .sidebar-module:hover { background: var(--side-hover); color: #fff; }
+  body.sidebar-collapsed aside .nav-btn.active { padding-left: 6px; }
+
+  /* Workspace */
+  .main-inner { padding: 18px 28px 48px; }
+  .page-title { font-size: 1.45rem; font-weight: 700; letter-spacing: -.01em; color: var(--text); }
+  .page-sub { font-size: .86rem; margin-bottom: 20px; }
+
+  /* Cards */
+  .card { border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-1); padding: 20px; margin-bottom: 18px; }
+  .card-title { margin: -20px -20px 18px; padding: 15px 20px; font-size: .98rem; font-weight: 650; border-bottom: 1px solid var(--border); }
+  .card-title > span[style*="muted"] { font-weight: 400; }
+
+  /* Count tiles: the dashboard strip and every desk's counters. */
+  .stats-grid { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+  .stat-card { border-radius: 14px; box-shadow: var(--shadow-1); padding: 18px 18px 16px; border-color: var(--border); }
+  .stat-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c, var(--accent)); opacity: .9; }
+  .stat-card .label { text-transform: uppercase; letter-spacing: .06em; font-size: .66rem; font-weight: 600; }
+  .stat-card .value { font-size: clamp(1.15rem, 1.6vw, 1.55rem); font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  .quick-facts { border: 0; background: transparent; gap: 12px; overflow: visible; }
+  .qf-item { flex: 1 1 140px; background: var(--surface); border: 1px solid var(--border); border-right: 1px solid var(--border);
+             border-radius: 12px; padding: 13px 15px; box-shadow: var(--shadow-1); position: relative; }
+  .qf-item:last-child { border-right: 1px solid var(--border); }
+  .qf-item span { text-transform: uppercase; letter-spacing: .05em; font-size: .62rem; font-weight: 600; line-height: 1.35; min-height: 2.7em; }
+  .qf-item strong { font-size: 1.55rem; font-weight: 700; color: var(--accent); }
+  .qf-item.qf-zero strong { color: var(--muted); font-weight: 600; }
+
+  /* Tables: no grid, light header, roomy rows, light blue on hover. */
+  .table-wrap { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+  table { font-size: .84rem; }
+  thead tr { background: var(--surface2); }
+  th { border: 0; border-bottom: 1px solid var(--border); padding: 11px 14px; font-size: .68rem; font-weight: 650;
+       text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  td { border: 0; border-bottom: 1px solid #EEF2F7; padding: 11px 14px; }
+  html[data-theme="dark"] td { border-bottom-color: var(--border); }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: var(--row-hover); }
+  .table-wrap > table { min-width: 520px; }
+  .table-wrap .empty { padding: 30px 20px; }
+
+  /* Buttons */
+  .btn { border-radius: var(--radius-sm); padding: 8px 15px; font-weight: 600; font-size: .83rem; }
+  .btn-sm { padding: 5px 11px; font-size: .77rem; border-radius: 7px; }
+  .btn-primary { box-shadow: 0 1px 2px rgba(18,63,128,.25); }
+  .btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+  .btn-secondary { border-color: var(--border-strong); }
+  .btn-secondary:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .btn-ghost { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+  .btn-ghost:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-danger, .btn-green, .btn-warning { border-color: var(--border-strong); }
+
+  /* Status pills */
+  .badge { border-radius: 999px; padding: 3px 10px; font-size: .7rem; font-weight: 650; letter-spacing: .01em; }
+  .badge-green { background: var(--green-soft); color: var(--green); }
+  .badge-red { background: var(--red-soft); color: var(--red); }
+  .badge-yellow { background: var(--yellow-soft); color: var(--yellow); }
+  .badge-orange { background: var(--yellow-soft); color: var(--orange); }
+  .badge-blue { background: var(--accent-soft); color: var(--accent); }
+  .badge-purple { background: #F3E8FF; color: #6D28D9; }
+  html[data-theme="dark"] .badge-purple { background: #2A1D47; color: #C4B5FD; }
+  .badge-gen, .badge-cat1, .badge-cat2 { border-radius: 999px; }
+
+  /* Fields */
+  .field label { font-size: .78rem; font-weight: 600; color: var(--text); }
+  .field input, .field select, .field textarea, .inventory-filter-control {
+    border-radius: var(--radius-sm); border-color: var(--border-strong); background: var(--surface); padding: 9px 12px; }
+  .field input:focus, .field select:focus, .field textarea:focus, .inventory-filter-control:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(18,63,128,.14); outline: none; }
+
+  /* Explanations: a quiet callout, not a paragraph. */
+  .help-note { background: var(--accent-soft); border-radius: var(--radius-sm); padding: 9px 12px 9px 34px; position: relative;
+               color: var(--text); font-size: .78rem; line-height: 1.5; }
+  .help-note::before { content: 'i'; position: absolute; left: 11px; top: 9px; width: 16px; height: 16px; border-radius: 50%;
+               background: var(--accent); color: #fff; font: 700 .66rem/16px var(--font-sans); text-align: center; }
+  .help-note:empty { display: none; }
+  .missing-note { border-radius: var(--radius-sm); border-left-width: 4px; }
+  .tip { border-radius: 50%; }
+  .tip::after { border-radius: var(--radius-sm); box-shadow: var(--shadow-2); }
+
+  /* Modals */
+  .modal-overlay { background: rgba(15,23,42,.45); backdrop-filter: blur(3px); }
+  .modal { border-radius: 16px; border: 0; box-shadow: var(--shadow-2); padding: 0 24px 24px; }
+  .modal-title { margin: 0 -24px 20px; padding: 16px 24px; font-size: 1.02rem; font-weight: 700; }
+  .modal-close { border-radius: 50%; width: 32px; height: 32px; }
+  .facts { gap: 7px 18px; font-size: .84rem; }
+  .facts dt { font-size: .8rem; }
+  .block-title { font-size: .72rem !important; text-transform: uppercase; letter-spacing: .07em; color: var(--muted) !important; font-weight: 700 !important; }
+
+  /* People and money in rows */
+  .who-cell { display: flex; align-items: center; gap: 11px; min-width: 190px; }
+  .who-avatar { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center;
+                background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: .74rem; }
+  .who-cell strong { display: block; font-weight: 600; color: var(--text); }
+  .who-cell small { display: block; color: var(--muted); font-size: .72rem; margin-top: 1px; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  td.act { text-align: right; white-space: nowrap; width: 1%; }
+  .money { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .money.owe { color: var(--red); } .money.nil { color: var(--muted); font-weight: 400; }
+  .qf-item:has(.qf-icon) { padding-left: 56px; }
+  .qf-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border-radius: 9px;
+             display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: .95rem; }
+  .qf-item.qf-zero .qf-icon { background: var(--surface2); color: var(--muted); }
+  .qf-item span { min-height: 0; }
+
+  @media (max-width: 580px) {
+    .qf-item { flex: 1 1 calc(50% - 6px); }
+    .user-chip .role-badge, .user-chip .uname, .logout-btn span { display: none; }
+    .user-chip { padding: 3px; }
+    .logo { font-size: 1rem; }
+    .main-inner { padding: 14px 14px 40px; }
+    .crumb-bar { padding: 12px 14px 0; }
+  }
+
+  /* Empty states, menus, toasts */
+  .empty .ei { width: 48px; height: 48px; margin: 0 auto 10px; border-radius: 50%; display: grid; place-items: center;
+               background: var(--accent-soft); color: var(--accent); opacity: 1; font-size: 1.3rem; }
+  .bell-panel { border-radius: 14px; box-shadow: var(--shadow-2); }
+  #toast { border-radius: 12px; box-shadow: var(--shadow-2); }
+
   @media print {
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
@@ -861,20 +1067,21 @@
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-adm-section="desk" data-roles="principal admission records finance" onclick="showAdmissionSection('desk', this)">My desk</button>
         <button class="nav-sub-btn" data-adm-section="new" data-roles="principal admission" onclick="showAdmissionSection('new', this)">New application</button>
-        <button class="nav-sub-btn" data-adm-section="all" onclick="showAdmissionSection('all', this)">All applications</button>
-        <button class="nav-sub-btn" data-adm-section="pass" data-roles="principal admission" onclick="showAdmissionSection('pass', this)">Semester pass</button>
+        <button class="nav-sub-btn" data-adm-section="veta" data-roles="principal dparc admission records finance" onclick="showAdmissionSection('veta', this)">VETA applications</button>
+        <button class="nav-sub-btn" data-adm-section="pending" onclick="showAdmissionSection('pending', this)">Pending</button>
+        <button class="nav-sub-btn" data-adm-section="all" onclick="showAdmissionSection('all', this)">Applications</button>
         <button class="nav-sub-btn" data-adm-section="dueback" data-roles="principal admission" onclick="showAdmissionSection('dueback', this)">Expected back</button>
-        <button class="nav-sub-btn" data-adm-section="noshow" data-roles="principal admission" onclick="showAdmissionSection('noshow', this)">Did not report</button>
-        <button class="nav-sub-btn" data-adm-section="items" data-roles="principal finance admission" onclick="showAdmissionSection('items', this)">Items check</button>
-        <button class="nav-sub-btn" data-adm-section="classlist" onclick="showAdmissionSection('classlist', this)">Class lists</button>
-        <button class="nav-sub-btn" data-adm-section="veta" data-roles="principal dparc admission records finance" onclick="showAdmissionSection('veta', this)">VETA courses</button>
-        <button class="nav-sub-btn" data-adm-section="settings" data-roles="principal admission" onclick="showAdmissionSection('settings', this)">Window &amp; ID numbers</button>
+        <button class="nav-sub-btn" data-adm-section="settings" data-roles="principal admission" onclick="showAdmissionSection('settings', this)">Settings</button>
       </div>
     </div>
-    <div class="nav-group" id="students-nav-group" data-roles="principal dparc records admission runs dean">
+    <div class="nav-group" id="students-nav-group" data-roles="principal dparc records admission finance runs dean">
       <button class="nav-btn" data-page="students" onclick="toggleStudentsMenu(event)"><span class="icon"><i class="bi bi-mortarboard"></i></span> Students <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-rec-section="find" data-roles="principal dparc records" onclick="showRecordsSection('find', this)">Find a student</button>
+        <button class="nav-sub-btn" data-adm-section="pass" data-roles="principal admission" onclick="showAdmissionSection('pass', this)">Semester pass</button>
+        <button class="nav-sub-btn" data-adm-section="classlist" data-roles="principal dparc admission records finance" onclick="showAdmissionSection('classlist', this)">Class lists</button>
+        <button class="nav-sub-btn" data-adm-section="items" data-roles="principal finance admission" onclick="showAdmissionSection('items', this)">Items check</button>
+        <button class="nav-sub-btn" data-adm-section="noshow" data-roles="principal admission" onclick="showAdmissionSection('noshow', this)">Did not report</button>
         <button class="nav-sub-btn" data-student-section="manage" data-roles="runs" onclick="showStudentSection('manage', this)">Enrollments</button>
         <button class="nav-sub-btn" data-rec-section="ids" data-roles="principal records admission" onclick="showRecordsSection('ids', this)">College ID import</button>
         <button class="nav-sub-btn" data-rec-section="nhif" data-roles="principal dparc records admission" onclick="showRecordsSection('nhif', this)">NHIF sheets</button>
@@ -901,14 +1108,21 @@
         <button class="nav-sub-btn" data-lab-section="book" onclick="showLabSection('book', this)">Stock book</button>
       </div>
     </div>
+    <!-- Finance and inventory apart (said 21 October 2026): two menus, not one. -->
     <div class="nav-group" id="exec-nav-group" data-roles="principal dpfpa finance">
-      <button class="nav-btn" data-page="executive" onclick="toggleExecMenu(event)"><span class="icon"><i class="bi bi-bar-chart-line"></i></span> Executive Summary <span class="nav-caret">›</span></button>
+      <button class="nav-btn" data-page="executive" onclick="toggleExecMenu(event)"><span class="icon"><i class="bi bi-bar-chart-line"></i></span> Finance summary <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
-        <button class="nav-sub-btn" data-exec-section="finance" onclick="showExecSection('finance', this)">Finance</button>
+        <button class="nav-sub-btn" data-exec-section="finance" onclick="showExecSection('finance', this)">Fees &amp; collections</button>
         <button class="nav-sub-btn" data-exec-section="spending" onclick="showExecSection('spending', this)">Spending</button>
-        <button class="nav-sub-btn" data-exec-section="inventory" data-roles="principal dpfpa" onclick="showExecSection('inventory', this)">Inventory</button>
-        <button class="nav-sub-btn" data-exec-section="disposals" data-roles="principal dpfpa" onclick="showExecSection('disposals', this)">Asset disposals</button>
-        <button class="nav-sub-btn" data-exec-section="lab" data-roles="principal dpfpa" onclick="showExecSection('lab', this)">Laboratory stock</button>
+        <button class="nav-sub-btn" data-exec-section="waivers" data-roles="principal dpfpa" onclick="showExecSection('waivers', this)">Waiver approvals</button>
+      </div>
+    </div>
+    <div class="nav-group" id="exec-inv-nav-group" data-roles="principal dpfpa">
+      <button class="nav-btn" data-page="executive" onclick="toggleExecInventoryMenu(event)"><span class="icon"><i class="bi bi-box-seam"></i></span> Inventory summary <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-exec-section="inventory" onclick="showExecSection('inventory', this)">College property</button>
+        <button class="nav-sub-btn" data-exec-section="disposals" onclick="showExecSection('disposals', this)">Asset disposals</button>
+        <button class="nav-sub-btn" data-exec-section="lab" onclick="showExecSection('lab', this)">Laboratory stock</button>
       </div>
     </div>
     <div class="nav-group admin-only" id="review-nav-group">
@@ -994,6 +1208,7 @@
         <button class="nav-sub-btn" data-finance-section="record" onclick="showFinanceSection('record', this)">Record a Payment</button>
         <button class="nav-sub-btn" data-finance-section="history" onclick="showFinanceSection('history', this)">Payment History</button>
         <button class="nav-sub-btn" data-finance-section="collections" onclick="showFinanceSection('collections', this)">Collections &amp; EFD</button>
+        <button class="nav-sub-btn" data-finance-section="overpayments" onclick="showFinanceSection('overpayments', this)">Overpayments</button>
       </div>
     </div>
     <div class="nav-group finance-only" id="finance-students-nav-group">
@@ -1058,10 +1273,10 @@
       </div>
 
       <div class="quick-facts">
-        <div class="qf-item"><span>My Modules</span><strong id="stat-modules">—</strong></div>
-        <div class="qf-item"><span>Total Students</span><strong id="stat-students">—</strong></div>
-        <div class="qf-item"><span>Sessions Today</span><strong id="stat-sessions">—</strong></div>
-        <div class="qf-item"><span>Avg Attendance</span><strong id="stat-avg" title="Counts Present + all Sick marks. This is not the stricter exam-eligibility figure, which only counts Sick days with a submitted certificate — see the Eligibility page for that.">—</strong></div>
+        <div class="qf-item"><i class="bi bi-journal-bookmark qf-icon"></i><span>My Modules</span><strong id="stat-modules">—</strong></div>
+        <div class="qf-item"><i class="bi bi-people qf-icon"></i><span>Total Students</span><strong id="stat-students">—</strong></div>
+        <div class="qf-item"><i class="bi bi-calendar2-check qf-icon"></i><span>Sessions Today</span><strong id="stat-sessions">—</strong></div>
+        <div class="qf-item"><i class="bi bi-graph-up qf-icon"></i><span>Avg Attendance</span><strong id="stat-avg" title="Counts Present + all Sick marks. This is not the stricter exam-eligibility figure, which only counts Sick days with a submitted certificate — see the Eligibility page for that.">—</strong></div>
       </div>
       <div class="quick-facts" id="level-stats"></div>
 
@@ -1466,7 +1681,7 @@
     </div>
 
     <div class="page" id="page-executive">
-      <div class="page-title" id="exec-page-title">Executive summary · Finance</div>
+      <div class="page-title" id="exec-page-title">Finance summary · Fees &amp; collections</div>
       <div class="page-sub" id="exec-page-sub">The college's money for the year, in totals. Read-only: the accountant's ledger is where a student's account is kept.</div>
 
       <div data-exec-section="finance">
@@ -1594,6 +1809,24 @@
         </div>
       </div>
 
+      <div data-exec-section="waivers">
+        <div class="card">
+          <div class="card-title">Waiting for your approval <span id="waiver-pending-count" class="badge badge-orange"></span>
+            <span class="tip" tabindex="0" role="note" aria-label="Help: waivers" data-tip="A shortfall the accountant wants waived on tuition or direct costs. Nothing changes on the student's bill until you approve, and the student waits at the finance desk meanwhile. A refusal needs a reason; it goes back to the accountant.">?</span></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Student</th><th>Charge</th><th class="num">Charge</th><th class="num">Waive</th><th>Reason</th><th>Asked by</th><th></th></tr></thead>
+            <tbody id="waiver-pending-tbody"><tr><td colspan="7"><div class="empty">Loading…</div></td></tr></tbody>
+          </table></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Decided</div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Student</th><th>Charge</th><th class="num">Waived</th><th>Decision</th><th>By</th><th>Note</th></tr></thead>
+            <tbody id="waiver-done-tbody"></tbody>
+          </table></div>
+        </div>
+      </div>
+
       <div data-exec-section="lab">
         <div class="card">
           <div class="card-title">Laboratory stock <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px">— kept by the lab technician; read-only here</span>
@@ -1714,8 +1947,8 @@
         <div class="card-title">On my desk <span id="adm-desk-count" style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;"></span></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Reg. No.</th><th>Name</th><th>Kind</th><th>Level</th><th>Owes</th><th>At</th><th></th></tr></thead>
-            <tbody id="adm-desk-tbody"><tr><td colspan="7"><div class="empty"><div class="ei"><i class="bi bi-inbox"></i></div>Nothing waiting on you</div></td></tr></tbody>
+            <thead><tr><th>Student</th><th>Kind</th><th>Level</th><th>At</th><th class="num">Owes</th><th></th></tr></thead>
+            <tbody id="adm-desk-tbody"><tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-inbox"></i></div>Nothing waiting on you</div></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1829,25 +2062,46 @@
         </div>
       </div>
 
+      <div class="card" data-adm-section="pending">
+        <div class="card-title">Still being worked <span id="adm-pending-count" style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;"></span></div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field"><label>At</label>
+            <select id="adm-pending-desk" onchange="loadPending()">
+              <option value="">Any desk</option>
+              <option value="intake">Admission office — intake</option>
+              <option value="information">Records — details</option>
+              <option value="finance">Finance</option>
+              <option value="records">Records</option>
+              <option value="admission">Admission office — to admit</option>
+            </select>
+          </div>
+          <div class="field"><label>Find a student</label><input id="adm-pending-search" placeholder="Name, registration or college ID" oninput="clearTimeout(state.pendingTimer); state.pendingTimer = setTimeout(loadPending, 350)"></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Student</th><th>Kind</th><th>Level</th><th>Where it is</th><th class="num">Owes</th><th></th></tr></thead>
+            <tbody id="adm-pending-tbody"><tr><td colspan="7"><div class="empty">Loading…</div></td></tr></tbody>
+          </table>
+        </div>
+        <p class="help-note" style="margin-top:8px;">VETA applications on their way are listed under VETA applications.</p>
+      </div>
+
       <div class="card" data-adm-section="all">
-        <div class="card-title">Everything this semester</div>
+        <div class="card-title">Every application this semester</div>
         <div class="form-grid-3" style="margin-bottom:12px;">
           <div class="field"><label>Show</label>
             <select id="adm-filter" onchange="loadApplications()">
-              <option value="open">Still being worked</option>
               <option value="">Everything</option>
-              <option value="finance">At finance</option>
-              <option value="records">At records</option>
-              <option value="admission">At the admission office</option>
               <option value="admitted">Admitted</option>
               <option value="rejected">Refused</option>
+              <option value="cancelled">Withdrawn</option>
             </select>
           </div>
           <div class="field"><label>Find a student</label><input id="adm-search" placeholder="Name, registration or college ID" oninput="scheduleApplicationSearch()"></div>
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Reg. No.</th><th>Name</th><th>Kind</th><th>Level</th><th>Where it is</th><th>Owes</th><th></th></tr></thead>
+            <thead><tr><th>Student</th><th>Kind</th><th>Level</th><th>Where it is</th><th class="num">Owes</th><th></th></tr></thead>
             <tbody id="adm-list-tbody"><tr><td colspan="7"><div class="empty"><div class="ei"><i class="bi bi-list-ul"></i></div>No applications yet</div></td></tr></tbody>
           </table>
         </div>
@@ -2157,7 +2411,7 @@
           <div class="field"><label>Class Level *</label><select id="mod-level"><option value="">— select level —</option></select></div>
           <div class="field"><label>Module Name *</label><input id="mod-name" placeholder="e.g. Business Mathematics" /></div>
           <div class="field"><label>Module Code *</label><input id="mod-code" placeholder="e.g. BM401" /></div>
-          <div class="field"><label>Tutor Display Name *</label><input id="mod-teacher" placeholder="e.g. Mr. Mwangi" /></div>
+          <div class="field"><label>Tutor responsible * <span class="tip" tabindex="0" role="note" aria-label="Help: tutor" data-tip="Chosen from the department's tutors: the module shows their name and is theirs to teach. Staff ▸ a tutor's modules still assigns anybody, for an emergency.">?</span></label><select id="mod-tutor"><option value="">— choose a tutor —</option></select></div>
           <div class="field"><label>Module Credits *</label><input id="mod-credits" type="number" min="1" value="1" /></div>
           <div class="field"><label>Programme</label><select id="mod-programme"><option value="">— no programme —</option></select></div>
         </div>
@@ -2903,6 +3157,20 @@
         </div>
       </div>
 
+      <!-- OVERPAYMENTS -->
+      <div class="finance-section" id="finance-section-overpayments">
+        <div class="card finance-only">
+          <div class="card-title">Paid more than the full fee <span class="tip" tabindex="0" role="note" aria-label="Help: overpayments" data-tip="Beyond the whole invoice — tuition, direct costs — not beyond an instalment. The excess stays on the student's account as credit and pays their next bill when it is raised at the finance desk, only for charges of the same bank account. A slip recorded without an invoice is shown by its bank account.">?</span></div>
+          <div class="field" style="max-width:320px;"><label>Search</label><input id="fin-over-search" oninput="renderOverpayments()" placeholder="name, reg no, college ID, invoice"></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Student</th><th>Invoice</th><th>For</th><th>Invoice total</th><th>Paid on it</th><th>Excess</th><th>Last paid</th><th></th></tr></thead>
+              <tbody id="fin-over-tbody"><tr><td colspan="8"><div class="empty">Loading…</div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- PAYMENT HISTORY -->
       <div class="finance-section" id="finance-section-history">
         <div class="card finance-only">
@@ -3193,6 +3461,14 @@
               <tbody id="fin-overrides-tbody"></tbody>
             </table>
           </div>
+        </div>
+
+        <div class="card finance-only">
+          <div class="card-title">Shortfall waivers <span class="tip" tabindex="0" role="note" aria-label="Help: shortfall waivers" data-tip="Asked at the finance desk, on tuition or direct costs. DPFPA approves or refuses each; only an approved one comes off the bill.">?</span></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Student</th><th>Charge</th><th class="num">Waived in all</th><th>Reason</th><th>Status</th><th>DPFPA's note</th></tr></thead>
+            <tbody id="fin-waivers-tbody"></tbody>
+          </table></div>
         </div>
       </div>
 
@@ -3762,7 +4038,8 @@
       <div class="field"><label>Class Level *</label><select id="edit-mod-level"></select></div>
       <div class="field"><label>Module Name *</label><input id="edit-mod-name"></div>
       <div class="field"><label>Module Code *</label><input id="edit-mod-code"></div>
-      <div class="field"><label>Tutor Display Name *</label><input id="edit-mod-teacher"></div>
+      <div class="field"><label>Tutor responsible *</label><select id="edit-mod-tutor"><option value="">— keep as it is —</option></select>
+        <span id="edit-mod-teacher-now" style="font-size:.72rem;color:var(--muted);margin-top:3px;"></span></div>
       <div class="field"><label>Credits *</label><input id="edit-mod-credits" type="number" min="1"></div>
       <div class="field"><label>Programme</label><select id="edit-mod-programme"><option value="">— no programme —</option></select></div>
     </div>
@@ -5157,6 +5434,7 @@ async function deleteAnnouncement(id, title) {
 
 // ── MODULES PAGE ───────────────────────────────────────────────────────────────
 async function loadModules() {
+  fillTutorSelect('mod-tutor', '— choose a tutor —');
   const semId = document.getElementById('flt-mod-sem').value;
   const lvlId = document.getElementById('flt-mod-level').value;
   let url = '/modules/?';
@@ -5192,23 +5470,39 @@ async function loadModules() {
   } catch(e) { toast('Failed to load modules', 'var(--red)'); }
 }
 
+// The tutor is chosen from the department's tutors, not typed (said 21
+// October 2026): the choice gives the module its display name and its tutor.
+async function fillTutorSelect(id, emptyLabel) {
+  const select = document.getElementById(id);
+  if (!select) return;
+  try { state.moduleTutors = state.moduleTutors || await api('GET', '/module-tutors/'); }
+  catch (e) { state.moduleTutors = []; }
+  const current = select.value;
+  select.innerHTML = `<option value="">${emptyLabel}</option>` + state.moduleTutors.map(t =>
+    `<option value="${t.id}">${safeText(t.name)}</option>`).join('');
+  select.value = current;
+}
+
 async function createModule() {
   const semId = document.getElementById('mod-semester').value;
   const lvlId = document.getElementById('mod-level').value;
   const name  = document.getElementById('mod-name').value.trim();
   const code  = document.getElementById('mod-code').value.trim().toUpperCase();
-  const teacher = document.getElementById('mod-teacher').value.trim();
+  const tutorSelect = document.getElementById('mod-tutor');
+  const tutor_id = tutorSelect.value;
+  const teacher = tutor_id ? tutorSelect.selectedOptions[0].textContent : '';
   const credits = parseInt(document.getElementById('mod-credits').value, 10);
   const has_practical = document.getElementById('mod-has-practical').checked;
   const is_field_module = document.getElementById('mod-is-field').checked;
+  if (!tutor_id) { toast('Choose the tutor responsible', 'var(--red)'); return; }
   if (!semId || !lvlId || !name || !code || !teacher || !credits || credits < 1) {
     toast('Please fill in all required fields', 'var(--red)'); return;
   }
   try {
     const programme = document.getElementById('mod-programme').value || null;
-    await api('POST', '/modules/', { semester: semId, class_level: lvlId, name, code, teacher, credits, has_practical: is_field_module ? false : has_practical, is_field_module, programme });
+    await api('POST', '/modules/', { semester: semId, class_level: lvlId, name, code, teacher, tutor_id, credits, has_practical: is_field_module ? false : has_practical, is_field_module, programme });
     toast('Module added!', 'var(--green)');
-    ['mod-name','mod-code','mod-teacher'].forEach(id => document.getElementById(id).value = '');
+    ['mod-name','mod-code','mod-tutor'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('mod-has-practical').checked = false;
     document.getElementById('mod-is-field').checked = false;
     document.getElementById('mod-credits').value = 1;
@@ -5293,7 +5587,13 @@ function openModuleEditModal(id) {
   document.getElementById('edit-mod-level').value = module.class_level;
   document.getElementById('edit-mod-name').value = module.name;
   document.getElementById('edit-mod-code').value = module.code;
-  document.getElementById('edit-mod-teacher').value = module.teacher;
+  fillTutorSelect('edit-mod-tutor', '— keep as it is —').then(() => {
+    const select = document.getElementById('edit-mod-tutor');
+    const match = [...select.options].find(o => o.textContent === module.teacher);
+    select.value = match ? match.value : '';
+  });
+  document.getElementById('edit-mod-teacher-now').textContent = `Now: ${module.teacher || '—'}`;
+  state.editModuleTeacher = module.teacher;
   document.getElementById('edit-mod-credits').value = module.credits;
   document.getElementById('edit-mod-practical').checked = module.has_practical;
   document.getElementById('edit-mod-field').checked = module.is_field_module;
@@ -5308,7 +5608,10 @@ async function saveModuleEdit() {
   const payload = {
     semester: Number(document.getElementById('edit-mod-semester').value), class_level: Number(document.getElementById('edit-mod-level').value),
     name: document.getElementById('edit-mod-name').value.trim(), code: document.getElementById('edit-mod-code').value.trim().toUpperCase(),
-    teacher: document.getElementById('edit-mod-teacher').value.trim(), credits: Number(document.getElementById('edit-mod-credits').value),
+    teacher: document.getElementById('edit-mod-tutor').selectedOptions[0]?.value
+      ? document.getElementById('edit-mod-tutor').selectedOptions[0].textContent : state.editModuleTeacher,
+    tutor_id: document.getElementById('edit-mod-tutor').value || null,
+    credits: Number(document.getElementById('edit-mod-credits').value),
     has_practical: document.getElementById('edit-mod-field').checked ? false : document.getElementById('edit-mod-practical').checked,
     is_field_module: document.getElementById('edit-mod-field').checked,
     programme: document.getElementById('edit-mod-programme').value || null,
@@ -7513,7 +7816,7 @@ function blockedList(clearance) {
 function financeNavGroupFor(section = state.financeSection || 'overview') {
   if (['accounts', 'charge-types', 'fee-structure', 'payment-schedule', 'course-fees'].includes(section)) return document.getElementById('finance-setup-nav-group');
   if (['expenses', 'expense-budget'].includes(section)) return document.getElementById('finance-expenses-nav-group');
-  if (['record', 'history', 'collections'].includes(section)) return document.getElementById('finance-payments-nav-group');
+  if (['record', 'history', 'collections', 'overpayments'].includes(section)) return document.getElementById('finance-payments-nav-group');
   if (['students', 'extra-charge', 'overrides', 'hostel'].includes(section)) return document.getElementById('finance-students-nav-group');
   return null;
 }
@@ -7537,6 +7840,7 @@ const FINANCE_COPY = {
   record:          ['Record a Payment', 'Look up the reference on the slip, then record what arrived.'],
   history:         ['Payment History', 'Every payment recorded, and the reversals that corrected them.'],
   collections:     ['Collections & EFD', 'What came in over a period, to reconcile against the EFD machine.'],
+  overpayments:    ['Overpayments', 'Students who paid more than the full fee on an invoice — credit on account, used on their next bill.'],
   students:        ['Balances & Clearance', 'What every student owes and what they are cleared to sit.'],
   'extra-charge':  ['Extra Charges', 'Bill one student for a supplementary, a repeat, a hostel place — anything outside the fee structure.'],
   overrides:       ['Waivers & Overrides', 'Bursaries, sponsor delays and manual holds — the exceptions to the ledger.'],
@@ -7667,6 +7971,7 @@ async function loadFinanceSection() {
       case 'record':         await loadOutstandingForPayment(); break;
       case 'history':        await loadPaymentHistory(); break;
       case 'collections':    await loadCollections(); break;
+      case 'overpayments':   await loadOverpayments(); break;
       case 'students':       await loadFinanceStudents(); break;
       case 'extra-charge':   await loadExtraCharges(); break;
       case 'overrides':      await loadOverrides(); break;
@@ -7675,6 +7980,29 @@ async function loadFinanceSection() {
   } catch (e) {
     toast(e?.detail || 'Failed to load finance data', 'var(--red)');
   }
+}
+
+// ── overpayments (said 21 October 2026) ─────────────────────────────────────
+async function loadOverpayments() {
+  state.overpayments = await api('GET', '/finance/overpayments/');
+  renderOverpayments();
+}
+
+function renderOverpayments() {
+  const q = (document.getElementById('fin-over-search')?.value || '').trim().toLowerCase();
+  const rows = (state.overpayments || []).filter(r => !q
+    || [r.name, r.reg_no, r.college_id, r.invoice].some(v => String(v || '').toLowerCase().includes(q)));
+  document.getElementById('fin-over-tbody').innerHTML = rows.length ? rows.map(r => `<tr>
+      <td>${safeText(r.name)}<div style="font-size:.7rem;color:var(--muted)">${safeText(r.college_id || r.reg_no)}</div></td>
+      <td>${r.invoice ? `<code>${safeText(r.invoice)}</code>` : '<span style="color:var(--muted)">no invoice</span>'}</td>
+      <td>${safeText(r.group || '—')}<div style="font-size:.7rem;color:var(--muted)">${safeText(r.account)}</div></td>
+      <td>${r.invoice_total === null ? '—' : money(r.invoice_total)}</td>
+      <td>${money(r.paid)}</td>
+      <td><strong style="color:var(--green)">${money(r.excess)}</strong></td>
+      <td>${safeText(r.last_paid_on)}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openStatement(${r.profile_id})">Statement</button></td>
+    </tr>`).join('')
+    : '<tr><td colspan="8"><div class="empty"><div class="ei"><i class="bi bi-check2-circle"></i></div>Nobody has paid more than the full fee</div></td></tr>';
 }
 
 // ── overview ──────────────────────────────────────────────────────────────────
@@ -8416,6 +8744,8 @@ const NOTIFICATION_LINKS = {
   'forms:requests': () => showFormsSection('requests'),
   'status:postponements': () => showStatusSection('postpone', document.querySelector('[data-status-section="postpone"].nav-sub-btn')),
   'executive:spending': () => showExecSection('spending', document.querySelector('[data-exec-section="spending"].nav-sub-btn')),
+  'executive:waivers': () => showExecSection('waivers', document.querySelector('[data-exec-section="waivers"].nav-sub-btn')),
+  'finance:overrides': () => showFinanceSection('overrides', document.querySelector('[data-finance-section="overrides"].nav-sub-btn')),
   'executive:disposals': () => showExecSection('disposals', document.querySelector('[data-exec-section="disposals"].nav-sub-btn')),
   'inventory:disposal': () => showInventorySection('disposal', document.querySelector('[data-inventory-section="disposal"]')),
   'finance:expenses': () => showFinanceSection('expenses', document.querySelector('[data-finance-section="expenses"].nav-sub-btn')),
@@ -8796,7 +9126,7 @@ function renderPerformance(data) {
         labels: data.trend.map(p => p.label),
         datasets: [
           { label: `Mean ${data.assessment_label}`, data: data.trend.map(p => p.mean),
-            borderColor: '#1565c0', backgroundColor: 'rgba(21,101,192,.12)',
+            borderColor: '#1E5BB8', backgroundColor: 'rgba(30,91,184,.12)',
             fill: true, tension: .3, pointRadius: 4 },
           { label: 'Pass rate', data: data.trend.map(p => p.pass_rate),
             borderColor: '#16a34a', borderDash: [5, 4], fill: false, tension: .3, pointRadius: 3 },
@@ -8814,7 +9144,7 @@ function renderPerformance(data) {
       data: {
         labels: data.distribution.map(d => d.grade),
         datasets: [{ label: 'Students', data: data.distribution.map(d => d.count),
-                     backgroundColor: data.distribution.map(d => d.grade === 'F' ? '#dc2626' : '#1565c0'),
+                     backgroundColor: data.distribution.map(d => d.grade === 'F' ? '#dc2626' : '#1E5BB8'),
                      borderRadius: 6 }],
       },
       options: { ...base, scales: { x: { ticks: axis, grid }, y: { beginAtZero: true, ticks: { ...axis, precision: 0 }, grid } } },
@@ -8829,7 +9159,7 @@ function renderPerformance(data) {
       data: {
         labels: rows.map(r => r.code),
         datasets: [{ label: 'Mean %', data: rows.map(r => r.mean),
-                     backgroundColor: rows.map(r => r.mean < data.pass_mark ? '#dc2626' : '#1565c0'),
+                     backgroundColor: rows.map(r => r.mean < data.pass_mark ? '#dc2626' : '#1E5BB8'),
                      borderRadius: 6 }],
       },
       options: { ...base, indexAxis: 'y',
@@ -10025,7 +10355,8 @@ async function renderAppInvoices(application) {
           <td><a class="btn btn-ghost btn-sm" href="/invoice/${encodeURIComponent(i.reference)}/" target="_blank" rel="noopener">Print</a></td></tr>`).join('')}
         </tbody></table></div>` : '<div style="font-size:.8rem;color:var(--muted);margin-bottom:6px;">No invoice yet.</div>'}
       ${kinds.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">${kinds.map(button).join('')}
-        <button class="btn btn-primary btn-sm" onclick="issueInvoiceFor(${application.profile}, null, null, () => openApplicationModal(${application.id}))">Everything outstanding</button></div>` : ''}`;
+        <button class="btn btn-primary btn-sm" onclick="issueInvoiceFor(${application.profile}, null, null, () => openApplicationModal(${application.id}))">Everything outstanding</button></div>` : ''}
+      ${me.finance ? waiverFormHtml(application.profile, s.charges || [], await api('GET', `/waiver-requests/?profile_id=${application.profile}`).catch(() => []), application.id) : ''}`;
   } catch (e) { box.innerHTML = ''; }
 }
 
@@ -10108,6 +10439,15 @@ async function raiseExtraCharge() {
 // ── overrides ─────────────────────────────────────────────────────────────────
 
 async function loadOverrides() {
+  api('GET', '/waiver-requests/').then(rows => {
+    document.getElementById('fin-waivers-tbody').innerHTML = rows.length ? rows.map(w => `<tr>
+      <td>${personCell(w.name, w.college_id || w.reg_no)}</td>
+      <td>${safeText(w.charge)} · instalment ${w.installment}</td>
+      <td class="num">${money(w.amount)}</td><td>${safeText(w.reason)}</td>
+      <td><span class="badge ${w.status === 'approved' ? 'badge-green' : w.status === 'refused' ? 'badge-red' : 'badge-yellow'}">${safeText(w.status_display)}</span></td>
+      <td>${safeText(w.decision_note || '—')}</td></tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty">No shortfall waivers asked for</div></td></tr>';
+  }).catch(() => {});
   const data = await api('GET', '/finance-overrides/');
   state.financeOverrides = data.results ?? data;
   const rows = state.financeOverrides.filter(o => o.is_active);
@@ -10816,15 +11156,18 @@ const KIND_LABELS = { new: 'First year', continuing: 'Continuing', readmission: 
 const ADMISSION_SECTIONS = {
   desk: ['My desk', 'What is waiting on you.'],
   new: ['New application', 'Take a student on.'],
-  all: ['All applications', 'Every application this semester.'],
+  pending: ['Pending', 'Applications still being worked, at any desk.'],
+  all: ['Applications', 'Every application this semester: admitted, refused, withdrawn.'],
   pass: ['Semester pass', 'Paid up to the semester\'s first instalment: print their pass. Students can download it from the portal.'],
   dueback: ['Expected back', 'FAIL and postponed students due this semester.'],
-  settings: ['Window & ID numbers', 'When admissions run, and the college ID format.'],
-  veta: ['VETA courses', 'Intakes, and students on their way through the desks.'],
+  settings: ['Settings', 'When admissions run, the college ID format, and the required items.'],
+  veta: ['VETA applications', 'Intakes, and VETA students on their way through the desks.'],
   items: ['Items check', 'Items checked again each semester — the TPH book by finance, rim paper and the other checked items by the admission office.'],
   classlist: ['Class lists', 'A level\'s students this semester: first sitting or repeater.'],
   noshow: ['Did not report', 'Continuing students who never came: decide three months after admission opened.'],
 };
+
+const STUDENT_SIDE_SECTIONS = ['pass', 'classlist', 'items', 'noshow'];
 
 function toggleAdmissionsMenu(event) {
   const group = document.getElementById('admissions-nav-group');
@@ -10845,8 +11188,12 @@ async function showAdmissionSection(section, btn) {
   const [title, sub] = ADMISSION_SECTIONS[section];
   document.getElementById('adm-page-title').textContent = title;
   document.getElementById('adm-page-sub').textContent = sub;
-  showPage('admissions', document.querySelector('#admissions-nav-group .nav-btn'));
-  document.getElementById('admissions-nav-group').classList.add('open');
+  // The student lists and the pass sit under Students (said 21 October 2026);
+  // their cards are still on this page.
+  const groupId = STUDENT_SIDE_SECTIONS.includes(section) ? 'students-nav-group' : 'admissions-nav-group';
+  showPage('admissions', document.querySelector(`#${groupId} .nav-btn`));
+  document.getElementById(groupId).classList.add('open');
+  const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = title;
   if (btn) btn.classList.add('active');
 
   if (section === 'desk') await Promise.all([loadAdmissionQueue(), loadMyDesk()]);
@@ -10862,6 +11209,7 @@ async function showAdmissionSection(section, btn) {
     if (!state.admissionQueue) await loadAdmissionQueue();
     await loadApplications();
   }
+  if (section === 'pending') await loadPending();
   if (section === 'dueback') await loadDueBack();
   if (section === 'veta') await loadVeta();
   if (section === 'items') {
@@ -10938,10 +11286,13 @@ async function loadAdmissionQueue() {
     const desks = ['intake', 'information', 'finance', 'records', 'admission', 'admitted']
       .filter(desk => !visible || visible.includes(desk));
     document.getElementById('adm-queue').innerHTML =
-      desks.map(desk => `<div class="qf-item"><span>${safeText(DESK_LABELS[desk])}</span><strong>${queue.by_desk?.[desk] || 0}</strong></div>`).join('') +
-      (queue.due_back === null ? '' : `<div class="qf-item"><span>Expected back</span><strong>${queue.due_back || 0}</strong></div>`);
+      desks.map(desk => {
+        const n = queue.by_desk?.[desk] || 0;
+        return `<div class="qf-item${n ? '' : ' qf-zero'}"><i class="bi ${DESK_ICONS[desk] || 'bi-circle'} qf-icon"></i><span>${safeText(DESK_SHORT[desk] || DESK_LABELS[desk])}</span><strong>${n}</strong></div>`;
+      }).join('') +
+      (queue.due_back === null ? '' : `<div class="qf-item${queue.due_back ? '' : ' qf-zero'}"><i class="bi bi-arrow-counterclockwise qf-icon"></i><span>Expected back</span><strong>${queue.due_back || 0}</strong></div>`);
     if (visible) {
-      document.querySelectorAll('#adm-filter option').forEach(option => {
+      document.querySelectorAll('#adm-filter option, #adm-pending-desk option').forEach(option => {
         const desk = option.value;
         if (desk && desk !== 'open' && !visible.includes(desk)) option.remove();
       });
@@ -10985,21 +11336,50 @@ async function queueContinuing(event) {
   } finally { button.disabled = false; }
 }
 
-function deskLabel(row) {
-  return safeText(DESK_LABELS[row.state] || row.state)
-    + (row.on_hold ? ' <span class="badge badge-yellow">On hold</span>' : '');
+// The desks' rows (said 21 October 2026: the admission cards read badly):
+// who, in one cell with their initials; what kind and where, as pills; what
+// they owe, as money.
+const DESK_SHORT = { intake: 'Intake', information: 'Records · details', finance: 'Finance', records: 'Records',
+                     admission: 'To admit', admitted: 'Admitted', rejected: 'Refused', cancelled: 'Withdrawn' };
+const DESK_ICONS = { intake: 'bi-person-plus', information: 'bi-card-text', finance: 'bi-cash-coin',
+                     records: 'bi-folder2-open', admission: 'bi-door-open', admitted: 'bi-check2-circle' };
+const DESK_TONE = { intake: 'blue', information: 'purple', finance: 'yellow', records: 'purple',
+                    admission: 'blue', admitted: 'green', rejected: 'red', cancelled: 'gen' };
+
+function initials(name) {
+  return String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
 }
 
-function applicationRow(row, { showDesk = true } = {}) {
+function personCell(name, sub, extra = '') {
+  return `<div class="who-cell"><span class="who-avatar">${safeText(initials(name))}</span>
+    <span><strong>${safeText(name)}</strong>${extra}<small>${safeText(sub || '')}</small></span></div>`;
+}
+
+function kindPill(row) {
+  const label = row.kind_label || KIND_LABELS[row.kind] || row.kind;
+  const short = String(label).split(' (new)')[0];
+  const tone = { new: 'blue', continuing: 'green', readmission: 'purple' }[row.kind] || 'gen';
+  return `<span class="badge badge-${tone}" title="${safeText(label)}">${safeText(short)}</span>`;
+}
+
+function owesCell(value) {
+  const n = Number(value || 0);
+  return n > 0 ? `<span class="money owe">${money(n)}</span>` : '<span class="money nil">—</span>';
+}
+
+function deskLabel(row) {
+  return `<span class="badge badge-${DESK_TONE[row.state] || 'gen'}">${safeText(DESK_SHORT[row.state] || DESK_LABELS[row.state] || row.state)}</span>`
+    + (row.on_hold ? ' <span class="badge badge-orange">On hold</span>' : '');
+}
+
+function applicationRow(row) {
   return `<tr>
-    <td>${safeText(row.reg_no)}${row.college_id ? `<div style="font-size:.68rem;color:var(--muted);">${safeText(row.college_id)}</div>` : ''}</td>
-    <td>${safeText(row.student_name)}${provisionalTag(row)}</td>
-    <td>${safeText(row.kind_label || KIND_LABELS[row.kind] || row.kind)}</td>
+    <td>${personCell(row.student_name, row.college_id || row.reg_no, provisionalTag(row))}</td>
+    <td>${kindPill(row)}</td>
     <td>${safeText(row.class_level_name || '—')}</td>
-    ${showDesk ? `<td>${deskLabel(row)}</td>` : ''}
-    <td>${safeText(row.balance)}</td>
-    ${showDesk ? '' : `<td>${deskLabel(row)}</td>`}
-    <td><button class="btn btn-ghost btn-sm" onclick="openApplicationModal(${row.id})">Open</button></td>
+    <td>${deskLabel(row)}</td>
+    <td class="num">${owesCell(row.balance)}</td>
+    <td class="act"><button class="btn btn-ghost btn-sm" onclick="openApplicationModal(${row.id})">Open</button></td>
   </tr>`;
 }
 
@@ -11011,17 +11391,14 @@ async function loadMyDesk() {
     document.getElementById('adm-desk-count').textContent = list.length ? `${list.length} waiting` : '';
     document.getElementById('adm-desk-tbody').innerHTML = list.length
       ? list.map(row => `<tr>
-          <td>${safeText(row.reg_no)}</td>
-          <td>${safeText(row.student_name)}${provisionalTag(row)}</td>
-          <td>${safeText(row.kind_label || KIND_LABELS[row.kind] || row.kind)}</td>
+          <td>${personCell(row.student_name, row.college_id || row.reg_no, provisionalTag(row))}</td>
+          <td>${kindPill(row)}</td>
           <td>${safeText(row.class_level_name || '—')}</td>
-          <td>${safeText(row.balance)}</td>
           <td>${deskLabel(row)}</td>
-          <td style="white-space:nowrap;">
-            <button class="btn btn-primary btn-sm" onclick="openApplicationModal(${row.id})">Work it</button>
-          </td>
+          <td class="num">${owesCell(row.balance)}</td>
+          <td class="act"><button class="btn btn-primary btn-sm" onclick="openApplicationModal(${row.id})">Work it <i class="bi bi-arrow-right"></i></button></td>
         </tr>`).join('')
-      : '<tr><td colspan="7"><div class="empty"><div class="ei"><i class="bi bi-inbox"></i></div>Nothing waiting on you</div></td></tr>';
+      : '<tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-inbox"></i></div>Nothing waiting on you</div></td></tr>';
   } catch (e) { /* not every office has a desk */ }
 }
 
@@ -11029,6 +11406,23 @@ let applicationSearchTimer;
 function scheduleApplicationSearch() {
   clearTimeout(applicationSearchTimer);
   applicationSearchTimer = setTimeout(loadApplications, 250);
+}
+
+async function loadPending() {
+  const desk = document.getElementById('adm-pending-desk').value;
+  const search = document.getElementById('adm-pending-search').value.trim();
+  let url = desk ? `/applications/?state=${encodeURIComponent(desk)}&` : '/applications/?open=1&';
+  if (search) url += `search=${encodeURIComponent(search)}&`;
+  try {
+    const rows = await api('GET', url);
+    const list = rows.results ?? rows;
+    document.getElementById('adm-pending-count').textContent = list.length ? `${list.length} open` : '';
+    document.getElementById('adm-pending-tbody').innerHTML = list.length
+      ? list.map(row => applicationRow(row)).join('')
+      : '<tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-inbox"></i></div>Nothing pending</div></td></tr>';
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not load the applications'), 'var(--red)');
+  }
 }
 
 async function loadApplications() {
@@ -11043,7 +11437,7 @@ async function loadApplications() {
     const list = rows.results ?? rows;
     document.getElementById('adm-list-tbody').innerHTML = list.length
       ? list.map(row => applicationRow(row)).join('')
-      : '<tr><td colspan="7"><div class="empty"><div class="ei"><i class="bi bi-list-ul"></i></div>Nothing here</div></td></tr>';
+      : '<tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-list-ul"></i></div>Nothing here</div></td></tr>';
   } catch (e) {
     toast(apiErrorText(e, 'Could not load the applications'), 'var(--red)');
   }
@@ -11430,7 +11824,7 @@ async function findSemesterPass(event) {
     box.innerHTML = `<div class="missing-note" style="border-left-color:${r.ok ? 'var(--green)' : 'var(--red)'}">
       <strong>${safeText(r.name)}</strong> · ${safeText(r.college_id || r.reg_no)}${r.programme_code ? ` · ${safeText(r.programme_code)} ${safeText(r.class_level)}` : ''}
       · ${safeText(r.semester || '')}<br>
-      ${r.ok ? `Paid up to ${safeText(r.due_by)}${r.overridden ? ' (let through by an override)' : ''}.
+      ${r.ok ? `Valid until <strong>${safeText(r.valid_until)}</strong> — ${safeText(r.basis)}.
           <div style="margin-top:8px;"><a class="btn btn-primary btn-sm" href="/semester-pass/${r.profile_id}/" target="_blank" rel="noopener"><i class="bi bi-printer"></i> Print the pass</a></div>`
         : `<span style="color:var(--red)">${safeText(r.reason)}</span>`}</div>`;
   } catch (e) {
@@ -11544,16 +11938,19 @@ async function openApplicationModal(id) {
     document.getElementById('app-modal-id').value = id;
     document.getElementById('app-modal-title').textContent =
       `${application.reg_no} — ${application.student_name}`;
-    document.getElementById('app-modal-summary').innerHTML = `
-      ${safeText(application.kind_label || KIND_LABELS[application.kind] || application.kind)} ·
-      ${safeText(application.programme_code || '')} ${safeText(application.class_level_name || '')} ·
-      ${safeText(application.semester_label)}${provisionalTag(application)}<br>
-      <strong>Where it is:</strong> ${safeText(DESK_LABELS[application.state] || application.state)}
-      ${application.balance === null ? '' : ` · <strong>Owes:</strong> ${safeText(application.balance)}`}
-      ${application.payment ? `<br><strong>To register:</strong> ${application.payment.cleared
-          ? '<span class="badge badge-green">paid</span>'
-          : `<span class="badge badge-red">not paid</span> ${safeText(application.payment.reason)}`}` : ''}
-      ${application.college_id ? ` · <strong>College ID:</strong> ${safeText(application.college_id)}` : ''}`;
+    // The application at a glance: tiles, not a sentence (said 21 October 2026).
+    const tile = (label, value) => `<div class="sum-tile"><span>${label}</span><div>${value}</div></div>`;
+    document.getElementById('app-modal-summary').innerHTML = `<div class="sum-strip">
+      ${tile('Kind', kindPill(application))}
+      ${tile('Programme', `<strong>${safeText(application.programme_code || '—')}</strong> · ${safeText(application.class_level_name || '')}`)}
+      ${tile('Where it is', deskLabel(application))}
+      ${application.balance === null ? '' : tile('Owes', owesCell(application.balance))}
+      ${application.payment ? tile('To register', application.payment.cleared
+          ? '<span class="badge badge-green">Paid</span>'
+          : `<span class="badge badge-red" title="${safeText(application.payment.reason)}">Not paid</span>`) : ''}
+      ${application.college_id ? tile('College ID', `<strong>${safeText(application.college_id)}</strong>`) : ''}
+    </div><div class="sum-sub">${safeText(application.semester_label)}${provisionalTag(application)}
+      ${application.payment && !application.payment.cleared ? ` · ${safeText(application.payment.reason)}` : ''}</div>`;
     document.getElementById('app-modal-steps').innerHTML = (application.steps || []).length
       ? application.steps.map(step => `<tr>
           <td>${safeText(DESK_LABELS[step.step] || step.step)}</td>
@@ -11621,6 +12018,10 @@ async function renderRequirementChecklist(id) {
   const holds = { intake: me.admission, information: me.records, records: me.records,
                   finance: me.finance, admission: me.admission }[at];
   const canMark = row => (row.desks || []).includes(at) && (me.principal || holds);
+  // Admitted with an item waived or missing, brought afterwards (said 21
+  // October 2026): the admission office records it as brought.
+  const broughtLater = row => at === 'admitted' && (me.principal || me.admission)
+    && ['waived', 'missing'].includes(row.status);
   try {
     const rows = await api('GET', `/applications/${id}/requirements/`);
     if (!rows.length) { box.innerHTML = ''; return; }
@@ -11629,6 +12030,11 @@ async function renderRequirementChecklist(id) {
         const check = row.kind === 'check';
         const name = `<span style="min-width:170px;font-size:.82rem;">${safeText(row.name)}${row.mandatory ? '' : ' <span style="color:var(--muted)">(optional)</span>'}${check ? ' <span style="color:var(--muted);font-size:.72rem">· checked only</span>' : ''}</span>`;
         // The desk that marks it has buttons; every other desk reads what was found.
+        if (broughtLater(row)) {
+          return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">${name}
+            <span style="font-size:.82rem;">${row.status === 'waived' ? 'Waived' : `Missing — charged ${itemPaidBadge(row)}`}</span>
+            ${hasItControls(id, row)}</div>`;
+        }
         if (!canMark(row)) {
           const said = { has_it: `Has it${itemFound(row)}`, missing: check ? 'Missing — held' : `Missing — charged ${itemPaidBadge(row)}`, waived: 'Waived' }[row.status]
             || (check ? 'Checked at the admission desk' : 'Not checked yet');
@@ -11663,8 +12069,13 @@ function renderAcademicBlock(academic) {
 }
 
 // ── who the student is: kept by records, read by every desk ─────────────────
-const RELATIONSHIPS = [['parent', 'Parent'], ['guardian', 'Guardian'], ['spouse', 'Spouse'],
-                       ['sibling', 'Sibling'], ['relative', 'Other relative'], ['other', 'Other']];
+// Mother or father, sister or brother, husband or wife (said 21 October 2026).
+const RELATIONSHIPS = [['mother', 'Mother'], ['father', 'Father'], ['guardian', 'Guardian'],
+                       ['husband', 'Husband'], ['wife', 'Wife'], ['sister', 'Sister'], ['brother', 'Brother'],
+                       ['relative', 'Other relative'], ['other', 'Other']];
+// Taken down before that: shown so it is seen, to be changed.
+const OLD_RELATIONSHIPS = { parent: 'Parent — choose Mother or Father', spouse: 'Spouse — choose Husband or Wife',
+                            sibling: 'Sibling — choose Sister or Brother' };
 
 // The name in its parts (said 20 October 2026): first, middle, last.
 function splitName(name) {
@@ -11685,7 +12096,9 @@ function readNameParts(prefix) {
 
 function detailsFormHtml(prefix, details, { withReason = false } = {}) {
   const kin = (n) => (details.next_of_kin || []).find(k => k.position === n) || {};
-  const rel = (n) => RELATIONSHIPS.map(([v, l]) =>
+  const rel = (n) => (OLD_RELATIONSHIPS[kin(n).relationship]
+      ? `<option value="${kin(n).relationship}" selected>${OLD_RELATIONSHIPS[kin(n).relationship]}</option>` : '')
+    + RELATIONSHIPS.map(([v, l]) =>
     `<option value="${v}" ${kin(n).relationship === v ? 'selected' : ''}>${l}</option>`).join('');
   const opt = (value, label, current) => `<option value="${value}" ${current === value ? 'selected' : ''}>${label}</option>`;
   const [first, middle, last] = details.first_name || details.last_name
@@ -11997,7 +12410,7 @@ function renderApplicationActions(application) {
       + (application.state === 'admitted'
          ? (state.canManageAccounts
             ? ' <button class="btn btn-ghost btn-sm" onclick="resetPortalPin()">New portal password</button>'
-            : ' <span style="font-size:.78rem;color:var(--muted);">Portal password: from the ICT officer.</span>')
+            : ' <span style="font-size:.78rem;color:var(--muted);">First portal password: their last name in capitals.</span>')
          : '');
     return;
   }
@@ -12035,7 +12448,7 @@ async function completeApplicationStep(event) {
   try {
     const application = await api('POST', `/applications/${id}/complete/`, { note });
     toast(application.state === 'admitted'
-      ? `Admitted — college ID ${application.college_id}. Their portal password comes from the ICT officer.`
+      ? `Admitted — college ID ${application.college_id}. First portal password: their LAST NAME in capitals (they choose their own at the first sign-in).`
       : `Now with ${DESK_LABELS[application.state]}`, 'var(--green)');
     closeApplicationModal();
     if (application.portal_pin) {
@@ -13055,8 +13468,8 @@ function renderInventoryCharts() {
   inventoryConditionChart?.destroy(); inventoryLocationChart?.destroy();
   const ink = chartInk();
   const common = {responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:ink.text}}},scales:{x:{ticks:{color:ink.muted},grid:{color:ink.grid}},y:{ticks:{color:ink.muted,precision:0},grid:{color:ink.grid}}}};
-  inventoryConditionChart = new Chart(document.getElementById('inventory-condition-chart'), {type:'doughnut',data:{labels:conditionLabels,datasets:[{data:conditionValues,backgroundColor:['#1565c0','#16a34a','#b45309','#c2410c','#dc2626'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:ink.text}}}}});
-  inventoryLocationChart = new Chart(document.getElementById('inventory-location-chart'), {type:'bar',data:{labels:Object.keys(locationTotals),datasets:[{label:'Items',data:Object.values(locationTotals),backgroundColor:'#1565c0',borderRadius:6}]},options:common});
+  inventoryConditionChart = new Chart(document.getElementById('inventory-condition-chart'), {type:'doughnut',data:{labels:conditionLabels,datasets:[{data:conditionValues,backgroundColor:['#1E5BB8','#16a34a','#b45309','#c2410c','#dc2626'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:ink.text}}}}});
+  inventoryLocationChart = new Chart(document.getElementById('inventory-location-chart'), {type:'bar',data:{labels:Object.keys(locationTotals),datasets:[{label:'Items',data:Object.values(locationTotals),backgroundColor:'#1E5BB8',borderRadius:6}]},options:common});
 }
 
 const ASSET_VALUE_FIELDS = { purchase_date: 'inv-purchase', unit_cost: 'inv-cost', supplier: 'inv-supplier',
@@ -13857,7 +14270,8 @@ async function openVetaModal(id) {
   state.vetaApplication = a;
   document.getElementById('veta-modal-id').value = a.id;
   document.getElementById('veta-modal-title').textContent = `${a.name} — ${a.intake_name}`;
-  const kin = a.next_of_kin.map(k => `${safeText(k.name)} (${safeText(k.relationship)}, ${safeText(k.phone)})`).join('; ') || 'none yet';
+  const relLabel = Object.fromEntries([...RELATIONSHIPS, ['parent', 'Parent'], ['spouse', 'Spouse'], ['sibling', 'Sibling']]);
+  const kin = a.next_of_kin.map(k => `${safeText(k.name)} (${safeText(relLabel[k.relationship] || k.relationship)}, ${safeText(k.phone)})`).join('; ') || 'none yet';
   document.getElementById('veta-modal-summary').innerHTML = `
     <strong>Where it is:</strong> ${safeText(VETA_DESKS[a.state] || a.state)} ·
     <strong>Registration:</strong> ${safeText(a.college_id || a.reg_no)}<br>
@@ -13903,6 +14317,8 @@ function renderVetaItems(a) {
   if (!items.length) { box.innerHTML = ''; return; }
   const canMark = a.can_work && a.state === 'admission';
   const said = { has_it: 'Has it', missing: 'Missing — held', waived: 'Waived' };
+  // Admitted with an item waived or missing, brought afterwards (said 21 October 2026).
+  const lateOk = a.state === 'admitted' && (state.offices?.principal || state.offices?.admission);
   box.innerHTML = `<div class="card-title" style="font-size:.9rem;">Items — checked before admitting</div>` + items.map(row => `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:.82rem;">
       <span style="min-width:180px;">${safeText(row.name)}${row.value ? ` <span style="color:var(--muted)">${safeText(row.value)}</span>` : ''}</span>
@@ -13911,7 +14327,8 @@ function renderVetaItems(a) {
         <button class="btn ${row.status === 'has_it' ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="markVetaItem(${a.id}, ${row.requirement}, 'has_it')">${row.value_label ? 'Save' : 'Has it'}</button>
         <button class="btn ${row.status === 'missing' ? 'btn-warning' : 'btn-ghost'} btn-sm" onclick="markVetaItem(${a.id}, ${row.requirement}, 'missing')">Missing — hold</button>
         <button class="btn ${row.status === 'waived' ? 'btn-secondary' : 'btn-ghost'} btn-sm" onclick="markVetaItem(${a.id}, ${row.requirement}, 'waived')">Waive</button>`
-      : `<span>${said[row.status] || 'Checked at the admission desk'}</span>`}
+      : `<span>${said[row.status] || 'Checked at the admission desk'}</span>${lateOk && ['waived', 'missing'].includes(row.status)
+          ? ` <button class="btn btn-ghost btn-sm" onclick="markVetaItem(${a.id}, ${row.requirement}, 'has_it')">Brought — Has it</button>` : ''}`}
     </div>`).join('');
 }
 
@@ -14067,7 +14484,7 @@ function renderExecutiveCharts(data) {
   const ink = chartInk();
   const grid = { color: ink.grid };
   const axis = { color: ink.muted };
-  const PAID = '#16a34a', OWED = '#dc2626', WAIVED = '#b45309', BLUE = '#1565c0';
+  const PAID = '#16a34a', OWED = '#dc2626', WAIVED = '#b45309', BLUE = '#1E5BB8';
   const tip = { callbacks: { label: c => `${c.dataset.label || c.label}: ${money(c.raw)}` } };
   const moneyAxis = { beginAtZero: true, ticks: { ...axis, callback: compactMoney }, grid };
   const stacked = (labels, rows) => ({
@@ -14126,15 +14543,17 @@ function renderExecutiveCharts(data) {
 
 // Finance and inventory are two summaries, each with its own menu item.
 const EXEC_SECTIONS = {
-  finance: ['Executive summary · Finance',
+  finance: ['Finance summary · Fees & collections',
             "The college's money for the year, in totals. Read-only: the accountant's ledger is where a student's account is kept."],
-  spending: ['Executive summary · Spending',
+  spending: ['Finance summary · Spending',
              'What the college spends against its budget, and the expenses waiting for the Principal or DPFPA.'],
-  inventory: ['Executive summary · Inventory',
+  inventory: ['Inventory summary · College property',
               "College property in figures, from the estate manager's register. Read-only: the estate manager keeps it."],
-  disposals: ['Executive summary · Asset disposals',
+  disposals: ['Inventory summary · Asset disposals',
               'Property the estate officer proposes to write off. DPFPA approves or rejects it.'],
-  lab: ['Executive summary · Laboratory stock',
+  waivers: ['Finance summary · Waiver approvals',
+            'Shortfalls the accountant wants waived on tuition or direct costs. DPFPA approves or refuses each one.'],
+  lab: ['Inventory summary · Laboratory stock',
         "The laboratory's reagents, glassware and consumables: balances, what is low, what expires. Kept by the lab technician."],
 };
 
@@ -14147,8 +14566,90 @@ function toggleExecMenu(event) {
   event.stopPropagation();
 }
 
+function toggleExecInventoryMenu(event) {
+  const group = document.getElementById('exec-inv-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-executive').classList.contains('active')
+      || !['inventory', 'disposals', 'lab'].includes(state.execSection)) {
+    showExecSection('inventory', group.querySelector('[data-exec-section="inventory"]'));
+  }
+  event.stopPropagation();
+}
+
+// ── shortfall waivers: DPFPA decides (said 21 October 2026) ─────────────────
+async function loadWaiverApprovals() {
+  const pending = await api('GET', '/waiver-requests/?status=pending');
+  const done = (await api('GET', '/waiver-requests/')).filter(w => w.status !== 'pending').slice(0, 50);
+  const canDecide = !!state.offices?.dpfpa;
+  document.getElementById('waiver-pending-count').textContent = pending.length ? `${pending.length}` : '';
+  document.getElementById('waiver-pending-tbody').innerHTML = pending.length ? pending.map(w => `<tr>
+      <td>${personCell(w.name, w.college_id || w.reg_no)}</td>
+      <td>${safeText(w.charge)}<div style="font-size:.72rem;color:var(--muted)">${safeText(w.family)} · instalment ${w.installment} · due ${safeText(w.due_date)}</div></td>
+      <td class="num">${money(w.charge_amount)}</td>
+      <td class="num"><strong>${money(Number(w.amount) - Number(w.waived_before || 0))}</strong></td>
+      <td>${safeText(w.reason)}</td>
+      <td>${safeText(w.requested_by)}<div style="font-size:.72rem;color:var(--muted)">${safeText(String(w.requested_at).slice(0, 16).replace('T', ' '))}</div></td>
+      <td class="act">${canDecide ? `<button class="btn btn-primary btn-sm" onclick="decideWaiver(${w.id}, true)">Approve</button>
+        <button class="btn btn-danger btn-sm" onclick="decideWaiver(${w.id}, false)">Refuse</button>` : '<span class="badge badge-yellow">Waiting for DPFPA</span>'}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="7"><div class="empty"><div class="ei"><i class="bi bi-check2-circle"></i></div>Nothing waiting</div></td></tr>';
+  document.getElementById('waiver-done-tbody').innerHTML = done.length ? done.map(w => `<tr>
+      <td>${personCell(w.name, w.college_id || w.reg_no)}</td><td>${safeText(w.charge)}</td>
+      <td class="num">${money(w.amount)}</td>
+      <td><span class="badge ${w.status === 'approved' ? 'badge-green' : 'badge-red'}">${safeText(w.status_display)}</span></td>
+      <td>${safeText(w.decided_by)}</td><td>${safeText(w.decision_note || '—')}</td></tr>`).join('')
+    : '<tr><td colspan="6"><div class="empty">Nothing decided yet</div></td></tr>';
+}
+
+async function decideWaiver(id, approve) {
+  let note = '';
+  if (!approve) {
+    note = prompt('Why is it refused? The accountant reads this.') || '';
+    if (!note.trim()) { toast('Say why it is refused', 'var(--red)'); return; }
+  } else if (!confirm('Approve this waiver? It comes off the student\'s bill now.')) return;
+  try {
+    await api('POST', `/waiver-requests/${id}/decide/`, { approve, note });
+    toast(approve ? 'Approved — the waiver is on the bill' : 'Refused', 'var(--green)');
+    loadWaiverApprovals();
+  } catch (e) { toast(apiErrorText(e, 'Could not decide it'), 'var(--red)'); }
+}
+
+// The accountant asks, from the finance desk, for a shortfall on tuition or
+// direct costs to be waived; DPFPA decides.
+function waiverFormHtml(profileId, charges, waivers, applicationId) {
+  const open = charges.filter(c => ['fee', 'direct_cost'].includes(c.family) && Number(c.balance) > 0);
+  const mine = waivers.filter(w => w.status === 'pending');
+  const recent = waivers.filter(w => w.status !== 'pending').slice(0, 3);
+  return `<div class="card-title" style="font-size:.9rem;margin-top:14px;">Waive a shortfall <span class="tip" tabindex="0" role="note" aria-label="Help: waivers" data-tip="Tuition or direct costs only. The request goes to DPFPA; nothing comes off the bill until it is approved, and the student waits at this desk meanwhile.">?</span></div>
+    ${mine.map(w => `<div class="missing-note" style="margin-bottom:6px;">Waiting for DPFPA: ${money(Number(w.amount) - Number(w.waived_before || 0))} on ${safeText(w.charge)} (instalment ${w.installment}) — ${safeText(w.reason)}</div>`).join('')}
+    ${recent.map(w => `<div style="font-size:.78rem;color:var(--muted);margin-bottom:4px;">${safeText(w.status_display)}: ${safeText(w.charge)} — ${safeText(w.decision_note || w.reason)}</div>`).join('')}
+    ${open.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+      <div class="field" style="margin:0;flex:1 1 220px;"><label>Charge</label><select id="wv-charge">${open.map(c =>
+        `<option value="${c.id}" data-waived="${c.waived_amount}" data-balance="${c.balance}">${safeText(c.charge_type_name)} · instalment ${c.installment_number} · owes ${money(c.balance)}</option>`).join('')}</select></div>
+      <div class="field" style="margin:0;flex:0 1 140px;"><label>Waive</label><input id="wv-amount" type="number" min="1" step="0.01" placeholder="shortfall"></div>
+      <div class="field" style="margin:0;flex:2 1 240px;"><label>Why</label><input id="wv-reason" placeholder="e.g. 20,000 short on the first instalment — bursary"></div>
+      <button class="btn btn-warning btn-sm" onclick="requestWaiver(${profileId}, ${applicationId || 'null'})">Send to DPFPA</button></div>` : ''}`;
+}
+
+async function requestWaiver(profileId, applicationId) {
+  const select = document.getElementById('wv-charge');
+  const option = select.selectedOptions[0];
+  const shortfall = Number(document.getElementById('wv-amount').value || 0);
+  const reason = document.getElementById('wv-reason').value.trim();
+  if (!(shortfall > 0)) { toast('How much is to be waived?', 'var(--red)'); return; }
+  if (shortfall > Number(option.dataset.balance)) { toast('More than is owed on that charge', 'var(--red)'); return; }
+  if (!reason) { toast('Say why', 'var(--red)'); return; }
+  try {
+    const r = await api('POST', `/student-charges/${select.value}/waive/`,
+                        { amount: (Number(option.dataset.waived) + shortfall).toFixed(2), reason });
+    toast(r.detail || 'Sent to DPFPA', 'var(--green)');
+    if (applicationId) openApplicationModal(applicationId);
+  } catch (e) { toast(apiErrorText(e, 'Could not send it'), 'var(--red)'); }
+}
+
 function showExecSection(section, btn) {
   if (!EXEC_SECTIONS[section]) section = 'finance';
+  state.execSection = section;
   document.querySelectorAll('#page-executive [data-exec-section]').forEach(el =>
     el.classList.toggle('sec-on', el.dataset.execSection === section));
   document.querySelectorAll('[data-exec-section].nav-sub-btn').forEach(b =>
@@ -14156,10 +14657,13 @@ function showExecSection(section, btn) {
   const [title, sub] = EXEC_SECTIONS[section];
   document.getElementById('exec-page-title').textContent = title;
   document.getElementById('exec-page-sub').textContent = sub;
-  showPage('executive', document.querySelector('#exec-nav-group .nav-btn'));
-  document.getElementById('exec-nav-group').classList.add('open');
+  const groupId = ['inventory', 'disposals', 'lab'].includes(section) ? 'exec-inv-nav-group' : 'exec-nav-group';
+  showPage('executive', document.querySelector(`#${groupId} .nav-btn`));
+  document.getElementById(groupId).classList.add('open');
+  const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = title;
   if (btn) btn.classList.add('active');
   if (section === 'spending') return loadExecutiveSpending();
+  if (section === 'waivers') return loadWaiverApprovals();
   if (section === 'disposals') return loadExecutiveDisposals();
   if (section === 'lab') return loadExecutiveLab();
   return section === 'finance' ? loadExecutiveFinance() : loadExecutiveInventory();
@@ -14260,7 +14764,7 @@ async function loadExecutiveSpending() {
         data: { labels: sp.rows.map(r => r.category), datasets: [
           { label: 'Budget', data: sp.rows.map(r => Number(r.budget || 0)), backgroundColor: '#94a3b8', borderRadius: 4 },
           { label: 'Committed', data: sp.rows.map(r => Number(r.committed)),
-            backgroundColor: sp.rows.map(r => r.over_budget ? '#dc2626' : '#1565c0'), borderRadius: 4 },
+            backgroundColor: sp.rows.map(r => r.over_budget ? '#dc2626' : '#1E5BB8'), borderRadius: 4 },
         ] },
         options: { responsive: true, maintainAspectRatio: false,
                    plugins: { legend: { position: 'bottom', labels: { color: ink.text } }, tooltip: tip },
@@ -14347,7 +14851,7 @@ async function loadExecutiveInventory() {
     const ink = chartInk();
     const condition = document.getElementById('exec-condition-chart');
     if (condition && p.by_condition.length) {
-      const shade = { New: '#1565c0', Good: '#16a34a', Fair: '#b45309', Poor: '#c2410c', Unserviceable: '#dc2626' };
+      const shade = { New: '#1E5BB8', Good: '#16a34a', Fair: '#b45309', Poor: '#c2410c', Unserviceable: '#dc2626' };
       propertyCharts.push(new Chart(condition, {
         type: 'doughnut',
         data: { labels: p.by_condition.map(r => r.name),
@@ -14365,7 +14869,7 @@ async function loadExecutiveInventory() {
         type: 'bar',
         data: { labels: p.by_location.map(r => r.name),
                 datasets: [{ label: 'Items', data: p.by_location.map(r => r.items),
-                             backgroundColor: '#1565c0', borderRadius: 6 }] },
+                             backgroundColor: '#1E5BB8', borderRadius: 6 }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
                    scales: { x: { ticks: axis, grid }, y: { beginAtZero: true, ticks: { ...axis, precision: 0 }, grid } } },
       }));

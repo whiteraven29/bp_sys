@@ -13,16 +13,16 @@
        panel token-for-token so both portals read as one system. */
     --bg: #eceff3;
     --sidebar: #ffffff;
-    --sidebar-2: #e8f1fb;
+    --sidebar-2: #EFF6FF;
     --surface: #ffffff;
     --surface-2: #f3f5f7;
     --surface-3: #e9edf1;
     --line: #ccd4dc;
     --text: #2b3440;
     --muted: #71808f;
-    --blue: #1565c0;
-    --blue-dark: #10529e;
-    --blue-soft: #e8f1fb;
+    --blue: #123F80;
+    --blue-dark: #0C2D5E;
+    --blue-soft: #EFF6FF;
     --green: #16a34a;
     --green-soft: #eaf7ef;
     --amber: #b45309;
@@ -35,7 +35,7 @@
     --sidebar-width: 250px;
     --row-hover: #f5f9fd;
     /* Fills: a colour with white text on it, deep enough to read in both themes. */
-    --blue-fill: #1565c0;
+    --blue-fill: #123F80;
     --green-fill: #15803d;
     --amber-fill: #b45309;
     --red-fill: #b91c1c;
@@ -45,7 +45,7 @@
     --toast-ink: #ffffff;
   }
   /* The same portal with the ground and the ink swapped. Only the palette
-     moves — every rule below reads these. The blue lightens because #1565c0 on
+     moves — every rule below reads these. The blue lightens because #123F80 on
      a dark ground fails contrast; it has to come up to meet it. */
   html[data-theme="dark"] {
     --bg: #10151b;
@@ -561,6 +561,140 @@
     table { min-width: 620px; font-size: .78rem; }
     table th, table td { padding: 7px 9px; white-space: nowrap; }
   }
+
+  /* ════════════════════════════════════════════════════════════════════════
+     DESIGN SYSTEM (said 21 October 2026) — the staff dashboard's, token for
+     token: primary blue #123F80 (sidebar, main actions, where you are), light
+     blue #EFF6FF (selection, highlights), white workspace, cool grey #F1F5F9.
+     ════════════════════════════════════════════════════════════════════════ */
+  :root {
+    --bg: #F1F5F9; --sidebar: #123F80; --sidebar-2: rgba(255,255,255,.16);
+    --surface: #FFFFFF; --surface-2: #F8FAFC; --surface-3: #EEF2F7; --line: #E2E8F0;
+    --text: #1E293B; --muted: #64748B;
+    --blue: #123F80; --blue-dark: #0C2D5E; --blue-soft: #EFF6FF; --row-hover: #EFF6FF;
+    --green: #15803D; --green-soft: #ECFDF3; --amber: #B45309; --amber-soft: #FFF7ED; --red: #DC2626; --red-soft: #FEF2F2;
+    --blue-fill: #123F80; --green-fill: #15803D; --amber-fill: #B45309; --red-fill: #C62828; --grey-fill: #64748B;
+    --radius: 10px; --side-deep: #0E3470; --side-ink: rgba(255,255,255,.80); --side-dim: rgba(255,255,255,.58);
+    --shadow-1: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06); --shadow-2: 0 10px 30px rgba(15,23,42,.12);
+    --toast-bg: #0F172A; --toast-ink: #ffffff;
+  }
+  html[data-theme="dark"] {
+    --bg: #0B1220; --sidebar: #0A1A36; --surface: #111A2C; --surface-2: #162138; --surface-3: #1C2A45; --line: #22314D;
+    --text: #E2E8F0; --muted: #94A3B8; --blue: #7CB0FF; --blue-dark: #A4C8FF; --blue-soft: #15284A; --row-hover: #15284A;
+    --green: #4ADE80; --green-soft: #10291C; --amber: #FBBF24; --amber-soft: #2E2410; --red: #F87171; --red-soft: #321A1A;
+    --blue-fill: #2B5BA8; --side-deep: #071329; --shadow-1: 0 1px 2px rgba(0,0,0,.4); --shadow-2: 0 14px 40px rgba(0,0,0,.55);
+    --toast-bg: #E2E8F0; --toast-ink: #0B1220;
+  }
+  body { -webkit-font-smoothing: antialiased; }
+
+  /* Sidebar: blue, rounded rows */
+  .sidebar { background: var(--sidebar); border-right: 0; }
+  .brand { background: transparent; min-height: 64px; }
+  .brand-mark { color: #123F80; background: #fff; border-radius: 9px; }
+  .student-mini { background: rgba(255,255,255,.06); border-bottom: 0; margin: 4px 10px 10px; border-radius: 12px; color: #fff; }
+  .student-mini span { color: var(--side-dim); }
+  .student-mini .avatar { background: #fff; color: #123F80; }
+  .nav-label { color: var(--side-dim); text-transform: uppercase; letter-spacing: .08em; font-size: .62rem; padding: 12px 20px 5px; }
+  .nav-item { border: 0; border-radius: 8px; color: var(--side-ink); margin: 1px 10px; width: calc(100% - 20px); padding: 10px 12px; }
+  .nav-item:hover { background: rgba(255,255,255,.08); color: #fff; }
+  .nav-item.active { background: rgba(255,255,255,.16); color: #fff; box-shadow: inset 3px 0 0 #fff; }
+  .nav-icon, .nav-toggle .nav-caret { color: var(--side-dim); }
+  .nav-item:hover .nav-icon, .nav-item.active .nav-icon { color: #fff; }
+  .nav-submenu { background: var(--side-deep); border-radius: 8px; margin: 2px 10px 6px; padding: 4px 0; }
+  .nav-submenu .nav-item { margin: 0; width: 100%; padding: 8px 12px 8px 40px; }
+  .nav-badge, .nav-item.active .nav-badge { background: rgba(255,255,255,.2); color: #fff; border-radius: 999px; }
+  body.nav-collapsed .sidebar .nav-item { margin: 1px 6px; width: calc(100% - 12px); }
+
+  /* Top bar */
+  .topbar { min-height: 64px; box-shadow: var(--shadow-1); }
+  .search input { border-radius: 999px; background: var(--surface-2); padding: 9px 14px 9px 34px; }
+  .search input:focus { background: var(--surface); box-shadow: 0 0 0 3px rgba(18,63,128,.14); }
+  .semester-pill { border: 0; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-weight: 600; padding: 5px 12px; }
+  .top-icon { border-radius: 10px; width: 38px; height: 38px; }
+  .top-icon:hover { background: var(--blue-soft); border-color: transparent; }
+  .logout { border-radius: 999px; }
+  .crumb-bar { background: transparent; border-bottom: 0; padding: 14px 28px 0; }
+  .content { padding: 18px 28px 48px; }
+
+  /* Cards and tiles */
+  .panel { border-radius: 14px; box-shadow: var(--shadow-1); overflow: hidden; }
+  .panel-head { padding: 15px 20px; }
+  .panel-head h2 { font-size: .98rem; font-weight: 650; }
+  .section-title h2 { font-size: 1.45rem; font-weight: 700; letter-spacing: -.01em; }
+  .stat-card { border-radius: 14px; box-shadow: var(--shadow-1); padding: 18px; }
+  .stat-icon { border-radius: 10px; width: 36px; height: 36px; }
+  .stat-card strong { font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; }
+  .quick-facts { border: 0; background: transparent; gap: 12px; overflow: visible; }
+  .qf-item { background: var(--surface); border: 1px solid var(--line); border-right: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-1); }
+  .qf-item:last-child { border-right: 1px solid var(--line); }
+  .qf-item span { text-transform: uppercase; letter-spacing: .05em; font-size: .62rem; font-weight: 600; }
+  .qf-item strong { color: var(--blue); font-weight: 700; font-size: 1.5rem; }
+  .module-card { border-radius: 14px; box-shadow: var(--shadow-1); }
+  .progress { border-radius: 999px; height: 7px; }
+  .progress span { border-radius: 999px; }
+  .counts { border-radius: 10px; overflow: hidden; }
+  .result-total, .photo-lg { border-radius: 12px; }
+
+  /* Tables: no grid lines */
+  .table-wrap { border-radius: 12px; }
+  th, td { border: 0; border-bottom: 1px solid var(--line); padding: 11px 14px; }
+  th { background: var(--surface-2); font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .q-matrix th, .q-matrix td, .q-grid th, .q-grid td { border: 1px solid var(--line); text-transform: none; letter-spacing: 0; }
+
+  /* Buttons, pills, empties */
+  .btn { border-radius: 8px; font-weight: 600; box-shadow: 0 1px 2px rgba(18,63,128,.25); }
+  .btn:hover { background: var(--blue-dark); border-color: var(--blue-dark); }
+  .btn-mini { border-radius: 999px; border-color: transparent; background: var(--blue-soft); }
+  .status { border-radius: 999px; padding: 3px 10px; }
+  .status.good, .status.pass { background: var(--green-soft); color: var(--green); }
+  .status.warning, .status.pending { background: var(--amber-soft); color: var(--amber); }
+  .status.critical, .status.fail { background: var(--red-soft); color: var(--red); }
+  .empty { border-radius: 12px; border-style: solid; background: var(--surface); }
+  .bell-panel { border-radius: 14px; box-shadow: var(--shadow-2); }
+
+  /* Panel bodies, actions and messages (said 21 October 2026). */
+  .view .panel { margin-bottom: 16px; }
+  .panel-body { padding: 16px 20px 20px; }
+  .panel-body > p, .panel-body.photo-row p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.55; }
+  .panel-body.photo-row { margin: 0; align-items: center; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+  .btn-row:first-child { margin-top: 0; }
+  .btn-soft { background: var(--blue-soft); color: var(--blue); border-color: transparent; box-shadow: none; }
+  .btn-soft:hover { background: var(--blue-fill); color: #fff; }
+  .panel-actions { padding: 16px 20px 20px; border-top: 1px solid var(--line); display: grid; gap: 12px; }
+  .panel-actions .btn-row { margin-top: 0; }
+  .inline-note { display: flex; gap: 10px; align-items: flex-start; padding: 11px 14px; border-radius: 10px;
+                 background: var(--blue-soft); color: var(--text); font-size: .86rem; line-height: 1.5; margin-top: 14px; }
+  .panel-actions .inline-note { margin-top: 0; }
+  .inline-note > i { color: var(--blue); margin-top: 2px; }
+  .inline-note.warn { background: var(--amber-soft); } .inline-note.warn > i { color: var(--amber); }
+  .invoice-msg { display: flex; gap: 10px; align-items: flex-start; padding: 11px 14px; border-radius: 10px; font-size: .86rem; line-height: 1.55; }
+  .invoice-msg:empty { display: none; }
+  .invoice-msg.busy { background: var(--surface-2); color: var(--muted); }
+  .invoice-msg.ok { background: var(--green-soft); color: var(--text); } .invoice-msg.ok > i { color: var(--green); margin-top: 2px; }
+  .invoice-msg.err { background: var(--red-soft); color: var(--red); } .invoice-msg > i { margin-top: 2px; }
+  .invoice-msg a { color: var(--blue); font-weight: 600; }
+
+  /* Two-column details: what it is | what we have. */
+  .kv { width: 100%; min-width: 0; border-collapse: separate; border-spacing: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .kv th, .kv td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+  .kv th { width: 36%; background: var(--surface-2); color: var(--muted); font-size: .82rem; font-weight: 500;
+           text-transform: none; letter-spacing: 0; white-space: normal; border-right: 1px solid var(--line); }
+  .kv td { font-size: .88rem; font-weight: 600; color: var(--text); }
+  .kv tr:last-child th, .kv tr:last-child td { border-bottom: 0; }
+  .kv tbody tr:hover td { background: transparent; }
+  .kv-form td { font-weight: 400; }
+  .kv-form input, .kv-form select { width: 100%; padding: 9px 12px; border: 1px solid #CBD5E1; border-radius: 8px;
+           background: var(--surface); color: var(--text); font: inherit; font-size: .86rem; }
+  .kv-form input:focus, .kv-form select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(18,63,128,.14); }
+  .kv-head { margin: 18px 0 8px !important; font-size: .7rem !important; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 700; }
+  .panel-body > .kv-head:first-child { margin-top: 0 !important; }
+  @media (max-width: 580px) {
+    .kv th { width: 42%; }
+    .kv th, .kv td { padding: 10px 11px; }
+    .panel-body, .panel-actions { padding: 14px 14px 16px; }
+  }
 </style>
 </head>
 <body>
@@ -670,7 +804,7 @@
                 <strong>{{ r.name }}{% if r.installments_total > 1 %} · instalment {{ r.installment_number }} of {{ r.installments_total }}{% endif %}</strong>
                 <span>{% if r.reference %}Invoice {{ r.reference }}{% else %}No invoice yet — generate one under Payments{% endif %}</span>
               </div>
-              <div class="rem-amount">{{ r.amount|floatformat:2 }}</div>
+              <div class="rem-amount">{{ r.amount|floatformat:"2g" }}</div>
               <div class="rem-when">
                 <b>{{ r.due_date|date:"d M Y" }}</b>
                 <span>{{ r.days_label }}</span>
@@ -695,7 +829,7 @@
                   <strong>{{ r.name }}{% if r.installments_total > 1 %} · instalment {{ r.installment_number }} of {{ r.installments_total }}{% endif %}</strong>
                   <span>{% if r.reference %}Invoice {{ r.reference }}{% else %}No invoice yet{% endif %}</span>
                 </div>
-                <div class="rem-amount">{{ r.amount|floatformat:2 }}</div>
+                <div class="rem-amount">{{ r.amount|floatformat:"2g" }}</div>
                 <div class="rem-when"><b>{{ r.due_date|date:"d M Y" }}</b><span>{{ r.days_label }}</span></div>
               </div>
               {% endfor %}
@@ -864,16 +998,18 @@
       <section class="view" id="view-obligations">
         <div class="section-title"><p class="eyebrow">Finance</p><h2>What I Owe</h2><p>Every charge on your account, and what is still outstanding on each.</p></div>
         <div class="stats">
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-wallet2"></i></div></div><strong>{{ finance_required|floatformat:2 }}</strong><p>Total billed</p></article>
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-check-circle"></i></div></div><strong>{{ finance_paid|floatformat:2 }}</strong><p>Total paid</p></article>
-          {% if finance_waived %}<article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-hand-thumbs-up"></i></div></div><strong>{{ finance_waived|floatformat:2 }}</strong><p>Waived</p></article>{% endif %}
-          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-exclamation-circle"></i></div></div><strong>{{ finance_balance|floatformat:2 }}</strong><p>Outstanding</p></article>
-          {% if finance_on_account %}<article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-piggy-bank"></i></div></div><strong>{{ finance_on_account|floatformat:2 }}</strong><p>Paid ahead — used on your next bill</p></article>{% endif %}
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-wallet2"></i></div></div><strong>{{ finance_required|floatformat:"2g" }}</strong><p>Total billed</p></article>
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-check-circle"></i></div></div><strong>{{ finance_paid|floatformat:"2g" }}</strong><p>Total paid</p></article>
+          {% if finance_waived %}<article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-hand-thumbs-up"></i></div></div><strong>{{ finance_waived|floatformat:"2g" }}</strong><p>Waived</p></article>{% endif %}
+          <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-exclamation-circle"></i></div></div><strong>{{ finance_balance|floatformat:"2g" }}</strong><p>Outstanding</p></article>
+          {% if finance_on_account %}<article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-piggy-bank"></i></div></div><strong>{{ finance_on_account|floatformat:"2g" }}</strong><p>Paid ahead — used on your next bill</p></article>{% endif %}
         </div>
         <section class="panel">
-          <div class="panel-head"><h2>Semester pass</h2><span>Your pass to classes and exams this semester</span></div>
-          <p style="margin:0 0 10px;">Paid what is due by this semester's first instalment? Download your pass and print it — no queue at the admission office.</p>
-          <a class="btn" href="{% url 'my-semester-pass' %}" target="_blank" rel="noopener"><i class="bi bi-ticket-perforated"></i> My semester pass</a>
+          <div class="panel-head"><h2>Semester pass</h2><span>Your pass to classes and exams</span></div>
+          <div class="panel-body">
+            <p>Paid up for this semester? Download your pass, print it at ID-card size and have it stamped at the admission office.</p>
+            <div class="btn-row"><a class="btn" href="{% url 'my-semester-pass' %}" target="_blank" rel="noopener"><i class="bi bi-ticket-perforated"></i> My semester pass</a></div>
+          </div>
         </section>
         <section class="panel">
           <div class="panel-head"><h2>My charges</h2><span>School fees, direct costs, and other payments</span></div>
@@ -884,8 +1020,8 @@
               <td>{{ charge.charge_type.group_label }}</td>
               <td>{{ charge.installment_number }} of {{ charge.installments_total }}</td>
               <td>{{ charge.due_date|date:"d M Y" }}</td>
-              <td>{{ charge.amount|floatformat:2 }}</td>
-              <td>{{ charge.balance|floatformat:2 }}</td>
+              <td>{{ charge.amount|floatformat:"2g" }}</td>
+              <td>{{ charge.balance|floatformat:"2g" }}</td>
               <td>
                 {% if charge.balance <= 0 %}<span class="status pass">Settled</span>
                 {% elif charge.is_overdue %}<span class="status fail">Overdue</span>
@@ -898,27 +1034,19 @@
 
         <section class="panel">
           <div class="panel-head"><h2>Pay your fees</h2><span>Generate an invoice, take it to the bank, bring the slip back</span></div>
-          <div class="account-form">
+          <div class="panel-body">
             {% if finance_charges %}
-              <p style="margin:0 0 14px">
-                Each payment has one invoice number, good for all of its instalments and its
-                own CRDB account — write that number on every slip for it. If a parent or
-                sponsor pays for you, give them the number: without it we cannot tell whose
-                money arrived. Every payment received, with its bank reference and receipt,
-                is printed on the invoice it was paid against.
-              </p>
+              <p>One invoice number covers every instalment of a payment. Quote it on each bank slip — whoever pays for you needs it too.</p>
               {% if finance_balance > 0 %}
-                <button type="button" class="btn" data-goto-view="invoice-generate">Generate invoices for everything outstanding</button>
-                <button type="button" class="btn" data-goto-view="invoice-list">See my invoices</button>
+                <div class="btn-row">
+                  <button type="button" class="btn" data-goto-view="invoice-generate"><i class="bi bi-receipt"></i> Generate invoices</button>
+                  <button type="button" class="btn btn-soft" data-goto-view="invoice-list">See my invoices</button>
+                </div>
               {% else %}
-                <p style="margin:0"><span class="status pass">You are paid up for {{ academic_year }}</span></p>
+                <div class="btn-row"><span class="status pass">You are paid up for {{ academic_year }}</span></div>
               {% endif %}
             {% else %}
-              <p style="margin:0">
-                Your fees for {{ academic_year }} have not been set up yet. The Accounts
-                Office will bill you before you need to pay — nothing is owing in the
-                meantime.
-              </p>
+              <p>Your fees for {{ academic_year }} are not set up yet. Nothing is owing until the Accounts Office bills you.</p>
             {% endif %}
           </div>
         </section>
@@ -953,44 +1081,39 @@
                 <td>{{ charge.charge_type.name }}</td>
                 <td>{{ charge.installment_number }} of {{ charge.installments_total }}</td>
                 <td>{{ charge.due_date|date:"d M Y" }}</td>
-                <td>{{ charge.payable|floatformat:2 }}</td>
-                <td>{% if charge.balance > 0 %}{{ charge.balance|floatformat:2 }}{% else %}<span class="status pass">Settled</span>{% endif %}</td>
+                <td>{{ charge.payable|floatformat:"2g" }}</td>
+                <td>{% if charge.balance > 0 %}{{ charge.balance|floatformat:"2g" }}{% else %}<span class="status pass">Settled</span>{% endif %}</td>
               </tr>
               {% endfor %}
             </tbody>
             <tfoot><tr>
               <th colspan="3">Total for this payment</th>
-              <th>{{ payment.billed|floatformat:2 }}</th>
-              <th>{{ payment.outstanding|floatformat:2 }}</th>
+              <th>{{ payment.billed|floatformat:"2g" }}</th>
+              <th>{{ payment.outstanding|floatformat:"2g" }}</th>
             </tr></tfoot>
           </table></div>
 
-          <div style="margin-top:14px">
+          <div class="panel-actions">
             {% if payment.invoice %}
-              <p style="margin:0 0 10px">
-                Invoice <strong>{{ payment.invoice.reference }}</strong> already covers this payment
-                {% if payment.invoice.expires_on %}and is valid until {{ payment.invoice.expires_on|date:"d M Y" }}{% endif %}.
-                Keep using that number.
-              </p>
-              <a class="btn" href="{% url 'invoice-print' payment.invoice.reference %}" target="_blank" rel="noopener">Open invoice {{ payment.invoice.reference }}</a>
-              {% if payment.outstanding > 0 %}
-                <button type="button" class="btn" data-invoice-group="{{ payment.group }}">Refresh it with any new instalments</button>
-              {% endif %}
+              <div class="inline-note"><i class="bi bi-receipt"></i><span>Invoice <strong>{{ payment.invoice.reference }}</strong> covers this payment{% if payment.invoice.expires_on %} until {{ payment.invoice.expires_on|date:"d M Y" }}{% endif %}. Keep using that number.</span></div>
+              <div class="btn-row">
+                <a class="btn" href="{% url 'invoice-print' payment.invoice.reference %}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> Open {{ payment.invoice.reference }}</a>
+                {% if payment.outstanding > 0 %}
+                  <button type="button" class="btn btn-soft" data-invoice-group="{{ payment.group }}"><i class="bi bi-arrow-repeat"></i> Add new instalments</button>
+                {% endif %}
+              </div>
             {% elif payment.outstanding > 0 %}
-              <button type="button" class="btn" data-invoice-group="{{ payment.group }}">Generate invoice for {{ payment.group }}</button>
+              <div class="btn-row"><button type="button" class="btn" data-invoice-group="{{ payment.group }}"><i class="bi bi-receipt"></i> Generate invoice for {{ payment.group }}</button></div>
             {% else %}
-              <p style="margin:0"><span class="status pass">Settled in full — no invoice needed</span></p>
+              <div class="btn-row"><span class="status pass">Settled in full — no invoice needed</span></div>
             {% endif %}
-            <p class="invoice-msg" style="margin:12px 0 0"></p>
+            <div class="invoice-msg" role="status"></div>
           </div>
         </section>
         {% empty %}
         <section class="panel">
           <div class="panel-head"><h2>Nothing to invoice yet</h2><span>The Accounts Office bills you before you need to pay</span></div>
-          <p style="margin:0;padding:0 4px">
-            Your fees for {{ academic_year }} have not been set up yet, so there is nothing to
-            generate an invoice for. Nothing is owing in the meantime.
-          </p>
+          <div class="panel-body"><p>Your fees for {{ academic_year }} are not set up yet, so there is nothing to invoice. Nothing is owing in the meantime.</p></div>
         </section>
         {% endfor %}
       </section>
@@ -1021,9 +1144,9 @@
               <td>{{ row.installments }}</td>
               <td>{{ row.invoice.issued_on|date:"d M Y" }}</td>
               <td>{{ row.expires_on|date:"d M Y"|default:"—" }}</td>
-              <td>{{ row.total|floatformat:2 }}</td>
-              <td>{{ row.paid|floatformat:2 }}</td>
-              <td>{{ row.outstanding|floatformat:2 }}</td>
+              <td>{{ row.total|floatformat:"2g" }}</td>
+              <td>{{ row.paid|floatformat:"2g" }}</td>
+              <td>{{ row.outstanding|floatformat:"2g" }}</td>
               <td>
                 {% if row.status == 'paid' %}<span class="status pass">Paid in full</span>
                 {% elif row.status == 'cancelled' %}<span class="status fail">Cancelled</span>
@@ -1239,60 +1362,77 @@
           <button type="button" data-profile-option="password" role="tab">Password</button>
         </div>
 
+        <!-- Every option as plain two-column tables: what it is | what we have
+             (said 21 October 2026). One table per person or record in a list. -->
         <div class="pane on" data-profile-pane="personal">
-          <div class="photo-row">
-            <div class="photo-lg" data-photo="large">{% if record.passport_url %}<img src="{{ record.passport_url }}" alt="Your passport photo">{% else %}No photo yet{% endif %}</div>
-            <div>
-              <p style="margin:0 0 8px;color:var(--muted);font-size:.8rem;max-width:320px;">A recent passport-size photo, face clear on a plain background. It is made small before it is sent.</p>
-              <input type="file" id="passport-file" accept="image/jpeg,image/png" style="display:none">
-              <button type="button" class="btn" id="passport-btn">{% if record.passport_url %}Change photo{% else %}Upload photo{% endif %}</button>
+          <section class="panel">
+            <div class="panel-head"><h2>Passport photo</h2></div>
+            <div class="panel-body photo-row">
+              <div class="photo-lg" data-photo="large">{% if record.passport_url %}<img src="{{ record.passport_url }}" alt="Your passport photo">{% else %}No photo yet{% endif %}</div>
+              <div>
+                <p>A recent passport-size photo, face clear on a plain background.</p>
+                <input type="file" id="passport-file" accept="image/jpeg,image/png" style="display:none">
+                <div class="btn-row"><button type="button" class="btn" id="passport-btn">{% if record.passport_url %}Change photo{% else %}Upload photo{% endif %}</button></div>
+              </div>
             </div>
-          </div>
-          <div class="profile-grid">
-            <div class="profile-item"><span>Full name</span><strong>{% if record %}{{ record.name }}{% else %}{{ student_name }}{% endif %}</strong></div>
-            <div class="profile-item"><span>NACTVET number</span><strong>{{ registration_number }}</strong></div>
-            {% if record %}
-            <div class="profile-item"><span>College ID</span><strong>{{ record.college_id|default:"—" }}</strong></div>
-            <div class="profile-item"><span>Gender</span><strong>{{ record.gender|default:"—" }}</strong></div>
-            <div class="profile-item"><span>Date of birth</span><strong>{{ record.date_of_birth|date:"d M Y"|default:"—" }}</strong></div>
-            <div class="profile-item"><span>Phone</span><strong>{{ record.phone|default:"—" }}</strong></div>
-            <div class="profile-item"><span>Form Four index</span><strong>{{ record.form_four_index|default:"—" }}</strong></div>
-            <div class="profile-item"><span>Address</span><strong>{{ record.address|default:"—" }}</strong></div>
-            <div class="profile-item"><span>Fees paid by</span><strong>{{ record.fee_payer_display|default:"—" }}</strong></div>
-            <div class="profile-item"><span>Guarantor / sponsor</span><strong>{% if record.sponsor_name %}{{ record.sponsor_name }}{% if record.sponsor_phone %} · {{ record.sponsor_phone }}{% endif %}{% else %}—{% endif %}</strong></div>
-            {% for item in record.typed_items %}<div class="profile-item"><span>{{ item.name }}</span><strong>{{ item.value }}</strong></div>{% endfor %}
-            {% endif %}
-          </div>
-          {% if record.missing %}
-          <div class="notice" style="border-left-color:var(--amber);"><strong>Not recorded yet:</strong> {{ record.missing|join:", " }}. Take these to the records office.</div>
-          {% endif %}
-          <div class="notice">Something wrong in your details? Contact the records office.</div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>Personal details</h2><span>Kept by the records office</span></div>
+            <div class="panel-body">
+              <table class="kv"><tbody>
+                <tr><th>Full name</th><td>{% if record %}{{ record.name }}{% else %}{{ student_name }}{% endif %}</td></tr>
+                <tr><th>NACTVET number</th><td>{{ registration_number }}</td></tr>
+                {% if record %}
+                <tr><th>College ID</th><td>{{ record.college_id|default:"—" }}</td></tr>
+                <tr><th>Gender</th><td>{{ record.gender|default:"—" }}</td></tr>
+                <tr><th>Date of birth</th><td>{{ record.date_of_birth|date:"d M Y"|default:"—" }}</td></tr>
+                <tr><th>Phone</th><td>{{ record.phone|default:"—" }}</td></tr>
+                <tr><th>Form Four index</th><td>{{ record.form_four_index|default:"—" }}</td></tr>
+                <tr><th>Address</th><td>{{ record.address|default:"—" }}</td></tr>
+                <tr><th>Fees paid by</th><td>{{ record.fee_payer_display|default:"—" }}</td></tr>
+                <tr><th>Guarantor / sponsor</th><td>{% if record.sponsor_name %}{{ record.sponsor_name }}{% if record.sponsor_phone %} · {{ record.sponsor_phone }}{% endif %}{% else %}—{% endif %}</td></tr>
+                {% for item in record.typed_items %}<tr><th>{{ item.name }}</th><td>{{ item.value }}</td></tr>{% endfor %}
+                {% endif %}
+              </tbody></table>
+              {% if record.missing %}
+              <div class="inline-note warn"><i class="bi bi-exclamation-triangle"></i><span><strong>Not recorded yet:</strong> {{ record.missing|join:", " }}. Take these to the records office.</span></div>
+              {% endif %}
+              <div class="inline-note"><i class="bi bi-info-circle"></i><span>Something wrong? The records office corrects it.</span></div>
+            </div>
+          </section>
         </div>
 
         <div class="pane" data-profile-pane="academic">
-          <div class="profile-grid">
-            {% if record %}
-            <div class="profile-item"><span>Programme</span><strong>{{ record.programme|default:"—" }}</strong></div>
-            <div class="profile-item"><span>Level</span><strong>{{ record.class_level|default:"—" }}</strong></div>
-            {% endif %}
-            <div class="profile-item"><span>Academic year</span><strong>{{ academic_year }}</strong></div>
-            <div class="profile-item"><span>Current semester</span><strong>{{ active_semester }}</strong></div>
-            <div class="profile-item"><span>Enrolled modules</span><strong>{{ module_count }}</strong></div>
-            <div class="profile-item"><span>Recorded sessions</span><strong>{{ total_sessions }}</strong></div>
-          </div>
+          <section class="panel">
+            <div class="panel-head"><h2>Programme</h2></div>
+            <div class="panel-body">
+              <table class="kv"><tbody>
+                {% if record %}
+                <tr><th>Programme</th><td>{{ record.programme|default:"—" }}</td></tr>
+                <tr><th>Level</th><td>{{ record.class_level|default:"—" }}</td></tr>
+                {% endif %}
+                <tr><th>Academic year</th><td>{{ academic_year }}</td></tr>
+                <tr><th>Current semester</th><td>{{ active_semester }}</td></tr>
+                <tr><th>Enrolled modules</th><td>{{ module_count }}</td></tr>
+                <tr><th>Recorded sessions</th><td>{{ total_sessions }}</td></tr>
+              </tbody></table>
+            </div>
+          </section>
           {% if record %}
-          <section class="panel" style="margin-top:14px;">
-            <h3 class="statement-title">Schools and colleges before</h3>
-            <div style="padding:14px 16px;"><div class="table-wrap"><table>
-              <thead><tr><th>Level</th><th>School / college</th><th>Years</th><th>Index No.</th></tr></thead>
-              <tbody>
+          <section class="panel">
+            <div class="panel-head"><h2>Schools and colleges before</h2></div>
+            <div class="panel-body">
               {% for row in record.education %}
-              <tr><td>{{ row.level_display }}</td><td>{{ row.institution }}</td><td>{{ row.start_year|default:"—" }}–{{ row.end_year|default:"—" }}</td><td>{{ row.index_number|default:"—" }}</td></tr>
+              <p class="kv-head">{{ forloop.counter }} · {{ row.level_display }}</p>
+              <table class="kv"><tbody>
+                <tr><th>School / college</th><td>{{ row.institution }}</td></tr>
+                <tr><th>Years</th><td>{{ row.start_year|default:"—" }}–{{ row.end_year|default:"—" }}</td></tr>
+                <tr><th>Index No.</th><td>{{ row.index_number|default:"—" }}</td></tr>
+              </tbody></table>
               {% empty %}
-              <tr><td colspan="4" style="color:var(--muted);">Not recorded yet — the records office takes these from your enrolment form.</td></tr>
+              <p>Not recorded yet — the records office takes these from your enrolment form.</p>
               {% endfor %}
-              </tbody>
-            </table></div></div>
+            </div>
           </section>
           {% endif %}
         </div>
@@ -1300,89 +1440,84 @@
         {% if record %}
         <div class="pane" data-profile-pane="kin">
           <section class="panel">
-            <h3 class="statement-title">Next of kin <span class="tip" tabindex="0" role="note" aria-label="Help: who keeps these details" data-tip="The records office keeps these details. If anything is wrong or missing, take it to them and they will correct it.">?</span></h3>
-            <div style="padding:14px 16px;">
-              <div class="table-wrap">
-                <table>
-                  <thead><tr><th>Name</th><th>Relationship</th><th>Phone</th></tr></thead>
-                  <tbody>
-                    {% for kin in record.next_of_kin %}
-                    <tr><td>{{ kin.name }}</td><td>{{ kin.relationship }}</td><td>{{ kin.phone }}</td></tr>
-                    {% empty %}
-                    <tr><td colspan="3" style="color:var(--muted);">None recorded yet.</td></tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
+            <div class="panel-head"><h2>Next of kin</h2><span>Kept by the records office</span></div>
+            <div class="panel-body">
+              {% for kin in record.next_of_kin %}
+              <p class="kv-head">Next of kin {{ forloop.counter }}</p>
+              <table class="kv"><tbody>
+                <tr><th>Name</th><td>{{ kin.name }}</td></tr>
+                <tr><th>Relationship</th><td>{{ kin.relationship }}</td></tr>
+                <tr><th>Phone</th><td>{{ kin.phone }}</td></tr>
+              </tbody></table>
+              {% empty %}
+              <p>None recorded yet. Take their details to the records office.</p>
+              {% endfor %}
             </div>
           </section>
         </div>
         {% endif %}
 
         <div class="pane" data-profile-pane="documents">
-        <section class="panel">
-          <h3 class="statement-title">My documents <span class="tip" tabindex="0" role="note" aria-label="Help: uploading documents" data-tip="Upload a clear photo or scan. The records office checks it against the original. Only you and the college can open these.">?</span></h3>
-          <div style="padding:14px 16px;">
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>Document</th><th>Kind</th><th>Uploaded</th><th>Checked</th></tr></thead>
-                <tbody id="my-documents"><tr><td colspan="4" style="color:var(--muted);">Nothing uploaded yet.</td></tr></tbody>
-              </table>
+          <section class="panel">
+            <div class="panel-head"><h2>My documents</h2><span>Only you and the college can open these</span></div>
+            <div class="panel-body" id="my-documents"><p>Nothing uploaded yet.</p></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>Upload a document</h2></div>
+            <div class="panel-body">
+              <table class="kv kv-form"><tbody>
+                <tr><th><label for="doc-kind">Kind</label></th><td>
+                  <select id="doc-kind">
+                    <option value="o_level">O-level certificate (CSEE)</option>
+                    <option value="a_level">A-level certificate (ACSEE)</option>
+                    <option value="certificate">Other certificate</option>
+                    <option value="result_slip">Result slip</option>
+                    <option value="birth_certificate">Birth certificate</option>
+                    <option value="identity">Identification</option>
+                    <option value="medical">Medical form</option>
+                    <option value="other">Other</option>
+                  </select></td></tr>
+                <tr><th><label for="doc-file">File (PDF, JPG or PNG)</label></th><td><input type="file" id="doc-file" accept=".pdf,.jpg,.jpeg,.png"></td></tr>
+              </tbody></table>
+              <div class="btn-row"><button class="btn" type="button" id="doc-upload-btn"><i class="bi bi-upload"></i> Upload</button></div>
             </div>
-            <div class="account-form" style="margin-top:14px;">
-              <div class="account-field"><label>Kind</label>
-                <select id="doc-kind">
-                  <option value="o_level">O-level certificate (CSEE)</option>
-                  <option value="a_level">A-level certificate (ACSEE)</option>
-                  <option value="certificate">Other certificate</option>
-                  <option value="result_slip">Result slip</option>
-                  <option value="birth_certificate">Birth certificate</option>
-                  <option value="identity">Identification</option>
-                  <option value="medical">Medical form</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div class="account-field"><label>File (PDF, JPG or PNG)</label>
-                <input type="file" id="doc-file" accept=".pdf,.jpg,.jpeg,.png"></div>
-              <button class="account-button" type="button" id="doc-upload-btn">Upload</button>
-            </div>
-          </div>
-        </section>
+          </section>
         </div>
 
         <div class="pane" data-profile-pane="health">
           <section class="panel">
-            <h3 class="statement-title">My health records <span class="tip" tabindex="0" role="note" aria-label="Help: health records" data-tip="Only the records office, the Dean of Students and the Principal read these — for your welfare and what the college should allow for. Nobody else.">?</span></h3>
-            <div style="padding:14px 16px;">
-              <div class="table-wrap"><table>
-                <thead><tr><th>Condition</th><th>Hospital / facility</th><th>Dated</th><th>Status</th></tr></thead>
-                <tbody id="my-health"><tr><td colspan="4" style="color:var(--muted);">Nothing recorded.</td></tr></tbody>
-              </table></div>
-            </div>
+            <div class="panel-head"><h2>My health records</h2><span>Read only by records, the Dean of Students and the Principal</span></div>
+            <div class="panel-body" id="my-health"><p>Nothing recorded.</p></div>
           </section>
-          <section class="panel" style="margin-top:14px;">
-            <h3 class="statement-title">Report a health problem</h3>
-            <div style="padding:14px 16px;">
-              <p style="margin:0 0 10px;color:var(--muted);font-size:.82rem;">Upload the document the hospital gave you — a medical certificate or report, signed and stamped. The records office checks it against the original before it is recorded, so bring the original when asked.</p>
-              <div class="account-form" style="margin-top:0;grid-template-columns:repeat(2,minmax(0,1fr));">
-                <div class="account-field"><label>Health problem</label><input id="hp-condition" maxlength="200" placeholder="As the document names it"></div>
-                <div class="account-field"><label>Hospital or health facility</label><input id="hp-facility" maxlength="160" placeholder="e.g. Singida Regional Referral Hospital"></div>
-                <div class="account-field"><label>Date on the document</label><input id="hp-issued" type="date"></div>
-                <div class="account-field"><label>The document (PDF, JPG or PNG)</label><input id="hp-file" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
-                <button class="account-button" type="button" id="hp-submit">Send to the records office</button>
-              </div>
+          <section class="panel">
+            <div class="panel-head"><h2>Report a health problem</h2><span>With the hospital's signed document</span></div>
+            <div class="panel-body">
+              <table class="kv kv-form"><tbody>
+                <tr><th><label for="hp-condition">Health problem</label></th><td><input id="hp-condition" maxlength="200" placeholder="As the document names it"></td></tr>
+                <tr><th><label for="hp-facility">Hospital or facility</label></th><td><input id="hp-facility" maxlength="160" placeholder="e.g. Singida Regional Referral Hospital"></td></tr>
+                <tr><th><label for="hp-issued">Date on the document</label></th><td><input id="hp-issued" type="date"></td></tr>
+                <tr><th><label for="hp-file">Document (PDF, JPG or PNG)</label></th><td><input id="hp-file" type="file" accept=".pdf,.jpg,.jpeg,.png"></td></tr>
+              </tbody></table>
+              <div class="btn-row"><button class="btn" type="button" id="hp-submit"><i class="bi bi-send"></i> Send to the records office</button></div>
             </div>
           </section>
         </div>
 
         <div class="pane" data-profile-pane="password">
-          {% if password %}<p style="margin:0 0 4px;color:var(--muted);font-size:.82rem;">Your password was set {{ password.changed_on|date:"d M Y" }} and lasts until {{ password.expires_on|date:"d M Y" }}.
-            <span class="tip" tabindex="0" role="note" aria-label="Help: passwords last six months" data-tip="Every password lasts six months. After it expires you have two weeks to change it; after that the ICT officer resets it.">?</span></p>{% endif %}
-          <div class="account-form">
-            <div class="account-field"><label>Current password</label><input id="current-pin" type="password" autocomplete="current-password" placeholder="Current portal password"></div>
-            <div class="account-field"><label>New password</label><input id="new-pin" type="password" autocomplete="new-password" minlength="8" placeholder="8+ characters with Aa, 1 and symbol"></div>
-            <button class="account-button" type="button" id="change-pin-btn">Update password</button>
-          </div>
+          <section class="panel">
+            <div class="panel-head"><h2>Password</h2><span>Lasts six months</span></div>
+            <div class="panel-body">
+              <table class="kv kv-form"><tbody>
+                {% if password %}
+                <tr><th>Set on</th><td>{{ password.changed_on|date:"d M Y" }}</td></tr>
+                <tr><th>Valid until</th><td>{{ password.expires_on|date:"d M Y" }}</td></tr>
+                {% endif %}
+                <tr><th><label for="current-pin">Current password</label></th><td><input id="current-pin" type="password" autocomplete="current-password" placeholder="Current portal password"></td></tr>
+                <tr><th><label for="new-pin">New password</label></th><td><input id="new-pin" type="password" autocomplete="new-password" minlength="8" placeholder="8+ characters with Aa, 1 and symbol"></td></tr>
+              </tbody></table>
+              <div class="btn-row"><button class="btn" type="button" id="change-pin-btn">Update password</button></div>
+            </div>
+          </section>
         </div>
       </section>
     </main>
@@ -1430,27 +1565,26 @@
     // One payment, one invoice number, every instalment of it. Asking again
     // returns the same number with any newly-raised instalments added, so a
     // student never ends up with two references for the same bill.
-    const message = button.parentElement.querySelector('.invoice-msg');
+    const message = button.closest('.panel')?.querySelector('.invoice-msg');
+    const say = (kind, html) => { if (message) { message.className = `invoice-msg ${kind}`; message.innerHTML = html; } };
     button.disabled = true;
-    if (message) message.textContent = 'Generating…';
+    say('busy', '<i class="bi bi-hourglass-split"></i> <span>Generating…</span>');
     try {
       const created = await api('POST', '/my-fees/invoice/', { group });
       const list = Array.isArray(created) ? created : [created];
-      if (message) {
-        message.innerHTML = list.map(i =>
-          `<strong>${escapeText(i.reference)}</strong> — ${i.invoice_group || 'Student fees'}, `
-          + `${money(i.total)} across ${i.installment_count} instalment(s)`
-          + (i.expires_on ? `, valid until ${i.expires_on}` : '')
-          + (i.bank_account_number ? `, into ${i.bank_name} ${i.bank_account_number}` : '')
-          + ` · <a href="/invoice/${escapeText(i.reference)}/" target="_blank" rel="noopener">view</a>`
-          + ` · <a href="/invoice/${escapeText(i.reference)}/?download=1" target="_blank" rel="noopener">download</a>`
-        ).join('<br>');
-      }
+      say('ok', '<i class="bi bi-check-circle-fill"></i><span>' + list.map(i =>
+          `Invoice <strong>${escapeText(i.reference)}</strong> is ready — ${escapeText(i.invoice_group || 'Student fees')}, `
+          + `${money(i.total)} over ${i.installment_count} instalment(s)`
+          + (i.expires_on ? `, valid until ${escapeText(i.expires_on)}` : '')
+          + (i.bank_account_number ? `. Pay into ${escapeText(i.bank_name)} ${escapeText(i.bank_account_number)}` : '')
+          + `. <a href="/invoice/${escapeText(i.reference)}/" target="_blank" rel="noopener">View</a>`
+          + ` · <a href="/invoice/${escapeText(i.reference)}/?download=1" target="_blank" rel="noopener">Download</a>`
+        ).join('<br>') + '</span>');
       toast('Invoice ' + list[0].reference + ' ready');
       // Reload so My Invoices and the totals show it without a second click.
       setTimeout(() => { window.location.hash = 'invoice-list'; window.location.reload(); }, 1500);
     } catch (error) {
-      if (message) message.textContent = error?.detail || 'Could not generate an invoice.';
+      say('err', '<i class="bi bi-exclamation-circle-fill"></i><span>' + escapeText(error?.detail || 'Could not generate an invoice.') + '</span>');
       toast(error?.detail || 'Could not generate an invoice');
       button.disabled = false;
     }
@@ -1843,13 +1977,13 @@
     if (!body) return;
     try {
       const rows = await api('GET', '/my-documents/');
-      body.innerHTML = rows.length ? rows.map(doc => `<tr>
-          <td><a href="${doc.download_url}" target="_blank" rel="noopener">${escapeText(doc.display_name)}</a></td>
-          <td>${DOCUMENT_KINDS[doc.kind] || doc.kind}</td>
-          <td>${(doc.uploaded_at || '').slice(0, 10)}</td>
-          <td>${doc.is_verified ? 'Checked by the college' : 'Waiting to be checked'}</td>
-        </tr>`).join('')
-        : '<tr><td colspan="4" style="color:var(--muted);">Nothing uploaded yet.</td></tr>';
+      body.innerHTML = rows.length ? rows.map((doc, n) => `<p class="kv-head">${n + 1} · ${escapeText(DOCUMENT_KINDS[doc.kind] || doc.kind)}</p>
+        <table class="kv"><tbody>
+          <tr><th>Document</th><td><a href="${doc.download_url}" target="_blank" rel="noopener">${escapeText(doc.display_name)}</a></td></tr>
+          <tr><th>Uploaded</th><td>${escapeText((doc.uploaded_at || '').slice(0, 10))}</td></tr>
+          <tr><th>Checked</th><td>${doc.is_verified ? '<span class="status pass">Checked by the college</span>' : '<span class="status pending">Waiting to be checked</span>'}</td></tr>
+        </tbody></table>`).join('')
+        : '<p>Nothing uploaded yet.</p>';
     } catch (error) { /* the rest of the page still works */ }
   }
 
@@ -1884,14 +2018,18 @@
     if (!body) return;
     try {
       const data = await api('GET', '/my-health/');
+      const record = (r, status) => `<table class="kv"><tbody>
+          <tr><th>Condition</th><td>${escapeText(r.condition)}</td></tr>
+          <tr><th>Hospital / facility</th><td>${escapeText(r.facility || '—')}</td></tr>
+          <tr><th>Dated</th><td>${escapeText(r.issued_on || '—')}</td></tr>
+          <tr><th>Status</th><td>${status}</td></tr>
+        </tbody></table>`;
       const rows = [
-        ...data.reports.map(r => `<tr><td>${escapeText(r.condition)}</td><td>${escapeText(r.facility)}</td><td>${escapeText(r.issued_on)}</td>
-          <td>${r.status === 'waiting' ? '<span class="status pending">With the records office</span>'
-               : `<span class="status fail">Not accepted</span><div style="font-size:.74rem;color:var(--muted);margin-top:3px;">${escapeText(r.decision_note)}</div>`}</td></tr>`),
-        ...data.records.map(r => `<tr><td>${escapeText(r.condition)}</td><td>${escapeText(r.facility || '—')}</td><td>${escapeText(r.issued_on || '—')}</td>
-          <td>${r.is_current ? '<span class="status pass">On file</span>' : '<span class="status">No longer applies</span>'}</td></tr>`),
+        ...data.reports.map(r => record(r, r.status === 'waiting' ? '<span class="status pending">With the records office</span>'
+               : `<span class="status fail">Not accepted</span> <span class="meta">${escapeText(r.decision_note)}</span>`)),
+        ...data.records.map(r => record(r, r.is_current ? '<span class="status pass">On file</span>' : '<span class="status">No longer applies</span>')),
       ];
-      body.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="4" style="color:var(--muted);">Nothing recorded.</td></tr>';
+      body.innerHTML = rows.length ? rows.map((html, n) => `<p class="kv-head">Record ${n + 1}</p>${html}`).join('') : '<p>Nothing recorded.</p>';
     } catch (error) { /* the portal works without it */ }
   }
 

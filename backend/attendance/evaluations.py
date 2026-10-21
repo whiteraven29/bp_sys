@@ -93,11 +93,27 @@ def pending_mandatory_forms(profile, today=None):
     # means bad data cannot lock the portal behind one either.
     pending = [form for form in open_forms(today, class_level=level_of(profile),
                                            kind=Form.EVALUATION)
-               if form.is_mandatory and form.id not in answered]
+               if form.is_mandatory and form.id not in answered and studied_for(form, profile)]
     # Form's own ordering is newest-first, which would ask for the most recent
     # census before one that has been waiting a fortnight. Oldest first.
     pending.sort(key=lambda form: (form.created_at, form.id))
     return pending
+
+
+def studied_for(form, profile):
+    """Whether this student sat the teaching a compulsory evaluation is about
+    (said 21 October 2026: a newcomer was stopped at sign-in by last
+    semester's evaluation). A form for a year asks those who studied that
+    year; a form with no year asks those who studied before this semester.
+    Newcomers have nothing to evaluate yet and are not stopped."""
+    from .models import Semester, Student
+    studied = Student.objects.filter(profile=profile)
+    if form.academic_year_id:
+        return studied.filter(module__semester__academic_year_id=form.academic_year_id).exists()
+    active = Semester.objects.filter(is_active=True).first()
+    if active is not None:
+        studied = studied.exclude(module__semester=active)
+    return studied.exists()
 
 
 def waiting_request_ids(profile):

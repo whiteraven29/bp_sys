@@ -47,6 +47,16 @@ class FormTestBase(TestCase):
         self.portal = Client()
         self.portal.post('/login/', {'identifier': 'BPH/2026/001', 'secret': 'Portal#2026'})
 
+    def studied_before(self, profile, level):
+        """A semester behind them: a compulsory evaluation is about teaching
+        they sat (said 21 October 2026); a newcomer is not asked."""
+        old_year, _ = AcademicYear.objects.get_or_create(name='2025/2026')
+        old_sem, _ = Semester.objects.get_or_create(academic_year=old_year, number=2)
+        module = Module.objects.create(name='Before', code=f'OLD{profile.id:03d}', teacher='T',
+                                       class_level=level, semester=old_sem)
+        Student.objects.create(nactvet_reg_no=profile.nactvet_reg_no, name=profile.name, module=module,
+                               profile=profile)
+
     def _form(self, **kw):
         defaults = {'title': 'Course Evaluation', 'slug': 'course-eval', 'is_active': True}
         defaults.update(kw)
@@ -895,6 +905,22 @@ class CompulsoryFormTests(FormTestBase):
     self-selecting few".
     """
 
+    def setUp(self):
+        super().setUp()
+        self.studied_before(self.asha, self.level)
+
+    def test_a_newcomer_is_not_stopped(self):
+        """Said 21 October 2026: results were not out, the evaluation stayed
+        compulsory, and new students — who sat nothing yet — were stopped by it."""
+        self._required_form()
+        newcomer = Student.objects.create(nactvet_reg_no='BPH/2026/099', name='New Comer', module=self.module)
+        newcomer.set_portal_pin('Portal#2026', require_change=False)
+        newcomer.save()
+        portal = Client()
+        portal.post('/login/', {'identifier': 'BPH/2026/099', 'secret': 'Portal#2026'})
+        self.assertTemplateNotUsed(portal.get('/student-dashboard/'), 'student_required_form.html')
+        self.assertTemplateUsed(self._dashboard(), 'student_required_form.html')        # Asha studied before
+
     def _required_form(self, **kw):
         form = self._form(slug='census', title='Course Evaluation', is_mandatory=True, **kw)
         question = self._question(required=True, text='Rate the tutor')
@@ -1025,6 +1051,8 @@ class LevelTargetedFormsTests(FormTestBase):
         enrollment.save()
         from . import finance
         self.neema_profile = finance.profile_for_student(enrollment)
+        self.studied_before(self.asha, self.level)
+        self.studied_before(self.neema_profile, self.level6)
         self.neema = Client()
         self.neema.post('/login/', {'identifier': 'BPH/2026/006', 'secret': 'Portal#2026'})
 
@@ -1142,8 +1170,8 @@ class LevelTargetedFormsTests(FormTestBase):
         """Asha was a level 4 last year and is a level 5 now. The level 5 form
         is the one she is asked for, and last year's is not."""
         level5 = ClassLevel.objects.create(name='NTA Level 5', order=5)
-        last_year = AcademicYear.objects.create(name='2025/2026', is_active=False)
-        old_sem = Semester.objects.create(academic_year=last_year, number=1)
+        last_year, _ = AcademicYear.objects.get_or_create(name='2025/2026')
+        old_sem, _ = Semester.objects.get_or_create(academic_year=last_year, number=1)
         self.enrollment.module = Module.objects.create(
             name='Anatomy', code='ANA101', teacher='T',
             class_level=self.level, semester=old_sem)

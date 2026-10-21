@@ -85,7 +85,8 @@ class OneMenuItemOneViewTests(TestCase):
         self.assertEqual(self.html.count('id="students-nav-group"'), 1)
         group = self.html.split('id="students-nav-group"')[1].split('</div>\n    </div>')[0]
         self.assertEqual(re.findall(r'>([^<>]+)</button>', group),
-                         ['Find a student', 'Enrollments', 'College ID import', 'NHIF sheets', 'Health records'])
+                         ['Find a student', 'Semester pass', 'Class lists', 'Items check', 'Did not report',
+                          'Enrollments', 'College ID import', 'NHIF sheets', 'Health records'])
         self.assertNotIn('data-page="health"', self.html)        # not a menu item of its own
         self.assertNotIn('Upload / Register', self.html)
         self.assertNotIn('Bulk Upload via Excel', self.html)
@@ -99,6 +100,13 @@ class OneMenuItemOneViewTests(TestCase):
             self.assertIn('data-res-view=', tag, card)
             self.assertNotIn('display:none', tag, card)          # the switcher decides, not a fixed style
         self.assertIn('body.is-admin .admin-only.card:not(.sec-off)', self.html)
+
+    def test_admissions_keeps_the_applications_and_students_the_lists(self):
+        """Said 21 October 2026: the Admissions menu had too many items."""
+        group = self.html.split('id="admissions-nav-group"')[1].split('</div>\n    </div>')[0]
+        self.assertEqual(re.findall(r'>([^<>]+)</button>', group),
+                         ['My desk', 'New application', 'VETA applications', 'Pending', 'Applications',
+                          'Expected back', 'Settings'])
 
     def test_final_eligibility_is_its_own_view(self):
         page = self.html.split('id="page-eligibility"')[1].split('<div class="page" id=')[0]

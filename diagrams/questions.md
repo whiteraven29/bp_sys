@@ -898,3 +898,26 @@ stops forgery) only when paid up to the semester's first instalment, else no pas
 year's parts stay dated instalments on one invoice; money paid beyond the bill is credit for next
 year's bill, same bank account. Charges during the year: supp/special exams, repeat modules, a hostel
 place taken later, the TPH book if missing (uniform, coat, insurance stay *Has it* options).
+
+### Q65. How long is a pass valid, and how is it checked? ✅
+
+**Answer (21 October 2026):** by what the student paid of their own schedule — the day before the
+next window they have not paid; a year from the day they paid the whole year in one payment; an
+override's date when one let them through. An ID-card-sized pass with a stamp box; checked by its
+code alone, no link printed. First passwords are the last name in capitals (changed at first
+sign-in); compulsory evaluations are asked only of students who studied the period. The accountant
+sees overpayments beyond an invoice's full fee; the admission office records an item brought after
+admission. Admissions menu keeps applications; student lists and the pass move to Students.
+
+### Q66. Next-of-kin relationships ✅
+
+**Answer (21 October 2026):** mother or father, sister or brother, and husband (with wife) — not
+parent, sibling or spouse. Records already taken keep their value until records corrects it; the
+desks list them.
+
+### Q67. Who approves a fee waiver? ✅
+
+**Answer (21 October 2026):** DPFPA, for a shortfall waived on tuition or direct costs; the student
+waits at the finance desk until it is decided. Other waivers are as before. DPFPA's finance and
+inventory menus are separate. A module's tutor is chosen from the department's tutors; the staff
+assignment stays for emergencies.

@@ -47,7 +47,7 @@ def complete_record(profile):
         profile.save(update_fields=['fee_payer'])
     if not profile.next_of_kin.exists():
         NextOfKin.objects.create(profile=profile, position=1, name='Mzazi', phone='0713000000',
-                                 relationship=NextOfKin.PARENT)
+                                 relationship=NextOfKin.MOTHER)
     return profile
 
 
@@ -94,8 +94,8 @@ class AdmissionBase(TestCase):
         return complete_record(admissions.capture_student(
             nactvet_reg_no=reg_no, name=name, phone='0712000111', gender='F',
             date_of_birth=date(2006, 4, 12), actor=self.officer, form_four_index=next_index(),
-            next_of_kin=[{'name': 'Mama Mtui', 'phone': '0713000222', 'relationship': 'parent'},
-                         {'name': 'Baba Mtui', 'phone': '0714000333', 'relationship': 'parent'}],
+            next_of_kin=[{'name': 'Mama Mtui', 'phone': '0713000222', 'relationship': 'mother'},
+                         {'name': 'Baba Mtui', 'phone': '0714000333', 'relationship': 'mother'}],
         ))
 
 
@@ -508,8 +508,8 @@ class AdmissionApiTests(AdmissionBase):
         response = self.records.post(f'/api/applications/{application_id}/details/', {
             'name': 'Rehema Mtui', 'phone': '0712000111', 'gender': 'F',
             'date_of_birth': '2006-04-12', 'form_four_index': next_index(),
-            'next_of_kin': [{'name': 'Mama Mtui', 'phone': '0713000222', 'relationship': 'parent'},
-                            {'name': 'Baba Mtui', 'phone': '0714000333', 'relationship': 'parent'}],
+            'next_of_kin': [{'name': 'Mama Mtui', 'phone': '0713000222', 'relationship': 'mother'},
+                            {'name': 'Baba Mtui', 'phone': '0714000333', 'relationship': 'mother'}],
             'fee_payer': 'family',
         }, format='json')
         self.assertEqual(response.status_code, 200, response.data)
@@ -925,15 +925,19 @@ class PortalPinTests(AdmissionBase):
         client = APIClient(); client.force_authenticate(ict)
         return client
 
-    def test_admission_hands_over_no_password(self):
-        # Only the ICT officer (or the Principal) sets or sees a password (said
-        # 8 October 2026): admitting a student issues none.
-        profile, application = self.admit()
-
+    def test_admission_sets_the_last_name_as_the_first_password(self):
+        # Said 21 October 2026: no issuing step — the first password is the
+        # last name in capitals, and it must be changed at the first sign-in.
+        profile, application = self.admit()                    # Rehema Mtui
         self.assertIsNone(application.portal_pin)
-        self.assertFalse(Student.objects.get(profile=profile).portal_pin_hash)
+        enrollment = Student.objects.get(profile=profile)
+        self.assertTrue(enrollment.check_portal_pin('MTUI'))
+        self.assertTrue(enrollment.must_change_portal_password)
         from . import passwords
-        self.assertIn(profile, list(passwords.students_without_password()))
+        self.assertNotIn(profile, list(passwords.students_without_password()))
+        signed_in = self.client.post('/login/', {'identifier': profile.nactvet_reg_no, 'secret': 'MTUI'})
+        self.assertEqual(signed_in.status_code, 302)
+        self.assertIn('student_id', self.client.session)
 
     def test_the_admission_desk_is_shown_no_password(self):
         profile = self.applicant('NACTVET/PENDING/301')
@@ -950,22 +954,18 @@ class PortalPinTests(AdmissionBase):
         self.assertEqual(admitted.status_code, 200, admitted.data)
         self.assertFalse(admitted.data.get('portal_pin'))
 
-    def test_the_ict_desk_issues_each_new_student_their_own_password(self):
+    def test_nobody_newly_admitted_waits_at_the_ict_desk(self):
         first, _ = self.admit('NACTVET/PENDING/310')
         second, _ = self.admit('NACTVET/PENDING/311')
         desk = self.ict_desk()
-        self.assertEqual(desk.get('/api/student-passwords/issue/').data['count'], 2)
-
-        issued = desk.post('/api/student-passwords/issue/', {}, format='json').data['issued']
-
-        by_reg = {row['reg_no']: row['password'] for row in issued}
-        self.assertEqual(len(set(by_reg.values())), 2, 'never one password for the class')
-        response = self.client.post('/login/', {'identifier': first.nactvet_reg_no,
-                                                'secret': by_reg[first.nactvet_reg_no]})
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('student_id', self.client.session)
-        self.assertTrue(Student.objects.get(profile=second).must_change_portal_password)
         self.assertEqual(desk.get('/api/student-passwords/issue/').data['count'], 0)
+        # A lost one is still replaced at the desk, with a password of its own.
+        from . import passwords
+        ict = User.objects.get(username='ict4')
+        pin = passwords.reset_student_password(second, actor=ict)
+        self.assertNotEqual(pin, 'MTUI')
+        self.assertTrue(Student.objects.get(profile=second).check_portal_pin(pin))
+        self.assertTrue(Student.objects.get(profile=first).check_portal_pin('MTUI'))
 
     def test_a_returning_student_keeps_the_password_they_know(self):
         profile, _ = self.admit()
@@ -1106,8 +1106,8 @@ class OfficeBoundaryTests(OfficeClients):
             'fee_payer': 'family',
             'phone': '0715000100', 'gender': 'M', 'date_of_birth': '2005-11-02',
             'form_four_index': 's0101 0777 2024',
-            'next_of_kin': [{'name': 'Mama Laizer', 'phone': '0715000101', 'relationship': 'parent'},
-                            {'name': 'Kaka Laizer', 'phone': '0715000102', 'relationship': 'sibling'}],
+            'next_of_kin': [{'name': 'Mama Laizer', 'phone': '0715000101', 'relationship': 'mother'},
+                            {'name': 'Kaka Laizer', 'phone': '0715000102', 'relationship': 'sister'}],
         }, format='json')
         cleared = self.records.post(f'/api/applications/{application_id}/complete/', {}, format='json')
         seen_by_finance = self.accounts.get(f'/api/applications/{application_id}/')
@@ -1136,8 +1136,8 @@ class OfficeBoundaryTests(OfficeClients):
         admissions.record_details(application.profile, fee_payer='family', phone='0715000100', gender='M',
                                   date_of_birth=date(2005, 11, 2), actor=self.officer,
                                   form_four_index=next_index(),
-                                  next_of_kin=[{'name': 'A', 'phone': '1', 'relationship': 'parent'},
-                                               {'name': 'B', 'phone': '2', 'relationship': 'parent'}])
+                                  next_of_kin=[{'name': 'A', 'phone': '1', 'relationship': 'mother'},
+                                               {'name': 'B', 'phone': '2', 'relationship': 'mother'}])
         admissions.complete_step(application, actor=self.officer)       # intake
         admissions.complete_step(application, actor=self.officer)       # records → finance
 
@@ -1375,8 +1375,8 @@ class OfficeVisibilityTests(OfficeClients):
         self.at_finance = Application.objects.get(pk=self.open_first_year())
         admissions.record_details(self.at_finance.profile, fee_payer='family', phone='0715000100', gender='F',
             date_of_birth=date(2006, 1, 5), actor=self.officer, form_four_index=next_index(),
-            next_of_kin=[{'name': 'A', 'phone': '1', 'relationship': 'parent'},
-                         {'name': 'B', 'phone': '2', 'relationship': 'parent'}])
+            next_of_kin=[{'name': 'A', 'phone': '1', 'relationship': 'mother'},
+                         {'name': 'B', 'phone': '2', 'relationship': 'mother'}])
         self.at_finance.profile.name = 'Finance Waiting'
         self.at_finance.profile.save(update_fields=['name'])
         admissions.complete_step(self.at_finance, actor=self.officer)       # → information

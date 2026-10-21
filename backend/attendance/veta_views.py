@@ -336,8 +336,13 @@ def course_application_action(request, pk, action=None):
             # form's details (said 19 October 2026).
             _record_details_from(request, app.profile)
         elif action == 'item':
-            # The admission desk checks the VETA items before admitting.
-            if not (app.state == CourseApplication.ADMISSION and can_work_desk(user, app.state)):
+            # The admission desk checks the VETA items before admitting; after
+            # admission it records one brought late (said 21 October 2026).
+            brought_later = (app.state == CourseApplication.ADMITTED
+                             and can_work_desk(user, CourseApplication.ADMISSION))
+            if brought_later and str(request.data.get('status') or '') != 'has_it':
+                return _bad('After admission an item can only be recorded as brought (Has it).')
+            if not brought_later and not (app.state == CourseApplication.ADMISSION and can_work_desk(user, app.state)):
                 raise PermissionDenied('Items are checked at the admission desk.')
             requirement = AdmissionRequirement.objects.filter(
                 id=pk_or_none(request.data.get('requirement_id'))).first()

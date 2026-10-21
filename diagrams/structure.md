@@ -195,7 +195,14 @@ sign in.
                          bill is credit on it (finance.on_account)
   StudentProfile.portal_pin_hash   VETA students' password, and every admitted
                          PST student's too (signs in before modules exist)
-  semester_pass.py       the semester pass: status, check code, verify
+  NextOfKin.relationship mother | father | guardian | husband | wife | sister |
+                         brother | relative | other  (parent / spouse / sibling:
+                         old records only, to be corrected)
+  WaiverRequest          a shortfall waiver on tuition / direct costs: amount,
+                         reason, pending | approved | refused — DPFPA decides
+  StudentPass            a pass issued: random code, valid_until, basis,
+                         source (office / portal), issued_by
+  semester_pass.py       the pass: coverage (windows paid), status, issue, verify by code
   Application.kind_label  "First year" | "Second year (new) — joins at NTA
                          Level 5" | "Continuing student" | "Readmission"
   Semester.provisional_cutoff   the exam officer's date for late results

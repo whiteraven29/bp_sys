@@ -705,8 +705,8 @@ class StudentInvoiceMessageTests(TestCase):
 
     def test_the_dashboard_hides_the_button_until_there_is_something_to_pay(self):
         body = self.portal.get('/student-dashboard/').content.decode()
-        self.assertIn('have not been set up yet', body)
-        self.assertNotIn('Generate invoices for everything outstanding', body)
+        self.assertIn('are not set up yet', body)
+        self.assertNotIn('Generate invoices</button>', body)
 
         charge_type = ChargeType.objects.create(name='Tuition Fee', family=ChargeType.FEE)
         structure = FeeStructure.objects.create(
@@ -716,7 +716,7 @@ class StudentInvoiceMessageTests(TestCase):
         finance.generate_charges(self.asha, self.year)
 
         body = self.portal.get('/student-dashboard/').content.decode()
-        self.assertIn('Generate invoices for everything outstanding', body)
+        self.assertIn('Generate invoices</button>', body)
 
 
 class InvoiceSplittingTests(TestCase):

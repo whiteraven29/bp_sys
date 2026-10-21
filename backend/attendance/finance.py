@@ -18,6 +18,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.conf import settings
 from django.db import transaction
 from django.db.models import DecimalField, Q, Sum, Value
+from django.utils import timezone
 from django.db.models.functions import Coalesce
 
 from .models import (
@@ -824,6 +825,78 @@ def waive_charge(charge, amount, reason, *, actor=None):
     return charge
 
 
+# ── shortfall waivers: DPFPA approves (said 21 October 2026) ─────────────────
+
+class WaiverError(ValueError):
+    pass
+
+
+def waiver_needs_approval(charge):
+    """Tuition and direct costs: a shortfall waived on them waits for DPFPA."""
+    return charge.charge_type.family in (ChargeType.FEE, ChargeType.DIRECT_COST)
+
+
+def pending_waivers(profile):
+    from .models import WaiverRequest
+    return WaiverRequest.objects.filter(profile=profile, status=WaiverRequest.PENDING)
+
+
+@transaction.atomic
+def request_waiver(charge, amount, reason, *, actor=None):
+    """The accountant asks DPFPA to waive this much on a tuition or direct-cost
+    charge. Nothing changes on the bill until DPFPA approves."""
+    from . import notifications
+    from .models import Notification, WaiverRequest
+    amount = money(amount)
+    reason = (reason or '').strip()
+    if not reason:
+        raise WaiverError('Say why it is waived.')
+    if amount <= charge.waived_amount or amount > charge.amount:
+        raise WaiverError(f'Ask for more than is waived now ({money(charge.waived_amount):,.2f}) '
+                          f'and no more than the charge ({money(charge.amount):,.2f}).')
+    if WaiverRequest.objects.filter(charge=charge, status=WaiverRequest.PENDING).exists():
+        raise WaiverError('A waiver on this charge is already waiting for DPFPA.')
+    made = WaiverRequest.objects.create(charge=charge, profile=charge.profile, amount=amount,
+                                        reason=reason[:300], requested_by=actor)
+    extra = amount - charge.waived_amount
+    audit('waiver.request', 'StudentCharge', actor=actor, entity_id=charge.id, profile=charge.profile,
+          summary=f'Asked DPFPA to waive {extra:,.2f} on {charge.charge_type}: {reason}')
+    notifications.notify(notifications.dpfpa(), kind=Notification.WAIVER_REQUESTED,
+                         title=f'Waiver to approve: {charge.profile.name}',
+                         body=f'{extra:,.2f} on {charge.charge_type} (instalment {charge.installment_number}). {reason}',
+                         link='executive:waivers')
+    return made
+
+
+@transaction.atomic
+def decide_waiver(waiver, *, approve, actor=None, note=''):
+    """DPFPA's yes applies the waiver; a no leaves the bill as it was."""
+    from . import notifications
+    from .models import Notification, WaiverRequest
+    waiver = WaiverRequest.objects.select_for_update().select_related('charge__charge_type', 'profile').get(pk=waiver.pk)
+    if waiver.status != WaiverRequest.PENDING:
+        raise WaiverError('This waiver has already been decided.')
+    if not approve and not (note or '').strip():
+        raise WaiverError('Say why it is refused.')
+    by = (actor.get_full_name() or actor.username) if actor is not None else 'DPFPA'
+    if approve:
+        waive_charge(waiver.charge, waiver.amount, f'{waiver.reason} — approved by {by}'[:300], actor=actor)
+    waiver.status = WaiverRequest.APPROVED if approve else WaiverRequest.REFUSED
+    waiver.decided_by = actor
+    waiver.decided_at = timezone.now()
+    waiver.decision_note = (note or '').strip()[:300]
+    waiver.save(update_fields=['status', 'decided_by', 'decided_at', 'decision_note'])
+    audit('waiver.decide', 'StudentCharge', actor=actor, entity_id=waiver.charge_id, profile=waiver.profile,
+          summary=f"{'Approved' if approve else 'Refused'} the waiver on {waiver.charge.charge_type}"
+                  + (f': {note}' if note else ''))
+    notifications.notify([u for u in [waiver.requested_by] if u is not None] or notifications.accountants(),
+                         kind=Notification.WAIVER_DECIDED,
+                         title=f"Waiver {'approved' if approve else 'refused'}: {waiver.profile.name}",
+                         body=f'{waiver.charge.charge_type}: {waiver.reason}' + (f' — {note}' if note else ''),
+                         link='finance:overrides')
+    return waiver
+
+
 # ── balances ──────────────────────────────────────────────────────────────────
 
 ALLOCATED = Coalesce(
@@ -922,6 +995,40 @@ def apply_on_account(profile, *, actor=None):
         audit('credit.on_account', 'StudentProfile', actor=actor, profile=profile,
               summary=f'{money(used)} of money on account settled {len(plan)} charge(s)')
     return money(used)
+
+
+def overpayments():
+    """Who paid more than the full fee on what they paid for (said 21 October
+    2026: the accountant's list) — one row per invoice a payment was recorded
+    with (tuition, direct costs…), or per bank account for a slip with no
+    invoice. The excess is money beyond the whole invoice, not beyond an
+    instalment: what no charge has taken."""
+    payments = list(Payment.objects.filter(amount__gt=ZERO, reverses__isnull=True, reversal__isnull=True)
+                    .select_related('profile', 'invoice__bank_account', 'bank_account'))
+    assigned = dict(PaymentAllocation.objects.filter(payment__in=payments).order_by()
+                    .values('payment').annotate(total=Sum('amount')).values_list('payment', 'total'))
+    rows = {}
+    for payment in payments:
+        left = money(payment.amount - (assigned.get(payment.id) or ZERO))
+        if left <= ZERO:
+            continue
+        invoice = payment.invoice
+        account = (invoice.bank_account if invoice is not None and invoice.bank_account_id
+                   else payment.bank_account)
+        key = (payment.profile_id, invoice.id if invoice is not None else None, account.id if account else None)
+        row = rows.setdefault(key, {
+            'profile_id': payment.profile_id, 'name': payment.profile.name,
+            'reg_no': payment.profile.nactvet_reg_no, 'college_id': payment.profile.college_id or '',
+            'invoice': invoice.reference if invoice is not None else '',
+            'group': (invoice.invoice_group if invoice is not None else '') or (account.purpose if account else ''),
+            'invoice_total': money(invoice.total) if invoice is not None else None,
+            'account': f'{account.bank_name} · {account.account_number}' if account else '',
+            'paid': ZERO, 'excess': ZERO, 'last_paid_on': payment.payment_date,
+        })
+        row['paid'] += money(payment.amount)
+        row['excess'] += left
+        row['last_paid_on'] = max(row['last_paid_on'], payment.payment_date)
+    return sorted(rows.values(), key=lambda r: (-r['excess'], r['name']))
 
 
 def balance_for(profile, academic_year=None):

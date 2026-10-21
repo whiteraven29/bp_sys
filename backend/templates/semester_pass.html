@@ -3,96 +3,124 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% if mode == 'check' %}Check a semester pass{% else %}Semester pass — {{ profile.name }}{% endif %}</title>
+<title>{% if mode == 'check' %}Check a pass{% else %}Student pass — {{ profile.name }}{% endif %}</title>
 <style>
-  :root { --ink:#13233a; --muted:#5b6b80; --line:#c9d3df; --ok:#137a3f; --bad:#b42318; --paper:#fff; }
+  :root { --ink:#1E293B; --muted:#64748B; --line:#E2E8F0; --ok:#15803D; --bad:#B42318; --band:#123F80; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #eef2f6; color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .sheet { max-width: 640px; margin: 24px auto; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
-  .head { display: flex; gap: 14px; align-items: center; border-bottom: 2px solid var(--ink); padding-bottom: 12px; }
-  .head img { width: 64px; height: 64px; object-fit: contain; }
-  .head h1 { font-size: 1.05rem; margin: 0; letter-spacing: .02em; text-transform: uppercase; }
-  .head p { margin: 2px 0 0; color: var(--muted); font-size: .85rem; }
-  h2 { font-size: 1.3rem; margin: 18px 0 4px; }
-  .who { display: flex; gap: 18px; margin-top: 14px; }
-  .photo { width: 120px; height: 150px; border: 1px solid var(--line); border-radius: 6px; object-fit: cover; background: #f4f6f9; flex: none; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: .75rem; text-align: center; }
-  .facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; align-content: start; }
-  .facts span { color: var(--muted); }
-  .code { margin-top: 18px; padding: 12px; border: 1px dashed var(--ink); border-radius: 8px; text-align: center; }
-  .code b { font: 700 1.6rem/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .12em; }
-  .code small { display: block; color: var(--muted); margin-top: 4px; word-break: break-all; }
-  .verdict { margin-top: 16px; padding: 12px 14px; border-radius: 8px; font-weight: 600; }
+  body { margin: 0; background: #F1F5F9; color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .sheet { max-width: 560px; margin: 24px auto; background: #fff; border: 0; border-radius: 16px; padding: 24px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 12px 32px rgba(15,23,42,.10); }
+  .sheet h2 { font-size: 1.2rem; margin: 0 0 8px; }
+  .verdict { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-weight: 600; }
   .verdict.ok { background: #e7f6ec; color: var(--ok); }
   .verdict.bad { background: #fdecea; color: var(--bad); }
-  form { display: grid; gap: 10px; margin-top: 14px; }
-  input { font: inherit; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; width: 100%; }
-  button, .btn { font: inherit; padding: 9px 14px; border: 0; border-radius: 6px; background: var(--ink); color: #fff; cursor: pointer; text-decoration: none; display: inline-block; }
-  .actions { margin-top: 16px; display: flex; gap: 10px; }
-  @media (max-width: 520px) { .who { flex-direction: column; } .sheet { margin: 0; border-radius: 0; } }
-  @media print { body { background: #fff; } .sheet { border: 0; margin: 0; } .actions { display: none; } }
+  form { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  input { font: 600 1.1rem ui-monospace, Menlo, Consolas, monospace; letter-spacing: .12em; text-transform: uppercase;
+          padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; flex: 1; min-width: 180px; }
+  button { font: inherit; font-weight: 600; padding: 9px 16px; border: 0; border-radius: 8px; background: #123F80; color: #fff; cursor: pointer; }
+  .who { display: flex; gap: 14px; margin-top: 14px; }
+  .who img, .who .nophoto { width: 90px; height: 112px; border: 1px solid var(--line); border-radius: 6px; object-fit: cover; flex: none;
+          background: #f4f6f9; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: .72rem; text-align: center; }
+  .facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; align-content: start; font-size: .92rem; }
+  .facts span { color: var(--muted); }
+
+  /* The pass itself: an ID card, 85.6 × 54 mm (said 21 October 2026). */
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 28px 12px; }
+  .card { width: 85.6mm; height: 54mm; background: #fff; border-radius: 3mm; overflow: hidden; position: relative;
+          box-shadow: 0 6px 24px rgba(19,35,58,.18); zoom: 1.7; font-size: 6.6pt; line-height: 1.25; color: var(--ink); }
+  .card .band { background: var(--band); color: #fff; display: flex; align-items: center; gap: 1.6mm; padding: 1.3mm 2.2mm; height: 10mm; }
+  .card .band img { width: 7mm; height: 7mm; background: #fff; border-radius: 50%; padding: .3mm; object-fit: contain; }
+  .card .band b { display: block; font-size: 6.2pt; letter-spacing: .02em; text-transform: uppercase; }
+  .card .band small { display: block; font-size: 5.4pt; opacity: .85; }
+  .card .band .kind { margin-left: auto; font-weight: 800; font-size: 6.4pt; letter-spacing: .08em; text-align: right; }
+  .card .body { display: flex; gap: 2.2mm; padding: 2mm 2.2mm 0; }
+  .card .photo { width: 19mm; height: 24mm; border: .2mm solid var(--line); border-radius: 1mm; object-fit: cover; flex: none;
+          background: #f4f6f9; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 5pt; text-align: center; }
+  .card .name { font-size: 7.6pt; font-weight: 800; margin-bottom: .6mm; }
+  .card .row { display: flex; gap: 1.2mm; }
+  .card .row span { color: var(--muted); min-width: 13mm; }
+  .card .row strong { font-weight: 700; }
+  .card .until { margin-top: .8mm; font-size: 7.2pt; }
+  .card .until strong { color: var(--bad); }
+  .card .foot { position: absolute; left: 2.2mm; right: 2.2mm; bottom: 1.8mm; display: flex; align-items: flex-end; justify-content: space-between; }
+  .card .code { font: 800 8pt ui-monospace, Menlo, Consolas, monospace; letter-spacing: .1em; }
+  .card .code small { display: block; font: 600 4.8pt system-ui, sans-serif; letter-spacing: 0; color: var(--muted); }
+  .card .stamp { width: 21mm; height: 12mm; border: .25mm dashed var(--muted); border-radius: 1mm; color: var(--muted);
+          font-size: 4.6pt; display: flex; align-items: flex-end; justify-content: center; padding-bottom: .6mm; }
+  .note { color: var(--muted); font-size: .85rem; text-align: center; max-width: 420px; }
+  @page { size: 85.6mm 54mm; margin: 0; }
+  @media print {
+    body { background: #fff; }
+    .stage { padding: 0; display: block; }
+    .card { zoom: 1; box-shadow: none; border-radius: 0; }
+    .no-print { display: none !important; }
+  }
 </style>
 </head>
 <body>
-<div class="sheet">
-  <div class="head">
-    {% if logo %}<img src="{{ logo }}" alt="">{% endif %}
-    <div><h1>{{ college }}</h1><p>Admission office</p></div>
-  </div>
-
-  {% if mode == 'pass' %}
-    <h2>Semester pass</h2>
-    <div style="color:var(--muted)">{{ result.semester }} — valid for classes and examinations of this semester</div>
-    <div class="who">
-      {% if photo %}<img class="photo" src="{{ photo }}" alt="Passport photo">{% else %}<div class="photo">No photo on record</div>{% endif %}
-      <div class="facts">
-        <span>Name</span><strong>{{ result.name }}</strong>
-        <span>College ID</span><strong>{{ result.college_id|default:"—" }}</strong>
-        <span>Reg. No.</span><strong>{{ result.reg_no }}</strong>
-        <span>Programme</span><strong>{{ result.programme }}</strong>
-        <span>Level</span><strong>{{ result.class_level }}</strong>
-        <span>Paid up to</span><strong>{{ result.due_by|date:"j M Y" }}</strong>
+{% if mode == 'pass' %}
+  <div class="stage">
+    <div class="card">
+      <div class="band">
+        {% if logo %}<img src="{{ logo }}" alt="">{% endif %}
+        <div><b>{{ college }}</b><small>{{ issued.semester }}</small></div>
+        <div class="kind">STUDENT<br>PASS</div>
+      </div>
+      <div class="body">
+        {% if photo %}<img class="photo" src="{{ photo }}" alt="Photo">{% else %}<div class="photo">No photo<br>on record</div>{% endif %}
+        <div>
+          <div class="name">{{ profile.name }}</div>
+          <div class="row"><span>College ID</span><strong>{{ profile.college_id|default:"—" }}</strong></div>
+          <div class="row"><span>Reg. No.</span><strong>{{ profile.nactvet_reg_no }}</strong></div>
+          <div class="row"><span>Programme</span><strong>{{ result.programme_code }} · {{ result.class_level }}</strong></div>
+          <div class="until">Valid until <strong>{{ issued.valid_until|date:"j M Y" }}</strong></div>
+        </div>
+      </div>
+      <div class="foot">
+        <div class="code"><small>Pass code</small>{{ issued.code }}</div>
+        <div class="stamp">Admission office stamp</div>
       </div>
     </div>
-    <div class="code">
-      Check code <b>{{ result.code }}</b>
-      <small>Staff check this pass at {{ check_url }}</small>
-    </div>
-    <div class="actions"><button onclick="window.print()">Print / save as PDF</button></div>
+    <p class="note no-print">Print on card or paper at actual size (85.6 × 54 mm), then take it to the admission office to be stamped. Valid until {{ issued.valid_until|date:"j M Y" }} — {{ issued.basis }}.</p>
+    <button class="no-print" onclick="window.print()">Print / save as PDF</button>
+  </div>
 
-  {% elif mode == 'refused' %}
-    <h2>No semester pass</h2>
+{% elif mode == 'refused' %}
+  <div class="sheet">
+    <h2>No student pass</h2>
     <div class="verdict bad">{{ result.reason }}</div>
     <p style="color:var(--muted)">Pay at the bank, bring the slip to the Accounts Office, then download the pass again.</p>
+  </div>
 
-  {% else %}
-    <h2>Check a semester pass</h2>
+{% else %}
+  <div class="sheet">
+    <h2>Check a pass</h2>
     <form method="get">
-      <input name="id" value="{{ identifier }}" placeholder="College ID or registration number on the pass" required>
-      <input name="code" value="{{ code }}" placeholder="Check code, e.g. 4F2A1-C9D03" required>
+      <input name="code" value="{{ code }}" placeholder="Pass code, e.g. K7PM-3QXA" required autofocus>
       <button type="submit">Check</button>
     </form>
     {% if checked %}
       {% if checked.genuine %}
-        {% if checked.now.ok %}
-          <div class="verdict ok">Genuine — {{ checked.now.name }} may attend {{ checked.now.semester }}.</div>
+        {% if checked.valid %}
+          <div class="verdict ok">Genuine — valid until {{ checked.pass.valid_until|date:"j M Y" }}.</div>
         {% else %}
-          <div class="verdict bad">Issued by the college, but no longer valid: {{ checked.now.reason }}</div>
+          <div class="verdict bad">Issued by the college, but not valid now: {{ checked.reason }}</div>
         {% endif %}
         <div class="who">
-          {% if photo %}<img class="photo" src="{{ photo }}" alt="Passport photo">{% else %}<div class="photo">No photo on record</div>{% endif %}
+          {% if photo %}<img src="{{ photo }}" alt="Photo">{% else %}<div class="nophoto">No photo on record</div>{% endif %}
           <div class="facts">
             <span>Name</span><strong>{{ profile.name }}</strong>
             <span>College ID</span><strong>{{ profile.college_id|default:"—" }}</strong>
             <span>Reg. No.</span><strong>{{ profile.nactvet_reg_no }}</strong>
-            {% if checked.now.programme %}<span>Programme</span><strong>{{ checked.now.programme }}</strong>
-            <span>Level</span><strong>{{ checked.now.class_level }}</strong>{% endif %}
+            <span>Semester</span><strong>{{ checked.pass.semester }}</strong>
+            <span>Valid until</span><strong>{{ checked.pass.valid_until|date:"j M Y" }}</strong>
+            <span>Issued</span><strong>{{ checked.pass.issued_at|date:"j M Y" }} · {{ checked.pass.get_source_display }}</strong>
           </div>
         </div>
       {% else %}
         <div class="verdict bad">Not genuine. {{ checked.reason }}</div>
       {% endif %}
     {% endif %}
-  {% endif %}
-</div>
+  </div>
+{% endif %}
 </body>
 </html>

@@ -203,9 +203,48 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] Semester pass: admission desk prints, students download; registered, studying, billed, paid
      up to the semester's first instalment; check code catches an edited copy (*Check a pass*)
    - [x] 1138 tests; screens checked in the browser (password with no modules, pass, check, forged code)
-   - [ ] On the server: run `merge_programmes` (release guide B6) after the deploy, before the next application
-   - [ ] On the server (B7): issue passwords; HOD sets PST on Level 4 modules and creates Level 5's;
-     accountant confirms no new charges
+2u. **Student pass, overpayments, first password, menus — 21 Oct (not committed).**
+   - [x] Pass as an ID card (85.6 × 54 mm, prints as one page at that size), stamp box, no link
+   - [x] Valid until follows the student's own paid windows; one full payment → a year; override → its date
+   - [x] Passes kept with random codes (migration 0076); checked by the code alone
+   - [x] Finance ▸ Payments ▸ Overpayments: paid beyond an invoice's full fee
+   - [x] Admission records an item brought after admission (Has it only), PST and VETA
+   - [x] Menus split: Admissions (desk, new, VETA, pending, applications, expected back, settings);
+     Students gains pass, class lists, items check, did not report
+   - [x] First password = last name in capitals at admission, change forced; no ICT issuing step
+   - [x] Compulsory evaluations ask only students who studied the period; newcomers not stopped
+   - [x] 1155 tests; screens checked in the browser
+2v. **Design system — 21 Oct (not committed).** Primary blue #123F80, light blue #EFF6FF, white,
+   cool grey #F1F5F9 on every dashboard and page.
+   - [x] Staff dashboard: white top bar, blue sidebar, rounded cards with soft shadows, tile counters
+     with icons, quiet tables, status pills, help text as callouts; dark mode and phone width kept
+   - [x] Admission desks: rows with initials, kind and desk pills, money; the application window as
+     summary tiles and section panels
+   - [x] Student portal, VETA/no-module portal, sign-in, password, compulsory form, registration,
+     pass pages: the same tokens and shapes
+   - [x] Student portal: Generate Invoice and What I Owe — padded panels, action rows, the invoice
+     result as a coloured message (working / ready / failed), money with thousands separators
+   - [x] My Profile: every option as plain two-column tables (one per next of kin, school, document,
+     health record); the upload, health-report and password forms in the same two columns
+2w. **Next-of-kin relationships — 21 Oct (not committed).** Mother, Father, Guardian, Husband, Wife,
+   Sister, Brother, Other relative, Other (migration 0077). Parent / Sibling / Spouse kept readable on
+   old records, never written anew, listed for records to correct; checked in the browser; 1170 tests
+2x. **DPFPA approves shortfall waivers; menus apart; tutors from a list — 21 Oct (not committed).**
+   - [x] Tuition / direct-cost waiver = a request to DPFPA (migration 0078); applied only when approved;
+     refusal needs a reason; the student waits at finance (PST and VETA); both sides notified
+   - [x] *Waive a shortfall* in the application window at finance; *Shortfall waivers* list for the accountant;
+     *Finance summary ▸ Waiver approvals* for DPFPA
+   - [x] DPFPA menus: Finance summary and Inventory summary apart
+   - [x] Module form: Tutor responsible from the department's tutors (name and responsibility from one
+     choice); the staff assignment kept for emergencies
+   - [x] 1179 tests; the whole flow checked in the browser
+2y. **On the server, after this deploy (12–21 Oct work) — in this order.**
+   - [ ] Migrations to 0078 applied by the deploy (release guide B1–B4); `Ran 1179 tests … OK` on the laptop first
+   - [ ] `merge_programmes` (release guide B6): dry run, read it, then `--apply` — before the next application
+   - [ ] B7: HOD sets programme PST on Level 4's modules and creates Level 5's (links the two students
+     admitted 19–20 Oct, bills nothing); the accountant confirms no new charges on their statements
+   - [ ] Next of kin still "Parent / Sibling / Spouse": list them (release guide command); records corrects
+   - [ ] Retake the desk manual's screenshots in the new look and republish it
 2c. **Security review fixed — 8 Oct (not committed).** `diagrams/security-review.md` (kept out of
    git): student-portal takeover, stored XSS, brute force, HTML receipts, CSRF on the portal,
    module claims, client-address spoofing, medical documents, Excel formulas; the ICT password

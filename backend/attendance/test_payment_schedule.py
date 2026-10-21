@@ -205,8 +205,8 @@ class FinanceDeskResidenceTests(ScheduleBase):
         self.profile = admissions.capture_student(
             nactvet_reg_no='NIT/PST/2026/0100', name='Asha Hostel', phone='07', gender='F',
             date_of_birth=date(2006, 1, 1), actor=self.officer, form_four_index='S0101/0002/2025',
-            next_of_kin=[{'name': 'A', 'phone': '1', 'relationship': 'parent'},
-                         {'name': 'B', 'phone': '2', 'relationship': 'parent'}])
+            next_of_kin=[{'name': 'A', 'phone': '1', 'relationship': 'mother'},
+                         {'name': 'B', 'phone': '2', 'relationship': 'mother'}])
         complete_record(self.profile)
         self.application = admissions.open_application(
             profile=self.profile, semester=self.sem1, programme=self.pst, class_level=self.level4,

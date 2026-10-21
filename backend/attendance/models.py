@@ -1413,17 +1413,31 @@ class StudentDetailChange(models.Model):
 
 
 class NextOfKin(models.Model):
-    """Someone the college contacts about a student. The admission form takes two."""
-    PARENT = 'parent'
+    """Someone the college contacts about a student. The admission form takes two.
+
+    Mother or father, sister or brother, husband or wife (said 21 October
+    2026) — not "parent", "sibling" or "spouse". Those three stay readable for
+    the records already taken with them, are no longer offered, and are asked
+    of the records office to correct (admissions.missing_details)."""
+    MOTHER = 'mother'
+    FATHER = 'father'
     GUARDIAN = 'guardian'
-    SPOUSE = 'spouse'
-    SIBLING = 'sibling'
+    HUSBAND = 'husband'
+    WIFE = 'wife'
+    SISTER = 'sister'
+    BROTHER = 'brother'
     RELATIVE = 'relative'
     OTHER = 'other'
-    RELATIONSHIP_CHOICES = [
-        (PARENT, 'Parent'), (GUARDIAN, 'Guardian'), (SPOUSE, 'Spouse'),
-        (SIBLING, 'Sibling'), (RELATIVE, 'Other relative'), (OTHER, 'Other'),
+    PARENT = 'parent'           # old: mother or father
+    SPOUSE = 'spouse'           # old: husband or wife
+    SIBLING = 'sibling'         # old: sister or brother
+    OFFERED = [
+        (MOTHER, 'Mother'), (FATHER, 'Father'), (GUARDIAN, 'Guardian'),
+        (HUSBAND, 'Husband'), (WIFE, 'Wife'), (SISTER, 'Sister'), (BROTHER, 'Brother'),
+        (RELATIVE, 'Other relative'), (OTHER, 'Other'),
     ]
+    OLD = {PARENT: 'Mother or Father', SPOUSE: 'Husband or Wife', SIBLING: 'Sister or Brother'}
+    RELATIONSHIP_CHOICES = OFFERED + [(PARENT, 'Parent'), (SPOUSE, 'Spouse'), (SIBLING, 'Sibling')]
 
     profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='next_of_kin')
     position = models.PositiveSmallIntegerField(
@@ -3330,6 +3344,39 @@ class PaymentAllocation(models.Model):
         return f'{self.amount} → {self.charge}'
 
 
+class WaiverRequest(models.Model):
+    """Waiving a shortfall on tuition or direct costs waits for DPFPA (said 21
+    October 2026). The accountant asks, with the amount and the reason; DPFPA
+    approves or refuses; only an approved request is applied to the charge.
+    Other waivers — items, overrides, the reversals the rules make — are not
+    asked for. While one waits, the student is not cleared at the finance desk.
+    """
+    PENDING = 'pending'
+    APPROVED = 'approved'
+    REFUSED = 'refused'
+    STATUS_CHOICES = [(PENDING, 'Waiting for DPFPA'), (APPROVED, 'Approved'), (REFUSED, 'Refused')]
+
+    charge = models.ForeignKey('StudentCharge', on_delete=models.CASCADE, related_name='waiver_requests')
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='waiver_requests')
+    amount = models.DecimalField(max_digits=12, decimal_places=2,
+                                 help_text='What is waived on the charge in all, once approved.')
+    reason = models.CharField(max_length=300)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                     related_name='waivers_requested')
+    requested_at = models.DateTimeField(auto_now_add=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='waivers_decided')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ['-requested_at']
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · {self.amount} · {self.status}'
+
+
 class FinanceOverride(models.Model):
     """A human decision that beats the arithmetic — bursary, sponsor delay,
     hardship, or a hold placed for a reason outside the ledger.
@@ -3820,6 +3867,8 @@ class Notification(models.Model):
     DISPOSAL_PROPOSED = 'disposal.proposed'
     DISPOSAL_DECIDED = 'disposal.decided'
     PASSWORD_RESET = 'password.reset'
+    WAIVER_REQUESTED = 'waiver.requested'
+    WAIVER_DECIDED = 'waiver.decided'
     KIND_CHOICES = [
         (REQUEST_SUBMITTED, 'A student asked for something'),
         (REQUEST_FORWARDED, 'A request needs a decision'),
@@ -3844,6 +3893,8 @@ class Notification(models.Model):
         (DISPOSAL_PROPOSED, 'An asset disposal needs approval'),
         (DISPOSAL_DECIDED, 'An asset disposal was decided'),
         (PASSWORD_RESET, 'Your password was reset by the office'),
+        (WAIVER_REQUESTED, 'A fee waiver needs DPFPA approval'),
+        (WAIVER_DECIDED, 'A fee waiver was decided'),
     ]
 
     # Exactly one of these two is set: staff sign in as Django users, students
@@ -4329,3 +4380,35 @@ class PettyCashTopUp(models.Model):
     def __str__(self):
         return f'Petty cash +{self.amount} on {self.received_on}'
 
+
+
+class StudentPass(models.Model):
+    """A pass to classes and exams, as printed at the admission desk or
+    downloaded from the portal (said 20–21 October 2026).
+
+    Valid until the day before the next payment window the student has not
+    paid for — or a year from the day they paid the whole year at once, or the
+    date on an override that let them through. Its code is random and kept
+    here, so a pass is checked by its code alone and an edited copy — another
+    name, a later date — does not match what the college issued.
+    """
+    OFFICE = 'office'
+    PORTAL = 'portal'
+    SOURCE_CHOICES = [(OFFICE, 'Printed at the admission desk'), (PORTAL, 'Downloaded by the student')]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='passes')
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='student_passes')
+    code = models.CharField(max_length=12, unique=True)
+    valid_until = models.DateField()
+    basis = models.CharField(max_length=200, blank=True, help_text='Why it runs to that date.')
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default=OFFICE)
+    issued_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='passes_issued')
+    issued_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-issued_at']
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · {self.code} · until {self.valid_until}'

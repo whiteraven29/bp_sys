@@ -264,10 +264,10 @@ class StudentRecordTests(TestCase):
         profile = StudentProfile.objects.create(nactvet_reg_no='A', name='A')
         for position in (1, 2):
             NextOfKin.objects.create(profile=profile, position=position, name='K', phone='0700',
-                                     relationship=NextOfKin.PARENT)
+                                     relationship=NextOfKin.MOTHER)
         with self.assertRaises(IntegrityError), transaction.atomic():
             NextOfKin.objects.create(profile=profile, position=3, name='K', phone='0700',
-                                     relationship=NextOfKin.PARENT)
+                                     relationship=NextOfKin.MOTHER)
         with self.assertRaises(IntegrityError), transaction.atomic():
             NextOfKin.objects.create(profile=profile, position=1, name='K', phone='0700',
-                                     relationship=NextOfKin.PARENT)
+                                     relationship=NextOfKin.MOTHER)

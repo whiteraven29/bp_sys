@@ -60,7 +60,7 @@ from .models import (
     ChargeType, FeeStructure, FeeInstallment, StudentProfile, StudentCharge,
     Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
     BankAccount, CollegeProfile,
-    CatNumberFormat, Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration,
+    CatNumberFormat, Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration, StudentPass, WaiverRequest,
     OutstandingRepeat, SemesterReview, StudentStanding, StandingChange,
     AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck, Application,
     PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultWithholding,
@@ -1472,6 +1472,25 @@ def set_roles(user, roles, *, full_name=None, actor=None):
             added=[role for role in ROLE_ORDER if role in added],
             removed=[role for role in ROLE_ORDER if role in removed])
     return user
+
+
+def available_tutors(user):
+    """The tutors this office may make responsible for a module: a Head of
+    Department's own department's, everybody's for DPARC and the Principal."""
+    tutors = User.objects.filter(profile__isnull=False, is_active=True)
+    departments = hod_only_departments(user)
+    if departments is not None:
+        tutors = tutors.filter(departments__in=departments)
+    return tutors.select_related('profile').distinct().order_by('profile__full_name')
+
+
+@api_view(['GET'])
+def module_tutors(request):
+    """The list the module form picks the responsible tutor from."""
+    if not runs_departments(request.user):
+        raise PermissionDenied('Modules are kept by the Head of Department, DPARC or the Principal.')
+    return Response([{'id': u.id, 'name': u.profile.full_name, 'username': u.username}
+                     for u in available_tutors(request.user)])
 
 
 def hod_only_departments(user):
@@ -4063,12 +4082,21 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
             id=pk_or_none(request.data.get('requirement_id'))).first()
         if requirement is None:
             return Response({'detail': 'No such requirement.'}, status=status.HTTP_400_BAD_REQUEST)
-        if application.state not in admissions.item_desks(requirement):
+        # Admitted with an item waived or missing, and brought it afterwards
+        # (said 21 October 2026): the admission office records it as brought —
+        # nothing else, so nothing is billed after the finance desk.
+        brought_later = (application.state == Application.ADMITTED
+                         and can_work_desk(request.user, Application.ADMISSION))
+        if brought_later:
+            if str(request.data.get('status') or '') != RequirementCheck.HAS_IT:
+                return Response({'detail': 'After admission an item can only be recorded as brought (Has it).'},
+                                status=status.HTTP_400_BAD_REQUEST)
+        elif application.state not in admissions.item_desks(requirement):
             return Response({'detail': 'Billed items are checked at the finance desk.'
                              if requirement.kind == AdmissionRequirement.BILLED
                              else 'This item is checked at the admission desk, before admitting.'},
                             status=status.HTTP_400_BAD_REQUEST)
-        if not can_work_desk(request.user, application.state):
+        if not brought_later and not can_work_desk(request.user, application.state):
             return Response({'detail': 'This application is with another desk.'},
                             status=status.HTTP_403_FORBIDDEN)
         try:
@@ -4263,11 +4291,27 @@ class ModuleViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(semester__academic_year=year)
         return qs
 
+    def _chosen_tutor(self):
+        """The tutor picked from the list (said 21 October 2026): one of the
+        department's tutors for a Head of Department, any tutor for DPARC or
+        the Principal. None when the form sent none."""
+        tutor_id = pk_or_none(self.request.data.get('tutor_id'))
+        if tutor_id is None:
+            return None
+        tutor = available_tutors(self.request.user).filter(pk=tutor_id).first()
+        if tutor is None:
+            raise ValidationError({'tutor_id': 'Choose one of your department\'s tutors.'})
+        return tutor
+
     def perform_create(self, serializer):
         if not runs_departments(self.request.user):
             raise PermissionDenied('Modules are registered by the Head of Department, DPARC or the Principal.')
-        module = serializer.save()
-        module.teachers.add(self.request.user)
+        tutor = self._chosen_tutor()
+        # The display name and who is responsible come from the same choice —
+        # not typed by hand. Staff ▸ a tutor's modules still assigns anybody,
+        # for an emergency.
+        module = serializer.save(**({'teacher': full_name_for(tutor)} if tutor else {}))
+        module.teachers.add(tutor or self.request.user)
         # Registration and the module list are built in either order. A module
         # added after the class was registered enrolls them now, so neither
         # order leaves a class registered for modules they are not in.
@@ -4281,7 +4325,10 @@ class ModuleViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         before = Module.objects.filter(pk=serializer.instance.pk).values(
             'programme_id', 'class_level_id', 'semester_id').first()
-        module = serializer.save()
+        tutor = self._chosen_tutor()
+        module = serializer.save(**({'teacher': full_name_for(tutor)} if tutor else {}))
+        if tutor is not None:
+            module.teachers.add(tutor)
         # Given a programme, a level or a semester, the module now covers
         # students it did not: they are enrolled, as when it is created.
         if before != {'programme_id': module.programme_id, 'class_level_id': module.class_level_id,
@@ -8157,6 +8204,15 @@ class StudentChargeViewSet(viewsets.ReadOnlyModelViewSet):
         if serializer.validated_data['amount'] > charge.amount:
             return Response({'detail': 'A waiver cannot exceed the charge.'},
                             status=status.HTTP_400_BAD_REQUEST)
+        if finance.waiver_needs_approval(charge):
+            # Tuition and direct costs: DPFPA approves first (said 21 October 2026).
+            try:
+                made = finance.request_waiver(charge, serializer.validated_data['amount'],
+                                              serializer.validated_data['reason'], actor=request.user)
+            except finance.WaiverError as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Sent to DPFPA for approval. Nothing changes on the bill until then.',
+                             'waiver_request': _waiver_row(made)}, status=status.HTTP_202_ACCEPTED)
         finance.waive_charge(charge, serializer.validated_data['amount'],
                              serializer.validated_data['reason'], actor=request.user)
         return Response(StudentChargeSerializer(charge).data)
@@ -9642,14 +9698,10 @@ def _pass_photo(profile):
     return f'data:{kind};base64,' + base64.b64encode(data).decode()
 
 
-def _render_pass(request, profile, result):
-    from urllib.parse import urlencode
-    check_url = request.build_absolute_uri('/semester-pass/check/') + '?' + urlencode(
-        {'id': profile.college_id or profile.nactvet_reg_no, 'code': result.get('code', '')})
+def _render_pass(request, profile, issued, result):
     response = render(request, 'semester_pass.html', {
-        'mode': 'pass' if result['ok'] else 'refused', 'result': result, 'profile': profile,
-        'photo': _pass_photo(profile) if result['ok'] else '', 'logo': _pass_logo(),
-        'college': COLLEGE_NAME, 'check_url': check_url,
+        'mode': 'pass' if issued else 'refused', 'result': result, 'issued': issued, 'profile': profile,
+        'photo': _pass_photo(profile) if issued else '', 'logo': _pass_logo(), 'college': COLLEGE_NAME,
     })
     response['Cache-Control'] = 'no-store'
     return response
@@ -9671,10 +9723,9 @@ def semester_pass_status(request):
     if profile is None:
         return Response({'detail': 'No student with that registration number or college ID.'}, status=404)
     result = semester_pass.status(profile)
-    result.pop('profile', None)
-    if 'due_by' in result:
-        result['due_by'] = result['due_by'].isoformat()
-    if 'balance' in result:
+    if result.get('valid_until'):
+        result['valid_until'] = result['valid_until'].isoformat()
+    if result.get('balance') is not None:
         result['balance'] = str(result['balance'])
     return Response(result)
 
@@ -9685,7 +9736,8 @@ def semester_pass_print(request, profile_id):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden('The admission office gives semester passes.')
     profile = get_object_or_404(StudentProfile, pk=profile_id)
-    return _render_pass(request, profile, semester_pass.status(profile))
+    issued, result = semester_pass.issue(profile, actor=request.user)
+    return _render_pass(request, profile, issued, result)
 
 
 def my_semester_pass(request):
@@ -9695,18 +9747,81 @@ def my_semester_pass(request):
         StudentProfile.objects.filter(id=request.session.get('course_profile_id')).first())
     if profile is None:
         return redirect('login')
-    return _render_pass(request, profile, semester_pass.status(profile))
+    issued, result = semester_pass.issue(profile, source=StudentPass.PORTAL)
+    return _render_pass(request, profile, issued, result)
 
 
 @login_required
 def semester_pass_check(request):
-    """Anybody on the staff checks a pass they are shown."""
-    identifier = request.GET.get('id', '')
+    """Anybody on the staff checks a pass they are shown — by its code alone."""
     code = request.GET.get('code', '')
-    checked = semester_pass.verify(identifier, code) if identifier and code else None
+    checked = semester_pass.verify(code) if code.strip() else None
     profile = checked.get('profile') if checked else None
     return render(request, 'semester_pass.html', {
-        'mode': 'check', 'checked': checked, 'identifier': identifier, 'code': code,
+        'mode': 'check', 'checked': checked, 'code': code,
         'profile': profile, 'photo': _pass_photo(profile) if profile else '', 'logo': _pass_logo(),
         'college': COLLEGE_NAME,
     })
+
+
+@api_view(['GET'])
+def finance_overpayments(request):
+    """Payments ▸ Overpayments: students who paid more than the full fee on an
+    invoice (said 21 October 2026). The excess is credit on account, used on
+    their next bill at the finance desk."""
+    if not can_manage_finance(request.user):
+        raise PermissionDenied('For the accountant.')
+    rows = finance.overpayments()
+    return Response([{**row, 'paid': str(row['paid']), 'excess': str(row['excess']),
+                      'invoice_total': str(row['invoice_total']) if row['invoice_total'] is not None else None}
+                     for row in rows])
+
+
+# ── shortfall waivers, approved by DPFPA (said 21 October 2026) ───────────────
+
+def _waiver_row(waiver):
+    charge = waiver.charge
+    return {
+        'id': waiver.id, 'status': waiver.status, 'status_display': waiver.get_status_display(),
+        'profile_id': waiver.profile_id, 'name': waiver.profile.name,
+        'reg_no': waiver.profile.nactvet_reg_no, 'college_id': waiver.profile.college_id or '',
+        'charge_id': charge.id, 'charge': str(charge.charge_type), 'family': charge.charge_type.get_family_display(),
+        'installment': charge.installment_number, 'due_date': charge.due_date,
+        'charge_amount': str(charge.amount), 'waived_before': str(charge.waived_amount if waiver.status != 'approved' else ''),
+        'amount': str(waiver.amount), 'reason': waiver.reason,
+        'requested_by': full_name_for(waiver.requested_by) if waiver.requested_by_id else '',
+        'requested_at': waiver.requested_at,
+        'decided_by': full_name_for(waiver.decided_by) if waiver.decided_by_id else '',
+        'decided_at': waiver.decided_at, 'decision_note': waiver.decision_note,
+    }
+
+
+@api_view(['GET'])
+def waiver_requests(request):
+    """The accountant sees what they asked; DPFPA and the Principal see all."""
+    from .roles import is_dpfpa
+    if not (can_manage_finance(request.user) or is_dpfpa(request.user) or is_principal(request.user)):
+        raise PermissionDenied('For the accountant, DPFPA and the Principal.')
+    rows = WaiverRequest.objects.select_related('charge__charge_type', 'profile', 'requested_by', 'decided_by')
+    wanted = request.query_params.get('status')
+    if wanted:
+        rows = rows.filter(status=wanted)
+    profile_id = pk_or_none(request.query_params.get('profile_id'))
+    if profile_id:
+        rows = rows.filter(profile_id=profile_id)
+    return Response([_waiver_row(w) for w in rows[:300]])
+
+
+@api_view(['POST'])
+def decide_waiver_request(request, pk):
+    """DPFPA approves or refuses a shortfall waiver — nobody else."""
+    from .roles import is_dpfpa
+    if not is_dpfpa(request.user):
+        raise PermissionDenied('DPFPA approves fee waivers.')
+    waiver = get_object_or_404(WaiverRequest, pk=pk)
+    try:
+        decided = finance.decide_waiver(waiver, approve=bool(request.data.get('approve')), actor=request.user,
+                                        note=str(request.data.get('note') or ''))
+    except finance.WaiverError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(_waiver_row(decided))

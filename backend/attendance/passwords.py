@@ -251,6 +251,29 @@ def reset_student_password(profile, *, actor, ip=None, first=False):
     return pin
 
 
+def first_password(profile):
+    """A newly admitted student's first password: their last name in capital
+    letters, no spaces (said 21 October 2026). They must choose their own the
+    first time they sign in."""
+    last = profile.last_name or (profile.name.split()[-1] if (profile.name or '').split() else '')
+    return ''.join(last.split()).upper()
+
+
+def give_first_password(profile, *, actor=None):
+    """Set the first password at admission — only for somebody who has none:
+    a returning student keeps the one they chose."""
+    if profile.portal_pin_hash or Student.objects.filter(
+            nactvet_reg_no__iexact=profile.nactvet_reg_no).exclude(portal_pin_hash='').exists():
+        return False
+    pin = first_password(profile)
+    if not pin:
+        return False
+    from . import veta
+    veta.set_portal_pin(profile, pin, require_change=True)
+    _record_reset(kind='student', actor=actor, profile=profile, first=True)
+    return True
+
+
 def is_admitted(profile):
     """Our student: admitted this year (PST — a registration the admission
     desk made), or on a VETA course. Modules are not the test."""

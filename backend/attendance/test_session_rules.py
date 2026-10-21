@@ -143,3 +143,33 @@ class HeadOfDepartmentTests(TestCase):
                                                                'full_name': 'X', 'password': 'Strong#2026x'},
                                        format='json').status_code, 403)
         self.assertEqual(self.hod.get('/api/staff-accounts/role-changes/').status_code, 403)
+
+    # ── the module's tutor, chosen from a list (said 21 October 2026) ──────────
+    def new_module(self, client, code, **extra):
+        return client.post('/api/modules/', {
+            'name': 'Pharmacology', 'code': code, 'teacher': 'typed', 'credits': 3,
+            'class_level': self.pst_module.class_level_id, 'semester': self.pst_module.semester_id, **extra},
+            format='json')
+
+    def test_the_hod_picks_from_their_department_tutors(self):
+        listed = self.hod.get('/api/module-tutors/').data
+        self.assertEqual([t['id'] for t in listed], [self.mine_user.id])
+        self.assertEqual(len(self.boss.get('/api/module-tutors/').data), 2)        # the Principal: every tutor
+
+    def test_the_choice_names_the_module_and_makes_it_theirs(self):
+        made = self.new_module(self.hod, 'PST04160', tutor_id=self.mine_user.id)
+        self.assertEqual(made.status_code, 201, made.data)
+        module = Module.objects.get(pk=made.data['id'])
+        self.assertEqual(module.teacher, 'Mine')                                    # their name, not what was typed
+        self.assertEqual(list(module.teachers.all()), [self.mine_user])             # not the HOD
+
+    def test_another_departments_tutor_is_refused(self):
+        refused = self.new_module(self.hod, 'PST04161', tutor_id=self.other_user.id)
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('tutor_id', refused.data)
+
+    def test_the_emergency_assignment_still_works(self):
+        made = self.boss.post(f'/api/staff-accounts/{self.other_user.id}/set-modules/',
+                              {'module_ids': [self.pst_module.id]}, format='json')
+        self.assertEqual(made.status_code, 200, made.data)
+        self.assertIn(self.other_user, self.pst_module.teachers.all())

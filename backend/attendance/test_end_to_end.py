@@ -146,8 +146,8 @@ class FirstYearEndToEndTests(TestCase):
             'phone': '0712000111', 'gender': 'F', 'date_of_birth': '2006-04-12',
             'form_four_index': 'S0101/0001/2025',
             'fee_payer': 'family',
-            'next_of_kin': [{'name': 'Mama Mtui', 'phone': '0713000222', 'relationship': 'parent'},
-                            {'name': 'Baba Mtui', 'phone': '0714000333', 'relationship': 'parent'}],
+            'next_of_kin': [{'name': 'Mama Mtui', 'phone': '0713000222', 'relationship': 'mother'},
+                            {'name': 'Baba Mtui', 'phone': '0714000333', 'relationship': 'mother'}],
         }, format='json'))
         self.assertEqual(self.ok(self.records.post(f'/api/applications/{app_id}/complete/', {},
                                                    format='json'))['state'], Application.FINANCE)
@@ -193,14 +193,11 @@ class FirstYearEndToEndTests(TestCase):
         self.assertEqual(registration.kind, SemesterRegistration.NEW)
         self.assertTrue(Student.objects.filter(profile=self.profile, module=self.m1).exists())
 
-        # 5. The ICT officer gives them their portal password — nobody else
-        # sets or sees one; admission hands over none.
+        # 5. Their first portal password is their last name in capitals (said
+        # 21 October 2026); nobody hands one over.
         self.assertFalse(admitted.get('portal_pin'))
-        ict = User.objects.create_user('ict', password='pw')
-        set_roles(ict, ['ict_officer'], full_name='ICT')
-        desk = APIClient(); desk.force_authenticate(ict)
-        issued = self.ok(desk.post('/api/student-passwords/issue/', {}, format='json'))['issued']
-        pin = {row['reg_no']: row['password'] for row in issued}['NIT/PST/2026/0001']
+        self.profile.refresh_from_db()
+        pin = self.profile.last_name.upper()
 
         # 6. The portal: the PIN signs them in; they invoice the TPH book.
         signed_in = self.client.post('/login/', {'identifier': 'NIT/PST/2026/0001',

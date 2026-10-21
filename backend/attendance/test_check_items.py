@@ -198,3 +198,30 @@ for _name in [n for n in dir(ItemsTests) if n.startswith('test_')]:
     setattr(CheckOnlyItemTests, _name, None)
 for _name in [n for n in vars(CheckOnlyItemTests) if n.startswith('test_')]:
     setattr(CountedAndTypedItemTests, _name, None)
+
+
+class BroughtAfterAdmissionTests(CheckOnlyItemTests):
+    """Said 21 October 2026: admitted with an item waived or missing, the
+    student brought it afterwards — the admission office records it as
+    brought, and only that (nothing is billed after the finance desk)."""
+
+    def admitted_with_the_form_waived(self):
+        self.to_records()
+        self.to_admission()
+        self.assertEqual(self.mark(self.admission, self.form, 'waived').status_code, 200)
+        self.assertEqual(self.admit().status_code, 200)
+        self.application.refresh_from_db()
+        self.assertEqual(self.application.state, Application.ADMITTED)
+
+    def test_the_admission_office_records_it_brought(self):
+        self.admitted_with_the_form_waived()
+        self.assertEqual(self.mark(self.admission, self.form, 'has_it').status_code, 200)
+        self.assertEqual(RequirementCheck.objects.get(profile=self.application.profile,
+                                                      requirement=self.form).status, RequirementCheck.HAS_IT)
+
+    def test_only_as_brought_and_only_by_the_admission_office(self):
+        self.admitted_with_the_form_waived()
+        self.assertEqual(self.mark(self.admission, self.form, 'missing').status_code, 400)
+        self.assertIn(self.mark(self.records, self.form, 'has_it').status_code, (400, 403))
+        self.assertEqual(RequirementCheck.objects.get(profile=self.application.profile,
+                                                      requirement=self.form).status, RequirementCheck.WAIVED)
