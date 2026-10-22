@@ -3356,10 +3356,19 @@ class WaiverRequest(models.Model):
     REFUSED = 'refused'
     STATUS_CHOICES = [(PENDING, 'Waiting for DPFPA'), (APPROVED, 'Approved'), (REFUSED, 'Refused')]
 
-    charge = models.ForeignKey('StudentCharge', on_delete=models.CASCADE, related_name='waiver_requests')
+    # Since 22 October 2026 the accountant names an instalment, not a charge:
+    # tuition fee or direct costs, which instalment, and what is short. The
+    # first requests named one charge and still read that way.
+    charge = models.ForeignKey('StudentCharge', on_delete=models.CASCADE, related_name='waiver_requests',
+                               null=True, blank=True)
     profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='waiver_requests')
+    academic_year = models.ForeignKey('AcademicYear', on_delete=models.PROTECT, null=True, blank=True,
+                                      related_name='waiver_requests')
+    family = models.CharField(max_length=20, blank=True, help_text='Tuition fee or direct costs.')
+    installment_number = models.PositiveSmallIntegerField(null=True, blank=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2,
-                                 help_text='What is waived on the charge in all, once approved.')
+                                 help_text='An instalment: what is short, to be waived. One charge (the '
+                                           'first requests): what is waived on it in all, once approved.')
     reason = models.CharField(max_length=300)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,

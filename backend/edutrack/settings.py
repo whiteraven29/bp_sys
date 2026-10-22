@@ -34,13 +34,18 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Any request slower than SLOW_REQUEST_MS goes to the service log, with
+    # how many queries it ran (journalctl -u edutrack | grep "Slow request").
+    'attendance.middleware.SlowRequestLogMiddleware',
+    # Each request looks up a person's offices once (attendance/roles.py).
+    'attendance.roles.OfficeLookupMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    # Five minutes without use ends the session, staff and student alike.
+    # Thirty minutes without use ends the session, staff and student alike.
     'attendance.middleware.IdleTimeoutMiddleware',
     # After authentication: it decorates request.user.
     'attendance.middleware.TeachingScopeMiddleware',
@@ -196,6 +201,9 @@ REST_FRAMEWORK = {
 
 # Failed sign-ins, password resets and refused requests, to the service's log
 # (journalctl -u edutrack).
+# A request slower than this (milliseconds) is written to the service log; 0 turns it off.
+SLOW_REQUEST_MS = config('SLOW_REQUEST_MS', default=1000, cast=int)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -203,6 +211,7 @@ LOGGING = {
     'handlers': {'console': {'class': 'logging.StreamHandler', 'formatter': 'plain'}},
     'loggers': {
         'edutrack.security': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'edutrack.slow': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
         'django.security': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
         # A 500 writes its traceback to the service log (journalctl -u edutrack);
         # without this, DEBUG off, Django answers "Server Error" and keeps nothing.

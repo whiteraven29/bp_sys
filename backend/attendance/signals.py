@@ -7,10 +7,11 @@ desk raises the year's bill once, and nothing else bills the year again.
 
 import logging
 
-from django.db.models.signals import post_save
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from .models import ICTOfficerProfile
+from .models import ICTOfficerProfile, TeacherProfile
+from .roles import OFFICE_MODELS, forget_offices
 
 logger = logging.getLogger(__name__)
 
@@ -37,3 +38,13 @@ def ict_officer_opens_django_admin(sender, instance, **kwargs):
         user.is_staff = user.is_superuser = True
         user.save(update_fields=['is_staff', 'is_superuser'])
         logger.info('Opened the admin site to %s on becoming ICT officer', user.username)
+
+
+def offices_changed(sender, **kwargs):
+    """An office given or taken mid-request is seen at once (roles._holds)."""
+    forget_offices()
+
+
+for _office in (*OFFICE_MODELS, TeacherProfile):
+    post_save.connect(offices_changed, sender=_office, dispatch_uid=f'attendance.offices_changed.{_office.__name__}')
+    post_delete.connect(offices_changed, sender=_office, dispatch_uid=f'attendance.offices_gone.{_office.__name__}')

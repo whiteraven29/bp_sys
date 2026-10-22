@@ -6,5 +6,6 @@ class AttendanceConfig(AppConfig):
     name = 'attendance'
 
     def ready(self):
-        # Registers the receiver that bills a student as they are enrolled.
+        # The ICT officer's admin access, and forgetting offices looked up
+        # this request when one is given or taken.
         from . import signals  # noqa: F401

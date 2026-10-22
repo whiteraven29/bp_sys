@@ -114,6 +114,7 @@ urlpatterns = [
     path('semester-pass/', views.semester_pass_status, name='semester-pass-status'),
     path('finance/overpayments/', views.finance_overpayments, name='finance-overpayments'),
     path('waiver-requests/', views.waiver_requests, name='waiver-requests'),
+    path('waiver-requests/shortfalls/', views.waiver_shortfalls, name='waiver-shortfalls'),
     path('module-tutors/', views.module_tutors, name='module-tutors'),
     path('waiver-requests/<int:pk>/decide/', views.decide_waiver_request, name='waiver-request-decide'),
     path('staff-accounts/<int:user_id>/set-modules/', views.set_staff_modules, name='staff-set-modules'),

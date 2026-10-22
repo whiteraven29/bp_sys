@@ -1233,13 +1233,17 @@ def record_requirement(application, requirement, status, *, actor=None, note='',
 def typed_items(profile):
     """What was typed in for an item — the NACTVET admission code — the latest
     for each, kept on the student's details."""
-    rows = {}
-    for check in (RequirementCheck.objects.filter(profile=profile, status=RequirementCheck.HAS_IT)
-                  .exclude(value='').select_related('requirement', 'semester')
-                  .order_by('checked_at')):
-        rows[check.requirement_id] = {'name': check.requirement.value_label or check.requirement.name,
-                                      'value': check.value}
-    return list(rows.values())
+    return typed_items_for([profile.id])[profile.id]
+
+
+def typed_items_for(profile_ids):
+    """typed_items for many students in one query: {profile id: rows}."""
+    found = {profile_id: {} for profile_id in profile_ids}
+    for check in (RequirementCheck.objects.filter(profile_id__in=found, status=RequirementCheck.HAS_IT)
+                  .exclude(value='').select_related('requirement').order_by('checked_at')):
+        found[check.profile_id][check.requirement_id] = {
+            'name': check.requirement.value_label or check.requirement.name, 'value': check.value}
+    return {profile_id: list(rows.values()) for profile_id, rows in found.items()}
 
 
 def items_owed(profile, semester):

@@ -921,3 +921,10 @@ desks list them.
 waits at the finance desk until it is decided. Other waivers are as before. DPFPA's finance and
 inventory menus are separate. A module's tutor is chosen from the department's tutors; the staff
 assignment stays for emergencies.
+
+### Q68. How does the accountant say what is short? ✅
+
+**Answer (22 October 2026, the accountant's suggestion):** by instalment, not by charge. They choose
+the category — Tuition fee or Direct costs — and the instalment that is short, write what is short and
+why, and send it to DPFPA. Approved, it comes off that instalment. (Same day: the system's slowness was
+measured and the lists fixed; the menus no longer flash before a person's own load.)

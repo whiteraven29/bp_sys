@@ -12,7 +12,8 @@ from django.contrib.auth import login, logout, authenticate, update_session_auth
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
-from django.db.models import Count, DecimalField, Exists, F, OuterRef, Q, Sum
+from django.db.models import Count, DecimalField, Exists, F, Min, OuterRef, Q, Subquery, Sum
+from django.db.models.functions import Coalesce
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
@@ -1570,12 +1571,33 @@ def hod_only_departments(user):
     return list(Department.objects.filter(hod=user))
 
 
-def staff_account_row(user):
-    held = roles_for(user)
+def _offices_of(users):
+    """Every office profile of these accounts, one query per office rather
+    than fifteen per person: {role: {user id: profile}}."""
+    ids = [user.id for user in users]
+    found = {}
+    for role, model in ROLE_PROFILES.items():
+        mine = found[role] = {}
+        for profile in model.objects.filter(user_id__in=ids).order_by('pk'):
+            mine.setdefault(profile.user_id, profile)
+    return found
+
+
+def staff_account_row(user, offices=None):
+    """One account as the staff list shows it. A list passes the offices it
+    read for everybody at once (_offices_of); the answers are roles_for's and
+    full_name_for's."""
+    if offices is None:
+        held, name = roles_for(user), full_name_for(user)
+    else:
+        mine = {role: offices[role][user.id] for role in offices if user.id in offices[role]}
+        held = [role for role in ROLE_ORDER if role in mine and getattr(mine[role], 'is_active', True)]
+        name = next((mine[role].full_name for role in ROLE_ORDER if role in mine),
+                    None) or user.get_full_name() or user.username
     return {
         'id': user.id,
         'username': user.username,
-        'full_name': full_name_for(user),
+        'full_name': name,
         'role': held[0] if held else '',
         'roles': held,
         'role_labels': [ROLE_LABELS[role] for role in held],
@@ -1673,7 +1695,9 @@ def create_staff_account(request):
         if departments is not None:
             users = users.filter(departments__in=departments).exclude(is_superuser=True).distinct()
 
-        return Response([staff_account_row(user) for user in users])
+        users = list(users)
+        offices = _offices_of(users)
+        return Response([staff_account_row(user, offices) for user in users])
 
     role = str(request.data.get('role', '')).strip()
     full_name = str(request.data.get('full_name', '')).strip()
@@ -2538,8 +2562,9 @@ def _record_details_from(request, profile):
     )
 
 
-def profile_details(profile):
-    """The details records keeps, as every desk's form reads them."""
+def profile_details(profile, typed=None):
+    """The details records keeps, as every desk's form reads them. A list
+    passes the typed items it read for the whole page."""
     return {
         'name': profile.name, 'phone': profile.phone, 'gender': profile.gender,
         'first_name': profile.first_name, 'middle_name': profile.middle_name, 'last_name': profile.last_name,
@@ -2559,7 +2584,7 @@ def profile_details(profile):
                          'relationship_display': kin.get_relationship_display()}
                         for kin in profile.next_of_kin.all()],
         'education': _education_rows(profile),
-        'typed_items': admissions.typed_items(profile),
+        'typed_items': admissions.typed_items(profile) if typed is None else typed,
     }
 
 
@@ -3960,7 +3985,9 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
               .select_related('profile', 'semester__academic_year', 'programme', 'class_level',
                               'registration')
               .prefetch_related('steps__done_by', 'requirement_checks__requirement',
-                                'requirement_checks__charge', 'programme__levels'))
+                                'requirement_checks__charge', 'programme__levels',
+                                'profile__next_of_kin', 'profile__education',
+                                'profile__course_applications'))
         visible = visible_application_states(self.request.user)
         if visible is not None:
             qs = qs.filter(state__in=sorted(visible))
@@ -4331,12 +4358,24 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
 
 # ── MODULES ────────────────────────────────────────────────────────────────────
 
+def _count_of(rows):
+    """How many rows, as a column of the list's own query."""
+    return Coalesce(Subquery(rows.order_by().values('module').annotate(n=Count('pk')).values('n')[:1]), 0)
+
+
 class ModuleViewSet(viewsets.ModelViewSet):
     serializer_class = ModuleSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        qs = user_modules(self.request.user).select_related('class_level', 'semester__academic_year')
+        qs = (user_modules(self.request.user)
+              .select_related('class_level', 'semester__academic_year', 'programme')
+              .annotate(n_students=_count_of(Student.objects.filter(module=OuterRef('pk'))),
+                        n_sessions=_count_of(Session.objects.filter(module=OuterRef('pk'))),
+                        n_theory=_count_of(Session.objects.filter(module=OuterRef('pk'),
+                                                                  session_type=Session.THEORY)),
+                        n_practical=_count_of(Session.objects.filter(module=OuterRef('pk'),
+                                                                     session_type=Session.PRACTICAL))))
         params = self.request.query_params
         for param, field in [
             ('class_level_id', 'class_level_id'),
@@ -8473,19 +8512,24 @@ def _finance_rows(profiles, year, semester):
     profiles = list(profiles)
     totals = finance.balance_map(profiles, year)
     clearance = finance.clearance_map(profiles, year, CLEARANCE_PERIODS, semester=semester)
+    # The level of a module they sit, read as three columns rather than every
+    # enrollment as a whole object.
+    levels = {}
+    for profile_id, level_id, level_name in (
+            Student.objects.filter(profile_id__in=[p.id for p in profiles]).order_by('name')
+            .values_list('profile_id', 'module__class_level_id', 'module__class_level__name')):
+        levels.setdefault(profile_id, (level_id, level_name))
 
     rows = []
     for profile in profiles:
-        # The enrollments are already prefetched, so this costs no query.
-        enrollment = next(iter(profile.enrollments.all()), None)
-        level = enrollment.module.class_level if enrollment else None
+        level_id, level_name = levels.get(profile.id, (None, None))
         mine = totals.get(profile.id, {})
         rows.append({
             'profile_id': profile.id,
             'nactvet_reg_no': profile.nactvet_reg_no,
             'name': profile.name,
-            'class_level': level.name if level else None,
-            'class_level_id': level.id if level else None,
+            'class_level': level_name,
+            'class_level_id': level_id,
             'billed': str(mine.get('billed', Decimal('0.00'))),
             'waived': str(mine.get('waived', Decimal('0.00'))),
             'paid': str(mine.get('paid', Decimal('0.00'))),
@@ -8512,9 +8556,7 @@ def finance_students(request):
         return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
     semester = active_semester()
 
-    profiles = StudentProfile.objects.prefetch_related(
-        'enrollments__module__class_level', 'charges__charge_type', 'charges__allocations',
-    )
+    profiles = StudentProfile.objects.only('id', 'nactvet_reg_no', 'name')
     search = str(request.query_params.get('search', '')).strip()
     if search:
         profiles = profiles.filter(
@@ -9845,27 +9887,74 @@ def finance_overpayments(request):
 
 # ── shortfall waivers, approved by DPFPA (said 21 October 2026) ───────────────
 
-def _waiver_row(waiver):
+def _waiver_row(waiver, names=None):
+    names = {} if names is None else names
+
+    def name(user):
+        if user.pk not in names:
+            names[user.pk] = full_name_for(user)
+        return names[user.pk]
+
     charge = waiver.charge
+    pending = waiver.status == WaiverRequest.PENDING
+    if charge is not None:      # the first requests named one charge
+        what = {'charge_id': charge.id, 'charge': str(charge.charge_type),
+                'family': charge.charge_type.get_family_display(), 'installment': charge.installment_number,
+                'due_date': charge.due_date, 'charge_amount': str(charge.amount),
+                'waived_before': str(charge.waived_amount if pending else ''),
+                'shortfall': str(waiver.amount - charge.waived_amount if pending else waiver.amount)}
+    else:
+        part = (StudentCharge.objects.filter(profile_id=waiver.profile_id, academic_year_id=waiver.academic_year_id,
+                                             charge_type__family=waiver.family,
+                                             installment_number=waiver.installment_number)
+                .exclude(charge_type_id__in=finance.item_charge_type_ids())
+                .aggregate(due=Min('due_date'), billed=Sum('amount')))
+        family = finance.WAIVER_FAMILIES.get(waiver.family, waiver.family)
+        what = {'charge_id': None, 'charge': f'{family} · instalment {waiver.installment_number}',
+                'family': family, 'installment': waiver.installment_number, 'due_date': part['due'],
+                'charge_amount': str(part['billed'] or 0), 'waived_before': '', 'shortfall': str(waiver.amount)}
     return {
         'id': waiver.id, 'status': waiver.status, 'status_display': waiver.get_status_display(),
         'profile_id': waiver.profile_id, 'name': waiver.profile.name,
         'reg_no': waiver.profile.nactvet_reg_no, 'college_id': waiver.profile.college_id or '',
-        'charge_id': charge.id, 'charge': str(charge.charge_type), 'family': charge.charge_type.get_family_display(),
-        'installment': charge.installment_number, 'due_date': charge.due_date,
-        'charge_amount': str(charge.amount), 'waived_before': str(charge.waived_amount if waiver.status != 'approved' else ''),
-        'amount': str(waiver.amount), 'reason': waiver.reason,
-        'requested_by': full_name_for(waiver.requested_by) if waiver.requested_by_id else '',
+        **what, 'amount': str(waiver.amount), 'reason': waiver.reason,
+        'requested_by': name(waiver.requested_by) if waiver.requested_by_id else '',
         'requested_at': waiver.requested_at,
-        'decided_by': full_name_for(waiver.decided_by) if waiver.decided_by_id else '',
+        'decided_by': name(waiver.decided_by) if waiver.decided_by_id else '',
         'decided_at': waiver.decided_at, 'decision_note': waiver.decision_note,
     }
 
 
-@api_view(['GET'])
+def _waiver_year(request, source):
+    return (AcademicYear.objects.filter(id=pk_or_none(source.get('academic_year_id'))).first()
+            or active_academic_year())
+
+
+@api_view(['GET', 'POST'])
 def waiver_requests(request):
-    """The accountant sees what they asked; DPFPA and the Principal see all."""
+    """The accountant sees what they asked; DPFPA and the Principal see all.
+
+    POST: the accountant names an instalment of tuition fee or direct costs,
+    what is short on it, and why — sent to DPFPA (said 22 October 2026)."""
     from .roles import is_dpfpa
+    if request.method == 'POST':
+        if not can_manage_finance(request.user):
+            raise PermissionDenied('The accountant asks for a waiver.')
+        profile = get_object_or_404(StudentProfile, pk=pk_or_none(request.data.get('profile_id')))
+        year = _waiver_year(request, request.data)
+        if year is None:
+            return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            made = finance.request_shortfall_waiver(
+                profile, year, str(request.data.get('family') or ''),
+                pk_or_none(request.data.get('installment_number')),
+                Decimal(str(request.data.get('amount') or '0')), str(request.data.get('reason') or ''),
+                actor=request.user)
+        except (finance.WaiverError, ArithmeticError, ValueError) as exc:
+            detail = str(exc) if isinstance(exc, finance.WaiverError) else 'Write how much is short.'
+            return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'detail': 'Sent to DPFPA for approval. Nothing changes on the bill until then.',
+                         'waiver_request': _waiver_row(made)}, status=status.HTTP_201_CREATED)
     if not (can_manage_finance(request.user) or is_dpfpa(request.user) or is_principal(request.user)):
         raise PermissionDenied('For the accountant, DPFPA and the Principal.')
     rows = WaiverRequest.objects.select_related('charge__charge_type', 'profile', 'requested_by', 'decided_by')
@@ -9875,7 +9964,22 @@ def waiver_requests(request):
     profile_id = pk_or_none(request.query_params.get('profile_id'))
     if profile_id:
         rows = rows.filter(profile_id=profile_id)
-    return Response([_waiver_row(w) for w in rows[:300]])
+    names = {}
+    return Response([_waiver_row(w, names) for w in rows[:300]])
+
+
+@api_view(['GET'])
+def waiver_shortfalls(request):
+    """The instalments of tuition and direct costs a student still owes on —
+    what the accountant picks from when one is short."""
+    if not can_manage_finance(request.user):
+        raise PermissionDenied('Finance access required.')
+    profile = get_object_or_404(StudentProfile, pk=pk_or_none(request.query_params.get('profile_id')))
+    year = _waiver_year(request, request.query_params)
+    if year is None:
+        return Response([])
+    return Response([{**row, 'billed': str(row['billed']), 'owed': str(row['owed'])}
+                     for row in finance.shortfalls(profile, year)])
 
 
 @api_view(['POST'])

@@ -917,6 +917,13 @@
   body.accountant-desk #exec-nav-group { order: 8; }
   body.accountant-desk aside > .nav-btn[data-finance-section="audit"] { order: 9; }
 
+  /* While the page settles who is signed in: a loader, not every office's screens. */
+  body.booting aside, body.booting main, body.booting .crumb-bar { visibility: hidden; }
+  body.booting::after { content: ''; position: fixed; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px;
+                        border: 3px solid var(--accent-soft); border-top-color: var(--accent); border-radius: 50%;
+                        animation: boot-spin .7s linear infinite; z-index: 300; }
+  @keyframes boot-spin { to { transform: rotate(360deg); } }
+
   /* Empty states, menus, toasts */
   .empty .ei { width: 48px; height: 48px; margin: 0 auto 10px; border-radius: 50%; display: grid; place-items: center;
                background: var(--accent-soft); color: var(--accent); opacity: 1; font-size: 1.3rem; }
@@ -1025,7 +1032,7 @@
   .print-header { display: none; }
 </style>
 </head>
-<body>
+<body class="booting">
 
 <header>
   <div class="header-left">
@@ -1832,14 +1839,14 @@
           <div class="card-title">Waiting for your approval <span id="waiver-pending-count" class="badge badge-orange"></span>
             <span class="tip" tabindex="0" role="note" aria-label="Help: waivers" data-tip="A shortfall the accountant wants waived on tuition or direct costs. Nothing changes on the student's bill until you approve, and the student waits at the finance desk meanwhile. A refusal needs a reason; it goes back to the accountant.">?</span></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Student</th><th>Charge</th><th class="num">Charge</th><th class="num">Waive</th><th>Reason</th><th>Asked by</th><th></th></tr></thead>
+            <thead><tr><th>Student</th><th>Instalment</th><th class="num">Billed</th><th class="num">Short</th><th>Reason</th><th>Asked by</th><th></th></tr></thead>
             <tbody id="waiver-pending-tbody"><tr><td colspan="7"><div class="empty">Loading…</div></td></tr></tbody>
           </table></div>
         </div>
         <div class="card">
           <div class="card-title">Decided</div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Student</th><th>Charge</th><th class="num">Waived</th><th>Decision</th><th>By</th><th>Note</th></tr></thead>
+            <thead><tr><th>Student</th><th>Instalment</th><th class="num">Short</th><th>Decision</th><th>By</th><th>Note</th></tr></thead>
             <tbody id="waiver-done-tbody"></tbody>
           </table></div>
         </div>
@@ -3492,7 +3499,7 @@
         <div class="card finance-only">
           <div class="card-title">Shortfall waivers <span class="tip" tabindex="0" role="note" aria-label="Help: shortfall waivers" data-tip="Asked at the finance desk, on tuition or direct costs. DPFPA approves or refuses each; only an approved one comes off the bill.">?</span></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Student</th><th>Charge</th><th class="num">Waived in all</th><th>Reason</th><th>Status</th><th>DPFPA's note</th></tr></thead>
+            <thead><tr><th>Student</th><th>Instalment</th><th class="num">Short</th><th>Reason</th><th>Status</th><th>DPFPA's note</th></tr></thead>
             <tbody id="fin-waivers-tbody"></tbody>
           </table></div>
         </div>
@@ -4806,7 +4813,13 @@ function toggleInventoryAssetsMenu(event) {
 }
 
 // ── BOOT ───────────────────────────────────────────────────────────────────────
+// Nothing of the dashboard shows until this account's menus and landing page
+// are settled (said 22 October 2026: a tutor saw every office's screens for a
+// second first). A failure or a slow answer never leaves the screen blank.
+function uncloak() { document.body.classList.remove('booting'); }
+
 async function boot() {
+  setTimeout(uncloak, 6000);
   try {
     const [dash, levels, sems] = await Promise.all([
       api('GET', '/dashboard/'),
@@ -4916,6 +4929,12 @@ async function boot() {
     } else if (dash.is_dpfpa && !state.isStaff && !state.isAccountant) {
       showExecSection('finance', document.querySelector('[data-exec-section="finance"].nav-sub-btn'));
     }
+    if (!state.isStaff && state.isAccountant) {
+      // Their day starts at the finance desk of admissions (said 22 October 2026).
+      document.body.classList.add('accountant-desk');
+      showAdmissionSection('desk', document.querySelector('#admissions-nav-group [data-adm-section="desk"]'));
+    }
+    uncloak();
     updatePeriodLocks();
     loadAnnouncements();
     loadNotifications();
@@ -4964,12 +4983,8 @@ async function boot() {
     populateAllSelects();
     await refreshModuleDropdowns('', '', 'stu-flt-module');
     buildSidebarModules();
-    if (!state.isStaff && state.isAccountant) {
-      // Their day starts at the finance desk of admissions (said 22 October 2026).
-      document.body.classList.add('accountant-desk');
-      showAdmissionSection('desk', document.querySelector('#admissions-nav-group [data-adm-section="desk"]'));
-    }
   } catch(e) {
+    uncloak();
     console.error(e);
     toast('Failed to load dashboard', 'var(--red)');
   }
@@ -10384,7 +10399,7 @@ async function renderAppInvoices(application) {
         </tbody></table></div>` : '<div style="font-size:.8rem;color:var(--muted);margin-bottom:6px;">No invoice yet.</div>'}
       ${kinds.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">${kinds.map(button).join('')}
         <button class="btn btn-primary btn-sm" onclick="issueInvoiceFor(${application.profile}, null, null, () => openApplicationModal(${application.id}))">Everything outstanding</button></div>` : ''}
-      ${me.finance ? waiverFormHtml(application.profile, s.charges || [], await api('GET', `/waiver-requests/?profile_id=${application.profile}`).catch(() => []), application.id) : ''}`;
+      ${me.finance ? waiverFormHtml(application.profile, await api('GET', `/waiver-requests/shortfalls/?profile_id=${application.profile}`).catch(() => []), await api('GET', `/waiver-requests/?profile_id=${application.profile}`).catch(() => []), application.id) : ''}`;
   } catch (e) { box.innerHTML = ''; }
 }
 
@@ -10470,8 +10485,8 @@ async function loadOverrides() {
   api('GET', '/waiver-requests/').then(rows => {
     document.getElementById('fin-waivers-tbody').innerHTML = rows.length ? rows.map(w => `<tr>
       <td>${personCell(w.name, w.college_id || w.reg_no)}</td>
-      <td>${safeText(w.charge)} · instalment ${w.installment}</td>
-      <td class="num">${money(w.amount)}</td><td>${safeText(w.reason)}</td>
+      <td>${safeText(w.charge)}${w.charge_id ? ` · instalment ${w.installment}` : ''}</td>
+      <td class="num">${money(w.shortfall)}</td><td>${safeText(w.reason)}</td>
       <td><span class="badge ${w.status === 'approved' ? 'badge-green' : w.status === 'refused' ? 'badge-red' : 'badge-yellow'}">${safeText(w.status_display)}</span></td>
       <td>${safeText(w.decision_note || '—')}</td></tr>`).join('')
       : '<tr><td colspan="6"><div class="empty">No shortfall waivers asked for</div></td></tr>';
@@ -14613,9 +14628,9 @@ async function loadWaiverApprovals() {
   document.getElementById('waiver-pending-count').textContent = pending.length ? `${pending.length}` : '';
   document.getElementById('waiver-pending-tbody').innerHTML = pending.length ? pending.map(w => `<tr>
       <td>${personCell(w.name, w.college_id || w.reg_no)}</td>
-      <td>${safeText(w.charge)}<div style="font-size:.72rem;color:var(--muted)">${safeText(w.family)} · instalment ${w.installment} · due ${safeText(w.due_date)}</div></td>
+      <td>${safeText(w.charge)}<div style="font-size:.72rem;color:var(--muted)">${w.charge_id ? `${safeText(w.family)} · instalment ${w.installment} · ` : ''}due ${safeText(w.due_date)}</div></td>
       <td class="num">${money(w.charge_amount)}</td>
-      <td class="num"><strong>${money(Number(w.amount) - Number(w.waived_before || 0))}</strong></td>
+      <td class="num"><strong>${money(w.shortfall)}</strong></td>
       <td>${safeText(w.reason)}</td>
       <td>${safeText(w.requested_by)}<div style="font-size:.72rem;color:var(--muted)">${safeText(String(w.requested_at).slice(0, 16).replace('T', ' '))}</div></td>
       <td class="act">${canDecide ? `<button class="btn btn-primary btn-sm" onclick="decideWaiver(${w.id}, true)">Approve</button>
@@ -14624,7 +14639,7 @@ async function loadWaiverApprovals() {
     : '<tr><td colspan="7"><div class="empty"><div class="ei"><i class="bi bi-check2-circle"></i></div>Nothing waiting</div></td></tr>';
   document.getElementById('waiver-done-tbody').innerHTML = done.length ? done.map(w => `<tr>
       <td>${personCell(w.name, w.college_id || w.reg_no)}</td><td>${safeText(w.charge)}</td>
-      <td class="num">${money(w.amount)}</td>
+      <td class="num">${money(w.shortfall)}</td>
       <td><span class="badge ${w.status === 'approved' ? 'badge-green' : 'badge-red'}">${safeText(w.status_display)}</span></td>
       <td>${safeText(w.decided_by)}</td><td>${safeText(w.decision_note || '—')}</td></tr>`).join('')
     : '<tr><td colspan="6"><div class="empty">Nothing decided yet</div></td></tr>';
@@ -14644,47 +14659,57 @@ async function decideWaiver(id, approve) {
 }
 
 // The accountant asks, from the finance desk, for a shortfall on tuition or
-// direct costs to be waived; DPFPA decides.
-// The same request from Waivers & Overrides, for any student (said 22 October 2026).
+// direct costs to be waived; DPFPA decides. They choose the kind and the
+// instalment that is short, and write what is short (said 22 October 2026).
+// The same request from Waivers & Overrides, for any student.
 async function loadWaiverFormFor(profileId) {
   const box = document.getElementById('fin-wv-form');
   if (!profileId) { box.innerHTML = ''; return; }
   try {
-    const [s, waivers] = await Promise.all([api('GET', `/finance/statement/${profileId}/`),
-                                            api('GET', `/waiver-requests/?profile_id=${profileId}`)]);
-    box.innerHTML = waiverFormHtml(Number(profileId), s.charges || [], waivers, null, { title: false });
-    if (!(s.charges || []).some(c => ['fee', 'direct_cost'].includes(c.family) && Number(c.balance) > 0)) {
-      box.insertAdjacentHTML('beforeend', '<p class="help-note">Nothing owed on tuition or direct costs.</p>');
-    }
+    const [shortfalls, waivers] = await Promise.all([
+      api('GET', `/waiver-requests/shortfalls/?profile_id=${profileId}`),
+      api('GET', `/waiver-requests/?profile_id=${profileId}`)]);
+    box.innerHTML = waiverFormHtml(Number(profileId), shortfalls, waivers, null, { title: false });
+    if (!shortfalls.length) box.insertAdjacentHTML('beforeend', '<p class="help-note">Nothing owed on tuition or direct costs this year.</p>');
   } catch (e) { box.innerHTML = ''; toast(apiErrorText(e, 'Could not load the student'), 'var(--red)'); }
 }
 
-function waiverFormHtml(profileId, charges, waivers, applicationId, { title = true } = {}) {
-  const open = charges.filter(c => ['fee', 'direct_cost'].includes(c.family) && Number(c.balance) > 0);
+function waiverInstalmentOptions(family) {
+  return (state.waiverShortfalls || []).filter(s => s.family === family).map(s =>
+    `<option value="${s.installment_number}" data-owed="${s.owed}" data-year="${s.academic_year_id}">${s.installment_number} · due ${new Date(s.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · owes ${money(s.owed)}</option>`).join('');
+}
+
+function waiverFormHtml(profileId, shortfalls, waivers, applicationId, { title = true } = {}) {
+  state.waiverShortfalls = shortfalls;
+  const families = [...new Map(shortfalls.map(s => [s.family, s.family_display])).entries()];
   const mine = waivers.filter(w => w.status === 'pending');
   const recent = waivers.filter(w => w.status !== 'pending').slice(0, 3);
-  return `${title ? `<div class="card-title" style="font-size:.9rem;margin-top:14px;">Waive a shortfall <span class="tip" tabindex="0" role="note" aria-label="Help: waivers" data-tip="Tuition or direct costs only. The request goes to DPFPA; nothing comes off the bill until it is approved, and the student waits at this desk meanwhile.">?</span></div>` : ''}
-    ${mine.map(w => `<div class="missing-note" style="margin-bottom:6px;">Waiting for DPFPA: ${money(Number(w.amount) - Number(w.waived_before || 0))} on ${safeText(w.charge)} (instalment ${w.installment}) — ${safeText(w.reason)}</div>`).join('')}
+  return `${title ? `<div class="card-title" style="font-size:.9rem;margin-top:14px;">Waive a shortfall <span class="tip" tabindex="0" role="note" aria-label="Help: waivers" data-tip="Tuition fee or direct costs only: choose which, and which instalment is short, and write what is short. The request goes to DPFPA; nothing comes off the bill until it is approved, and the student waits at this desk meanwhile.">?</span></div>` : ''}
+    ${mine.map(w => `<div class="missing-note" style="margin-bottom:6px;">Waiting for DPFPA: ${money(w.shortfall)} short on ${safeText(w.charge)} — ${safeText(w.reason)}</div>`).join('')}
     ${recent.map(w => `<div style="font-size:.78rem;color:var(--muted);margin-bottom:4px;">${safeText(w.status_display)}: ${safeText(w.charge)} — ${safeText(w.decision_note || w.reason)}</div>`).join('')}
-    ${open.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
-      <div class="field" style="margin:0;flex:1 1 220px;"><label>Charge</label><select id="wv-charge">${open.map(c =>
-        `<option value="${c.id}" data-waived="${c.waived_amount}" data-balance="${c.balance}">${safeText(c.charge_type_name)} · instalment ${c.installment_number} · owes ${money(c.balance)}</option>`).join('')}</select></div>
-      <div class="field" style="margin:0;flex:0 1 140px;"><label>Waive</label><input id="wv-amount" type="number" min="1" step="0.01" placeholder="shortfall"></div>
-      <div class="field" style="margin:0;flex:2 1 240px;"><label>Why</label><input id="wv-reason" placeholder="e.g. 20,000 short on the first instalment — bursary"></div>
+    ${families.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+      <div class="field" style="margin:0;flex:0 1 160px;"><label>Category</label><select id="wv-family"
+        onchange="document.getElementById('wv-inst').innerHTML = waiverInstalmentOptions(this.value)">${families.map(([value, label]) =>
+        `<option value="${value}">${safeText(label)}</option>`).join('')}</select></div>
+      <div class="field" style="margin:0;flex:1 1 290px;"><label>Instalment that is short</label><select id="wv-inst">${waiverInstalmentOptions(families[0][0])}</select></div>
+      <div class="field" style="margin:0;flex:0 1 140px;"><label>What is short</label><input id="wv-amount" type="number" min="1" step="0.01" placeholder="e.g. 20000"></div>
+      <div class="field" style="margin:0;flex:2 1 240px;"><label>Why</label><input id="wv-reason" placeholder="e.g. sponsor pays the rest in March"></div>
       <button class="btn btn-warning btn-sm" onclick="requestWaiver(${profileId}, ${applicationId || 'null'})">Send to DPFPA</button></div>` : ''}`;
 }
 
 async function requestWaiver(profileId, applicationId) {
-  const select = document.getElementById('wv-charge');
-  const option = select.selectedOptions[0];
+  const family = document.getElementById('wv-family').value;
+  const option = document.getElementById('wv-inst').selectedOptions[0];
   const shortfall = Number(document.getElementById('wv-amount').value || 0);
   const reason = document.getElementById('wv-reason').value.trim();
-  if (!(shortfall > 0)) { toast('How much is to be waived?', 'var(--red)'); return; }
-  if (shortfall > Number(option.dataset.balance)) { toast('More than is owed on that charge', 'var(--red)'); return; }
+  if (!option) { toast('Choose the instalment that is short', 'var(--red)'); return; }
+  if (!(shortfall > 0)) { toast('Write what is short', 'var(--red)'); return; }
+  if (shortfall > Number(option.dataset.owed)) { toast(`More than is owed on that instalment (${money(option.dataset.owed)})`, 'var(--red)'); return; }
   if (!reason) { toast('Say why', 'var(--red)'); return; }
   try {
-    const r = await api('POST', `/student-charges/${select.value}/waive/`,
-                        { amount: (Number(option.dataset.waived) + shortfall).toFixed(2), reason });
+    const r = await api('POST', '/waiver-requests/', {
+      profile_id: profileId, academic_year_id: option.dataset.year, family,
+      installment_number: option.value, amount: shortfall.toFixed(2), reason });
     toast(r.detail || 'Sent to DPFPA', 'var(--green)');
     if (applicationId) openApplicationModal(applicationId);
     else { loadWaiverFormFor(profileId); loadOverrides(); }

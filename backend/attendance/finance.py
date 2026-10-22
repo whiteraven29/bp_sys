@@ -583,6 +583,17 @@ def residence_for(profile, academic_year):
     return StudentResidence.objects.filter(profile=profile, academic_year=academic_year).first()
 
 
+def residences_for(pairs):
+    """residence_for for many (profile id, academic year id) at once."""
+    pairs = set(pairs)
+    found = {}
+    for residence in (StudentResidence.objects
+                      .filter(profile_id__in={p for p, _ in pairs}, academic_year_id__in={y for _, y in pairs})
+                      .order_by('pk')):
+        found.setdefault((residence.profile_id, residence.academic_year_id), residence)
+    return {pair: found.get(pair) for pair in pairs}
+
+
 def bill_hostel(profile, academic_year, *, from_semester_number=1, actor=None, class_level=None,
                 programme=None, entry=None):
     """Charge the hostel fee's instalments from this semester on.
@@ -841,6 +852,88 @@ def pending_waivers(profile):
     return WaiverRequest.objects.filter(profile=profile, status=WaiverRequest.PENDING)
 
 
+#: What the accountant chooses from (said 22 October 2026): the two kinds of
+#: charge a shortfall is waived on, by the names the desk uses.
+WAIVER_FAMILIES = {ChargeType.FEE: 'Tuition fee', ChargeType.DIRECT_COST: 'Direct costs'}
+
+
+def instalment_charges(profile, academic_year, family, installment_number):
+    """One instalment of the year's tuition or direct costs: its charges,
+    earliest due first. Items are left out — they are billed as missing, not
+    by instalment."""
+    return list(with_balances(
+        StudentCharge.objects.filter(profile=profile, academic_year=academic_year,
+                                     charge_type__family=family, installment_number=installment_number)
+        .exclude(charge_type_id__in=item_charge_type_ids())
+        .select_related('charge_type').order_by('due_date', 'charge_type__name', 'id')))
+
+
+def shortfalls(profile, academic_year):
+    """Each tuition and direct-cost instalment of the year still owed on —
+    what the accountant chooses from when one is short."""
+    groups = {}
+    charges = with_balances(
+        StudentCharge.objects.filter(profile=profile, academic_year=academic_year,
+                                     charge_type__family__in=list(WAIVER_FAMILIES))
+        .exclude(charge_type_id__in=item_charge_type_ids()).select_related('charge_type'))
+    for charge in charges:
+        family = charge.charge_type.family
+        group = groups.setdefault((family, charge.installment_number), {
+            'academic_year_id': academic_year.id, 'family': family, 'family_display': WAIVER_FAMILIES[family],
+            'installment_number': charge.installment_number, 'due_date': charge.due_date,
+            'billed': ZERO, 'owed': ZERO})
+        group['due_date'] = min(group['due_date'], charge.due_date)
+        group['billed'] += charge.amount
+        group['owed'] += charge_balance(charge)
+    order = list(WAIVER_FAMILIES)
+    return sorted((g for g in groups.values() if g['owed'] > ZERO),
+                  key=lambda g: (order.index(g['family']), g['installment_number'] or 0))
+
+
+@transaction.atomic
+def request_shortfall_waiver(profile, academic_year, family, installment_number, amount, reason, *, actor=None):
+    """The accountant asks DPFPA to waive what is short on one instalment of
+    tuition or direct costs (said 22 October 2026). Nothing changes on the
+    bill until DPFPA approves."""
+    from . import notifications
+    from .models import Notification, WaiverRequest
+    if family not in WAIVER_FAMILIES:
+        raise WaiverError('Choose tuition fee or direct costs.')
+    amount = money(amount or 0)
+    reason = (reason or '').strip()
+    charges = instalment_charges(profile, academic_year, family, installment_number)
+    owed = sum((charge_balance(c) for c in charges), ZERO)
+    label = f'{WAIVER_FAMILIES[family]}, instalment {installment_number}'
+    if owed <= ZERO:
+        raise WaiverError(f'Nothing is owed on {label}.')
+    if amount <= ZERO:
+        raise WaiverError('Write how much is short.')
+    if amount > owed:
+        raise WaiverError(f'More than is owed on {label} ({owed:,.2f}).')
+    if not reason:
+        raise WaiverError('Say why it is waived.')
+    waiting = WaiverRequest.objects.filter(profile=profile, status=WaiverRequest.PENDING)
+    if (waiting.filter(academic_year=academic_year, family=family, installment_number=installment_number).exists()
+            or waiting.filter(charge__in=charges).exists()):
+        raise WaiverError(f'A waiver on {label} is already waiting for DPFPA.')
+    made = WaiverRequest.objects.create(profile=profile, academic_year=academic_year, family=family,
+                                        installment_number=installment_number, amount=amount,
+                                        reason=reason[:300], requested_by=actor)
+    audit('waiver.request', 'WaiverRequest', actor=actor, entity_id=made.id, profile=profile,
+          summary=f'Asked DPFPA to waive {amount:,.2f} short on {label}: {reason}')
+    notifications.notify(notifications.dpfpa(), kind=Notification.WAIVER_REQUESTED,
+                         title=f'Waiver to approve: {profile.name}',
+                         body=f'{amount:,.2f} short on {label}. {reason}', link='executive:waivers')
+    return made
+
+
+def waiver_label(waiver):
+    """What a request is about, as the desks name it."""
+    if waiver.charge_id:
+        return f'{waiver.charge.charge_type} (instalment {waiver.charge.installment_number})'
+    return f'{WAIVER_FAMILIES.get(waiver.family, waiver.family)}, instalment {waiver.installment_number}'
+
+
 @transaction.atomic
 def request_waiver(charge, amount, reason, *, actor=None):
     """The accountant asks DPFPA to waive this much on a tuition or direct-cost
@@ -873,26 +966,45 @@ def decide_waiver(waiver, *, approve, actor=None, note=''):
     """DPFPA's yes applies the waiver; a no leaves the bill as it was."""
     from . import notifications
     from .models import Notification, WaiverRequest
-    waiver = WaiverRequest.objects.select_for_update().select_related('charge__charge_type', 'profile').get(pk=waiver.pk)
+    waiver = (WaiverRequest.objects.select_for_update(of=('self',))
+              .select_related('charge__charge_type', 'profile', 'academic_year').get(pk=waiver.pk))
     if waiver.status != WaiverRequest.PENDING:
         raise WaiverError('This waiver has already been decided.')
     if not approve and not (note or '').strip():
         raise WaiverError('Say why it is refused.')
     by = (actor.get_full_name() or actor.username) if actor is not None else 'DPFPA'
-    if approve:
+    note = (note or '').strip()
+    label = waiver_label(waiver)
+    if approve and waiver.charge_id:
         waive_charge(waiver.charge, waiver.amount, f'{waiver.reason} — approved by {by}'[:300], actor=actor)
+    elif approve:
+        # What is short comes off the instalment's charges in turn, each no
+        # further than what is still owed on it.
+        left = waiver.amount
+        for charge in instalment_charges(waiver.profile, waiver.academic_year, waiver.family,
+                                         waiver.installment_number):
+            take = min(left, charge_balance(charge))
+            if take > ZERO:
+                waive_charge(charge, charge.waived_amount + take,
+                             f'{waiver.reason} — approved by {by}'[:300], actor=actor)
+                left -= take
+            if left <= ZERO:
+                break
+        if left >= waiver.amount:
+            raise WaiverError(f'Nothing is owed on {label} now. Refuse it, saying it was paid.')
+        if left > ZERO:
+            note = (f'{waiver.amount - left:,.2f} waived: the rest was paid meanwhile. {note}').strip()
     waiver.status = WaiverRequest.APPROVED if approve else WaiverRequest.REFUSED
     waiver.decided_by = actor
     waiver.decided_at = timezone.now()
-    waiver.decision_note = (note or '').strip()[:300]
+    waiver.decision_note = note[:300]
     waiver.save(update_fields=['status', 'decided_by', 'decided_at', 'decision_note'])
-    audit('waiver.decide', 'StudentCharge', actor=actor, entity_id=waiver.charge_id, profile=waiver.profile,
-          summary=f"{'Approved' if approve else 'Refused'} the waiver on {waiver.charge.charge_type}"
-                  + (f': {note}' if note else ''))
+    audit('waiver.decide', 'WaiverRequest', actor=actor, entity_id=waiver.id, profile=waiver.profile,
+          summary=f"{'Approved' if approve else 'Refused'} the waiver on {label}" + (f': {note}' if note else ''))
     notifications.notify([u for u in [waiver.requested_by] if u is not None] or notifications.accountants(),
                          kind=Notification.WAIVER_DECIDED,
                          title=f"Waiver {'approved' if approve else 'refused'}: {waiver.profile.name}",
-                         body=f'{waiver.charge.charge_type}: {waiver.reason}' + (f' — {note}' if note else ''),
+                         body=f'{label}: {waiver.reason}' + (f' — {note}' if note else ''),
                          link='finance:overrides')
     return waiver
 
@@ -1047,6 +1159,28 @@ def balance_for(profile, academic_year=None):
         'paid': money(paid),
         'balance': money(billed - waived - paid),
     }
+
+
+def balances_for(pairs):
+    """balance_for(...)['balance'] for many (profile id, academic year id) at
+    once — two grouped queries for a whole list instead of three per row."""
+    pairs = set(pairs)
+    profile_ids, year_ids = {p for p, _ in pairs}, {y for _, y in pairs}
+    owed = {pair: ZERO for pair in pairs}
+    for row in (StudentCharge.objects.filter(profile_id__in=profile_ids, academic_year_id__in=year_ids)
+                .order_by().values('profile_id', 'academic_year_id')
+                .annotate(billed=Sum('amount'), waived=Sum('waived_amount'))):
+        pair = (row['profile_id'], row['academic_year_id'])
+        if pair in owed:
+            owed[pair] += (row['billed'] or ZERO) - (row['waived'] or ZERO)
+    for row in (PaymentAllocation.objects
+                .filter(charge__profile_id__in=profile_ids, charge__academic_year_id__in=year_ids)
+                .order_by().values('charge__profile_id', 'charge__academic_year_id')
+                .annotate(paid=Sum('amount'))):
+        pair = (row['charge__profile_id'], row['charge__academic_year_id'])
+        if pair in owed:
+            owed[pair] -= row['paid'] or ZERO
+    return {pair: money(amount) for pair, amount in owed.items()}
 
 
 # ── invoices ──────────────────────────────────────────────────────────────────
@@ -1925,18 +2059,28 @@ def programme_by_profile(profile_ids):
             if profile_id in ids and profile_id not in found and programme is not None:
                 found[profile_id] = programme
 
-    take((r.profile_id, r.programme) for r in StudentStanding.objects
-         .filter(profile_id__in=ids, programme__isnull=False).select_related('programme__department'))
-    take((r.profile_id, r.programme) for r in SemesterRegistration.objects
-         .filter(profile_id__in=ids).select_related('programme__department')
-         .order_by('-semester__academic_year__name', '-semester__number'))
-    take((a.profile_id, a.intake.programme) for a in CourseApplication.objects
-         .filter(profile_id__in=ids).select_related('intake__programme__department').order_by('-created_at'))
-    take((a.profile_id, a.programme) for a in Application.objects
-         .filter(profile_id__in=ids).select_related('programme__department').order_by('-created_at'))
-    take((e.profile_id, e.module.programme) for e in Student.objects
-         .filter(profile_id__in=ids, module__programme__isnull=False)
-         .select_related('module__programme__department').order_by('-id'))
+    # Each source is asked only about the students the ones before it left
+    # without a programme: most have a standing, so the rest is short work.
+    sources = (
+        lambda left: ((r.profile_id, r.programme) for r in StudentStanding.objects
+                      .filter(profile_id__in=left, programme__isnull=False).select_related('programme__department')),
+        lambda left: ((r.profile_id, r.programme) for r in SemesterRegistration.objects
+                      .filter(profile_id__in=left).select_related('programme__department')
+                      .order_by('-semester__academic_year__name', '-semester__number')),
+        lambda left: ((a.profile_id, a.intake.programme) for a in CourseApplication.objects
+                      .filter(profile_id__in=left).select_related('intake__programme__department')
+                      .order_by('-created_at')),
+        lambda left: ((a.profile_id, a.programme) for a in Application.objects
+                      .filter(profile_id__in=left).select_related('programme__department').order_by('-created_at')),
+        lambda left: ((e.profile_id, e.module.programme) for e in Student.objects
+                      .filter(profile_id__in=left, module__programme__isnull=False)
+                      .select_related('module__programme__department').order_by('-id')),
+    )
+    for source in sources:
+        left = ids - found.keys()
+        if not left:
+            break
+        take(source(left))
     return found
 
 

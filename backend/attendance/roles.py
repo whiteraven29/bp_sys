@@ -27,6 +27,8 @@ its continuous assessment, and the examination officer the rest (see
 views.check_result_entry). Holding a senior office adds no power over marks.
 """
 
+import contextvars
+
 from .models import (
     AccountantProfile, AdmissionOfficerProfile, DeanOfStudentsProfile, DeputyAcademicProfile,
     DeputyFinanceProfile, EstateOfficerProfile, ExamOfficerProfile, HeadOfDepartmentProfile, ICTOfficerProfile,
@@ -39,8 +41,44 @@ def _signed_in(user):
     return bool(user and user.is_authenticated)
 
 
+#: The offices already looked up during this request. A screen asks "is this
+#: the Principal?" a dozen times over; each answer was a query. Set fresh for
+#: every request by OfficeLookupMiddleware and emptied whenever an office is
+#: given or taken (signals.py), so an answer is never older than the request.
+_known = contextvars.ContextVar('edutrack_offices', default=None)
+
+
 def _holds(model, user):
-    return bool(_signed_in(user) and model.objects.filter(user=user, is_active=True).exists())
+    if not _signed_in(user):
+        return False
+    known = _known.get()
+    if known is None:                       # outside a request: ask every time
+        return model.objects.filter(user=user, is_active=True).exists()
+    key = (model, user.pk)
+    if key not in known:
+        known[key] = model.objects.filter(user=user, is_active=True).exists()
+    return known[key]
+
+
+def forget_offices():
+    """An office was given or taken: look again."""
+    known = _known.get()
+    if known is not None:
+        known.clear()
+
+
+class OfficeLookupMiddleware:
+    """Keeps the offices looked up for the length of one request only."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        token = _known.set({})
+        try:
+            return self.get_response(request)
+        finally:
+            _known.reset(token)
 
 
 #: Every office a person can hold. TeacherProfile has no is_active switch.

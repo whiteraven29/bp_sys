@@ -251,8 +251,28 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      Overview, Fee Setup, Expenses, Postpone & Finish, Finance summary, Audit Trail; they land on
      Admissions ▸ My desk; no Students menu for them — Items check and Class lists back under Admissions
    - [x] 1179 tests; checked in the browser (desktop and phone, every portal view, no errors)
+3a. **Speed; no flash of other menus; waivers by instalment — 22 Oct (not committed).**
+   - [x] Measured on 300 students (1,800 enrollments, 1,200 charges, 300 applications): the admission
+     list ran 3,313 queries (2.7 s) — 11 a row; now 20 (0.33 s). Admissions sign-in 3,937 → 157 queries
+     (4.0 s → 1.0 s); Principal 3,883 → 385; tutor 320 → 102; accountant 372 → 204
+   - [x] How: staff names looked up once per response; next of kin, education, VETA applications fetched
+     with the list; balances, residence and typed items read for the whole page at once; module counts
+     in the list's own query; the staff list reads each office table once; finance's student list no
+     longer loads every charge and enrollment (0.94 s → 0.24 s); an office ("is this the Principal?")
+     looked up once per request, forgotten the moment one is given or taken
+   - [x] Slow-request log: any request over `SLOW_REQUEST_MS` (default 1000) is written to the service log
+     with its query count — `journalctl -u edutrack | grep "Slow request"`; the path only, never a search
+   - [x] Signing in: the page stays hidden behind a loader until the menus are trimmed to the person's
+     own — no second of other offices' menus (checked: tutor and accountant, nothing shown while loading)
+   - [x] Waive a shortfall: *Category* (Tuition fee / Direct costs) → *Instalment that is short* (due date,
+     what is owed) → *What is short* → *Why* → Send to DPFPA (migration 0079). Approved, it comes off that
+     instalment's charges in turn; paid meanwhile, DPFPA is told to refuse it. Requests made before keep
+     their charge
+   - [x] Tests keep the lists flat (three rows cost what thirty do); 1192 tests; checked in the browser
 2y. **On the server, after this deploy (12–22 Oct work) — in this order.**
-   - [ ] Migrations to 0078 applied by the deploy (release guide B1–B4); `Ran 1179 tests … OK` on the laptop first
+   - [ ] Migrations to 0079 applied by the deploy (release guide B1–B4); `Ran 1192 tests … OK` on the laptop first
+   - [ ] A day after the deploy: `journalctl -u edutrack --since today | grep "Slow request"` — any page
+     still slow on real data is named there, with its query count
    - [ ] `merge_programmes` (release guide B6): dry run, read it, then `--apply` — before the next application
    - [ ] B7: HOD sets programme PST on Level 4's modules and creates Level 5's (links the two students
      admitted 19–20 Oct, bills nothing); the accountant confirms no new charges on their statements

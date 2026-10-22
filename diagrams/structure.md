@@ -34,7 +34,8 @@ When the structure changes, update this file in the same change.
   │      registers.py    the printed class attendance register     │
   │      inventory.py    college property's life; the lab stock    │
   │      lifecycle.py    postponement, finishing, clearance        │
-  │      roles.py        what each office may do                   │
+  │      roles.py        what each office may do (looked up once   │
+  │                      a request: OfficeLookupMiddleware)        │
   │      veta.py         VETA courses: intakes, desks, fees        │
   │      expenses.py     the expenses register and its rules       │
   │      veta_views.py   the API for both                          │
@@ -198,8 +199,10 @@ sign in.
   NextOfKin.relationship mother | father | guardian | husband | wife | sister |
                          brother | relative | other  (parent / spouse / sibling:
                          old records only, to be corrected)
-  WaiverRequest          a shortfall waiver on tuition / direct costs: amount,
-                         reason, pending | approved | refused — DPFPA decides
+  WaiverRequest          a shortfall waiver: tuition fee or direct costs, the
+                         year and instalment, what is short (or, the first
+                         requests, one charge), reason, pending | approved |
+                         refused — DPFPA decides
   StudentPass            a pass issued: random code, valid_until, basis,
                          source (office / portal), issued_by
   semester_pass.py       the pass: coverage (windows paid), status, issue, verify by code

@@ -340,10 +340,8 @@ class SemesterPassTests(Accounts):
         self.assertContains(staff.get('/semester-pass/check/?code=AAAA-BBBB'), 'Not genuine')
 
 
-class ShortfallWaiverTests(Accounts):
-    """Said 21 October 2026: a shortfall waived on tuition or direct costs
-    waits for DPFPA; the student waits at the finance desk meanwhile; other
-    waivers are as they were."""
+class WaiverDesk(Accounts):
+    """A student at the finance desk, owing a year's tuition in two parts."""
 
     def setUp(self):
         super().setUp()
@@ -359,6 +357,13 @@ class ShortfallWaiverTests(Accounts):
         self.accountant, self.accounts = office('money', 'accountant')
         self.dpfpa_user, self.dpfpa = office('dpf', 'dpfpa')
         _, self.principal = office('boss2', 'principal')
+
+
+class ShortfallWaiverTests(WaiverDesk):
+    """Said 21 October 2026: a shortfall waived on tuition or direct costs
+    waits for DPFPA; the student waits at the finance desk meanwhile; other
+    waivers are as they were. (These ask by one charge, as the first requests
+    did; the API still takes them.)"""
 
     def ask(self, amount='20000', reason='20,000 short on the first instalment'):
         return self.accounts.post(f'/api/student-charges/{self.charge.id}/waive/',
@@ -418,3 +423,74 @@ class ShortfallWaiverTests(Accounts):
         self.assertEqual(done.status_code, 200, done.data)
         other.refresh_from_db()
         self.assertEqual(other.waived_amount, Decimal('50000.00'))
+
+
+class InstalmentWaiverTests(WaiverDesk):
+    """Said 22 October 2026: the accountant chooses tuition fee or direct
+    costs, which instalment is short, writes what is short, and sends it to
+    DPFPA. DPFPA's yes takes it off that instalment's charges."""
+
+    def ask_for(self, family='fee', instalment=1, amount='20000', reason='Sponsor pays the rest in March'):
+        return self.accounts.post('/api/waiver-requests/', {
+            'profile_id': self.profile.id, 'academic_year_id': self.year.id, 'family': family,
+            'installment_number': instalment, 'amount': amount, 'reason': reason}, format='json')
+
+    def test_the_desk_chooses_from_the_instalments_owed_on(self):
+        rows = self.accounts.get(f'/api/waiver-requests/shortfalls/?profile_id={self.profile.id}').data
+        self.assertEqual([(r['family'], r['family_display'], r['installment_number']) for r in rows],
+                         [('fee', 'Tuition fee', 1), ('fee', 'Tuition fee', 2)])
+        self.assertEqual(sum(Decimal(r['owed']) for r in rows), Decimal('1000000.00'))
+        self.assertEqual(self.dpfpa.get(f'/api/waiver-requests/shortfalls/?profile_id={self.profile.id}').status_code,
+                         403)
+
+    def test_it_waits_then_comes_off_the_instalment(self):
+        from .models import WaiverRequest
+        asked = self.ask_for()
+        self.assertEqual(asked.status_code, 201, asked.data)
+        self.assertEqual(asked.data['waiver_request']['charge'], 'Tuition fee · instalment 1')
+        self.assertEqual(asked.data['waiver_request']['shortfall'], '20000.00')
+        self.charge.refresh_from_db()
+        self.assertEqual(self.charge.waived_amount, Decimal('0'))
+        with self.assertRaises(admissions.AdmissionError):
+            admissions.complete_step(self.application, actor=self.officer)
+        self.assertEqual(self.ask_for(amount='5000').status_code, 400)          # one at a time
+        waiver = WaiverRequest.objects.get()
+        decided = self.dpfpa.post(f'/api/waiver-requests/{waiver.id}/decide/', {'approve': True}, format='json')
+        self.assertEqual(decided.status_code, 200, decided.data)
+        self.charge.refresh_from_db()
+        self.assertEqual(self.charge.waived_amount, Decimal('20000.00'))
+        second = StudentCharge.objects.get(profile=self.profile, charge_type=self.tuition, installment_number=2)
+        self.assertEqual(second.waived_amount, Decimal('0'))
+
+    def test_what_is_short_spreads_over_the_instalments_charges(self):
+        from .models import WaiverRequest
+        uniform = ChargeType.objects.create(name='Uniform', family=ChargeType.DIRECT_COST,
+                                            applies=ChargeType.AUTOMATIC)
+        due = date(2026, 10, 15)
+        first = finance.raise_charge(self.profile, self.direct, self.year, Decimal('30000'), due,
+                                     source=StudentCharge.STRUCTURE)
+        then = finance.raise_charge(self.profile, uniform, self.year, Decimal('40000'), due,
+                                    source=StudentCharge.STRUCTURE)
+        self.assertEqual(self.ask_for('direct_cost', 1, '50000').status_code, 201)
+        waiver = WaiverRequest.objects.get()
+        self.dpfpa.post(f'/api/waiver-requests/{waiver.id}/decide/', {'approve': True}, format='json')
+        first.refresh_from_db()
+        then.refresh_from_db()
+        self.assertEqual((first.waived_amount, then.waived_amount), (Decimal('30000.00'), Decimal('20000.00')))
+
+    def test_what_the_desk_may_not_ask(self):
+        self.assertEqual(self.ask_for(amount='999999999').status_code, 400)      # more than is owed
+        self.assertEqual(self.ask_for(amount='0').status_code, 400)
+        self.assertEqual(self.ask_for(reason=' ').status_code, 400)
+        self.assertEqual(self.ask_for(family='other').status_code, 400)
+        self.assertEqual(self.ask_for(instalment=7).status_code, 400)           # no such instalment
+        self.assertEqual(self.dpfpa.post('/api/waiver-requests/', {}, format='json').status_code, 403)
+
+    def test_paid_meanwhile_cannot_be_approved(self):
+        from .models import WaiverRequest
+        self.ask_for()
+        finance.waive_charge(self.charge, self.charge.amount, 'Bursary', actor=None)
+        waiver = WaiverRequest.objects.get()
+        refused = self.dpfpa.post(f'/api/waiver-requests/{waiver.id}/decide/', {'approve': True}, format='json')
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('Nothing is owed', refused.data['detail'])

@@ -10,6 +10,14 @@ The switch is a *view* scope and never a permission: a Principal working in
 narrower set. Nothing here can widen what an account may do.
 """
 
+import logging
+import time
+
+from django.conf import settings
+from django.db import connection
+
+slow_log = logging.getLogger('edutrack.slow')
+
 
 class TeachingScopeMiddleware:
     """Carry the session's teaching-scope switch onto the request's user.
@@ -132,3 +140,33 @@ class IdleTimeoutMiddleware:
         if request.path not in self.BACKGROUND and (last is None or now - last > 15):
             session[self.STAMP] = now           # written at most every 15 seconds
         return self.get_response(request)
+
+
+class SlowRequestLogMiddleware:
+    """Write down every request slower than SLOW_REQUEST_MS (said 22 October
+    2026: "the system is slow" — this says which page, how slow, and how many
+    queries it ran). Read it with: journalctl -u edutrack | grep "Slow request".
+
+    The path only, never the query string or the body, so no name or number
+    typed into a search lands in the log.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+        self.limit = getattr(settings, 'SLOW_REQUEST_MS', 1000)
+
+    def __call__(self, request):
+        ran = [0]
+
+        def count(execute, sql, params, many, context):
+            ran[0] += 1
+            return execute(sql, params, many, context)
+
+        started = time.monotonic()
+        with connection.execute_wrapper(count):
+            response = self.get_response(request)
+        took = (time.monotonic() - started) * 1000
+        if self.limit and took >= self.limit:
+            slow_log.warning('Slow request: %s %s took %d ms, %d queries, status %s',
+                             request.method, request.path, took, ran[0], response.status_code)
+        return response

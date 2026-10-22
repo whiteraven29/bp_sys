@@ -333,17 +333,21 @@ class ModuleSerializer(serializers.ModelSerializer):
                 })
         return attrs
 
+    # A list counts in its own query (ModuleViewSet.get_queryset); one module
+    # saved or read alone counts here.
     def get_student_count(self, obj):
-        return obj.students.count()
+        return obj.n_students if hasattr(obj, 'n_students') else obj.students.count()
 
     def get_session_count(self, obj):
-        return obj.sessions.count()
+        return obj.n_sessions if hasattr(obj, 'n_sessions') else obj.sessions.count()
 
     def get_theory_count(self, obj):
-        return obj.sessions.filter(session_type=Session.THEORY).count()
+        return (obj.n_theory if hasattr(obj, 'n_theory')
+                else obj.sessions.filter(session_type=Session.THEORY).count())
 
     def get_practical_count(self, obj):
-        return obj.sessions.filter(session_type=Session.PRACTICAL).count()
+        return (obj.n_practical if hasattr(obj, 'n_practical')
+                else obj.sessions.filter(session_type=Session.PRACTICAL).count())
 
 
 def known_student(reg_no):
@@ -356,6 +360,23 @@ def known_student(reg_no):
 
 
 NOT_ADMITTED = '{} has not been admitted. New students come in through Admissions.'
+
+
+def _staff_name(context, user):
+    """A staff member's name, looked up once per response: finding it reads a
+    table per role, and a list names the same few people on every row."""
+    from .views import full_name_for
+    names = context.setdefault('_staff_names', {}) if context is not None else {}
+    if user.pk not in names:
+        names[user.pk] = full_name_for(user)
+    return names[user.pk]
+
+
+def _page_rows(serializer, obj):
+    """The rows being drawn with this one — the whole page for a list."""
+    parent = getattr(serializer, 'parent', None)
+    rows = getattr(parent, 'instance', None) if isinstance(parent, serializers.ListSerializer) else None
+    return list(rows) if rows is not None else [obj]
 
 
 def _provisional_ids(context):
@@ -1973,8 +1994,7 @@ class ApplicationStepSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_done_by_name(self, obj):
-        from .views import full_name_for
-        return full_name_for(obj.done_by) if obj.done_by_id else ''
+        return _staff_name(self.context, obj.done_by) if obj.done_by_id else ''
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
@@ -2016,12 +2036,27 @@ class ApplicationSerializer(serializers.ModelSerializer):
     def get_details(self, obj):
         """Who the student is, as records took it down — read by every desk."""
         from .views import profile_details
-        details = profile_details(obj.profile)
+        details = profile_details(obj.profile, typed=self._per_page('_typed_items', obj, obj.profile_id))
         profile = obj.profile
         details['passport_url'] = (f'/api/student-records/{profile.id}/passport/?v='
                                    f'{int(profile.passport_updated_at.timestamp()) if profile.passport_updated_at else 0}'
                                    if profile.passport else '')
         return details
+
+    def _per_page(self, name, obj, key):
+        """What a row needs from other tables, read for the whole page at once
+        (one query, not one per row) and kept for the response."""
+        cache = self.context.setdefault(name, {})
+        if key not in cache:
+            from .admissions import typed_items_for
+            rows = _page_rows(self, obj)
+            if name == '_typed_items':
+                cache.update(typed_items_for({row.profile_id for row in rows} | {key}))
+            else:
+                pairs = {(row.profile_id, row.semester.academic_year_id) for row in rows} | {key}
+                build = finance.balances_for if name == '_balances' else finance.residences_for
+                cache.update(build(pairs))
+        return cache[key]
 
     def get_missing_details(self, obj):
         from .admissions import missing_details
@@ -2038,11 +2073,13 @@ class ApplicationSerializer(serializers.ModelSerializer):
 
     def _hides_money(self):
         """DPARC reads the admission queue but not the money in it."""
-        request = self.context.get('request')
-        user = getattr(request, 'user', None)
-        return bool(user and is_dparc(user) and not (
-            is_principal(user) or is_accountant(user)
-            or is_admission_officer(user) or is_records_officer(user)))
+        if '_hides_money' not in self.context:          # once per response, not per row
+            request = self.context.get('request')
+            user = getattr(request, 'user', None)
+            self.context['_hides_money'] = bool(user and is_dparc(user) and not (
+                is_principal(user) or is_accountant(user)
+                or is_admission_officer(user) or is_records_officer(user)))
+        return self.context['_hides_money']
 
     def get_payment(self, obj):
         """Whether they have paid what registration needs — the one thing that
@@ -2077,25 +2114,21 @@ class ApplicationSerializer(serializers.ModelSerializer):
 
     def get_residence(self, obj):
         """Day or hostel for the year — the finance desk states it."""
-        residence = finance.residence_for(obj.profile, obj.semester.academic_year)
+        residence = self._per_page('_residences', obj, (obj.profile_id, obj.semester.academic_year_id))
         if residence is None:
             return None
         return {'residence': residence.residence, 'display': residence.get_residence_display(),
                 'source': residence.get_source_display()}
 
     def get_held_by_name(self, obj):
-        from .views import full_name_for
-        return full_name_for(obj.held_by) if obj.held_by_id else ''
+        return _staff_name(self.context, obj.held_by) if obj.held_by_id else ''
 
     def get_balance(self, obj):
         """What the student owes for the year they are being admitted into —
         the number the finance desk is looking at."""
         if self._hides_money():
             return None
-        try:
-            return str(finance.balance_for(obj.profile, obj.semester.academic_year)['balance'])
-        except Exception:      # a student with no charges yet
-            return '0.00'
+        return str(self._per_page('_balances', obj, (obj.profile_id, obj.semester.academic_year_id)))
 
 
 class StudentDocumentSerializer(serializers.ModelSerializer):
