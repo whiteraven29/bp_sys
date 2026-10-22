@@ -126,8 +126,8 @@ class StudentTakeoverTests(SecurityBase):
         pin = {row['reg_no']: row['password'] for row in issued}['NS0002/0002/2024']
         self.assertFalse(Student.objects.filter(nactvet_reg_no='NS0002/0002/2024').exists())   # no module
         for identifier in ('NS0002/0002/2024', 'BPH/PST/2026/0099'):
-            self.assertEqual(self.sign_in(identifier, pin).get('Location'), '/course-portal/', identifier)
-        self.assertNotEqual(self.sign_in('NS0002/0002/2024', 'Wrong#2026').get('Location'), '/course-portal/')
+            self.assertEqual(self.sign_in(identifier, pin).get('Location'), '/student-dashboard/', identifier)
+        self.assertNotEqual(self.sign_in('NS0002/0002/2024', 'Wrong#2026').get('Location'), '/student-dashboard/')
 
 
 class SignInTests(SecurityBase):

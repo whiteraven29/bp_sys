@@ -50,8 +50,10 @@ class IdleTimeoutTests(TestCase):
         response = self.client.get('/api/notifications/')
         self.assertEqual(response.status_code, 401)
         self.assertTrue(response.json()['idle'])
-        self.assertIn('30 minutes', response.json()['detail'])
-        self.assertContains(self.client.get('/login/?idle=1'), 'after 30 minutes without use')
+        self.assertEqual(response.json()['detail'], 'Your session expired. Sign in again.')
+        page = self.client.get('/login/?idle=1')
+        self.assertContains(page, 'Your session expired. Sign in again.')
+        self.assertNotContains(page, 'minutes')                                 # the limit is not told
 
     def test_under_the_limit_carries_on(self):
         self.idle_for(29 * 60)          # five minutes used to sign them out

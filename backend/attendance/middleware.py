@@ -79,12 +79,10 @@ class PasswordExpiryMiddleware:
 
 
 def idle_message(limit=None):
-    """What the sign-in page and the API say after an idle sign-out."""
-    if limit is None:
-        from django.conf import settings
-        limit = getattr(settings, 'IDLE_TIMEOUT_SECONDS', 30 * 60)
-    minutes = max(1, round(limit / 60))
-    return f'You were signed out after {minutes} minute{"s" if minutes != 1 else ""} without use. Sign in again.'
+    """What the sign-in page and the API say after an idle sign-out — not
+    how long the limit is (said 22 October 2026: no need to tell anybody who
+    is trying their luck how long an unattended session stays open)."""
+    return 'Your session expired. Sign in again.'
 
 
 class IdleTimeoutMiddleware:
@@ -117,7 +115,8 @@ class IdleTimeoutMiddleware:
         session = getattr(request, 'session', None)
         user = getattr(request, 'user', None)
         signed_in = bool(user is not None and getattr(user, 'is_authenticated', False)) or bool(
-            session is not None and (session.get('student_id') or session.get('course_profile_id')))
+            session is not None and (session.get('student_id') or session.get('portal_profile_id')
+                                    or session.get('course_profile_id')))
         if not signed_in or request.path.startswith(('/static/', '/login', '/logout', '/student-logout')):
             return self.get_response(request)
 

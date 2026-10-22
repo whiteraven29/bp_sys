@@ -154,6 +154,8 @@ def student_reading(student, *, now=None):
         return None
     rows = Student.objects.filter(nactvet_reg_no__iexact=student.nactvet_reg_no)
     stamps = [row.portal_pin_set_at for row in rows if row.portal_pin_set_at]
+    if not stamps and getattr(student, 'portal_pin_set_at', None):
+        stamps = [student.portal_pin_set_at]          # no module yet: the record's own
     return _reading(max(stamps) if stamps else None,
                     must_change=student.must_change_portal_password, now=now)
 

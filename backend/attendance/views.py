@@ -480,7 +480,7 @@ def keep_alive(request):
     from django.http import HttpResponseNotAllowed, JsonResponse
     if request.method != 'POST':
         return HttpResponseNotAllowed(['POST'])
-    signed_in = bool(request.user.is_authenticated or request.session.get('student_id')
+    signed_in = bool(request.user.is_authenticated or portal_signed_in(request)
                      or request.session.get('course_profile_id'))
     return JsonResponse({'ok': signed_in}, status=200 if signed_in else 401)
 
@@ -548,9 +548,14 @@ def login_view(request):
             if candidate is not None and check_password(str(secret), candidate.portal_pin_hash):
                 course_profile = candidate
         if student is None and course_profile is None:
-            # Admitted, no module yet: their own record signs them in (said 20
-            # October 2026 — admission and finance make them our student).
-            course_profile = passwords.profile_for_sign_in(reg_no, secret)
+            # Admitted, no module yet: their own record signs them in, to the
+            # same dashboard as everybody (said 20 and 22 October 2026).
+            seated = passwords.profile_for_sign_in(reg_no, secret)
+            if seated is not None:
+                passwords.clear_sign_in_failures(identifier)
+                request.session.cycle_key()
+                request.session[PORTAL_PROFILE] = seated.id
+                return redirect('student-dashboard')
 
         if course_profile is not None:
             passwords.clear_sign_in_failures(identifier)
@@ -624,10 +629,57 @@ def student_portal_is_closed(student):
         profile_id=profile_id, status__in=StudentStanding.PORTAL_BLOCKED).exists()
 
 
+# An admitted PST student with no module yet signs in to the same dashboard
+# (said 22 October 2026): the session holds their record, and the portal reads
+# a stand-in for the enrollment until their modules come — then the newest
+# enrollment is used, without signing in again.
+PORTAL_PROFILE = 'portal_profile_id'
+
+
+class PortalSeat:
+    """What the portal reads from an enrollment, made from the student's own
+    record and their registration: name, number, password, level, semester.
+    Nothing is saved through it."""
+    id = None
+
+    def __init__(self, profile, registration):
+        self.profile = profile
+        self.profile_id = profile.id
+        self.name = profile.name
+        self.nactvet_reg_no = profile.nactvet_reg_no
+        self.portal_pin_hash = profile.portal_pin_hash
+        self.portal_pin_set_at = profile.portal_pin_set_at
+        self.must_change_portal_password = profile.must_change_portal_password
+        from types import SimpleNamespace
+        self.module = SimpleNamespace(class_level=registration.class_level if registration else None,
+                                      semester=registration.semester if registration else active_semester())
+
+    def check_portal_pin(self, raw):
+        return bool(self.portal_pin_hash) and check_password(str(raw), self.portal_pin_hash)
+
+
+def portal_signed_in(request):
+    """A student is signed in to the portal — through an enrollment or, with
+    no module yet, through their record."""
+    return bool(request.session.get('student_id') or request.session.get(PORTAL_PROFILE))
+
+
+def _portal_profile(request):
+    profile_id = request.session.get(PORTAL_PROFILE)
+    return StudentProfile.objects.filter(id=profile_id).first() if profile_id else None
+
+
 def student_login_required(view_func):
     @wraps(view_func)
     def _wrapped(request, *args, **kwargs):
         student_id = request.session.get('student_id')
+        if not student_id and request.session.get(PORTAL_PROFILE):
+            profile = _portal_profile(request)
+            if profile is None or StudentStanding.objects.filter(
+                    profile=profile, status__in=StudentStanding.PORTAL_BLOCKED).exists():
+                request.session.flush()
+                return redirect('login')
+            return view_func(request, *args, **kwargs)
         if student_id:
             # Checked on every page, not only at the door: a student archived
             # while they are signed in must not keep the portal until their
@@ -645,7 +697,21 @@ def student_login_required(view_func):
 def get_logged_student(request):
     student_id = request.session.get('student_id')
     if not student_id:
-        return None
+        profile = _portal_profile(request)
+        if profile is None:
+            return None
+        # Modules added since they signed in: the newest enrollment, as if they
+        # had signed in through it.
+        enrollment = (Student.objects.filter(profile=profile)
+                      .select_related('module__class_level', 'module__semester__academic_year')
+                      .order_by('-id').first())
+        if enrollment is not None:
+            return enrollment
+        registration = (SemesterRegistration.objects.filter(profile=profile)
+                        .exclude(status=SemesterRegistration.CANCELLED)
+                        .select_related('class_level', 'semester__academic_year')
+                        .order_by('-semester__academic_year__name', '-semester__number').first())
+        return PortalSeat(profile, registration)
     return Student.objects.filter(
         id=student_id
     ).select_related(
@@ -715,7 +781,7 @@ def announcement_download(request, pk):
     click, so framing it carries none of the risk the header exists to prevent,
     and every other view keeps DENY.
     """
-    if not (request.user.is_authenticated or request.session.get('student_id')):
+    if not (request.user.is_authenticated or portal_signed_in(request)):
         return redirect('login')
     announcement = get_object_or_404(Announcement, pk=pk)
     try:
@@ -2950,7 +3016,7 @@ def student_document_download(request, pk):
     """Stream a student's document to the student it belongs to, or to the
     offices that admit and keep the record. Gated, not public."""
     document = get_object_or_404(StudentDocument.objects.select_related('profile'), pk=pk)
-    if request.session.get('student_id'):
+    if portal_signed_in(request):
         viewer = _student_profile(request)
         if viewer is None or viewer.id != document.profile_id:
             raise Http404('No such document.')
@@ -9053,7 +9119,7 @@ def invoice_print(request, reference):
     Save as PDF instead of on a page they then have to work out how to save.
     """
     viewer_profile = None
-    if request.session.get('student_id'):
+    if portal_signed_in(request):
         viewer_profile = _student_profile(request)
     elif not (request.user.is_authenticated and can_manage_finance(request.user)):
         return redirect('login')
@@ -9477,7 +9543,7 @@ def request_print(request, pk):
     college's letterhead on something nobody has agreed to.
     """
     viewer_profile = None
-    if request.session.get('student_id'):
+    if portal_signed_in(request):
         viewer_profile = _student_profile(request)
     elif not can_answer_requests(request.user):
         return redirect('login')
@@ -9534,7 +9600,7 @@ def request_attachment_download(request, pk):
         RequestAttachment.objects.select_related('request__profile'), pk=pk)
     owner = attachment.request.profile
 
-    if request.session.get('student_id'):
+    if portal_signed_in(request):
         viewer = _student_profile(request)
         if viewer is None or owner is None or viewer.id != owner.id:
             raise Http404('No such document.')

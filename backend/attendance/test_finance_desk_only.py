@@ -89,12 +89,24 @@ class AModuleBillsNothingTests(Accounts):
         self.assertIn(self.profile, passwords.students_without_password())
         principal, _ = office('boss', 'principal')
         pin = passwords.reset_student_password(self.profile, actor=principal, first=True)
-        signed_in = Client().post('/login/', {'identifier': self.profile.nactvet_reg_no, 'secret': pin})
-        self.assertEqual(signed_in.get('Location'), '/course-portal/')
+        portal = Client()
+        signed_in = portal.post('/login/', {'identifier': self.profile.nactvet_reg_no, 'secret': pin})
+        self.assertEqual(signed_in.get('Location'), '/student-dashboard/')       # the dashboard, modules or not
+        # First sign-in: choose their own password, then the dashboard itself.
+        changed = portal.post('/api/change-password/', {'current_password': pin, 'new_password': 'Anitha#2026x'},
+                              content_type='application/json')
+        self.assertEqual(changed.status_code, 200, changed.content)
+        page = portal.get('/student-dashboard/')
+        self.assertEqual(page.status_code, 200)
+        self.assertTemplateUsed(page, 'student_dashboard.html')
+        self.assertContains(page, self.profile.name)
+        pin = 'Anitha#2026x'
         # The module set up later takes the same password: the dashboard opens.
         module = Module.objects.create(name='Anatomy', code='PST04101', teacher='T', class_level=self.level4,
                                        semester=self.sem1, programme=self.pst, credits=3)
         progression.enroll_module(module)
+        # Still signed in: the module shows on the next page, no new sign-in needed.
+        self.assertContains(portal.get('/student-dashboard/'), 'PST04101')
         signed_in = Client().post('/login/', {'identifier': self.profile.nactvet_reg_no, 'secret': pin})
         self.assertEqual(signed_in.get('Location'), '/student-dashboard/')
         self.assertNotIn(self.profile, passwords.students_without_password())

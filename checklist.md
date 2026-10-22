@@ -238,7 +238,20 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] Module form: Tutor responsible from the department's tutors (name and responsibility from one
      choice); the staff assignment kept for emergencies
    - [x] 1179 tests; the whole flow checked in the browser
-2y. **On the server, after this deploy (12–21 Oct work) — in this order.**
+2z. **Every admitted student signs in to the dashboard; plain session message — 22 Oct (not committed).**
+   - [x] An admitted PST student with no module yet opens the normal student dashboard (not the
+     "My Programme" page): a stand-in for the enrollment from their record and registration; modules
+     appear on the next page once added, without signing in again (VETA keeps its course portal)
+   - [x] Idle sign-out says only "Your session expired. Sign in again." — not how long the limit is
+   - [x] Waivers & Overrides gets *Waive a shortfall* (DPFPA approves); the override card is labelled
+     *Let through or hold — override* (saved at once, takes nothing off the bill), so the two are not confused
+   - [x] The accountant's money menu renamed *Student accounts* — no second *Students* menu; a test keeps
+     every menu name unique
+   - [x] The accountant's sidebar, most used first: Admissions, Payments, Student accounts, then Finance
+     Overview, Fee Setup, Expenses, Postpone & Finish, Finance summary, Audit Trail; they land on
+     Admissions ▸ My desk; no Students menu for them — Items check and Class lists back under Admissions
+   - [x] 1179 tests; checked in the browser (desktop and phone, every portal view, no errors)
+2y. **On the server, after this deploy (12–22 Oct work) — in this order.**
    - [ ] Migrations to 0078 applied by the deploy (release guide B1–B4); `Ran 1179 tests … OK` on the laptop first
    - [ ] `merge_programmes` (release guide B6): dry run, read it, then `--apply` — before the next application
    - [ ] B7: HOD sets programme PST on Level 4's modules and creates Level 5's (links the two students

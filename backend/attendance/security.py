@@ -22,7 +22,7 @@ from rest_framework.authentication import BaseAuthentication, CSRFCheck
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 from rest_framework.throttling import SimpleRateThrottle
 
-STUDENT_SESSION_KEYS = ('student_id', 'course_profile_id')
+STUDENT_SESSION_KEYS = ('student_id', 'portal_profile_id', 'course_profile_id')
 
 
 def student_session(request):

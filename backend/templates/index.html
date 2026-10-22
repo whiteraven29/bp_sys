@@ -903,6 +903,20 @@
     .crumb-bar { padding: 12px 14px 0; }
   }
 
+  /* The accountant's sidebar, most used first (said 22 October 2026):
+     admissions, payments, student accounts, then the rest. */
+  body.accountant-desk aside > * { order: 20; }
+  body.accountant-desk aside > .aside-label:first-child { order: 0; }
+  body.accountant-desk #admissions-nav-group { order: 1; }
+  body.accountant-desk #finance-payments-nav-group { order: 2; }
+  body.accountant-desk #finance-students-nav-group { order: 3; }
+  body.accountant-desk aside > .nav-btn[data-finance-section="overview"] { order: 4; }
+  body.accountant-desk #finance-setup-nav-group { order: 5; }
+  body.accountant-desk #finance-expenses-nav-group { order: 6; }
+  body.accountant-desk #status-nav-group { order: 7; }
+  body.accountant-desk #exec-nav-group { order: 8; }
+  body.accountant-desk aside > .nav-btn[data-finance-section="audit"] { order: 9; }
+
   /* Empty states, menus, toasts */
   .empty .ei { width: 48px; height: 48px; margin: 0 auto 10px; border-radius: 50%; display: grid; place-items: center;
                background: var(--accent-soft); color: var(--accent); opacity: 1; font-size: 1.3rem; }
@@ -1071,16 +1085,19 @@
         <button class="nav-sub-btn" data-adm-section="pending" onclick="showAdmissionSection('pending', this)">Pending</button>
         <button class="nav-sub-btn" data-adm-section="all" onclick="showAdmissionSection('all', this)">Applications</button>
         <button class="nav-sub-btn" data-adm-section="dueback" data-roles="principal admission" onclick="showAdmissionSection('dueback', this)">Expected back</button>
+        <!-- The accountant has no Students menu: their two student lists stay here (said 22 October 2026). -->
+        <button class="nav-sub-btn" data-adm-section="items" data-roles="finance" onclick="showAdmissionSection('items', this)">Items check</button>
+        <button class="nav-sub-btn" data-adm-section="classlist" data-roles="finance" onclick="showAdmissionSection('classlist', this)">Class lists</button>
         <button class="nav-sub-btn" data-adm-section="settings" data-roles="principal admission" onclick="showAdmissionSection('settings', this)">Settings</button>
       </div>
     </div>
-    <div class="nav-group" id="students-nav-group" data-roles="principal dparc records admission finance runs dean">
+    <div class="nav-group" id="students-nav-group" data-roles="principal dparc records admission runs dean">
       <button class="nav-btn" data-page="students" onclick="toggleStudentsMenu(event)"><span class="icon"><i class="bi bi-mortarboard"></i></span> Students <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-rec-section="find" data-roles="principal dparc records" onclick="showRecordsSection('find', this)">Find a student</button>
         <button class="nav-sub-btn" data-adm-section="pass" data-roles="principal admission" onclick="showAdmissionSection('pass', this)">Semester pass</button>
-        <button class="nav-sub-btn" data-adm-section="classlist" data-roles="principal dparc admission records finance" onclick="showAdmissionSection('classlist', this)">Class lists</button>
-        <button class="nav-sub-btn" data-adm-section="items" data-roles="principal finance admission" onclick="showAdmissionSection('items', this)">Items check</button>
+        <button class="nav-sub-btn" data-adm-section="classlist" data-roles="principal dparc admission records" onclick="showAdmissionSection('classlist', this)">Class lists</button>
+        <button class="nav-sub-btn" data-adm-section="items" data-roles="principal admission" onclick="showAdmissionSection('items', this)">Items check</button>
         <button class="nav-sub-btn" data-adm-section="noshow" data-roles="principal admission" onclick="showAdmissionSection('noshow', this)">Did not report</button>
         <button class="nav-sub-btn" data-student-section="manage" data-roles="runs" onclick="showStudentSection('manage', this)">Enrollments</button>
         <button class="nav-sub-btn" data-rec-section="ids" data-roles="principal records admission" onclick="showRecordsSection('ids', this)">College ID import</button>
@@ -1212,7 +1229,8 @@
       </div>
     </div>
     <div class="nav-group finance-only" id="finance-students-nav-group">
-      <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'students')"><span class="icon"><i class="bi bi-mortarboard"></i></span> Students <span class="nav-caret">›</span></button>
+      <!-- "Student accounts", not a second "Students" menu (said 22 October 2026). -->
+      <button class="nav-btn" data-page="finance" onclick="toggleFinanceMenu(event, 'students')"><span class="icon"><i class="bi bi-wallet2"></i></span> Student accounts <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-finance-section="students" onclick="showFinanceSection('students', this)">Balances &amp; Clearance</button>
         <button class="nav-sub-btn" data-finance-section="extra-charge" onclick="showFinanceSection('extra-charge', this)">Extra Charges</button>
@@ -3429,7 +3447,15 @@
 
       <div class="finance-section" id="finance-section-overrides">
         <div class="card finance-only">
-          <div class="card-title">Clear or hold a student by hand</div>
+          <div class="card-title">Waive a shortfall <span class="badge badge-blue">DPFPA approves</span>
+            <span class="tip" tabindex="0" role="note" aria-label="Help: waiving a shortfall" data-tip="Takes money off a student's tuition or direct costs. It goes to DPFPA first: nothing comes off the bill until DPFPA approves, and the student waits at the finance desk meanwhile.">?</span></div>
+          <div class="field" style="max-width:460px;"><label>Student</label>
+            <select id="fin-wv-profile" onchange="loadWaiverFormFor(this.value)"><option value="">— select student —</option></select></div>
+          <div id="fin-wv-form"></div>
+        </div>
+
+        <div class="card finance-only">
+          <div class="card-title">Let through or hold — override <span class="tip" tabindex="0" role="note" aria-label="Help: override" data-tip="Not a waiver: nothing comes off the bill. It lets a student through registration or an exam without having paid — a sponsor's letter, a delayed HESLB loan — or holds them, until the date you set. Saved at once, by you.">?</span></div>
           <div class="form-grid-3">
             <div class="field"><label>Student</label><select id="fin-ov-profile"><option value="">— select student —</option></select></div>
             <div class="field">
@@ -4939,7 +4965,9 @@ async function boot() {
     await refreshModuleDropdowns('', '', 'stu-flt-module');
     buildSidebarModules();
     if (!state.isStaff && state.isAccountant) {
-      showPage('finance', document.querySelector('[data-page="finance"]'));
+      // Their day starts at the finance desk of admissions (said 22 October 2026).
+      document.body.classList.add('accountant-desk');
+      showAdmissionSection('desk', document.querySelector('#admissions-nav-group [data-adm-section="desk"]'));
     }
   } catch(e) {
     console.error(e);
@@ -7938,7 +7966,7 @@ async function ensureFinanceLookups() {
       `<option value="${l.id}">${safeText(l.name)}</option>`).join('');
     el.dataset.filled = '1';
   });
-  ['fin-pay-profile', 'fin-ov-profile', 'fin-rc-profile'].forEach(id => {
+  ['fin-pay-profile', 'fin-ov-profile', 'fin-rc-profile', 'fin-wv-profile'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     const current = el.value;
@@ -11190,7 +11218,8 @@ async function showAdmissionSection(section, btn) {
   document.getElementById('adm-page-sub').textContent = sub;
   // The student lists and the pass sit under Students (said 21 October 2026);
   // their cards are still on this page.
-  const groupId = STUDENT_SIDE_SECTIONS.includes(section) ? 'students-nav-group' : 'admissions-nav-group';
+  const groupId = (btn && btn.closest('.nav-group')?.id)
+    || (STUDENT_SIDE_SECTIONS.includes(section) && !state.offices?.finance ? 'students-nav-group' : 'admissions-nav-group');
   showPage('admissions', document.querySelector(`#${groupId} .nav-btn`));
   document.getElementById(groupId).classList.add('open');
   const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = title;
@@ -14616,11 +14645,25 @@ async function decideWaiver(id, approve) {
 
 // The accountant asks, from the finance desk, for a shortfall on tuition or
 // direct costs to be waived; DPFPA decides.
-function waiverFormHtml(profileId, charges, waivers, applicationId) {
+// The same request from Waivers & Overrides, for any student (said 22 October 2026).
+async function loadWaiverFormFor(profileId) {
+  const box = document.getElementById('fin-wv-form');
+  if (!profileId) { box.innerHTML = ''; return; }
+  try {
+    const [s, waivers] = await Promise.all([api('GET', `/finance/statement/${profileId}/`),
+                                            api('GET', `/waiver-requests/?profile_id=${profileId}`)]);
+    box.innerHTML = waiverFormHtml(Number(profileId), s.charges || [], waivers, null, { title: false });
+    if (!(s.charges || []).some(c => ['fee', 'direct_cost'].includes(c.family) && Number(c.balance) > 0)) {
+      box.insertAdjacentHTML('beforeend', '<p class="help-note">Nothing owed on tuition or direct costs.</p>');
+    }
+  } catch (e) { box.innerHTML = ''; toast(apiErrorText(e, 'Could not load the student'), 'var(--red)'); }
+}
+
+function waiverFormHtml(profileId, charges, waivers, applicationId, { title = true } = {}) {
   const open = charges.filter(c => ['fee', 'direct_cost'].includes(c.family) && Number(c.balance) > 0);
   const mine = waivers.filter(w => w.status === 'pending');
   const recent = waivers.filter(w => w.status !== 'pending').slice(0, 3);
-  return `<div class="card-title" style="font-size:.9rem;margin-top:14px;">Waive a shortfall <span class="tip" tabindex="0" role="note" aria-label="Help: waivers" data-tip="Tuition or direct costs only. The request goes to DPFPA; nothing comes off the bill until it is approved, and the student waits at this desk meanwhile.">?</span></div>
+  return `${title ? `<div class="card-title" style="font-size:.9rem;margin-top:14px;">Waive a shortfall <span class="tip" tabindex="0" role="note" aria-label="Help: waivers" data-tip="Tuition or direct costs only. The request goes to DPFPA; nothing comes off the bill until it is approved, and the student waits at this desk meanwhile.">?</span></div>` : ''}
     ${mine.map(w => `<div class="missing-note" style="margin-bottom:6px;">Waiting for DPFPA: ${money(Number(w.amount) - Number(w.waived_before || 0))} on ${safeText(w.charge)} (instalment ${w.installment}) — ${safeText(w.reason)}</div>`).join('')}
     ${recent.map(w => `<div style="font-size:.78rem;color:var(--muted);margin-bottom:4px;">${safeText(w.status_display)}: ${safeText(w.charge)} — ${safeText(w.decision_note || w.reason)}</div>`).join('')}
     ${open.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
@@ -14644,6 +14687,7 @@ async function requestWaiver(profileId, applicationId) {
                         { amount: (Number(option.dataset.waived) + shortfall).toFixed(2), reason });
     toast(r.detail || 'Sent to DPFPA', 'var(--green)');
     if (applicationId) openApplicationModal(applicationId);
+    else { loadWaiverFormFor(profileId); loadOverrides(); }
   } catch (e) { toast(apiErrorText(e, 'Could not send it'), 'var(--red)'); }
 }
 

@@ -106,7 +106,18 @@ class OneMenuItemOneViewTests(TestCase):
         group = self.html.split('id="admissions-nav-group"')[1].split('</div>\n    </div>')[0]
         self.assertEqual(re.findall(r'>([^<>]+)</button>', group),
                          ['My desk', 'New application', 'VETA applications', 'Pending', 'Applications',
-                          'Expected back', 'Settings'])
+                          'Expected back', 'Items check', 'Class lists', 'Settings'])
+        # Those two only for the accountant, who has no Students menu (said 22 October 2026).
+        for item in ('items', 'classlist'):
+            self.assertIn(f'data-adm-section="{item}" data-roles="finance"', group)
+        students = self.html.split('id="students-nav-group"')[0].rsplit('<div', 1)[1] + self.html.split('id="students-nav-group"')[1][:200]
+        self.assertNotIn('finance', students.split('data-roles="')[1].split('"')[0])
+
+    def test_no_two_menus_share_a_name(self):
+        """Said 22 October 2026: the accountant saw two "Students" menus."""
+        names = re.findall(r'class="nav-btn[^"]*"[^>]*>\s*<span class="icon">.*?</span>\s*([^<]+?)\s*<', self.html)
+        repeated = sorted({name for name in names if names.count(name) > 1})
+        self.assertEqual(repeated, [], names)
 
     def test_final_eligibility_is_its_own_view(self):
         page = self.html.split('id="page-eligibility"')[1].split('<div class="page" id=')[0]
