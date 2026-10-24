@@ -757,6 +757,79 @@ def results_shown(semester, class_level):
         semester=semester, class_level=class_level, visible=True).exists()
 
 
+def clear_authority_grades(semester, class_level, *, sheet='continuing', sitting='first', reason='',
+                           actor=None, dry_run=False):
+    """Take one sheet's uploaded NACTVET grades off again, so a corrected
+    sheet can be uploaded (said 24 October 2026). The grades cleared are kept
+    in an AuthorityGradeClearing.
+
+    Refused while students can see these results (hide them first), when a
+    first sitting has a supplementary on top (clear that first), and when any
+    student has been confirmed on these results — a settled place, a raised
+    repeat or a discontinuation is not undone behind anybody's back.
+    """
+    from .grading import parse_authority_grade
+    from .models import AuthorityGradeClearing, StudentResult
+    if sheet not in ('continuing', 'repeaters') or sitting not in ('first', 'supp'):
+        raise ProgressionError('Choose the sheet (continuing or repeaters) and the sitting (first or supplementary).')
+    continuing, repeaters = sheets_for(semester, class_level)
+    people = continuing if sheet == 'continuing' else repeaters
+    field = 'authority_supp_grade' if sitting == 'supp' else 'authority_grade'
+    results = list(StudentResult.objects
+                   .filter(student_id__in=[e.id for rows in people.values() for e in rows])
+                   .exclude(**{field: ''}).select_related('student__module__class_level')
+                   .order_by('student__name', 'student__module__code'))
+    which = (f'{class_level.name}, {semester.label}, {sheet} sheet, '
+             f'{"supplementary" if sitting == "supp" else "first"} sitting')
+    if not results:
+        raise ProgressionError(f'No uploaded grades to clear: {which}.')
+    if results_shown(semester, class_level):
+        raise ProgressionError('Students can see these results. Hide them from students first '
+                               '(Results ▸ Results Summary), then clear.')
+    if sitting == 'first':
+        topped = sorted({r.student.name for r in results if r.authority_supp_grade})
+        if topped:
+            raise ProgressionError(f'{len(topped)} student(s) have a supplementary grade on top '
+                                   f'({", ".join(topped[:5])}): clear the supplementary sitting first.')
+    decided = sorted({review.profile.name for review in SemesterReview.objects.filter(
+        semester=semester, profile_id__in={r.student.profile_id for r in results if r.student.profile_id})
+        .exclude(confirmed__in=['', SemesterReview.PROVISIONAL]).select_related('profile')})
+    if decided:
+        raise ProgressionError(f'{len(decided)} student(s) are already confirmed on these results '
+                               f'({", ".join(decided[:5])}{"…" if len(decided) > 5 else ""}). '
+                               'A confirmed decision is not undone by clearing grades.')
+    found = {'grades': len(results), 'students': len({r.student.nactvet_reg_no.upper() for r in results}),
+             'which': which}
+    if dry_run:
+        return found
+    reason = (reason or '').strip()
+    if not reason:
+        raise ProgressionError('Say why the grades are cleared.')
+    with transaction.atomic():
+        record = AuthorityGradeClearing.objects.create(
+            semester=semester, class_level=class_level, sheet=sheet, sitting=sitting, reason=reason[:300],
+            cleared_by=actor if getattr(actor, 'is_authenticated', False) else None,
+            grades=[{'reg_no': r.student.nactvet_reg_no, 'module': r.student.module.code,
+                     'grade': r.authority_grade, 'supp_grade': r.authority_supp_grade,
+                     'status': r.authority_status} for r in results])
+        for result in results:
+            if sitting == 'supp':
+                # Back to the first sitting's grade, still waiting for its supplementary.
+                result.authority_supp_grade = ''
+                result.authority_status = parse_authority_grade(
+                    result.authority_grade, result.student.module.class_level)['status']
+                result.save(update_fields=['authority_supp_grade', 'authority_status', 'updated_at'])
+            else:
+                # No longer a published result: the corrected sheet publishes it again.
+                result.authority_grade = ''
+                result.authority_status = ''
+                result.final_approved = False
+                result.save(update_fields=['authority_grade', 'authority_status', 'final_approved', 'updated_at'])
+    refresh_provisional(provisional_reviews().filter(semester=semester))
+    logger.info('%s cleared %d grade(s): %s — %s', getattr(actor, 'username', None), len(results), which, reason)
+    return {**found, 'record_id': record.id}
+
+
 def tell_settled(review):
     """Tell a provisional student what their results did to their place."""
     from . import notifications

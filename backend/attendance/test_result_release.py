@@ -166,3 +166,57 @@ class WhatStudentsSeeTodayTests(PortalBase):
         import_module('attendance.migrations.0080_result_release').keep_what_is_shown(apps, None)
         self.assertEqual(set(ResultRelease.objects.filter(visible=True).values_list('semester_id', 'class_level_id')),
                          {(self.sem1.id, self.level4.id)})
+
+
+class ClearUploadedGradesTests(PortalBase):
+    """Said 24 October 2026: a sheet uploaded with mistakes is cleared and
+    uploaded again — what was cleared kept on record."""
+
+    def clear(self, client=None, **extra):
+        return (client or self.exam).post('/api/results/authority-grades/clear/', {
+            'semester_id': self.sem1.id, 'class_level_id': self.level4.id, 'sheet': 'continuing',
+            'sitting': 'first', **extra}, format='json')
+
+    def test_cleared_kept_on_record_then_uploaded_again(self):
+        from .models import AuthorityGradeClearing, StudentResult
+        preview = self.clear(dry_run=True)
+        self.assertEqual((preview.data['grades'], preview.data['students']), (2, 1))
+        self.assertEqual(self.clear().status_code, 400)                       # a reason is needed
+        done = self.clear(reason='B and A swapped')
+        self.assertEqual(done.status_code, 200, done.data)
+        result = StudentResult.objects.get(student=self.enrollment)
+        self.assertEqual((result.authority_grade, result.final_approved), ('', False))
+        record = AuthorityGradeClearing.objects.get()
+        self.assertEqual(sorted(row['grade'] for row in record.grades), ['A', 'B'])
+        self.assertEqual(record.reason, 'B and A swapped')
+        self.upload(self.exam, [('NIT/30', 'PST04101', 'B'), ('NIT/30', 'PST04102', 'A')])
+        result.refresh_from_db()
+        self.assertEqual((result.authority_grade, result.final_approved), ('B', True))
+
+    def test_not_while_students_see_them(self):
+        self.show(self.sem1, self.level4)
+        refused = self.clear(reason='Mistake')
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('Hide them', refused.data['detail'])
+
+    def test_not_once_a_student_is_confirmed_on_them(self):
+        SemesterReview.objects.create(profile=self.profile, semester=self.sem1, class_level=self.level4,
+                                      proposed=SemesterReview.CLEAR, confirmed=SemesterReview.CLEAR)
+        refused = self.clear(reason='Mistake')
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('confirmed', refused.data['detail'])
+
+    def test_a_supplementary_is_cleared_first_and_alone(self):
+        from .models import StudentResult
+        self.upload(self.exam, [('NIT/30', 'PST04102', 'C*')])
+        self.exam.post('/api/results/authority-grades/', {'semester_id': self.sem1.id, 'sitting': 'supp', 'rows': [
+            {'reg_no': 'NIT/30', 'module_code': 'PST04102', 'grade': 'C'}]}, format='json')
+        self.assertEqual(self.clear(reason='Mistake').status_code, 400)        # the supplementary sits on top
+        self.assertEqual(self.clear(sitting='supp', reason='Wrong sheet').status_code, 200)
+        result = StudentResult.objects.get(student__module__code='PST04102', student__nactvet_reg_no='NIT/30')
+        self.assertEqual((result.authority_grade, result.authority_supp_grade, result.authority_status),
+                         ('C*', '', 'SUPP'))
+
+    def test_only_the_exam_office_clears(self):
+        _, principal = office('boss', 'principal')
+        self.assertEqual(self.clear(client=principal, reason='Mistake').status_code, 403)

@@ -2684,6 +2684,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" onclick="downloadAuthorityGradeTemplate()">⬇ Download Level Template</button>
           <button class="btn btn-primary btn-sm exam-office-only" onclick="uploadAuthorityGrades()">⬆ Upload Authority Grades</button>
+          <button class="btn btn-danger btn-sm exam-office-only" onclick="clearAuthorityGrades()" title="Take this sheet's uploaded grades off, to upload a corrected one">Clear uploaded grades…</button>
         </div>
       </div>
 
@@ -6611,6 +6612,28 @@ async function downloadAuthorityGradeTemplate() {
   } catch(e) { toast(e?.detail || 'Could not create grade template', 'var(--red)'); }
 }
 
+// A sheet uploaded with mistakes is cleared and uploaded again (said 24
+// October 2026). What is cleared is kept on record; the server refuses while
+// students can see the results or once anyone has been confirmed on them.
+async function clearAuthorityGrades() {
+  const ask = {
+    semester_id: document.getElementById('auth-grade-semester').value,
+    class_level_id: document.getElementById('auth-grade-level').value,
+    sheet: document.getElementById('auth-grade-sheet').value,
+    sitting: document.getElementById('auth-grade-sitting').value,
+  };
+  if (!ask.semester_id || !ask.class_level_id) { toast('Select the semester and class level first', 'var(--red)'); return; }
+  try {
+    const found = await api('POST', '/results/authority-grades/clear/', { ...ask, dry_run: true });
+    if (!confirm(`Clear ${found.grades} uploaded grade(s) of ${found.students} student(s)?\n\n${found.which}\n\nThey are kept on record. Upload the corrected sheet afterwards.`)) return;
+    const reason = prompt('Why are they cleared? (kept with the record)', 'Mistakes in the uploaded sheet');
+    if (reason === null) return;
+    const done = await api('POST', '/results/authority-grades/clear/', { ...ask, reason });
+    toast(`Cleared ${done.grades} grade(s) — upload the corrected sheet now`, 'var(--orange)');
+    if (document.getElementById('res-flt-module').value) loadResultsModule();
+  } catch (e) { toast(apiErrorText(e, 'Could not clear the grades'), 'var(--red)'); }
+}
+
 async function uploadAuthorityGrades() {
   const file = document.getElementById('auth-grade-file').files[0];
   if (!file) { toast('Choose a completed authority grade file', 'var(--red)'); return; }
@@ -6643,7 +6666,16 @@ async function uploadAuthorityGrades() {
     const same = (result.unchanged ? `; ${result.unchanged} unchanged (not supplementaries)` : '')
       + ((result.not_sitting || []).length ? `; ${result.not_sitting.length} skipped (not sitting that module this semester)` : '');
     toast(`Imported ${result.saved} authority grade(s)${same}${result.errors.length ? `; ${result.errors.length} error(s)` : ''}`, result.errors.length ? 'var(--yellow)' : 'var(--green)');
-    if (result.errors.length) alert(`Imported ${result.saved} grade(s).\n\nNot imported:\n${result.errors.slice(0, 20).join('\n')}${result.errors.length > 20 ? '\n…' : ''}`);
+    // Every grade not saved, by name (said 24 October 2026): a grade for a
+    // module the student is not enrolled in this semester is skipped, and
+    // a count alone left the office thinking it was in.
+    const skipped = result.not_sitting || [];
+    if (result.errors.length || skipped.length) {
+      const list = rows => rows.slice(0, 25).join('\n') + (rows.length > 25 ? `\n… and ${rows.length - 25} more` : '');
+      alert(`Imported ${result.saved} grade(s).`
+        + (skipped.length ? `\n\nNOT SAVED — not enrolled in that module this semester (${skipped.length}):\n${list(skipped)}` : '')
+        + (result.errors.length ? `\n\nNOT SAVED — errors (${result.errors.length}):\n${list(result.errors)}` : ''));
+    }
     if (document.getElementById('res-flt-module').value) loadResultsModule();
   } catch(e) { toast(e?.detail || 'Authority grade upload failed', 'var(--red)'); }
 }

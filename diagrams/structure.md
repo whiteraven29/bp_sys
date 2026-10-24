@@ -216,6 +216,8 @@ sign in.
   ExitRequest            finish after Level 5: portal → Principal decides
   CompletionClearance    finance clear → Principal declares cleared
   ResultWithholding      hides one semester's results on the portal
+  AuthorityGradeClearing uploaded grades taken off to upload a corrected sheet:
+                         every grade kept, who, why
   ResultRelease          a semester's results shown to a level's students
                          (hidden until the examination office shows them)
 ```

@@ -63,7 +63,7 @@ from .models import (
     Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
     BankAccount, CollegeProfile,
     CatNumberFormat, Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration, StudentPass, WaiverRequest,
-    OutstandingRepeat, SemesterReview, StudentStanding, StandingChange,
+    OutstandingRepeat, SemesterReview, StudentStanding, StandingChange, Notification,
     AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck, Application,
     PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultRelease, ResultWithholding,
     StudentDocument, HealthRecord, HealthReport, ExitRequest, PasswordReset, AssetHandover, LabItem, LabStockMovement, ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile,
@@ -6700,6 +6700,25 @@ class ResultViewSet(viewsets.ModelViewSet):
                         link='review:provisional')
         return Response({'saved': saved, 'unchanged': unchanged, 'sitting': sitting, 'errors': errors,
                          'not_sitting': not_sitting, 'provisional_to_settle': settle})
+
+    @action(detail=False, methods=['post'], url_path='authority-grades/clear')
+    def clear_authority_grades(self, request):
+        """Take one sheet's uploaded grades off, to upload a corrected sheet
+        (progression.clear_authority_grades). `dry_run` says what would go."""
+        if not can_manage_exams(request.user):
+            raise PermissionDenied('The examination officer clears uploaded grades.')
+        semester = Semester.objects.filter(id=pk_or_none(request.data.get('semester_id'))).first()
+        level = ClassLevel.objects.filter(id=pk_or_none(request.data.get('class_level_id'))).first()
+        if semester is None or level is None:
+            return Response({'detail': 'Which semester, and which level?'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            done = progression.clear_authority_grades(
+                semester, level, sheet=str(request.data.get('sheet') or 'continuing'),
+                sitting=str(request.data.get('sitting') or 'first'), reason=str(request.data.get('reason') or ''),
+                actor=request.user, dry_run=request.data.get('dry_run') in (True, 'true', '1', 1))
+        except progression.ProgressionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(done)
 
     # ── Get or create results for every student in a module ────────────────────
     @action(detail=False, methods=['get'], url_path='module')

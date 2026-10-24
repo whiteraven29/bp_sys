@@ -2772,6 +2772,27 @@ class FeeInstallment(models.Model):
         return f'{self.fee_structure.charge_type} inst. {self.number} due {self.due_date}'
 
 
+class AuthorityGradeClearing(models.Model):
+    """NACTVET grades taken off again so a corrected sheet can be uploaded
+    (said 24 October 2026). What was there is kept here, row by row, with who
+    cleared it and why: a result is never simply lost."""
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='grade_clearings')
+    class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, related_name='grade_clearings')
+    sheet = models.CharField(max_length=12)
+    sitting = models.CharField(max_length=6)
+    reason = models.CharField(max_length=300)
+    grades = models.JSONField(default=list)
+    cleared_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='grade_clearings')
+    cleared_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-cleared_at']
+
+    def __str__(self):
+        return f'{self.semester_id} · {self.class_level_id} · {self.sheet} · {self.sitting} · {len(self.grades)} grade(s)'
+
+
 class ResultRelease(models.Model):
     """Whether students may see a semester's end-of-semester results, level by
     level (said 24 October 2026: the college chooses when results reach the

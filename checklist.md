@@ -288,10 +288,23 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] A settled student is told only once that semester's results are shown to their level (held back
      until then, sent when the exam office presses *Show to students*)
    - [x] The authority grade template lists students by name, A to Z (registration number between equal names)
-   - [x] 1204 tests; checked in the browser (show / hide, withhold several, settle passes, the portal's notice and
+   - [x] 1210 tests; checked in the browser (show / hide, withhold several, settle passes, the portal's notice and
      2025/26 statement, the template's order)
+3c. **Server error on uploading grades — fixed 24 Oct (not committed).** On the server, an upload that brought in
+   provisional students' results answered 500 (`NameError: Notification` in `authority_grades`, written 18 Oct, never
+   imported). The grades were saved before the error (no request-wide transaction); only the Principal / DPARC notice
+   and the reply failed. Fixed (import), with a test through the upload itself; the whole app scanned for other names
+   never defined (none). 1210 tests
+3d. **Clear uploaded grades; skipped grades named — 24 Oct (not committed).**
+   - [x] *Results ▸ Authority Grades ▸ Clear uploaded grades…* takes one sheet's uploaded grades off (the semester,
+     level, sheet and sitting selected) so a corrected sheet can be uploaded. What it clears is kept
+     (`AuthorityGradeClearing`, migration 0081: every grade, who, why). Refused while students can see the results,
+     when a supplementary sits on a first sitting (clear that first), and once anybody is confirmed on them
+   - [x] An upload now lists every grade it did not save, by name: "not enrolled in that module this semester"
+     (it used to be only a count — why filled cells seemed lost) and errors
+   - [x] 1210 tests; checked in the browser (cleared 24 grades with a reason, the record kept)
 2y. **On the server, after this deploy (12–24 Oct work) — in this order.**
-   - [ ] Migrations to 0080 applied by the deploy (release guide B1–B4); `Ran 1204 tests … OK` on the laptop first
+   - [ ] Migrations to 0081 applied by the deploy (release guide B1–B4); `Ran 1210 tests … OK` on the laptop first
    - [ ] Upload the three 2025/26 first-sitting sheets (MTS1) into 2025/26 Semester 2, as First sitting; settle the
      provisional students (passes, then repeats / FAILs); withhold who should not see theirs; *Show to students*
      per level — the settled students are told then

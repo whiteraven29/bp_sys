@@ -192,6 +192,20 @@ class SettlingTests(ProvisionalBase):
         self.assertFalse(Notification.objects.filter(profile=self.profile,
                                                      kind=Notification.PROVISIONAL_SETTLED).exists())
 
+    def test_uploading_their_grades_tells_the_offices(self):
+        """The server answered 500 on 24 October 2026 when an upload brought in
+        provisional students' results: the notice named a model views.py never
+        imported (the grades themselves were saved)."""
+        module = Student.objects.filter(profile=self.profile, module__semester=self.sem2).first().module
+        uploaded = self.exam.post('/api/results/authority-grades/', {
+            'semester_id': self.sem2.id, 'sitting': 'first',
+            'rows': [{'reg_no': self.profile.nactvet_reg_no, 'module_code': module.code, 'grade': 'B'}]},
+            format='json')
+        self.assertEqual(uploaded.status_code, 200, uploaded.data)
+        self.assertEqual(uploaded.data['provisional_to_settle'], 1)
+        self.assertTrue(Notification.objects.filter(user=self.principal_user,
+                                                    kind=Notification.PROVISIONAL_RESULTS_IN).exists())
+
     def test_settled_after_the_results_are_shown_is_told_at_once(self):
         self.publish(self.profile, 80)
         review = SemesterReview.objects.get(profile=self.profile, semester=self.sem2)
