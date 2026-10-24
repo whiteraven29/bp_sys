@@ -1687,6 +1687,9 @@ class SemesterReview(models.Model):
     # One entry per module sat: code, name, credits, status, grade, points.
     # Stored so the list the officer confirmed can be shown again unchanged,
     # even after a repeat sitting has replaced one of those results.
+    # A provisional student settled while the semester's results are still
+    # hidden from students is told once they are shown (said 24 October 2026).
+    notify_when_shown = models.BooleanField(default=False)
     modules = models.JSONField(default=list, blank=True)
     proposed = models.CharField(max_length=20, choices=OUTCOME_CHOICES)
     proposed_reason = models.CharField(max_length=300, blank=True)
@@ -2767,6 +2770,30 @@ class FeeInstallment(models.Model):
 
     def __str__(self):
         return f'{self.fee_structure.charge_type} inst. {self.number} due {self.due_date}'
+
+
+class ResultRelease(models.Model):
+    """Whether students may see a semester's end-of-semester results, level by
+    level (said 24 October 2026: the college chooses when results reach the
+    portal). Until the examination office shows them, the portal shows nothing
+    for that semester — not "Withheld", which is one student's results kept
+    back (ResultWithholding). The offices read the results as usual either way.
+    No row is the same as hidden.
+    """
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='result_releases')
+    class_level = models.ForeignKey(ClassLevel, on_delete=models.PROTECT, related_name='result_releases')
+    visible = models.BooleanField(default=False)
+    changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='result_releases')
+    changed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['semester', 'class_level'], name='one_release_per_semester_level'),
+        ]
+
+    def __str__(self):
+        return f'{self.semester_id} · {self.class_level_id} · {"shown" if self.visible else "hidden"}'
 
 
 class ResultWithholding(models.Model):

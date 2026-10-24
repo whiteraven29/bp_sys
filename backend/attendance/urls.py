@@ -153,6 +153,7 @@ urlpatterns = [
     path('student-records/search/', views.search_student_records, name='search-student-records'),
     path('item-checks/', views.item_checks, name='item-checks'),
     path('results-summary/', views.results_summary, name='results-summary'),
+    path('result-releases/', views.result_release, name='result-release'),
     path('result-withholdings/', views.withhold_results, name='withhold-results'),
     path('result-withholdings/<int:pk>/release/', views.release_results, name='release-results'),
     path('finance/payment-schedules/', views.payment_schedules, name='payment-schedules'),

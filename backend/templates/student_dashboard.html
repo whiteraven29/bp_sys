@@ -777,6 +777,9 @@
       {% if standing_banner %}
       <div class="notice" style="margin-bottom:14px;border-left-color:var(--{{ standing_banner.tone }});"><strong>{{ standing_banner.text }}</strong></div>
       {% endif %}
+      {% if provisional_notice %}
+      <div class="notice" id="provisional-notice" style="margin-bottom:14px;border-left-color:var(--amber);"><strong>{{ provisional_notice.title }}</strong> {{ provisional_notice.body }}</div>
+      {% endif %}
       <section class="view active" id="view-dashboard">
         {% if password and password.state != 'ok' %}
         <div class="notice" id="password-alert" style="margin:0 0 14px;{% if password.state == 'expired' or password.state == 'locked' %}border-left-color:var(--red);{% else %}border-left-color:var(--amber);{% endif %}">
@@ -931,7 +934,7 @@
       <section class="view" id="view-final-results">
         <div class="section-title">
           <p class="eyebrow">Academic results</p><h2>End of Semester</h2>
-          <p>Every semester result the college has published, for {{ academic_year }}.</p>
+          <p>Every semester result the college has published to you, year by year.</p>
         </div>
         {% if result_statements %}
         {% for statement in result_statements %}

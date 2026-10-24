@@ -4,6 +4,7 @@ from functools import wraps
 import logging
 import re
 from io import BytesIO
+from types import SimpleNamespace
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -64,7 +65,7 @@ from .models import (
     CatNumberFormat, Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration, StudentPass, WaiverRequest,
     OutstandingRepeat, SemesterReview, StudentStanding, StandingChange,
     AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck, Application,
-    PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultWithholding,
+    PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultRelease, ResultWithholding,
     StudentDocument, HealthRecord, HealthReport, ExitRequest, PasswordReset, AssetHandover, LabItem, LabStockMovement, ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile,
     ICTOfficerProfile, RoleChange, TrainingCoordinatorProfile, DeanOfStudentsProfile, LabTechnicianProfile,
     Intake, CourseFee, CourseFeeInstalment, CourseModule, CourseApplication, CourseEnrollment,
@@ -811,21 +812,29 @@ def _result_statements(modules, class_level):
     statements = {}
     # Repeat sittings last: each takes the failed module's place in the
     # statement of the semester it completes, so that one must be built first.
+    # Keyed by year, then semester, so earlier years read in order (the
+    # portal shows every year since 24 October 2026).
     for module in sorted(modules, key=lambda m: bool(m.get('completes'))):
-        key = tuple(module['completes']) if module.get('completes') else (module['semester_number'], module['semester'])
-        label = key[1]
+        if module.get('completes'):
+            number, label = module['completes'][0], module['completes'][1]
+            year = module['completes'][2] if len(module['completes']) > 2 else ''
+        else:
+            number, label, year = module['semester_number'], module['semester'], module.get('semester_year', '')
+        key = (year, number, label)
         if module.get('withheld'):
             # The college is keeping this semester's results from the student:
-            # one line saying so, no grades, no GPA.
+            # one line saying so, no grades, no GPA — a repeat withheld keeps
+            # back the semester it completes.
             statements.setdefault(key, {
-                'label': module['semester'], 'number': module['semester_number'], 'modules': [],
-                'points': [], 'supp': [], 'failed': [], 'withheld': True})
+                'label': label, 'number': number, 'modules': [], 'level': module.get('class_level', ''),
+                'points': [], 'supp': [], 'failed': [], 'withheld': True})['withheld'] = True
             continue
         if not module['has_final_result'] or not module['result']:
             continue
         statement = statements.setdefault(key, {
             'label': label,
-            'number': key[0],
+            'number': number,
+            'level': module.get('class_level', ''),
             'modules': [],
             'points': [],
             'supp': [],
@@ -874,7 +883,10 @@ def _result_statements(modules, class_level):
         statement = statements[key]
         points = statement.pop('points')
         if statement['withheld']:
-            statement.update(gpa=None, remark='WITHHELD', comment='')
+            # Nothing of it shows: not the grades read before a withheld
+            # repeat was reached either.
+            statement.pop('sittings', None)
+            statement.update(gpa=None, remark='WITHHELD', comment='', modules=[], supp=[], failed=[])
             ordered.append(statement)
             continue
         # The same decision the semester review and the Results Summary make
@@ -899,7 +911,10 @@ def _result_statements(modules, class_level):
             # remark says what is outstanding rather than guessing at a class.
             remark, comment = 'SUPP', ', '.join(sorted(decision['supp']))
         elif remark == progression.PASS:
-            remark, comment = gpa_classification(semester_gpa, class_level), 'PASS'
+            # Classed at the semester's own level: a Level 5 statement keeps
+            # Level 5's bands after the student moves to Level 6.
+            level = SimpleNamespace(name=statement['level'], order=0) if statement.get('level') else class_level
+            remark, comment = gpa_classification(semester_gpa, level), 'PASS'
         else:
             remark, comment = 'INCOMPLETE', ', '.join(decision['waiting'])
         statement['gpa'] = semester_gpa
@@ -907,7 +922,39 @@ def _result_statements(modules, class_level):
         statement['comment'] = comment
         statement['modules'].sort(key=lambda row: row['code'])
         ordered.append(statement)
+    for statement in ordered:
+        statement.pop('level', None)
     return ordered
+
+
+def _provisional_notice(profile):
+    """What a student placed provisionally is told at the top of the portal
+    (said 24 October 2026): that the place waits on last semester's results,
+    and — once the college has shown those results — what is still to come.
+    Nothing here says more than the results the student may already see."""
+    if profile is None:
+        return None
+    review = (SemesterReview.objects.filter(profile=profile, confirmed=SemesterReview.PROVISIONAL)
+              .select_related('semester__academic_year', 'class_level').order_by('-semester__academic_year__name',
+                                                                                  '-semester__number').first())
+    if review is None:
+        return None
+    semester = review.semester.label
+    head = f'Your place this year is provisional until your {semester} results are settled.'
+    shown = review.class_level_id and ResultRelease.objects.filter(
+        semester=review.semester, class_level=review.class_level, visible=True).exists()
+    if not shown:
+        return {'title': head, 'body': 'The college confirms your place once those results are published.'}
+    # A supplementary to sit proposes "pending" too, so it is looked for first.
+    supp = sorted(row['code'] for row in (review.modules or []) if row.get('status') == 'SUPP')
+    if supp:
+        return {'title': head, 'body': f'Your supplementary in {", ".join(supp)} must be passed to keep this place.'}
+    if review.proposed == SemesterReview.PENDING:
+        return {'title': head, 'body': 'The college confirms your place once those results are published.'}
+    if review.proposed in (SemesterReview.CLEAR, SemesterReview.COMPLETED):
+        return {'title': head, 'body': 'Your results show a pass: the college will confirm your place shortly.'}
+    return {'title': head, 'body': 'Your results are under End of Semester. The admission office will tell you '
+                                   'what they mean for your place.'}
 
 
 def _student_record_for_portal(profile):
@@ -1042,25 +1089,36 @@ def student_dashboard(request):
     ).order_by(
         'module__semester__number', 'module__name'
     )
+    # Every earlier year is read too, for End of Semester only (said 24
+    # October 2026: a student sees the year they cleared, not just this one).
     # A repeat completes the semester it repeats, so that semester's first
-    # sittings are read too — its statement then shows the whole semester,
-    # the repeat in the failed module's place (as NACTVET keeps it).
+    # sittings come with it — its statement shows the whole semester, the
+    # repeat in the failed module's place (as NACTVET keeps it).
     enrollments = list(enrollments)
-    completed = {e.repeat_of.module.semester_id for e in enrollments
-                 if e.attempt == Student.REPEAT and e.repeat_of_id}
     # Read for the statement only: a repeater sees the modules they are
     # repeating, not last time's (said 13 October 2026) — every list, total,
     # GPA and eligibility below leaves these out.
-    statement_only = set()
-    if completed:
-        earlier = list(
-            Student.objects.filter(nactvet_reg_no=student.nactvet_reg_no, attempt=Student.NORMAL,
-                                   module__semester_id__in=completed)
-            .exclude(id__in=[e.id for e in enrollments])
-            .select_related('module__class_level', 'module__semester__academic_year', 'profile')
-            .prefetch_related('attendance_records__session', 'result', 'module__sessions'))
-        statement_only = {e.id for e in earlier}
-        enrollments += earlier
+    earlier = list(
+        Student.objects.filter(nactvet_reg_no=student.nactvet_reg_no)
+        .exclude(id__in=[e.id for e in enrollments])
+        .select_related('module__class_level', 'module__semester__academic_year', 'profile',
+                        'repeat_of__module__semester__academic_year')
+        .prefetch_related('attendance_records__session', 'result', 'module__sessions'))
+    statement_only = {e.id for e in earlier}
+    enrollments += earlier
+    # What the examination office has shown to students, semester by level
+    # (ResultRelease); a repeat shows only when the semester it completes does.
+    shown = set(ResultRelease.objects.filter(
+        visible=True, semester_id__in={e.module.semester_id for e in enrollments}
+        | {e.repeat_of.module.semester_id for e in enrollments if e.repeat_of_id})
+        .values_list('semester_id', 'class_level_id'))
+
+    def results_shown(enrollment):
+        module = enrollment.module
+        if (module.semester_id, module.class_level_id) not in shown:
+            return False
+        origin = enrollment.repeat_of.module if enrollment.repeat_of_id else None
+        return origin is None or (origin.semester_id, origin.class_level_id) in shown
 
     # Semesters whose results the college is keeping from the student for now.
     withheld_semesters = set(ResultWithholding.objects.filter(
@@ -1075,7 +1133,7 @@ def student_dashboard(request):
         result = getattr(enrollment, 'result', None)
         result_data = StudentResultSerializer(result).data if result else None
         ca_approved = bool(result and result.ca_approved)
-        final_approved = bool(result and result.final_approved)
+        final_approved = bool(result and result.final_approved) and results_shown(enrollment)
         if result_data and not ca_approved:
             for field in (
                 'assign1', 'assign2', 'cat1_theory', 'cat2_theory',
@@ -1140,10 +1198,12 @@ def student_dashboard(request):
             'class_level': data['class_level_name'],
             'semester': data['semester_label'],
             'semester_number': enrollment.module.semester.number,
+            'semester_year': enrollment.module.semester.academic_year.name,
             'attempt': enrollment.attempt,
             # A repeat completes the semester it repeats (NACTVET keeps it so):
             # its statement shows the repeat in the failed module's place.
-            'completes': ((enrollment.repeat_of.module.semester.number, enrollment.repeat_of.module.semester.label)
+            'completes': ((enrollment.repeat_of.module.semester.number, enrollment.repeat_of.module.semester.label,
+                           enrollment.repeat_of.module.semester.academic_year.name)
                           if enrollment.attempt == Student.REPEAT and enrollment.repeat_of_id else None),
             'credits': enrollment.module.credits,
             'sessions_attended': data['sessions_attended'],
@@ -1350,6 +1410,7 @@ def student_dashboard(request):
         'gpa': gpa,
         'gpa_classification': gpa_class,
         'result_statements': result_statements,
+        'provisional_notice': _provisional_notice(profile),
         'password': passwords.student_reading(student),
         'overall_attendance': overall_attendance,
         'total_present': total_present,
@@ -2444,12 +2505,18 @@ class SemesterReviewViewSet(viewsets.ReadOnlyModelViewSet):
         return to, and a student who failed semester 1 after the supplementary
         is taken off semester 2.
         """
-        if not can_confirm_reviews(request.user):
-            raise PermissionDenied('The examination officer prepares the review; the Principal '
-                                   'or DPARC confirms it.')
         review = self.get_object()
         outcome = str(request.data.get('outcome') or review.proposed).strip()
         reason = str(request.data.get('reason') or '').strip()
+        # The examination officer settles a provisional student as their results
+        # say — pass, repeat or FAIL (said 24 October 2026). Overruling the
+        # results, and the semester review itself, stay with the Principal and DPARC.
+        settling = (review.confirmed == SemesterReview.PROVISIONAL and outcome == review.proposed
+                    and can_manage_exams(request.user))
+        if not (can_confirm_reviews(request.user) or settling):
+            raise PermissionDenied('The examination officer prepares the review; the Principal '
+                                   'or DPARC confirms it. A provisional student is settled by the '
+                                   'examination officer as the results say.')
         if outcome != review.proposed and not reason:
             return Response(
                 {'detail': 'Overruling the results needs a reason — it is what the record will show.'},
@@ -3306,7 +3373,35 @@ def results_summary(request):
         return Response({'detail': 'Pick a semester and a class level.'}, status=status.HTTP_400_BAD_REQUEST)
     programme = Programme.objects.filter(id=pk_or_none(request.query_params.get('programme_id'))).first()
     sheet = 'repeaters' if request.query_params.get('sheet') == 'repeaters' else 'continuing'
-    return Response(progression.results_summary(semester, level, programme=programme, sheet=sheet))
+    summary = progression.results_summary(semester, level, programme=programme, sheet=sheet)
+    release = ResultRelease.objects.filter(semester=semester, class_level=level).select_related('changed_by').first()
+    summary['visible_to_students'] = bool(release and release.visible)
+    summary['visibility_changed'] = ({'by': full_name_for(release.changed_by) if release.changed_by_id else '',
+                                      'at': release.changed_at} if release else None)
+    return Response(summary)
+
+
+@api_view(['POST'])
+@login_required
+def result_release(request):
+    """Show a semester's results to a level's students on the portal, or hide
+    them again (said 24 October 2026). The examination officer's, as
+    withholding is. Withheld students stay withheld when the rest are shown."""
+    if not can_manage_exams(request.user):
+        raise PermissionDenied('The examination officer shows results to students.')
+    semester = Semester.objects.filter(id=pk_or_none(request.data.get('semester_id'))).first()
+    level = ClassLevel.objects.filter(id=pk_or_none(request.data.get('class_level_id'))).first()
+    if semester is None or level is None:
+        return Response({'detail': 'Which semester, and which level?'}, status=status.HTTP_400_BAD_REQUEST)
+    visible = request.data.get('visible') in (True, 'true', '1', 1)
+    with transaction.atomic():
+        release, _ = ResultRelease.objects.update_or_create(
+            semester=semester, class_level=level, defaults={'visible': visible, 'changed_by': request.user})
+        told = progression.tell_settled_when_shown(semester, level) if visible else 0
+    security_log.info('%s %s results of %s to students (%s)', request.user.username,
+                'showed' if visible else 'hid', level.name, semester.label)
+    return Response({'semester_id': semester.id, 'class_level_id': level.id, 'visible': release.visible,
+                     'changed_at': release.changed_at, 'told': told})
 
 
 @api_view(['POST'])
@@ -3316,15 +3411,27 @@ def withhold_results(request):
     "Withheld" on the portal — usually over unpaid fees."""
     if not can_manage_exams(request.user):
         raise PermissionDenied('The examination officer withholds results.')
-    profile = StudentProfile.objects.filter(id=pk_or_none(request.data.get('profile_id'))).first()
     semester = Semester.objects.filter(id=pk_or_none(request.data.get('semester_id'))).first()
-    if profile is None or semester is None:
+    # One student, or several chosen together (`profile_ids`, said 24 October 2026).
+    ids = request.data.get('profile_ids')
+    ids = ids if isinstance(ids, list) else [request.data.get('profile_id')]
+    wanted = {pk for pk in (pk_or_none(value) for value in ids) if pk}
+    profiles = list(StudentProfile.objects.filter(id__in=wanted))
+    if not profiles or len(profiles) != len(wanted) or semester is None:
         return Response({'detail': 'Which student, and which semester?'}, status=status.HTTP_400_BAD_REQUEST)
-    holding, made = ResultWithholding.objects.get_or_create(
-        profile=profile, semester=semester, released_at__isnull=True,
-        defaults={'reason': str(request.data.get('reason') or '')[:300], 'withheld_by': request.user})
-    return Response({'id': holding.id, 'reason': holding.reason},
-                    status=status.HTTP_201_CREATED if made else status.HTTP_200_OK)
+    reason = str(request.data.get('reason') or '')[:300]
+    made_any, rows = False, []
+    with transaction.atomic():
+        for profile in profiles:
+            holding, made = ResultWithholding.objects.get_or_create(
+                profile=profile, semester=semester, released_at__isnull=True,
+                defaults={'reason': reason, 'withheld_by': request.user})
+            made_any = made_any or made
+            rows.append({'id': holding.id, 'profile_id': profile.id, 'reason': holding.reason})
+    if not isinstance(request.data.get('profile_ids'), list):
+        return Response({'id': rows[0]['id'], 'reason': rows[0]['reason']},
+                        status=status.HTTP_201_CREATED if made_any else status.HTTP_200_OK)
+    return Response({'withheld': rows}, status=status.HTTP_201_CREATED if made_any else status.HTTP_200_OK)
 
 
 @api_view(['POST'])
@@ -3515,7 +3622,12 @@ def provisional_places(request):
     if not (can_read_exams(user) or can_confirm_reviews(user)):
         raise PermissionDenied('For the examination office, the Principal and DPARC.')
     rows = progression.refresh_provisional()
-    return Response({'rows': rows, 'can_settle': can_confirm_reviews(user), 'can_set_cutoff': can_manage_exams(user),
+    # Settling passes is the examination officer's too (said 24 October 2026);
+    # a repeat or discontinuation, which takes the place away, stays with the
+    # Principal and DPARC.
+    return Response({'rows': rows, 'can_settle': can_confirm_reviews(user) or can_manage_exams(user),
+                     'can_settle_passes': can_confirm_reviews(user) or can_manage_exams(user),
+                     'can_set_cutoff': can_manage_exams(user),
                      'cutoffs': [{'semester_id': sem.id, 'semester': sem.label, 'cutoff': sem.provisional_cutoff}
                                  for sem in Semester.objects.filter(is_active=True)]})
 
@@ -3523,8 +3635,8 @@ def provisional_places(request):
 @api_view(['POST'])
 @login_required
 def provisional_settle_passes(request):
-    if not can_confirm_reviews(request.user):
-        raise PermissionDenied('The Principal or DPARC confirms.')
+    if not (can_confirm_reviews(request.user) or can_manage_exams(request.user)):
+        raise PermissionDenied('The examination officer, the Principal or DPARC confirms passes.')
     with transaction.atomic():
         settled = progression.settle_passes(actor=request.user)
     return Response({'settled': settled})

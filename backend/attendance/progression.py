@@ -371,8 +371,11 @@ def repeaters_summary(semester, class_level, *, programme=None):
     semester as first sittings shows those."""
     from .grading import gpa_classification
 
+    from .models import ResultWithholding
     serializer = _result_serializer()
     _, people = sheets_for(semester, class_level, programme=programme)
+    withheld = {row.profile_id: row for row in ResultWithholding.objects.filter(
+        semester=semester, released_at__isnull=True)}
 
     students = []
     for rows_for_person in people.values():
@@ -410,10 +413,12 @@ def repeaters_summary(semester, class_level, *, programme=None):
             'supp': decision['supp'], 'waiting': decision['waiting'],
             'grades': {row['code']: row['grade'] for row in merged},
             'repeat_grades': {row['code']: row['grade'] for row in repeat_rows},
+            'withheld_id': withheld[first.profile_id].id if first.profile_id in withheld else None,
         })
     counts = {remark: sum(1 for student in students if student['remark'] == remark)
               for remark in (PASS, SUPP, REPEAT, DISCO, INCOMPLETE)}
     counts['total'] = len(students)
+    counts['withheld'] = sum(1 for student in students if student['withheld_id'])
     return {
         'semester': semester.label, 'class_level': class_level.name, 'sheet': 'repeaters',
         'counts': counts,
@@ -736,16 +741,48 @@ def confirm_review(review, outcome, *, actor, reason='', enrollments=None,
                 programme=review.programme, reason=review.confirmed_reason,
                 known=known_standings)
     if was_provisional and outcome != SemesterReview.PROVISIONAL:
-        from . import notifications
-        if outcome in (SemesterReview.CLEAR, SemesterReview.COMPLETED):
-            title, body = 'Your place is confirmed', f'Your {review.semester.label} results are in: your place stands.'
+        # Told once the results are on their portal, never before (said 24
+        # October 2026): settled while they are hidden, the message waits.
+        if results_shown(review.semester, review.class_level):
+            tell_settled(review)
         else:
-            title = 'Your results changed your place'
-            body = (f'Your {review.semester.label} results: {review.get_confirmed_display().lower()}. '
-                    'The admission office will tell you what comes next.')
-        notifications.notify(profile=review.profile, kind=Notification.PROVISIONAL_SETTLED,
-                             title=title, body=body)
+            review.notify_when_shown = True
+            review.save(update_fields=['notify_when_shown'])
     return review
+
+
+def results_shown(semester, class_level):
+    from .models import ResultRelease
+    return bool(class_level) and ResultRelease.objects.filter(
+        semester=semester, class_level=class_level, visible=True).exists()
+
+
+def tell_settled(review):
+    """Tell a provisional student what their results did to their place."""
+    from . import notifications
+    if review.confirmed in (SemesterReview.CLEAR, SemesterReview.COMPLETED):
+        title, body = 'Your place is confirmed', f'Your {review.semester.label} results are in: your place stands.'
+    else:
+        title = 'Your results changed your place'
+        said = {SemesterReview.REPEAT: 'you repeat the module(s) you failed',
+                SemesterReview.DISCONTINUED: 'FAIL — discontinued from studies'}.get(
+            review.confirmed, review.get_confirmed_display())
+        body = (f'Your {review.semester.label} results: {said}. Your place this year is called off; '
+                'the admission office will tell you what comes next.')
+    notifications.notify(profile=review.profile, kind=Notification.PROVISIONAL_SETTLED, title=title, body=body)
+    if review.notify_when_shown:
+        review.notify_when_shown = False
+        review.save(update_fields=['notify_when_shown'])
+
+
+def tell_settled_when_shown(semester, class_level):
+    """The results are now shown: tell everybody settled while they were
+    hidden. Returns how many were told."""
+    waiting = list(SemesterReview.objects.filter(semester=semester, class_level=class_level,
+                                                 notify_when_shown=True).select_related('semester', 'profile'))
+    for review in waiting:
+        tell_settled(review)
+    return len(waiting)
 
 
 @transaction.atomic

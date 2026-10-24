@@ -24,6 +24,7 @@ from .models import (
     ResultWithholding, SemesterReview, Semester, SemesterRegistration, Student, StudentProfile,
     StudentResult,
 )
+from .testkit import show_all_results
 
 User = get_user_model()
 
@@ -183,6 +184,7 @@ class WithholdingTests(AuthorityBase):
         session.save()
 
     def statements(self):
+        show_all_results()
         return self.client.get('/student-dashboard/').context['result_statements']
 
     def test_withheld_results_read_withheld_on_the_portal_and_are_not_changed(self):
@@ -537,6 +539,7 @@ class RepeatersSheetTests(AuthorityBase):
         session['student_id'] = self.repeat.id
         session.save()
 
+        show_all_results()
         statements = self.client.get('/student-dashboard/').context['result_statements']
 
         self.assertEqual([s['label'] for s in statements], [self.old_sem1.label])
@@ -547,6 +550,25 @@ class RepeatersSheetTests(AuthorityBase):
         self.assertEqual(old['comment'], 'PASS')
         self.assertEqual(old['gpa'], 3.0)
 
+    def test_a_withheld_repeater_is_marked_and_the_completed_semester_kept_back(self):
+        """Said 24 October 2026: repeaters are withheld from their own sheet too,
+        and withholding the repeat keeps back the semester it completes."""
+        self.upload(self.exam, [('NIT/90', 'PST04103', 'C')])
+        self.exam.post('/api/result-withholdings/', {'profile_ids': [self.profile.id], 'semester_id': self.sem1.id,
+                                                     'reason': 'Fees'}, format='json')
+        data = self.summary('repeaters')
+        self.assertIsNotNone(data['students'][0]['withheld_id'])
+        self.assertEqual(data['counts']['withheld'], 1)
+        self.repeat.set_portal_pin('Portal#2026', require_change=False)
+        self.repeat.save()
+        session = self.client.session
+        session['student_id'] = self.repeat.id
+        session.save()
+        show_all_results()
+        statement = self.client.get('/student-dashboard/').context['result_statements'][0]
+        self.assertEqual((statement['label'], statement['withheld'], statement['modules']),
+                         (self.old_sem1.label, True, []))
+
     def test_a_repeater_sees_only_the_module_they_are_repeating(self):
         # Last time's first sittings are read for the statement, not listed as
         # this year's modules (said 13 October 2026).
@@ -555,6 +577,7 @@ class RepeatersSheetTests(AuthorityBase):
         session = self.client.session
         session['student_id'] = self.repeat.id
         session.save()
+        show_all_results()
         page = self.client.get('/student-dashboard/')
         self.assertEqual([m['module_code'] for m in page.context['modules']], ['PST04103'])
         self.assertEqual(page.context['module_count'], 1)

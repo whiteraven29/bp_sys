@@ -25,6 +25,7 @@ from .models import (
 )
 from .test_admissions import AdmissionBase, User, complete_record
 from .views import set_roles
+from .testkit import show_all_results
 
 
 class ReturningBase(AdmissionBase):
@@ -340,6 +341,7 @@ class RepeatAcrossAPostponementTests(ReturningBase):
         session = self.client.session
         session['student_id'] = repeat.id
         session.save()
+        show_all_results()
         statements = self.client.get('/student-dashboard/').context['result_statements']
         self.assertEqual([s['label'] for s in statements], [older.label])
         self.assertEqual(statements[0]['comment'], 'PASS')

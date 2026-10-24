@@ -928,3 +928,21 @@ assignment stays for emergencies.
 the category — Tuition fee or Direct costs — and the instalment that is short, write what is short and
 why, and send it to DPFPA. Approved, it comes off that instalment. (Same day: the system's slowness was
 measured and the lists fixed; the menus no longer flash before a person's own load.)
+
+### Q69. NACTVET's older-year sheets, and who sees results ◐
+
+**Found (24 October 2026):** the sheets printed under 2024/25 and 2023/24 (exam numbers MTS2) are the
+repeat sittings of 2025/26, filed under the student's first year. A red grade there is a repeat not
+re-sat (still owed: NACTVET says REPEAT); a green one was sat (failed again: FAIL). The system cannot
+see the colour, so those sheets wait for a "not sat" mark (`NS`) and an import of earlier years'
+results, so a repeat completes the very year it belongs to. Two students NACTVET printed POSTPONED
+(NS5001, NP0672) you believe are NACTVET's mistake: with `NS` they read REPEAT, as the rules say.
+
+**Answer (24 October 2026):** results reach students only when the college shows them, level by level;
+students chosen are withheld, several at once; the portal shows every year; the examination officer
+settles provisional students — passes, repeats and FAILs as the results say; students are told only
+after their results are shown.
+
+**Still open:** build the `NS` mark, the upload guard, the past-results import and the correction
+function (exam officer proposes, DPARC or the Principal approves) — waiting for your go-ahead; the
+2023/24 Level 5 first-sitting sheet for NS1314.

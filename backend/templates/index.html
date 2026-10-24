@@ -535,6 +535,8 @@
   .facts dd { margin: 0; }
   .missing-note { padding: 7px 10px; border-left: 3px solid var(--orange); background: var(--yellow-soft);
     color: var(--text); font-size: .8rem; margin-bottom: 10px; }
+  .success-note { padding: 7px 10px; border-left: 3px solid var(--green); background: var(--green-soft, #e7f6ec);
+    color: var(--text); font-size: .8rem; margin-bottom: 10px; border-radius: var(--radius-sm, 6px); }
   .app-trail summary { cursor: pointer; font-size: .86rem; font-weight: 600; padding: 6px 0; }
   #page-admissions [data-adm-section], #page-student-records [data-rec-section] { display: none; }
   #page-lab [data-lab-section] { display: none; }
@@ -2694,6 +2696,7 @@
           <div class="field"><label>Sheet <span class="tip" tabindex="0" role="note" aria-label="Help: sheet" data-tip="As NACTVET keeps them: Continuing is the class's first sittings. Repeaters are the students sitting a repeat this semester — their repeat grades complete the semester they failed, which then reads cleared (or discontinued).">?</span></label>
             <select id="sum-sheet" onchange="loadResultsSummary()"><option value="continuing">Continuing</option><option value="repeaters">Repeaters</option></select></div>
         </div>
+        <div id="sum-visibility"></div>
         <div class="stats-grid" id="sum-stats"></div>
         <div class="card-title" style="font-size:.9rem;margin-top:14px;">Modules</div>
         <div class="table-wrap">
@@ -2702,10 +2705,11 @@
             <tbody id="sum-modules"><tr><td colspan="8" style="color:var(--muted);">Pick a semester and level</td></tr></tbody>
           </table>
         </div>
-        <div class="card-title" style="font-size:.9rem;margin-top:14px;">Students <span id="sum-count" style="font-size:.75rem;font-weight:400;color:var(--muted);"></span></div>
+        <div class="card-title" style="font-size:.9rem;margin-top:14px;">Students <span id="sum-count" style="font-size:.75rem;font-weight:400;color:var(--muted);"></span>
+          <button class="btn btn-warning btn-sm exam-office-only" id="sum-withhold-selected" style="margin-left:auto;display:none;" onclick="withholdSelected()">Withhold selected</button></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Reg. No.</th><th>Name</th><th>GPA</th><th>Remark</th><th>Modules</th><th>Portal</th></tr></thead>
+            <thead><tr><th class="exam-office-only" style="width:28px;"><input type="checkbox" id="sum-pick-all" aria-label="Choose every student shown" onchange="pickAllSummary(this.checked)"></th><th>Reg. No.</th><th>Name</th><th>GPA</th><th>Remark</th><th>Modules</th><th>Portal</th></tr></thead>
             <tbody id="sum-students"></tbody>
           </table>
         </div>
@@ -6573,7 +6577,10 @@ async function authorityTemplateData() {
         : (repeaters && m.code in s.grades ? (s.grades[m.code] || '') : 'NA');
     });
     return row;
-  }).sort((a, b) => a['Registration Number'].localeCompare(b['Registration Number']));
+  // By name, A to Z (said 24 October 2026); capitals ignored, the
+  // registration number between two of the same name.
+  }).sort((a, b) => String(a['Student Name'] || '').localeCompare(String(b['Student Name'] || ''), 'en', { sensitivity: 'base' })
+                    || a['Registration Number'].localeCompare(b['Registration Number']));
   return { modules, rows, levelId, repeaters };
 }
 
@@ -6671,8 +6678,69 @@ async function loadResultsSummary() {
         <td>${m.students}</td><td>${m.results}</td><td>${m.passed}</td><td>${m.supp}</td><td>${m.failed}</td><td>${m.waiting}</td>
         <td>${m.pass_rate == null ? '—' : `<strong>${m.pass_rate}%</strong>`}</td></tr>`).join('')
       : '<tr><td colspan="8" style="color:var(--muted);">No modules for this level and semester</td></tr>';
+    renderSummaryVisibility();
     renderSummaryStudents();
   } catch (e) { toast(apiErrorText(e, 'Could not load the summary'), 'var(--red)'); }
+}
+
+// Whether this semester's results reach this level's students on the portal
+// (said 24 October 2026): hidden until the examination office shows them.
+function renderSummaryVisibility() {
+  const data = state.resultsSummary;
+  const box = document.getElementById('sum-visibility');
+  if (!data || !box) return;
+  const when = data.visibility_changed
+    ? ` <span style="color:var(--muted);font-size:.75rem;">— ${safeText(data.visibility_changed.by || 'set')} · ${safeText(String(data.visibility_changed.at).slice(0, 16).replace('T', ' '))}</span>` : '';
+  box.innerHTML = `<div class="${data.visible_to_students ? 'success-note' : 'missing-note'}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <span>${data.visible_to_students
+        ? '<strong>Shown to students</strong> — they see these results on the portal (withheld students excepted).'
+        : '<strong>Hidden from students</strong> — the portal shows nothing for this semester yet.'}${when}</span>
+      <button class="btn ${data.visible_to_students ? 'btn-secondary' : 'btn-primary'} btn-sm exam-office-only" style="margin-left:auto;"
+        onclick="setResultsVisible(${!data.visible_to_students})">${data.visible_to_students ? 'Hide from students' : 'Show to students'}</button></div>`;
+}
+
+async function setResultsVisible(visible) {
+  const level = document.getElementById('sum-level').selectedOptions[0]?.textContent || 'this level';
+  const ask = visible
+    ? `Show these results to ${level} students on the portal? Withhold anyone first who should not see theirs.`
+    : `Hide these results from ${level} students? The portal shows nothing for this semester until they are shown again.`;
+  if (!confirm(ask)) return;
+  try {
+    const done = await api('POST', '/result-releases/', { semester_id: document.getElementById('sum-semester').value,
+      class_level_id: document.getElementById('sum-level').value, visible });
+    toast(visible ? `Shown to students${done.told ? ` — ${done.told} settled student(s) told about their place` : ''}`
+                  : 'Hidden from students', 'var(--green)');
+    await loadResultsSummary();
+  } catch (e) { toast(apiErrorText(e, 'Could not change it'), 'var(--red)'); }
+}
+
+function summaryPicked() {
+  return [...document.querySelectorAll('#sum-students .sum-pick:checked')].map(box => Number(box.value));
+}
+
+function syncSummaryPicks() {
+  const picked = summaryPicked().length;
+  const button = document.getElementById('sum-withhold-selected');
+  button.style.display = picked ? '' : 'none';
+  button.textContent = `Withhold selected (${picked})`;
+}
+
+function pickAllSummary(checked) {
+  document.querySelectorAll('#sum-students .sum-pick').forEach(box => { box.checked = checked; });
+  syncSummaryPicks();
+}
+
+async function withholdSelected() {
+  const ids = summaryPicked();
+  if (!ids.length) return;
+  const reason = prompt(`Withhold the results of ${ids.length} student(s)? Why (for the office — they see only "Withheld")`, 'Fees not paid');
+  if (reason === null) return;
+  try {
+    await api('POST', '/result-withholdings/', {
+      profile_ids: ids, semester_id: document.getElementById('sum-semester').value, reason });
+    toast(`${ids.length} withheld — they see "Withheld" on the portal`, 'var(--orange)');
+    await loadResultsSummary();
+  } catch (e) { toast(apiErrorText(e, 'Could not withhold'), 'var(--red)'); }
 }
 
 function renderSummaryStudents() {
@@ -6692,14 +6760,19 @@ function renderSummaryStudents() {
     const portal = s.withheld_id
       ? `<span class="badge badge-yellow">withheld</span> <button class="btn btn-ghost btn-sm exam-office-only" onclick="releaseResults(${s.withheld_id})">Release</button>`
       : (s.profile_id ? `<button class="btn btn-ghost btn-sm exam-office-only" onclick="withholdResults(${s.profile_id})">Withhold</button>` : '');
+    const pick = s.profile_id && !s.withheld_id
+      ? `<input type="checkbox" class="sum-pick" value="${s.profile_id}" aria-label="Choose ${safeText(s.name)}" onchange="syncSummaryPicks()">` : '';
     return `<tr>
+      <td class="exam-office-only">${pick}</td>
       <td>${safeText(s.reg_no)}</td><td>${safeText(s.name)}${s.origin
         ? `<div style="font-size:.72rem;color:var(--muted)">completes ${safeText(s.origin)}</div>` : ''}</td>
       <td><strong>${s.gpa == null ? '—' : s.gpa.toFixed(1)}</strong></td>
       <td><span class="badge ${REMARK_BADGES[s.remark] || 'badge-gen'}">${s.remark === 'DISCO' ? 'FAIL' : s.remark}</span> <span style="font-size:.75rem;">${detail}</span></td>
       <td style="font-size:.75rem;">${grades}</td>
       <td style="white-space:nowrap;">${portal}</td></tr>`;
-  }).join('') || '<tr><td colspan="6" style="color:var(--muted);">No students</td></tr>';
+  }).join('') || '<tr><td colspan="7" style="color:var(--muted);">No students</td></tr>';
+  document.getElementById('sum-pick-all').checked = false;
+  syncSummaryPicks();
 }
 
 async function withholdResults(profileId) {
@@ -12869,7 +12942,7 @@ async function loadProvisional() {
   try {
     const data = await api('GET', '/provisional/');
     const passes = data.rows.filter(r => ['clear', 'completed'].includes(r.proposed)).length;
-    document.getElementById('prov-settle-btn').style.display = data.can_settle && passes ? '' : 'none';
+    document.getElementById('prov-settle-btn').style.display = data.can_settle_passes && passes ? '' : 'none';
     document.getElementById('prov-summary').textContent = data.rows.length
       ? `${data.rows.length} provisional · ${data.rows.filter(r => r.results_in).length} with results in · ${passes} passed`
       : 'Nobody is provisional.';
@@ -12894,7 +12967,7 @@ async function loadProvisional() {
 }
 
 async function settleProvisionalPasses(event) {
-  if (!confirm('Confirm every provisional student whose results now show a pass? Their places stand.')) return;
+  if (!confirm('Confirm every provisional student whose results now show a pass? Their places stand; each is told once these results are shown to students.')) return;
   const done = working(event?.currentTarget, 'Confirming…');
   try {
     const result = await api('POST', '/provisional/settle-passes/', {});
@@ -12904,7 +12977,7 @@ async function settleProvisionalPasses(event) {
 }
 
 async function settleProvisional(reviewId, outcome, name, label) {
-  if (!confirm(`${name}: the results say ${label}. Confirm it? Their place in the next level is taken away, its fees reversed, and they are told.`)) return;
+  if (!confirm(`${name}: the results say ${label}. Confirm it? Their place in the next level is taken away and its fees reversed. They are told once these results are shown to students.`)) return;
   try {
     await api('POST', `/semester-reviews/${reviewId}/confirm/`, { outcome });
     toast('Confirmed', 'var(--green)'); await loadProvisional();

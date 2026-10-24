@@ -22,6 +22,7 @@ from .models import (
     PrincipalProfile, RequestAttachment, SecretaryProfile, Semester, Student,
     TeacherProfile,
 )
+from .testkit import show_all_results
 
 User = get_user_model()
 
@@ -888,6 +889,7 @@ class StudentResultsNavigationTests(TestCase):
         self.sem2.is_active = True
         self.sem2.save(update_fields=['is_active'])
 
+        show_all_results()
         context = self._context()
         published = [m['module_code'] for m in context['modules'] if m['has_final_result']]
         self.assertCountEqual(published, ['PHM101', 'ANA101'])

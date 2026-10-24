@@ -269,8 +269,33 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      instalment's charges in turn; paid meanwhile, DPFPA is told to refuse it. Requests made before keep
      their charge
    - [x] Tests keep the lists flat (three rows cost what thirty do); 1192 tests; checked in the browser
-2y. **On the server, after this deploy (12–22 Oct work) — in this order.**
-   - [ ] Migrations to 0079 applied by the deploy (release guide B1–B4); `Ran 1192 tests … OK` on the laptop first
+3b. **Results reach students when the college chooses; every year on the portal — 24 Oct (not committed).**
+   - [x] NACTVET's new sheets checked through the system (scratch database): the three 2025/26 first-sitting
+     sheets (exam numbers MTS1) match in all 90 rows; the older-year sheets (MTS2) are the 2025/26 repeat
+     sittings printed under the original year — 19 of 26 match; the rest are repeats not re-sat (grade
+     carried, red), which the system would read as FAIL — those sheets wait (`NS` mark, past-results import)
+   - [x] *Results Summary* says whether students see the semester (level by level): **Show to students** /
+     **Hide from students** (examination office; migration 0080). Hidden until shown; what students could
+     see on 24 Oct stays shown
+   - [x] Withhold several at once (tick them, *Withhold selected*); repeaters' sheet shows who is withheld; a
+     withheld repeat keeps back the semester it completes
+   - [x] The portal's *End of Semester* reads every year, each semester under its own year and classed at its
+     own level; nothing of an earlier year counts in this year's lists, GPA or eligibility
+   - [x] A provisional student is told so at the top of the portal (and, once results are shown, what is
+     still to come — e.g. the supplementary to pass)
+   - [x] The examination officer settles provisional students: the passes in one go, a repeat or FAIL one by one,
+     as the results say (overruling them stays with the Principal / DPARC)
+   - [x] A settled student is told only once that semester's results are shown to their level (held back
+     until then, sent when the exam office presses *Show to students*)
+   - [x] The authority grade template lists students by name, A to Z (registration number between equal names)
+   - [x] 1204 tests; checked in the browser (show / hide, withhold several, settle passes, the portal's notice and
+     2025/26 statement, the template's order)
+2y. **On the server, after this deploy (12–24 Oct work) — in this order.**
+   - [ ] Migrations to 0080 applied by the deploy (release guide B1–B4); `Ran 1204 tests … OK` on the laptop first
+   - [ ] Upload the three 2025/26 first-sitting sheets (MTS1) into 2025/26 Semester 2, as First sitting; settle the
+     provisional students (passes, then repeats / FAILs); withhold who should not see theirs; *Show to students*
+     per level — the settled students are told then
+   - [ ] Not yet: the older-year sheets (MTS2) — they wait for the `NS` mark and the past-results import
    - [ ] A day after the deploy: `journalctl -u edutrack --since today | grep "Slow request"` — any page
      still slow on real data is named there, with its query count
    - [ ] `merge_programmes` (release guide B6): dry run, read it, then `--apply` — before the next application

@@ -29,6 +29,7 @@ from .models import (
     OutstandingRepeat, Programme, Semester, SemesterRegistration, SemesterReview,
     Student, StudentCharge, StudentProfile, StudentResult, StudentStanding,
 )
+from .testkit import show_all_results
 
 User = get_user_model()
 
@@ -1339,6 +1340,7 @@ class ResultStatementTests(ProgressionBase):
         session['student_id'] = self.enrollment.id
         session.save()
         self.client.cookies['sessionid'] = session.session_key
+        show_all_results()
         response = self.client.get('/student-dashboard/')
         self.assertEqual(response.status_code, 200)
         return response

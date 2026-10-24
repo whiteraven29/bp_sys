@@ -258,6 +258,8 @@ dialog button { position: absolute; top: 8px; right: 8px; background: #0f1a1d; c
         <li><span class="path">Semester Review ▸ Provisional places</span>: who went on without results, and what their results say once uploaded.</li>
         <li>You set the <b>cut-off</b>: the date by which the late results must be in.</li>
         <li>A late result always belongs to the semester it was sat in. A student who failed 2025/26 Semester 2 is a 2025/26 repeater, never a 2026/27 failure.</li>
+        <li>Students see a semester's results only when you press <span class="ui">Show to students</span> in <span class="path">Results ▸ Results Summary</span>.</li>
+        <li>You settle the provisional students yourself: passes, repeats and FAILs. They are told once you show the results.</li>
       </ul>
     </div>
   </header>
@@ -294,7 +296,7 @@ dialog button { position: absolute; top: 8px; right: 8px; background: #0f1a1d; c
         <li><b>Semester:</b> the semester the exam was <b>sat in</b>, for example <i>Sem 2 · 2025/2026</i>. Not the semester running now.</li>
         <li><b>Class level</b>, then <b>Sheet</b>: <i>Continuing</i> or <i>Repeaters</i>. Continuing lists only students who sit every module as first sittings; anybody missing a module is on Repeaters, with only the modules they sit left to fill. Module columns are in code order.</li>
         <li><b>Sitting:</b> <i>First sitting</i>, or <i>Supplementary sitting</i> for a supplementary sheet.</li>
-        <li><span class="ui">Upload Authority Grades</span>.</li>
+        <li><span class="ui">Download Level Template</span> lists the students by name, A to Z. Copy NACTVET's grades in, then <span class="ui">Upload Authority Grades</span>.</li>
       </ol>
       <p>The Principal and DPARC are told that results for provisional students are in. Provisional places now shows what each one's results say.</p>
     </div>
@@ -306,12 +308,26 @@ dialog button { position: absolute; top: 8px; right: 8px; background: #0f1a1d; c
     <div>
       <h3><span class="num">04</span>What happens to each student</h3>
       <div class="tablewrap"><table class="faq">
-        <tr><th>Passed everything</th><td>The Principal or DPARC presses <span class="ui">Settle the passes</span>. The place is confirmed. Nothing else changes: no new bill, no new application.</td></tr>
+        <tr><th>Passed everything</th><td>You, the Principal or DPARC press <span class="ui">Settle the passes</span>. The place is confirmed. Nothing else changes: no new bill, no new application.</td></tr>
         <tr><th>A supplementary still to come</th><td>The student stays provisional. Upload the supplementary sheet with Sitting = <i>Supplementary</i>. A pass then settles them as above.</td></tr>
-        <tr><th>Failed: repeat or discontinued</th><td>Settled one by one by the Principal or DPARC. The failure is recorded against <b>2025/26</b>, the semester it was sat in. The 2026/27 place, its registration and its fees are called off. Marks earned in 2026/27 stay on record but do not count. The student then follows the normal repeat or readmission route.</td></tr>
+        <tr><th>Failed: repeat or discontinued</th><td>Settled one by one: press <span class="ui">Confirm…</span> on the row. The failure is recorded against <b>2025/26</b>, the semester it was sat in. The 2026/27 place, its registration and its fees are called off. Marks earned in 2026/27 stay on record but do not count. The student then follows the normal repeat or readmission route.</td></tr>
         <tr><th>Results still not out at the cut-off</th><td>The warning appears. Chase NACTVET. The student cannot sit the end-of-semester exam.</td></tr>
       </table></div>
-      <p style="margin-top:14px">The semester review works as before: you prepare it with <span class="ui">Read the results again</span>, and the Principal or DPARC confirms. You do not confirm reviews or settle provisional places yourself.</p>
+      <p style="margin-top:14px">The semester review works as before: you prepare it with <span class="ui">Read the results again</span>, and the Principal or DPARC confirms. You settle provisional students as their results say. Overruling a result stays with the Principal or DPARC. Students are told about their place only once you show the results.</p>
+    </div>
+  </div>
+
+  <div class="step wide">
+    <div>
+      <h3><span class="num">05</span>Show the results to students</h3>
+      <p>Uploaded results are <b>hidden from students</b> until you show them. Open <span class="path">Results ▸ Results Summary</span>, pick the semester and the level. The bar at the top says <i>Hidden from students</i> or <i>Shown to students</i>.</p>
+      <ol>
+        <li>Withhold anyone who should not see theirs yet: tick them and press <span class="ui">Withhold selected</span>, or <span class="ui">Withhold</span> on one row. They see only "Withheld".</li>
+        <li>Press <span class="ui">Show to students</span>. Each level is shown on its own.</li>
+        <li>Changed your mind? <span class="ui">Hide from students</span> takes them off the portal again.</li>
+      </ol>
+      <p>Students read every year under <b>End of Semester</b>, each semester under its own year. A provisional student also reads a note at the top of the portal.</p>
+      <div class="warn"><b>Not yet:</b> NACTVET's older-year sheets (exam numbers containing <b>MTS2</b>) are the repeat sittings, printed under the student's first year. Do not upload them until the "not sat" mark is in place.</div>
     </div>
   </div>
 </section>

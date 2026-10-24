@@ -145,11 +145,61 @@ class SettlingTests(ProvisionalBase):
         self.assertEqual(self.profile.standing.class_level, self.level5)      # not put back to level 4
         self.assertTrue(SemesterRegistration.objects.get(profile=self.profile, semester=self.next_sem1)
                         .status == SemesterRegistration.ACTIVE)
-        self.assertTrue(Notification.objects.filter(profile=self.profile, kind=Notification.PROVISIONAL_SETTLED).exists())
+        # Told only once the results are on their portal (said 24 October 2026).
+        told = Notification.objects.filter(profile=self.profile, kind=Notification.PROVISIONAL_SETTLED)
+        self.assertFalse(told.exists())
+        review = SemesterReview.objects.get(profile=self.profile, semester=self.sem2)
+        shown = self.exam.post('/api/result-releases/', {'semester_id': self.sem2.id,
+                                                         'class_level_id': review.class_level_id, 'visible': True},
+                               format='json')
+        self.assertEqual(shown.data['told'], 1)
+        self.assertEqual(told.count(), 1)
+        self.exam.post('/api/result-releases/', {'semester_id': self.sem2.id, 'class_level_id': review.class_level_id,
+                                                 'visible': True}, format='json')
+        self.assertEqual(told.count(), 1)                                   # not told twice
 
-    def test_only_the_principal_or_dparc_settles(self):
-        self.assertEqual(self.exam.post('/api/provisional/settle-passes/', {}, format='json').status_code, 403)
-        self.assertEqual(self.exam.get('/api/provisional/').status_code, 200)
+    def test_the_exam_officer_settles_the_passes(self):
+        """Said 24 October 2026: the examination officer settles provisional
+        students — the passes in one go, and (below) a repeat or FAIL."""
+        self.publish(self.profile, 80)
+        listed = self.exam.get('/api/provisional/')
+        self.assertEqual(listed.status_code, 200)
+        self.assertTrue(listed.data['can_settle_passes'])
+        self.assertTrue(listed.data['can_settle'])
+        settled = self.exam.post('/api/provisional/settle-passes/', {}, format='json')
+        self.assertEqual(settled.data['settled'], 1)
+        self.assertNotIn(self.profile.id, progression.provisional_profile_ids())
+
+    def test_the_exam_officer_settles_a_failure_as_the_results_say(self):
+        """Said 24 October 2026: results are the examination officer's, so a
+        provisional repeat or FAIL is theirs to settle too — as the results
+        say. Overruling them stays with the Principal and DPARC."""
+        self.publish(self.profile, 20)
+        progression.refresh_provisional()
+        review = SemesterReview.objects.get(profile=self.profile, semester=self.sem2)
+        overrule = self.exam.post(f'/api/semester-reviews/{review.id}/confirm/',
+                                  {'outcome': SemesterReview.CLEAR, 'reason': 'Kind heart'}, format='json')
+        self.assertEqual(overrule.status_code, 403)
+        settled = self.exam.post(f'/api/semester-reviews/{review.id}/confirm/', {'outcome': review.proposed},
+                                 format='json')
+        self.assertEqual(settled.status_code, 200, settled.data)
+        self.assertNotIn(self.profile.id, progression.provisional_profile_ids())
+        self.assertEqual(SemesterRegistration.objects.get(profile=self.profile, semester=self.next_sem1).status,
+                         SemesterRegistration.CANCELLED)
+        # Settled while the results are hidden: told when they are shown.
+        review.refresh_from_db()
+        self.assertTrue(review.notify_when_shown)
+        self.assertFalse(Notification.objects.filter(profile=self.profile,
+                                                     kind=Notification.PROVISIONAL_SETTLED).exists())
+
+    def test_settled_after_the_results_are_shown_is_told_at_once(self):
+        self.publish(self.profile, 80)
+        review = SemesterReview.objects.get(profile=self.profile, semester=self.sem2)
+        self.exam.post('/api/result-releases/', {'semester_id': self.sem2.id, 'class_level_id': review.class_level_id,
+                                                 'visible': True}, format='json')
+        self.exam.post('/api/provisional/settle-passes/', {}, format='json')
+        self.assertTrue(Notification.objects.filter(profile=self.profile,
+                                                    kind=Notification.PROVISIONAL_SETTLED).exists())
 
     def test_a_failure_takes_the_place_away_and_reverses_its_fees(self):
         self.publish(self.profile, 20)

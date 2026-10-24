@@ -27,6 +27,7 @@ from .models import (
     StudentStanding,
 )
 from .views import set_roles
+from .testkit import show_all_results
 
 User = get_user_model()
 
@@ -229,6 +230,7 @@ class FirstYearEndToEndTests(TestCase):
         self.assertTrue(Student.objects.filter(profile=self.profile, module=self.m2).exists())
         self.assertTrue(SemesterRegistration.objects.filter(profile=self.profile, semester=self.sem2).exists())
         # The portal shows semester 1's grade, never the marks.
+        show_all_results()
         page = self.client.get('/student-dashboard/')
         statements = page.context['result_statements']
         self.assertEqual([(m['code'], m['grade']) for s in statements for m in s['modules']], [('PST04101', 'B')])

@@ -36,6 +36,7 @@ from .models import (
 )
 from .serializers import StudentResultSerializer
 from .grading import gpa_classification
+from .testkit import show_all_results
 
 
 User = get_user_model()
@@ -866,6 +867,7 @@ class AttendanceSecurityTests(TestCase):
         session['student_id'] = self.student.id
         session.save()
 
+        show_all_results()
         response = self.client.get(reverse('student-dashboard'))
 
         self.assertContains(response, '12 credits')
@@ -1265,6 +1267,7 @@ class AttendanceSecurityTests(TestCase):
         session['student_id'] = self.student.id
         session.save()
 
+        show_all_results()
         response = self.client.get(reverse('student-dashboard'))
 
         # The student is shown the grade and what it means. The marks behind it
