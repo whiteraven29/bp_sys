@@ -336,18 +336,26 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] A correction recalculates the GPA everywhere: the Results Summary, the repeaters' sheet and the portal work it
      out from the grades each time; the student's semester review (which keeps its own copy) is refreshed too,
      confirmed or not
-   - [x] 1227 tests
+   - [x] No GPA for an INCOMPLETE student anywhere (Results Summary, Semester Review, portal) — NACTVET prints NA —
+     and none in the class average (it used to show a GPA from the modules graded so far)
+   - [x] 1228 tests
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1227 tests … OK` on the laptop first
+   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1228 tests … OK` on the laptop first
    - [ ] Level 4 / 5 students marked "Finished" by the advance before the merge: run the read-only check (sent 25 Oct),
      send the output, then repair them (to be written once the list is seen)
    - [ ] Upload the three 2025/26 first-sitting sheets (MTS1) into 2025/26 Semester 2, as First sitting; settle the
      provisional students (passes, then repeats / FAILs); withhold who should not see theirs; *Show to students*
      per level — the settled students are told then
-   - [ ] Earlier Results, in order, from `RESULTS/upload_earlier/` (check the 14 NS cells against the PDFs first):
-     L4, L5, L6 2024/25 — 1 first sitting, 2 supplementary, 3 repeat sitting (sat in Sem 2 · 2025/2026); then L5
-     2023/24 — 1 first sitting, 2 repeat sitting (sat in Sem 2 · 2024/2025). Then *Show to students* for Sem 2 ·
-     2024/2025 and Sem 2 · 2023/2024 (and Sem 2 · 2025/2026) per level
+   - [ ] The past results of the 23 students waiting on repeat results (your choice, 25 Oct: NS1314 for 2023/24 and the
+     22 Level 4 and 5 students for 2024/25): *Results ▸ Earlier Results*, the five files in
+     `RESULTS/upload_past_results/` in their numbered order (1 · 2023/24 L5 first sitting; 2–3 · 2024/25 L4 first sitting
+     then supplementary; 4–5 · 2024/25 L5 likewise)
+   - [ ] Then their current repeat sheets (MTS2) — *Results ▸ Authority Grades*, Sem 2 · 2025/2026, Repeaters, First
+     sitting — with NS where NACTVET reprinted the old grade (the filled-in copies with NS are the "repeat sitting"
+     files in `RESULTS/upload_earlier/`; check the 14 NS cells against the PDFs). Each repeat is linked to the year
+     it clears as it uploads. Checked end to end: all 23 as NACTVET printed them. (NS1314's repeat was sat in
+     2025/26 too: the dates on NACTVET's sheets are reprints of the first sitting's.)
+   - [ ] Then *Show to students* for Sem 2 · 2024/2025, Sem 2 · 2023/2024 and Sem 2 · 2025/2026, per level
    - [ ] A day after the deploy: `journalctl -u edutrack --since today | grep "Slow request"` — any page
      still slow on real data is named there, with its query count
    - [ ] `merge_programmes` (release guide B6): dry run, read it, then `--apply` — before the next application

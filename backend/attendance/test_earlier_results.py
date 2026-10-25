@@ -268,6 +268,17 @@ class IncompleteOnThePortalTests(EarlierBase):
         self.assertEqual(rows['PST04102'], ('', 'INCOMPLETE'))
         self.assertEqual(rows['PST04101'][0], 'A')
 
+    def test_no_gpa_for_an_incomplete_student_and_none_in_the_average(self):
+        """NACTVET prints NA: no GPA from part of a semester, on any screen."""
+        self.student('NIT/61', 'All Done')
+        self.upload(self.exam, [('NIT/60', 'PST04101', 'A'),
+                                ('NIT/61', 'PST04101', 'B'), ('NIT/61', 'PST04102', 'B')])
+        summary = self.exam.get(f'/api/results-summary/?semester_id={self.sem1.id}'
+                                f'&class_level_id={self.level4.id}').data
+        by_reg = {row['reg_no']: row for row in summary['students']}
+        self.assertEqual((by_reg['NIT/60']['remark'], by_reg['NIT/60']['gpa']), ('INCOMPLETE', None))
+        self.assertEqual(summary['average_gpa'], 3.0)                       # NIT/61 alone
+
 
 class OnlyLevelSixFinishesTests(EarlierBase):
     def test_a_programme_with_no_next_level_holds_the_student_not_finishes_them(self):

@@ -170,7 +170,10 @@ def decide(rows):
                 'reason': f'Failed {", ".join(failed_again)} at the repeat sitting — a failed '
                           f'repeat is a discontinuation.'}
     if waiting:
-        return {**out, 'remark': INCOMPLETE, 'reason': f'Waiting for results: {", ".join(waiting)}.'}
+        # No GPA while a result is missing — NACTVET prints NA (said 25 October
+        # 2026): a figure from part of the semester would mislead, and would pull
+        # the class average.
+        return {**out, 'gpa': None, 'remark': INCOMPLETE, 'reason': f'Waiting for results: {", ".join(waiting)}.'}
     if gpa is None:
         if not_sat:
             return {**out, 'remark': REPEAT, 'failed': sorted(not_sat),
