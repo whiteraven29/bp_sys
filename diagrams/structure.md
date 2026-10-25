@@ -206,6 +206,8 @@ sign in.
   StudentPass            a pass issued: random code, valid_until, basis,
                          source (office / portal), issued_by
   semester_pass.py       the pass: coverage (windows paid), status, issue, verify by code
+  authority.py           NACTVET grades in: the upload's rule, earlier years' sheets
+                         (first, supplementary, repeat), corrections
   Application.kind_label  "First year" | "Second year (new) — joins at NTA
                          Level 5" | "Continuing student" | "Readmission"
   Semester.provisional_cutoff   the exam officer's date for late results
@@ -216,6 +218,8 @@ sign in.
   ExitRequest            finish after Level 5: portal → Principal decides
   CompletionClearance    finance clear → Principal declares cleared
   ResultWithholding      hides one semester's results on the portal
+  ResultCorrection       one grade corrected: old and new, reason, NACTVET
+                         reference — exam office proposes, DPARC / Principal
   AuthorityGradeClearing uploaded grades taken off to upload a corrected sheet:
                          every grade kept, who, why
   ResultRelease          a semester's results shown to a level's students

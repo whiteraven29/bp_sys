@@ -2793,6 +2793,38 @@ class AuthorityGradeClearing(models.Model):
         return f'{self.semester_id} · {self.class_level_id} · {self.sheet} · {self.sitting} · {len(self.grades)} grade(s)'
 
 
+class ResultCorrection(models.Model):
+    """The emergency route for a grade NACTVET got wrong, or re-issued (said
+    24 October 2026): the examination officer proposes, DPARC or the Principal
+    approves. The grade it replaces is kept here; the remark then follows the
+    rules from the corrected grade — nobody types an outcome."""
+    FIRST, SUPP = 'grade', 'supp_grade'
+    FIELD_CHOICES = [(FIRST, 'First sitting'), (SUPP, 'Supplementary')]
+    PENDING, APPROVED, REFUSED = 'pending', 'approved', 'refused'
+    STATUS_CHOICES = [(PENDING, 'Waiting for approval'), (APPROVED, 'Approved'), (REFUSED, 'Refused')]
+
+    result = models.ForeignKey('StudentResult', on_delete=models.CASCADE, related_name='corrections')
+    field = models.CharField(max_length=12, choices=FIELD_CHOICES, default=FIRST)
+    old_value = models.CharField(max_length=20, blank=True)
+    new_value = models.CharField(max_length=20)
+    reason = models.CharField(max_length=300)
+    reference = models.CharField(max_length=120, blank=True, help_text="NACTVET's letter or ticket number.")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
+    proposed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                    related_name='corrections_proposed')
+    proposed_at = models.DateTimeField(auto_now_add=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='corrections_decided')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ['-proposed_at']
+
+    def __str__(self):
+        return f'{self.result_id} · {self.field} {self.old_value} → {self.new_value} · {self.status}'
+
+
 class ResultRelease(models.Model):
     """Whether students may see a semester's end-of-semester results, level by
     level (said 24 October 2026: the college chooses when results reach the
@@ -3926,6 +3958,8 @@ class Notification(models.Model):
     PASSWORD_RESET = 'password.reset'
     WAIVER_REQUESTED = 'waiver.requested'
     WAIVER_DECIDED = 'waiver.decided'
+    CORRECTION_PROPOSED = 'correction.proposed'
+    CORRECTION_DECIDED = 'correction.decided'
     KIND_CHOICES = [
         (REQUEST_SUBMITTED, 'A student asked for something'),
         (REQUEST_FORWARDED, 'A request needs a decision'),
@@ -3952,6 +3986,8 @@ class Notification(models.Model):
         (PASSWORD_RESET, 'Your password was reset by the office'),
         (WAIVER_REQUESTED, 'A fee waiver needs DPFPA approval'),
         (WAIVER_DECIDED, 'A fee waiver was decided'),
+        (CORRECTION_PROPOSED, 'A result correction needs approval'),
+        (CORRECTION_DECIDED, 'A result correction was decided'),
     ]
 
     # Exactly one of these two is set: staff sign in as Django users, students

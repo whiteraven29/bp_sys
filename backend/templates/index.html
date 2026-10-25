@@ -1193,7 +1193,9 @@
         <button class="nav-sub-btn" data-results-section="field" onclick="showResultsSection('field', this)">Field Results</button>
         <button class="nav-sub-btn" data-results-section="analysis" onclick="showResultsSection('analysis', this)">CAT Analysis</button>
         <button class="nav-sub-btn admin-only" data-results-section="authority" onclick="showResultsSection('authority', this)">Authority Grades</button>
+        <button class="nav-sub-btn exam-office-only" data-results-section="earlier" onclick="showResultsSection('earlier', this)">Earlier Results</button>
         <button class="nav-sub-btn admin-only" data-results-section="summary" onclick="showResultsSection('summary', this)">Results Summary</button>
+        <button class="nav-sub-btn" data-roles="principal dparc exam superuser" data-results-section="corrections" onclick="showResultsSection('corrections', this)">Corrections</button>
         <button class="nav-sub-btn exam-office-only" data-results-section="windows" onclick="showResultsSection('windows', this)">Entry Windows</button>
       </div>
     </div>
@@ -2276,6 +2278,7 @@
           <div class="field"><label>Show</label>
             <select id="rev-filter" onchange="loadReviews(1)">
               <option value="unconfirmed">Still to confirm</option>
+              <option value="differs">Results now differ from the decision</option>
               <option value="">Everyone</option>
               <option value="pending">Waiting for results</option>
               <option value="repeat">Repeating</option>
@@ -2686,6 +2689,38 @@
           <button class="btn btn-primary btn-sm exam-office-only" onclick="uploadAuthorityGrades()">⬆ Upload Authority Grades</button>
           <button class="btn btn-danger btn-sm exam-office-only" onclick="clearAuthorityGrades()" title="Take this sheet's uploaded grades off, to upload a corrected one">Clear uploaded grades…</button>
         </div>
+      </div>
+
+      <div class="card admin-only exam-office-only" id="earlier-results-card" data-res-view="earlier">
+        <div class="card-title">Earlier results <span class="tip" tabindex="0" role="note" aria-label="Help: earlier results" data-tip="For students whose earlier year the system never held. Upload a class's sheets in order: the first sitting (TES), the supplementary (RSM), then the repeat sitting (MTS2), choosing the semester the repeat was sat in. A repeat shows under the year it clears. NS on a repeat sheet = the module was not re-sat (NACTVET reprinted the old grade in red). Nothing is billed; no attendance or class list.">?</span></div>
+        <p class="help-note" style="margin-bottom:10px;">The file: a <b>Grades</b> sheet (Registration Number, Student Name, a column per module code) and, for a first sitting, a <b>Modules</b> sheet (Code, Name, Credits).</p>
+        <div class="form-grid-3">
+          <div class="field"><label>Year on NACTVET's sheet *</label><input id="er-year" placeholder="e.g. 2024/2025"></div>
+          <div class="field"><label>Semester *</label><select id="er-semester"><option value="2">Semester 2</option><option value="1">Semester 1</option></select></div>
+          <div class="field"><label>Class level *</label><select id="er-level"></select></div>
+          <div class="field"><label>Sitting *</label><select id="er-sitting" onchange="syncEarlierSitting()">
+            <option value="first">First sitting</option><option value="supp">Supplementary</option><option value="repeat">Repeat sitting</option></select></div>
+          <div class="field" id="er-satin-wrap" style="display:none;"><label>Repeat sat in *</label><select id="er-satin"></select></div>
+          <div class="field"><label>File *</label><input type="file" id="er-file" accept=".xlsx,.xls"></div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="uploadEarlierResults(event)">⬆ Upload earlier results</button>
+        <div id="er-report" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="card admin-only" id="corrections-card" data-res-view="corrections">
+        <div class="card-title">Corrections <span class="tip" tabindex="0" role="note" aria-label="Help: corrections" data-tip="For a grade NACTVET got wrong or re-issued, a repeat not sat (NS), or a grade written against a module the student did not sit (remove it). The examination office corrects it with the reason and NACTVET's reference; DPARC and the Principal are told. The old grade is kept; the remark follows the rules from the corrected grade.">?</span></div>
+        <div class="exam-office-only" id="corr-propose">
+          <div class="form-grid-3">
+            <div class="field"><label>Semester *</label><select id="corr-semester"></select></div>
+            <div class="field"><label>Registration number *</label><input id="corr-reg" placeholder="e.g. NS0622/0006/2024"></div>
+            <div class="field" style="align-self:end;"><button class="btn btn-secondary btn-sm" onclick="findCorrectionStudent()">Find their grades</button></div>
+          </div>
+          <div id="corr-found"></div>
+        </div>
+        <div class="card-title" style="font-size:.9rem;margin-top:14px;">Corrections made</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Student</th><th>Module</th><th>Grade</th><th>Why</th><th>By</th><th>When</th></tr></thead>
+          <tbody id="corr-done"></tbody></table></div>
       </div>
 
       <div class="card admin-only" id="results-summary-card" data-res-view="summary">
@@ -4704,12 +4739,14 @@ const RESULTS_SECTIONS = {
   analysis: ['CAT Analysis', 'How a class did in CAT 1 or CAT 2, module by module.'],
   authority: ['Authority Grades', "NACTVET's grades, imported by level — continuing and repeaters."],
   summary: ['Results Summary', 'A level\'s semester: GPA and remark for every student.'],
+  earlier: ['Earlier Results', "An earlier year's NACTVET sheets the system never held — first sitting, supplementary, repeat."],
+  corrections: ['Corrections', 'A grade NACTVET got wrong: the examination office proposes, DPARC or the Principal approves.'],
   windows: ['Mark Entry Windows', 'When tutors may enter marks.'],
 };
 
 function showResultsSection(section, btn) {
   if (!RESULTS_SECTIONS[section]) section = 'ca';
-  if (section === 'windows' && !document.body.classList.contains('is-exam-office')) section = 'ca';
+  if (['windows', 'earlier'].includes(section) && !document.body.classList.contains('is-exam-office')) section = 'ca';
   state.resultsSection = section;
   showPage('results', document.querySelector('#results-nav-group .nav-btn'));
   document.querySelectorAll('[data-results-section]').forEach(el => el.classList.toggle('active', el.dataset.resultsSection === section));
@@ -4733,6 +4770,8 @@ function showResultsSection(section, btn) {
   if (legend) legend.style.display = section === 'ca' || showField ? 'block' : 'none';
   if (endCard) endCard.style.display = section === 'final' && resModuleInfo && !resModuleInfo.is_field_module && state.isStaff ? 'block' : 'none';
   if (section === 'analysis') loadCatAnalysis();
+  if (section === 'earlier') openEarlierResults();
+  if (section === 'corrections') loadCorrections();
   if (section === 'summary') {
     const sem = document.getElementById('sum-semester');
     if (!sem.options.length) {
@@ -6612,6 +6651,133 @@ async function downloadAuthorityGradeTemplate() {
   } catch(e) { toast(e?.detail || 'Could not create grade template', 'var(--red)'); }
 }
 
+// ── earlier results (said 24 October 2026) ──────────────────────────────────
+async function openEarlierResults() {
+  buildLevelOptions(document.getElementById('er-level'));
+  const sems = await api('GET', '/semesters/').catch(() => null);
+  if (sems) state.semesters = sems.results ?? sems;
+  buildSemOptions(document.getElementById('er-satin'));
+  syncEarlierSitting();
+}
+
+function syncEarlierSitting() {
+  document.getElementById('er-satin-wrap').style.display =
+    document.getElementById('er-sitting').value === 'repeat' ? '' : 'none';
+}
+
+async function uploadEarlierResults(event) {
+  const file = document.getElementById('er-file').files[0];
+  const ask = {
+    year: document.getElementById('er-year').value.trim(),
+    semester_number: Number(document.getElementById('er-semester').value),
+    class_level_id: document.getElementById('er-level').value,
+    sitting: document.getElementById('er-sitting').value,
+    sat_in_semester_id: document.getElementById('er-satin').value || null,
+  };
+  if (!/^\d{4}\/\d{4}$/.test(ask.year)) { toast('Write the year as on the sheet, e.g. 2024/2025', 'var(--red)'); return; }
+  if (!ask.class_level_id || !file) { toast('Choose the class level and the file', 'var(--red)'); return; }
+  if (ask.sitting === 'repeat' && !ask.sat_in_semester_id) { toast('Choose the semester the repeat was sat in', 'var(--red)'); return; }
+  const done = working(event?.currentTarget, 'Uploading…');
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const gradeSheet = wb.Sheets.Grades || wb.Sheets[wb.SheetNames[0]];
+    const source = XLSX.utils.sheet_to_json(gradeSheet, { raw: false, defval: '' });
+    const rows = [];
+    source.forEach(row => {
+      const reg = String(row['Registration Number'] || row['RegNum'] || '').trim();
+      if (!reg) return;
+      const name = String(row['Student Name'] || row['Name'] || '').trim();
+      Object.keys(row).filter(key => /^PST0\d{4}$/i.test(key.trim())).forEach(code =>
+        rows.push({ reg_no: reg, name, module_code: code.trim().toUpperCase(), grade: String(row[code] || '').trim() }));
+    });
+    const modules = wb.Sheets.Modules ? XLSX.utils.sheet_to_json(wb.Sheets.Modules, { raw: false, defval: '' })
+      .map(m => ({ code: String(m.Code || '').trim(), name: String(m.Name || '').trim(), credits: m.Credits })) : [];
+    if (!rows.length) { toast('No grades found: the Grades sheet needs Registration Number and module-code columns', 'var(--red)'); return; }
+    const level = document.getElementById('er-level').selectedOptions[0]?.textContent || '';
+    const sittingLabel = { first: 'first sitting', supp: 'supplementary', repeat: 'repeat sitting' }[ask.sitting];
+    if (!confirm(`Upload the ${sittingLabel} of ${level}, ${ask.year} semester ${ask.semester_number}: ${new Set(rows.map(r => r.reg_no)).size} student(s)?`)) return;
+    const r = await api('POST', '/results/earlier/', { ...ask, rows, modules });
+    const list = items => items.length ? `<ul style="margin:4px 0 0 18px;font-size:.8rem;">${items.slice(0, 40).map(i => `<li>${safeText(i)}</li>`).join('')}</ul>` : '';
+    const owed = Object.entries(r.owed || {}).filter(([, codes]) => codes.length).map(([reg, codes]) => `${reg}: ${codes.join(', ')}`);
+    document.getElementById('er-report').innerHTML = `<div class="${(r.errors || []).length ? 'missing-note' : 'success-note'}">
+      <strong>${safeText(r.semester || '')}${r.clears ? ` — clears ${safeText(r.clears)}` : ''}:</strong>
+      ${r.saved} grade(s) saved, ${r.unchanged || 0} already there${r.carried ? `, ${r.carried} carried` : ''}${r.students_recorded ? `, ${r.students_recorded} student(s) newly on file` : ''}${r.repeats_added || r.repeats_linked ? `, ${r.repeats_added || 0} repeat sitting(s) added, ${r.repeats_linked || 0} linked` : ''}.
+      ${(r.errors || []).length ? `<div style="margin-top:6px;"><b>Not saved:</b>${list(r.errors)}</div>` : ''}
+      ${(r.not_sitting || []).length ? `<div style="margin-top:6px;"><b>Not enrolled in that module:</b>${list(r.not_sitting)}</div>` : ''}
+      ${(r.warnings || []).length ? `<div style="margin-top:6px;"><b>To look at:</b>${list(r.warnings)}</div>` : ''}
+      ${owed.length ? `<div style="margin-top:6px;"><b>Owed after that year:</b>${list(owed)}</div>` : ''}</div>`;
+    toast(`Saved ${r.saved} grade(s)`, (r.errors || []).length ? 'var(--yellow)' : 'var(--green)');
+    const sems = await api('GET', '/semesters/').catch(() => null);
+    if (sems) { state.semesters = sems.results ?? sems; buildSemOptions(document.getElementById('er-satin')); }
+  } catch (e) { toast(apiErrorText(e, 'Could not upload the earlier results'), 'var(--red)'); }
+  finally { done(); }
+}
+
+// ── corrections: the exam office proposes, DPARC or the Principal approves ───
+async function loadCorrections() {
+  const sem = document.getElementById('corr-semester');
+  if (!sem.options.length) {
+    const sems = await api('GET', '/semesters/').catch(() => null);
+    if (sems) state.semesters = sems.results ?? sems;
+    buildSemOptions(sem);
+  }
+  try {
+    const data = await api('GET', '/result-corrections/');
+    const done = data.rows.slice(0, 100);
+    const who = r => personCell(r.name, r.reg_no);
+    const mod = r => `${safeText(r.module)}${r.repeat ? ' <span class="badge badge-gen">repeat</span>' : ''}<div style="font-size:.72rem;color:var(--muted)">${safeText(r.semester)} · ${safeText(r.field_display)}</div>`;
+    const change = r => `${safeText(r.old || '—')} → <strong>${r.new ? safeText(r.new) : 'no result (removed)'}</strong>`;
+    document.getElementById('corr-done').innerHTML = done.length ? done.map(r => `<tr>
+        <td>${who(r)}</td><td>${mod(r)}</td><td>${change(r)}</td>
+        <td>${safeText(r.reason)}${r.reference ? `<div style="font-size:.72rem;color:var(--muted)">Ref. ${safeText(r.reference)}</div>` : ''}</td>
+        <td>${safeText(r.decided_by || r.proposed_by)}</td>
+        <td>${safeText(String(r.decided_at || r.proposed_at).slice(0, 16).replace('T', ' '))}</td></tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty">No grade corrected yet</div></td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load corrections'), 'var(--red)'); }
+}
+
+async function findCorrectionStudent() {
+  const semester = document.getElementById('corr-semester').value;
+  const reg = document.getElementById('corr-reg').value.trim();
+  const box = document.getElementById('corr-found');
+  if (!semester || !reg) { toast('Choose the semester and type the registration number', 'var(--red)'); return; }
+  const rows = await api('GET', `/result-corrections/lookup/?semester_id=${semester}&reg_no=${encodeURIComponent(reg)}`).catch(() => []);
+  if (!rows.length) { box.innerHTML = '<p class="help-note">Not sitting anything in that semester.</p>'; return; }
+  box.innerHTML = `<p style="margin:8px 0 6px;"><strong>${safeText(rows[0].student)}</strong></p>
+    <div class="table-wrap"><table class="compact"><thead><tr><th>Module</th><th>First sitting</th><th>Supplementary</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${safeText(r.module)} ${r.repeat ? '<span class="badge badge-gen">repeat</span>' : ''}</td><td>${safeText(r.grade || '—')}</td><td>${safeText(r.supp_grade || '—')}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="form-grid-3" style="margin-top:8px;">
+      <div class="field"><label>Module *</label><select id="corr-module">${rows.map(r => `<option value="${safeText(r.module)}">${safeText(r.module)}${r.repeat ? ' (repeat)' : ''}</option>`).join('')}</select></div>
+      <div class="field"><label>Which grade *</label><select id="corr-field"><option value="grade">First sitting (or repeat)</option><option value="supp_grade">Supplementary</option></select></div>
+      <div class="field"><label>Correct grade *</label><input id="corr-new" placeholder="e.g. B, C*, or NS"></div>
+      <div class="field" style="grid-column:1/-1;"><label style="display:flex;gap:8px;align-items:center;font-weight:500;">
+        <input type="checkbox" id="corr-remove" style="width:auto;" onchange="document.getElementById('corr-new').disabled = this.checked">
+        Remove the grade — the student did not sit this module (it then reads INCOMPLETE)</label></div>
+      <div class="field" style="grid-column:span 2;"><label>Why *</label><input id="corr-reason" placeholder="What NACTVET issued"></div>
+      <div class="field"><label>NACTVET reference</label><input id="corr-ref" placeholder="Letter or ticket number"></div>
+    </div>
+    <button class="btn btn-warning btn-sm" onclick="proposeCorrection()">Correct the grade</button>`;
+}
+
+async function proposeCorrection() {
+  const remove = document.getElementById('corr-remove').checked;
+  const what = remove ? 'remove the grade' : `change it to ${document.getElementById('corr-new').value.trim().toUpperCase()}`;
+  if (!confirm(`${document.getElementById('corr-module').value}: ${what}? It changes now; the old grade is kept, and DPARC and the Principal are told.`)) return;
+  try {
+    const done = await api('POST', '/result-corrections/', {
+      semester_id: document.getElementById('corr-semester').value, reg_no: document.getElementById('corr-reg').value.trim(),
+      module_code: document.getElementById('corr-module').value, field: document.getElementById('corr-field').value,
+      new_value: document.getElementById('corr-new').value.trim(), remove: document.getElementById('corr-remove').checked,
+      reason: document.getElementById('corr-reason').value.trim(),
+      reference: document.getElementById('corr-ref').value.trim() });
+    toast('Corrected — DPARC and the Principal are told', 'var(--green)');
+    if (done.warning) alert(done.warning);
+    document.getElementById('corr-found').innerHTML = '';
+    loadCorrections();
+  } catch (e) { toast(apiErrorText(e, 'Could not correct it'), 'var(--red)'); }
+}
+
 // A sheet uploaded with mistakes is cleared and uploaded again (said 24
 // October 2026). What is cleared is kept on record; the server refuses while
 // students can see the results or once anyone has been confirmed on them.
@@ -6647,7 +6813,7 @@ async function uploadAuthorityGrades() {
     const sittingSelect = document.getElementById('auth-grade-sitting');
     const examNumbers = sourceRows.map(row => String(row['Exam Number'] || '')).filter(Boolean);
     if (examNumbers.length && examNumbers.every(n => /RSM/i.test(n))) sittingSelect.value = 'supp';
-    else if (examNumbers.length && examNumbers.every(n => /TES/i.test(n))) sittingSelect.value = 'first';
+    else if (examNumbers.length && examNumbers.every(n => /TES|MTS/i.test(n))) sittingSelect.value = 'first';
     const sitting = sittingSelect.value;
     sourceRows.forEach(row => {
       const regNo = String(row['Registration Number'] || row['RegNum'] || row['Reg No'] || row['RegNo'] || '').trim();
@@ -6663,7 +6829,8 @@ async function uploadAuthorityGrades() {
     const result = await api('POST', '/results/authority-grades/', {
       rows, sitting, semester_id: document.getElementById('auth-grade-semester').value,
     });
-    const same = (result.unchanged ? `; ${result.unchanged} unchanged (not supplementaries)` : '')
+    const same = (result.unchanged ? `; ${result.unchanged} already there` : '')
+      + (result.carried ? `; ${result.carried} carried (repeaters' modules not repeated)` : '')
       + ((result.not_sitting || []).length ? `; ${result.not_sitting.length} skipped (not sitting that module this semester)` : '');
     toast(`Imported ${result.saved} authority grade(s)${same}${result.errors.length ? `; ${result.errors.length} error(s)` : ''}`, result.errors.length ? 'var(--yellow)' : 'var(--green)');
     // Every grade not saved, by name (said 24 October 2026): a grade for a
@@ -13081,6 +13248,7 @@ async function loadReviews(page = 1) {
   const search = document.getElementById('rev-search').value.trim();
   let url = `/semester-reviews/?semester_id=${semesterId}&page=${Math.max(1, page)}`;
   if (filter === 'unconfirmed') url += '&unconfirmed=1';
+  else if (filter === 'differs') url += '&differs=1';
   else if (filter) url += `&outcome=${encodeURIComponent(filter)}`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
   try {
@@ -13125,9 +13293,15 @@ function renderReviews() {
     const confirmed = row.confirmed
       ? `${outcomeBadge(row.confirmed)}<div style="font-size:.68rem;color:var(--muted);">${safeText(row.confirmed_by_name || '')}${row.confirmed_reason ? ' — ' + safeText(row.confirmed_reason) : ''}</div>`
       : '<span style="color:var(--muted);font-size:.75rem;">—</span>';
+    // A confirmed student whose results were corrected since (said 25 October
+    // 2026): the examination office confirms them again, as the results now say.
+    const corrected = row.confirmed && row.confirmed !== 'provisional' && row.proposed !== row.confirmed;
+    const againAs = row.proposed === 'pending' ? 'provisional' : row.proposed;
+    const again = corrected
+      ? `<button class="btn btn-warning btn-sm" onclick="confirmReview(${row.id}, '${againAs}')" title="The results were corrected after this was confirmed${againAs === 'provisional' ? ' — a result is now missing: provisional until it comes' : ''}">Confirm again${againAs === 'provisional' ? ' (provisional)' : ''}</button> ` : '';
     const actions = !state.canConfirmReviews
-      ? ''
-      : row.confirmed
+      ? (document.body.classList.contains('is-exam-office') ? again : '')
+      : again + row.confirmed
       ? `<button class="btn btn-ghost btn-sm" onclick="openReviewModal(${row.id})">Change</button>`
       : `<button class="btn btn-primary btn-sm" onclick="confirmReview(${row.id})"${row.proposed === 'pending' ? ' disabled title="Nothing to confirm while the results are outstanding"' : ''}>Confirm</button>
          <button class="btn btn-ghost btn-sm" onclick="openReviewModal(${row.id})">Decide…</button>`;
@@ -13186,9 +13360,12 @@ async function confirmReview(id, outcome, reason) {
   try {
     const saved = await api('POST', `/semester-reviews/${id}/confirm/`, { outcome, reason });
     const deferred = saved?.deferred || [];
+    const calledOff = saved?.called_off || [];
     toast(deferred.length
       ? `Confirmed — taken off ${deferred.join(', ')} until the module is passed`
       : 'Confirmed', 'var(--green)');
+    if (calledOff.length) alert(`Confirmed again. Places the earlier decision called off stay off: ${calledOff.join(', ')}. `
+      + 'The student comes back through Admissions; what they paid is kept as credit.');
     await loadReviewSummary();
     await loadReviews(state.reviewPage || 1);
     await loadStandings();

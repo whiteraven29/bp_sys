@@ -303,12 +303,48 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] An upload now lists every grade it did not save, by name: "not enrolled in that module this semester"
      (it used to be only a count — why filled cells seemed lost) and errors
    - [x] 1210 tests; checked in the browser (cleared 24 grades with a reason, the record kept)
-2y. **On the server, after this deploy (12–24 Oct work) — in this order.**
-   - [ ] Migrations to 0081 applied by the deploy (release guide B1–B4); `Ran 1210 tests … OK` on the laptop first
+3e. **Earlier years' results; NS; no grade quietly replaced; corrections — 25 Oct (not committed).**
+   - [x] *Results ▸ Earlier Results* (exam office): an earlier year's NACTVET sheets the system never held — first
+     sitting (with a Modules sheet of credits), supplementary, then the repeat sitting with the semester it was sat
+     in. Record-only enrollments (no password, no bill, no class list); a repeat links to the sitting it repeats
+   - [x] A repeat shows under the year it clears, everywhere, from now on (repeaters' sheet, portal: "Repeat, Sem 2 ·
+     2025/2026"); every upload links a repeat sitting with no recorded origin to the earlier sitting it repeats
+   - [x] `NS` = not sat at the repeat: the year's grade stays, still owed, remark REPEAT (portal: "Not sat at the
+     repeat … — still owed"); only on a repeat sitting
+   - [x] An upload never replaces a grade already in with a different one (listed; clear the sheet or correct it)
+   - [x] *Results ▸ Corrections*: the exam office corrects one grade at once (reason, NACTVET reference) — a new grade,
+     NS, or *remove* (a grade typed against a module not sat → INCOMPLETE); DPARC and the Principal are told, not asked
+     (your rule); the old grade kept (migration 0082)
+   - [x] A confirmed student whose corrected results now say otherwise: *Semester Review ▸ Show: Results now differ
+     from the decision ▸ Confirm again* (the exam office, as the results say; provisional while a result is missing);
+     repeats the wrong decision raised are cancelled; a place it called off stays off — back through admissions
+   - [x] The portal's "current" enrollment is the newest by year and semester (a record of an earlier year entered
+     later is never taken for this one)
+   - [x] Your sheets, end to end through the new import: the 27 students on NACTVET's repeat sheets all read as
+     NACTVET printed them (the two POSTPONED read REPEAT, your decision). 11 upload files prepared, 14 NS cells
+     (`~/Documents/BPHACOH/RESULTS/upload_earlier/`)
+   - [x] 1224 tests; checked in the browser (Level 4's three files uploaded, a correction made)
+3f. **INCOMPLETE on the portal; wrong confirmed results; only Level 6 finishes — 25 Oct (not committed).**
+   - [x] A blank cell — or NA against a module they are enrolled in — records nothing: the module has no result
+   - [x] The portal shows a module with no result empty, INCOMPLETE, and that semester INCOMPLETE — no GPA, no comment
+     (it used to leave the module out and show a GPA and class without it)
+   - [x] The year-end advance never marks a Level 4 or 5 student finished: a programme with no next level holds them
+     with "add the level to the programme" (the PST04 / PST05 single-level programmes did this before the merge)
+   - [x] Your example in the browser: a grade typed under module A that was module B's, confirmed as passed → A removed,
+     B corrected, confirmed again (provisional: A's result missing); the student reads A empty INCOMPLETE, B A,
+     semester INCOMPLETE; DPARC and the Principal told each time
+   - [x] 1226 tests
+2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
+   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1226 tests … OK` on the laptop first
+   - [ ] Level 4 / 5 students marked "Finished" by the advance before the merge: run the read-only check (sent 25 Oct),
+     send the output, then repair them (to be written once the list is seen)
    - [ ] Upload the three 2025/26 first-sitting sheets (MTS1) into 2025/26 Semester 2, as First sitting; settle the
      provisional students (passes, then repeats / FAILs); withhold who should not see theirs; *Show to students*
      per level — the settled students are told then
-   - [ ] Not yet: the older-year sheets (MTS2) — they wait for the `NS` mark and the past-results import
+   - [ ] Earlier Results, in order, from `RESULTS/upload_earlier/` (check the 14 NS cells against the PDFs first):
+     L4, L5, L6 2024/25 — 1 first sitting, 2 supplementary, 3 repeat sitting (sat in Sem 2 · 2025/2026); then L5
+     2023/24 — 1 first sitting, 2 repeat sitting (sat in Sem 2 · 2024/2025). Then *Show to students* for Sem 2 ·
+     2024/2025 and Sem 2 · 2023/2024 (and Sem 2 · 2025/2026) per level
    - [ ] A day after the deploy: `journalctl -u edutrack --since today | grep "Slow request"` — any page
      still slow on real data is named there, with its query count
    - [ ] `merge_programmes` (release guide B6): dry run, read it, then `--apply` — before the next application

@@ -227,7 +227,11 @@ class WithholdingTests(AuthorityBase):
         self.assertEqual(data['students'][0]['withheld_reason'], 'Fees')
 
     def test_the_authority_s_star_w_reads_as_withheld(self):
-        self.upload(self.exam, [('NIT/20', 'PST04102', '*W*')])
+        # A grade already in is not replaced by another (said 24 October 2026):
+        # the sheet is cleared, then uploaded as NACTVET issued it.
+        self.exam.post('/api/results/authority-grades/clear/', {
+            'semester_id': self.sem1.id, 'class_level_id': self.level4.id, 'reason': 'Reissued'}, format='json')
+        self.upload(self.exam, [('NIT/20', 'PST04101', 'A'), ('NIT/20', 'PST04102', '*W*')])
 
         grades = {row['code']: row['grade'] for row in self.statements()[0]['modules']}
 

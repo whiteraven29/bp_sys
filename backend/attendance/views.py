@@ -35,7 +35,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import admissions, analytics, classlists, inventory, registers, evaluations, finance, lifecycle, notifications, passwords, progression, semester_pass, veta, health
+from . import admissions, authority, analytics, classlists, inventory, registers, evaluations, finance, lifecycle, notifications, passwords, progression, semester_pass, veta, health
 from .roles import (
     OPEN_ROLES, can_advance_semester, can_appoint, can_confirm_reviews, can_decide_requests,
     can_handle_requests, can_manage_accounts, can_manage_departments, can_manage_exams,
@@ -65,7 +65,7 @@ from .models import (
     CatNumberFormat, Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration, StudentPass, WaiverRequest,
     OutstandingRepeat, SemesterReview, StudentStanding, StandingChange, Notification,
     AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck, Application,
-    PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultRelease, ResultWithholding,
+    PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultCorrection, ResultRelease, ResultWithholding,
     StudentDocument, HealthRecord, HealthReport, ExitRequest, PasswordReset, AssetHandover, LabItem, LabStockMovement, ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile,
     ICTOfficerProfile, RoleChange, TrainingCoordinatorProfile, DeanOfStudentsProfile, LabTechnicianProfile,
     Intake, CourseFee, CourseFeeInstalment, CourseModule, CourseApplication, CourseEnrollment,
@@ -703,10 +703,11 @@ def get_logged_student(request):
         if profile is None:
             return None
         # Modules added since they signed in: the newest enrollment, as if they
-        # had signed in through it.
+        # had signed in through it — newest by year and semester, so a record of
+        # an earlier year entered later is never taken for this one.
         enrollment = (Student.objects.filter(profile=profile)
                       .select_related('module__class_level', 'module__semester__academic_year')
-                      .order_by('-id').first())
+                      .order_by('-module__semester__academic_year__name', '-module__semester__number', '-id').first())
         if enrollment is not None:
             return enrollment
         registration = (SemesterRegistration.objects.filter(profile=profile)
@@ -810,6 +811,7 @@ def _result_statements(modules, class_level):
         a module to repeat           remark REPEAT      comment the module code(s)
     """
     statements = {}
+    no_result = []
     # Repeat sittings last: each takes the failed module's place in the
     # statement of the semester it completes, so that one must be built first.
     # Keyed by year, then semester, so earlier years read in order (the
@@ -830,6 +832,8 @@ def _result_statements(modules, class_level):
                 'points': [], 'supp': [], 'failed': [], 'withheld': True})['withheld'] = True
             continue
         if not module['has_final_result'] or not module['result']:
+            if not module.get('completes') and module.get('attempt') != Student.REPEAT:
+                no_result.append((key, module))
             continue
         statement = statements.setdefault(key, {
             'label': label,
@@ -847,7 +851,7 @@ def _result_statements(modules, class_level):
             'code': module['module_code'],
             'name': module['module_name'],
             # The authority's own markers read as words, not codes.
-            'grade': {'WITHHELD': 'Withheld', 'NULLIFIED': 'Nullified'}.get(status)
+            'grade': {'WITHHELD': 'Withheld', 'NULLIFIED': 'Nullified', 'NOT_SAT': 'Not sat'}.get(status)
                      or result.get('grade') or '—',
             'status': status or '—',
         }
@@ -856,6 +860,18 @@ def _result_statements(modules, class_level):
             'points': result.get('grade_point'),
             'face_points': result.get('face_grade_point', result.get('grade_point'))}
         sittings_list = statement.setdefault('sittings', [])
+        if module.get('completes') and status == 'NOT_SAT':
+            # Not sat at the repeat (NS): the year's own result stays in its
+            # place, still owed — as NACTVET prints it.
+            note = f'Not sat at the repeat, {module["semester"]} — still owed'
+            for existing in statement['modules']:
+                if existing['code'].upper() == entry['code'].upper():
+                    existing['note'] = note
+                    break
+            else:
+                statement['modules'].append({**entry, 'grade': 'Not sat', 'note': note})
+                sittings_list.append(sitting)
+            continue
         if module.get('completes'):
             entry['note'] = f'Repeat, {module["semester"]}'
             # In the failed module's place; the failed result itself is kept
@@ -877,6 +893,20 @@ def _result_statements(modules, class_level):
             statement['supp'].append(module['module_code'])
         elif status in ('FAIL', 'REPEAT', 'DISCONTINUED'):
             statement['failed'].append(module['module_code'])
+
+    # A module of theirs with no result, in a semester whose results are out:
+    # shown empty, INCOMPLETE — never left off, so the semester never reads
+    # as passed without it (said 25 October 2026).
+    for key, module in no_result:
+        statement = statements.get(key)
+        if statement is None or statement['withheld'] or any(
+                row['code'].upper() == module['module_code'].upper() for row in statement['modules']):
+            continue
+        statement['modules'].append({'code': module['module_code'], 'name': module['module_name'],
+                                     'grade': '', 'status': 'INCOMPLETE'})
+        statement.setdefault('sittings', []).append({'status': 'INCOMPLETE', 'attempt': module.get('attempt'),
+                                                     'credits': module['credits'], 'points': None,
+                                                     'face_points': None})
 
     ordered = []
     for key in sorted(statements):
@@ -916,7 +946,9 @@ def _result_statements(modules, class_level):
             level = SimpleNamespace(name=statement['level'], order=0) if statement.get('level') else class_level
             remark, comment = gpa_classification(semester_gpa, level), 'PASS'
         else:
-            remark, comment = 'INCOMPLETE', ', '.join(decision['waiting'])
+            # A result still to come: INCOMPLETE and nothing else — no GPA, no
+            # comment (said 25 October 2026).
+            remark, comment, semester_gpa = 'INCOMPLETE', '', None
         statement['gpa'] = semester_gpa
         statement['remark'] = remark
         statement['comment'] = comment
@@ -950,7 +982,7 @@ def _provisional_notice(profile):
     if supp:
         return {'title': head, 'body': f'Your supplementary in {", ".join(supp)} must be passed to keep this place.'}
     if review.proposed == SemesterReview.PENDING:
-        return {'title': head, 'body': 'The college confirms your place once those results are published.'}
+        return {'title': head, 'body': 'The college confirms your place once those results are complete.'}
     if review.proposed in (SemesterReview.CLEAR, SemesterReview.COMPLETED):
         return {'title': head, 'body': 'Your results show a pass: the college will confirm your place shortly.'}
     return {'title': head, 'body': 'Your results are under End of Semester. The admission office will tell you '
@@ -2426,6 +2458,11 @@ class SemesterReviewViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(**{field: value})
         if params.get('unconfirmed') == '1':
             qs = qs.filter(confirmed='')
+        if params.get('differs') == '1':
+            # Confirmed, and the results now say something else — corrected since
+            # (to confirm again), or overruled on purpose (with its reason).
+            qs = (qs.exclude(confirmed__in=['', SemesterReview.PROVISIONAL])
+                  .exclude(proposed=F('confirmed')))
         search = (params.get('search') or '').strip()
         if search:
             qs = qs.filter(Q(profile__name__icontains=search)
@@ -2513,11 +2550,23 @@ class SemesterReviewViewSet(viewsets.ReadOnlyModelViewSet):
         # results, and the semester review itself, stay with the Principal and DPARC.
         settling = (review.confirmed == SemesterReview.PROVISIONAL and outcome == review.proposed
                     and can_manage_exams(request.user))
-        if not (can_confirm_reviews(request.user) or settling):
+        # And confirms again a student whose results were corrected after the
+        # decision, as the corrected results say — DPARC and the Principal are
+        # told, not asked (said 25 October 2026).
+        # A result now missing (a grade removed) proposes "waiting": they are
+        # confirmed provisional, and settled when it comes.
+        as_results_say = outcome == review.proposed or (
+            review.proposed == SemesterReview.PENDING and outcome == SemesterReview.PROVISIONAL)
+        reconfirming = (review.confirmed not in ('', SemesterReview.PROVISIONAL)
+                        and review.proposed != review.confirmed and as_results_say
+                        and can_manage_exams(request.user))
+        if not (can_confirm_reviews(request.user) or settling or reconfirming):
             raise PermissionDenied('The examination officer prepares the review; the Principal '
-                                   'or DPARC confirms it. A provisional student is settled by the '
-                                   'examination officer as the results say.')
-        if outcome != review.proposed and not reason:
+                                   'or DPARC confirms it. A provisional student is settled, and one whose '
+                                   'results were corrected confirmed again, by the examination officer '
+                                   'as the results say.')
+        before = review.get_confirmed_display()
+        if not as_results_say and not reason:
             return Response(
                 {'detail': 'Overruling the results needs a reason — it is what the record will show.'},
                 status=status.HTTP_400_BAD_REQUEST)
@@ -2526,11 +2575,23 @@ class SemesterReviewViewSet(viewsets.ReadOnlyModelViewSet):
         except progression.ProgressionError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         deferred = getattr(review, 'deferred', [])
+        called_off = getattr(review, 'called_off', [])
         review.refresh_from_db()
         data = SemesterReviewSerializer(review).data
         # Taking somebody off a semester they were already attending is not
         # something the officer should have to discover for themselves.
         data['deferred'] = deferred
+        # Confirmed again after a correction: places the earlier decision
+        # called off stay off — back through admissions (said 25 October 2026).
+        data['called_off'] = called_off
+        if reconfirming and not can_confirm_reviews(request.user):
+            notifications.notify(
+                notifications.principal_and_dparc(), kind=Notification.CORRECTION_DECIDED,
+                title=f'Confirmed again after a correction: {review.profile.name}',
+                body=(f'{review.semester.label}: was "{before}", now "{review.get_confirmed_display()}".'
+                      + (f' Places called off before stay off: {", ".join(called_off)} — back through admissions.'
+                         if called_off else '')),
+                link='review:review')
         return Response(data)
 
     @action(detail=False, methods=['post'], url_path='confirm-proposed')
@@ -3379,6 +3440,82 @@ def results_summary(request):
     summary['visibility_changed'] = ({'by': full_name_for(release.changed_by) if release.changed_by_id else '',
                                       'at': release.changed_at} if release else None)
     return Response(summary)
+
+
+def _correction_row(correction):
+    enrollment = correction.result.student
+    return {
+        'id': correction.id, 'reg_no': enrollment.nactvet_reg_no, 'name': enrollment.name,
+        'semester': enrollment.module.semester.label, 'level': enrollment.module.class_level.name,
+        'module': enrollment.module.code, 'repeat': enrollment.attempt == Student.REPEAT,
+        'field': correction.field, 'field_display': correction.get_field_display(),
+        'old': correction.old_value, 'new': correction.new_value, 'reason': correction.reason,
+        'reference': correction.reference, 'status': correction.status,
+        'status_display': correction.get_status_display(),
+        'proposed_by': full_name_for(correction.proposed_by) if correction.proposed_by_id else '',
+        'proposed_at': correction.proposed_at,
+        'decided_by': full_name_for(correction.decided_by) if correction.decided_by_id else '',
+        'decided_at': correction.decided_at, 'decision_note': correction.decision_note,
+    }
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def result_corrections(request):
+    """The emergency route for a wrong grade (authority.correct_grade): the
+    examination officer corrects it; DPARC and the Principal are told and read
+    the list (said 25 October 2026)."""
+    user = request.user
+    if request.method == 'POST':
+        if not can_manage_exams(user):
+            raise PermissionDenied('The examination officer corrects a grade.')
+        semester = Semester.objects.filter(id=pk_or_none(request.data.get('semester_id'))).first()
+        reg_no = str(request.data.get('reg_no') or '').strip()
+        code = str(request.data.get('module_code') or '').strip()
+        enrollment = (Student.objects.filter(module__semester=semester, nactvet_reg_no__iexact=reg_no,
+                                             module__code__iexact=code)
+                      .select_related('module__class_level', 'module__semester').first()) if semester else None
+        if enrollment is None:
+            return Response({'detail': f'{reg_no or "That student"} does not sit {code or "that module"} in that semester.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            made, warning = authority.correct_grade(
+                enrollment, str(request.data.get('field') or ResultCorrection.FIRST),
+                str(request.data.get('new_value') or ''), str(request.data.get('reason') or ''),
+                str(request.data.get('reference') or ''), actor=user,
+                remove=request.data.get('remove') in (True, 'true', '1', 1))
+        except authority.CorrectionError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({**_correction_row(made), 'warning': warning}, status=status.HTTP_201_CREATED)
+    if not (can_manage_exams(user) or can_confirm_reviews(user)):
+        raise PermissionDenied('For the examination office, DPARC and the Principal.')
+    rows = (ResultCorrection.objects.select_related('result__student__module__semester__academic_year',
+                                                     'result__student__module__class_level',
+                                                     'proposed_by', 'decided_by'))
+    wanted = request.query_params.get('status')
+    if wanted:
+        rows = rows.filter(status=wanted)
+    return Response({'rows': [_correction_row(c) for c in rows[:200]], 'can_correct': can_manage_exams(user)})
+
+
+@api_view(['GET'])
+@login_required
+def result_correction_lookup(request):
+    """A student's grades in one semester, for the correction form."""
+    if not can_manage_exams(request.user):
+        raise PermissionDenied('The examination officer proposes a correction.')
+    semester = Semester.objects.filter(id=pk_or_none(request.query_params.get('semester_id'))).first()
+    reg_no = str(request.query_params.get('reg_no') or '').strip()
+    rows = (Student.objects.filter(module__semester=semester, nactvet_reg_no__iexact=reg_no)
+            .select_related('module', 'result').order_by('module__code')) if semester and reg_no else []
+    out = []
+    for enrollment in rows:
+        result = getattr(enrollment, 'result', None)
+        out.append({'module': enrollment.module.code, 'name': enrollment.module.name,
+                    'repeat': enrollment.attempt == Student.REPEAT, 'student': enrollment.name,
+                    'grade': result.authority_grade if result else '',
+                    'supp_grade': result.authority_supp_grade if result else ''})
+    return Response(out)
 
 
 @api_view(['POST'])
@@ -6625,68 +6762,8 @@ class ResultViewSet(viewsets.ModelViewSet):
         if sitting not in ('first', 'supp'):
             return Response({'detail': 'The sitting is "first" or "supp".'},
                             status=status.HTTP_400_BAD_REQUEST)
-        from .grading import parse_authority_supp_grade, result_outcome
-        serializer = StudentResultSerializer()
-
-        saved, unchanged, errors, not_sitting = 0, 0, [], []
-        # Who sits anything this semester: a grade for a module they are not
-        # sitting (NACTVET's repeat sheets list every module, the passed ones
-        # too) is reported, not an error — their earlier result stands.
-        sitting_here = {reg.upper() for reg in Student.objects.filter(module__semester=semester)
-                        .values_list('nactvet_reg_no', flat=True)}
-        with transaction.atomic():
-            for row in rows:
-                reg_no = str(row.get('reg_no', '')).strip()
-                module_code = str(row.get('module_code', '')).strip()
-                raw = str(row.get('grade', '')).strip().upper()
-                if not reg_no or not module_code or not raw:
-                    continue
-                student = (Student.objects
-                           .filter(nactvet_reg_no__iexact=reg_no, module__code__iexact=module_code,
-                                   module__semester=semester)
-                           .select_related('module__class_level')
-                           .order_by(F('withdrawn_at').asc(nulls_first=True), '-id').first())
-                if student is None:
-                    if raw == 'NA':
-                        continue                      # not applicable: nothing to record
-                    if reg_no.upper() in sitting_here:
-                        not_sitting.append(f'{reg_no} / {module_code}')
-                    else:
-                        errors.append(f'{reg_no} / {module_code}: not enrolled in {semester.label}')
-                    continue
-                try:
-                    parse = parse_authority_supp_grade if sitting == 'supp' else parse_authority_grade
-                    parsed = parse(raw, student.module.class_level)
-                except ValueError as exc:
-                    errors.append(f'{reg_no} / {module_code}: {exc}')
-                    continue
-                if sitting == 'supp':
-                    result = getattr(student, 'result', None)
-                    if result is None or not result.authority_grade:
-                        errors.append(f'{reg_no} / {module_code}: no first-sitting grade to follow')
-                        continue
-                    first = parse_authority_grade(result.authority_grade, student.module.class_level)
-                    if first['status'] != 'SUPP':
-                        # Re-listed, not re-sat: it must read as it did.
-                        if raw == result.authority_grade.upper():
-                            unchanged += 1
-                        else:
-                            errors.append(f'{reg_no} / {module_code}: {raw} on the supplementary '
-                                          f'sheet, but {result.authority_grade} was not a supplementary')
-                        continue
-                    result.authority_supp_grade = parsed['raw']
-                    result.authority_status = result_outcome(result, serializer)['status']
-                    result.final_approved = True
-                    result.save(update_fields=['authority_supp_grade', 'authority_status',
-                                               'final_approved', 'updated_at'])
-                    saved += 1
-                    continue
-                result, _ = StudentResult.objects.get_or_create(student=student)
-                result.authority_grade = parsed['raw']
-                result.authority_status = parsed['status']
-                result.final_approved = True
-                result.save(update_fields=['authority_grade', 'authority_status', 'final_approved', 'updated_at'])
-                saved += 1
+        done = authority.save_rows(semester, rows, sitting)
+        saved = done['saved']
         settle = 0
         if saved:
             provisional = progression.provisional_reviews().filter(semester=semester)
@@ -6698,8 +6775,44 @@ class ResultViewSet(viewsets.ModelViewSet):
                         title=f'Results in: {settle} provisional student(s) to settle',
                         body=f'{semester.label} grades uploaded. Semester Review ▸ Provisional places.',
                         link='review:provisional')
-        return Response({'saved': saved, 'unchanged': unchanged, 'sitting': sitting, 'errors': errors,
-                         'not_sitting': not_sitting, 'provisional_to_settle': settle})
+        return Response({**done, 'sitting': sitting, 'provisional_to_settle': settle})
+
+    @action(detail=False, methods=['post'], url_path='earlier')
+    def earlier_results(self, request):
+        """An earlier year's NACTVET sheet the system never held (said 24
+        October 2026): `sitting` first, supp, or repeat (sat in
+        `sat_in_semester_id`, shown under the year it clears). authority.py."""
+        if not can_manage_exams(request.user):
+            raise PermissionDenied('The examination officer enters earlier results.')
+        data = request.data if isinstance(request.data, dict) else {}
+        level = ClassLevel.objects.filter(id=pk_or_none(data.get('class_level_id'))).first()
+        rows = data.get('rows') or []
+        sitting = str(data.get('sitting') or '')
+        try:
+            number = int(data.get('semester_number') or 0)
+        except (TypeError, ValueError):
+            number = 0
+        if level is None or not rows or sitting not in ('first', 'supp', 'repeat'):
+            return Response({'detail': 'Give the level, the sitting (first, supplementary or repeat) and the grades.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            if sitting == 'first':
+                done = authority.import_first_sitting(data.get('year'), number, level, data.get('modules') or [],
+                                                      rows, actor=request.user)
+            elif sitting == 'supp':
+                done = authority.import_supplementary(data.get('year'), number, level, rows, actor=request.user)
+            else:
+                sat_in = Semester.objects.filter(id=pk_or_none(data.get('sat_in_semester_id'))).first()
+                if sat_in is None:
+                    return Response({'detail': 'Choose the semester the repeat was sat in.'},
+                                    status=status.HTTP_400_BAD_REQUEST)
+                done = authority.import_repeat_sitting(data.get('year'), number, level, sat_in, rows,
+                                                       actor=request.user)
+        except (authority.EarlierResultsError, admissions.AdmissionError) as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        security_log.info('%s entered earlier results: %s %s semester %s, %s sitting — %s saved',
+                          request.user.username, level.name, data.get('year'), number, sitting, done.get('saved'))
+        return Response(done)
 
     @action(detail=False, methods=['post'], url_path='authority-grades/clear')
     def clear_authority_grades(self, request):

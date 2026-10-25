@@ -208,7 +208,8 @@ class ClearUploadedGradesTests(PortalBase):
 
     def test_a_supplementary_is_cleared_first_and_alone(self):
         from .models import StudentResult
-        self.upload(self.exam, [('NIT/30', 'PST04102', 'C*')])
+        self.clear(reason='Reissued')
+        self.upload(self.exam, [('NIT/30', 'PST04101', 'A'), ('NIT/30', 'PST04102', 'C*')])
         self.exam.post('/api/results/authority-grades/', {'semester_id': self.sem1.id, 'sitting': 'supp', 'rows': [
             {'reg_no': 'NIT/30', 'module_code': 'PST04102', 'grade': 'C'}]}, format='json')
         self.assertEqual(self.clear(reason='Mistake').status_code, 400)        # the supplementary sits on top

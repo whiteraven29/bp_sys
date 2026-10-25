@@ -62,6 +62,11 @@ def gpa_classification(gpa, class_level):
 SUPP_PASS_POINTS = 2
 
 
+#: Typed in place of a grade on a repeat sheet for a module the student did
+#: not re-sit (NACTVET's red cell, its grade unchanged).
+NOT_SAT_MARK = 'NS'
+
+
 def parse_authority_grade(value, class_level):
     """Translate the NACTE grade-key notation into the system outcome fields."""
     raw = str(value or '').strip().upper()
@@ -79,6 +84,11 @@ def parse_authority_grade(value, class_level):
     if raw == 'NA':
         return {'raw': raw, 'grade': None, 'status': 'NA', 'points': None,
                 'description': 'Not applicable', 'failed_components': []}
+    if raw == NOT_SAT_MARK:
+        # A repeat not re-sat (said 24 October 2026): NACTVET reprints the old
+        # grade in red. The module is still owed; the year's own grade stands.
+        return {'raw': raw, 'grade': raw, 'status': 'NOT_SAT', 'points': None,
+                'description': 'Not sat at the repeat: still owed', 'failed_components': []}
 
     grade = raw.rstrip('*').strip()
     suffix = raw[len(grade):]
@@ -128,6 +138,8 @@ def parse_authority_supp_grade(value, class_level):
     still starred there was failed again: it is repeated, and it counts at the
     letter it carries. A plain grade is a pass (NACTVET writes C)."""
     parsed = parse_authority_grade(value, class_level)
+    if parsed['status'] == 'NOT_SAT':
+        raise ValueError('NS (not sat) is for a repeat sitting, not a supplementary')
     if parsed['status'] == 'SUPP' or (parsed['status'] == 'FAIL' and parsed['grade']):
         parsed.update(status='REPEAT', description='Failed supplementary examination')
     elif parsed['status'] == 'PASS':

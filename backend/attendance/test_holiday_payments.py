@@ -64,7 +64,9 @@ class RepeaterUploadTests(TestCase):
                               ('NS0001/0001/2023', 'PST04102', 'B')])     # passed before; not sat now
         self.assertEqual(result['saved'], 1)
         self.assertEqual(result['errors'], [])
-        self.assertEqual(result['not_sitting'], ['NS0001/0001/2023 / PST04102'])
+        # A repeater's module not repeated is last time's grade, re-listed: carried,
+        # not reported as missing (said 25 October 2026).
+        self.assertEqual((result['carried'], result['not_sitting']), (1, []))
         self.assertEqual(StudentResult.objects.get(student=self.sitting).authority_grade, 'C')
 
     def test_na_records_nothing(self):

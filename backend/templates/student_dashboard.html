@@ -951,7 +951,7 @@
                 <tr>
                   <td><strong>{{ row.code }}</strong> · {{ row.name }}{% if row.note %}<div style="font-size:.72rem;color:var(--muted);">{{ row.note }}</div>{% endif %}</td>
                   <td><strong>{{ row.grade }}</strong></td>
-                  <td><span class="status {% if row.status == 'PASS' %}pass{% elif row.status == 'SUPP' %}pending{% else %}fail{% endif %}">{{ row.status }}</span></td>
+                  <td><span class="status {% if row.status == 'PASS' %}pass{% elif row.status == 'SUPP' or row.status == 'INCOMPLETE' %}pending{% else %}fail{% endif %}">{{ row.status }}</span></td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -960,9 +960,13 @@
           <div class="statement-summary">
             <table>
               <tbody>
+                {% if statement.remark == 'INCOMPLETE' %}
+                <tr><th scope="row">Remarks</th><td>INCOMPLETE</td></tr>
+                {% else %}
                 <tr><th scope="row">GPA</th><td><strong>{{ statement.gpa|default_if_none:"—" }}</strong></td></tr>
                 <tr><th scope="row">Remarks</th><td>{{ statement.remark }}</td></tr>
                 <tr><th scope="row">Comment</th><td>{{ statement.comment }}</td></tr>
+                {% endif %}
               </tbody>
             </table>
           </div>

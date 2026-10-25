@@ -943,6 +943,13 @@ students chosen are withheld, several at once; the portal shows every year; the 
 settles provisional students — passes, repeats and FAILs as the results say; students are told only
 after their results are shown.
 
-**Still open:** build the `NS` mark, the upload guard, the past-results import and the correction
-function (exam officer proposes, DPARC or the Principal approves) — waiting for your go-ahead; the
-2023/24 Level 5 first-sitting sheet for NS1314.
+**Built (25 October 2026):** the repeats were sat in 2025/26 Semester 2 and show under the year they clear
+(your answer) — the `NS` mark, the upload guard, Results ▸ Earlier Results and Results ▸ Corrections. All
+27 students on NACTVET's repeat sheets read as printed, the two POSTPONED as REPEAT.
+
+**Found (25 October 2026), from your Google workbooks:** the 2024/25 workbook's "NTA level 4/5 Results"
+and "NTA level 6" tabs are the position *after* the supplementary (all 26 students on the repeat sheets
+match NACTVET's supplementary pages, not its first-sitting pages); the 2023/24 workbook holds that year's
+first sittings (exam numbers JMS1). NS1314's 2023/24 first sitting (B C*** B*** D* A, REPEAT 2.3), completed
+by the 2024 repeat sitting, gives FAIL 2.1 through the system's rules — as NACTVET printed it. Extracted for
+the 27 students: `~/Documents/BPHACOH/RESULTS/extracted/last_time_results_repeaters.xlsx`.

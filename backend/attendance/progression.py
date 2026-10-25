@@ -72,6 +72,8 @@ PASS_GPA = 2.0
 FIRST_SITTING_FAILS = {'SUPP'} | FAILED_STATUSES
 #: A repeat sitting has no supplementary: a starred paper there is a fail.
 REPEAT_SITTING_FAILS = {'SUPP'} | FAILED_STATUSES
+#: A repeat the student did not sit (NS): still owed — never a fail, never waiting.
+NOT_SAT = 'NOT_SAT'
 
 
 def fails_more_than_half(rows):
@@ -152,8 +154,10 @@ def decide(rows):
     waiting = [row['code'] for row in rows if row['status'] in WAITING_STATUSES]
     discontinued = [row['code'] for row in rows if row['status'] == 'DISCONTINUED']
     failed_again = failed_repeat_sittings(rows)
+    # Not sat at the repeat, read alone (no first sitting beside it): still owed.
+    not_sat = [row['code'] for row in rows if row['status'] == NOT_SAT]
     out = {'gpa': gpa, 'supp': supp, 'failed': failed, 'direct': [], 'waiting': waiting,
-           'failed_again': failed_again, 'discontinued': discontinued}
+           'failed_again': failed_again, 'discontinued': discontinued, 'not_sat': not_sat}
     shown = f'{gpa:.1f}' if gpa is not None else '—'
 
     if not rows:
@@ -168,6 +172,9 @@ def decide(rows):
     if waiting:
         return {**out, 'remark': INCOMPLETE, 'reason': f'Waiting for results: {", ".join(waiting)}.'}
     if gpa is None:
+        if not_sat:
+            return {**out, 'remark': REPEAT, 'failed': sorted(not_sat),
+                    'reason': f'Did not sit the repeat of {", ".join(sorted(not_sat))}: still owed.'}
         return {**out, 'remark': INCOMPLETE, 'reason': 'No graded module yet.'}
     if gpa < PASS_GPA:
         return {**out, 'remark': DISCO, 'reason': f'GPA {shown} is below {PASS_GPA:.1f}.'}
@@ -182,6 +189,9 @@ def decide(rows):
                 'reason': f'GPA {shown}; supplementary in {", ".join(supp)}.'}
     if failed:
         return {**out, 'remark': REPEAT, 'reason': f'GPA {shown}; repeats {", ".join(failed)}.'}
+    if not_sat:
+        return {**out, 'remark': REPEAT, 'failed': sorted(not_sat),
+                'reason': f'Did not sit the repeat of {", ".join(sorted(not_sat))}: still owed.'}
     return {**out, 'remark': PASS, 'reason': f'Passed every module with GPA {shown}.'}
 
 
@@ -314,10 +324,17 @@ def complete_with_repeats(origin_rows, repeat_rows):
     as NACTVET keeps it (said 12 October 2026): the repeat result takes the
     failed module's place, so the semester reads complete and cleared once the
     repeats are passed. The failed result is not changed; this is a reading of
-    the two together. Repeat rows with no first sitting here are added."""
+    the two together. Repeat rows with no first sitting here are added.
+
+    A repeat not sat (NS, said 24 October 2026) leaves the year's own result
+    in place — still owed, as NACTVET keeps it on REPEAT."""
     merged = {row['code'].upper(): row for row in origin_rows}
     for row in repeat_rows:
-        merged[row['code'].upper()] = {**row, 'repeat': True}
+        code = row['code'].upper()
+        if row['status'] == NOT_SAT and code in merged:
+            merged[code] = {**merged[code], 'not_sat': True}
+        else:
+            merged[code] = {**row, 'repeat': True}
     return sorted(merged.values(), key=lambda row: row['code'])
 
 
@@ -682,6 +699,7 @@ def confirm_review(review, outcome, *, actor, reason='', enrollments=None,
     # their pass changes nothing on their standing; a repeat or discontinuation
     # takes the place away below (said 18 October 2026).
     was_provisional = review.confirmed == SemesterReview.PROVISIONAL
+    prior = review.confirmed
     if outcome == SemesterReview.PENDING:
         raise ProgressionError(
             'Pending is not a decision. Wait for the results, or confirm the '
@@ -713,6 +731,32 @@ def confirm_review(review, outcome, *, actor, reason='', enrollments=None,
     review.save(update_fields=['modules', 'gpa', 'proposed', 'proposed_reason',
                                'class_level', 'programme', 'confirmed', 'confirmed_reason',
                                'confirmed_by', 'confirmed_at', 'updated_at'])
+
+    review.called_off = []
+    if prior not in ('', SemesterReview.PROVISIONAL) and prior != outcome:
+        # Confirmed again, to something else — after a corrected result (said
+        # 25 October 2026). The repeats the earlier decision raised that these
+        # results no longer call for are cancelled; one already sat is left as
+        # it is. A place it called off is not restored here: its fees were
+        # reversed, so the student comes back through admissions (named below).
+        # Whatever the new outcome, a module these results still fail stays owed.
+        still_owed = {row['code'].upper() for row in review.modules
+                      if row['status'] in FAILED_STATUSES or row.get('direct_repeat')}
+        for repeat in OutstandingRepeat.objects.filter(profile=review.profile, origin_semester=review.semester,
+                                                       status=OutstandingRepeat.OPEN,
+                                                       attempt_enrollment__isnull=True):
+            if repeat.module_code.upper() not in still_owed:
+                repeat.status = OutstandingRepeat.CANCELLED
+                repeat.resolved_at = timezone.now()
+                repeat.note = (f'Cancelled: {review.semester.label} confirmed again as '
+                               f'"{review.get_confirmed_display()}" after a correction.')[:300]
+                repeat.save(update_fields=['status', 'resolved_at', 'note'])
+        later = (Q(semester__academic_year__name__gt=review.semester.academic_year.name)
+                 | Q(semester__academic_year=review.semester.academic_year,
+                     semester__number__gt=review.semester.number))
+        review.called_off = [row.semester.label for row in SemesterRegistration.objects
+                             .filter(later, profile=review.profile, status=SemesterRegistration.CANCELLED)
+                             .select_related('semester__academic_year')]
 
     _resolve_repeat_sittings(review, enrollments=enrollments, repeats=repeats)
 
@@ -828,6 +872,34 @@ def clear_authority_grades(semester, class_level, *, sheet='continuing', sitting
     refresh_provisional(provisional_reviews().filter(semester=semester))
     logger.info('%s cleared %d grade(s): %s — %s', getattr(actor, 'username', None), len(results), which, reason)
     return {**found, 'record_id': record.id}
+
+
+def link_repeat_origins(semester):
+    """Join each repeat sitting of this semester that has no recorded origin
+    to the earlier first sitting it repeats — the latest earlier one of the
+    same module code, at the same level (said 24 October 2026: a repeat shows
+    under the year it clears). Nothing about a result changes: it is the link
+    that tells the portal and the repeaters' sheet which year to complete.
+    Returns how many were linked."""
+    linked = 0
+    loose = (Student.objects.filter(module__semester=semester, attempt=Student.REPEAT, repeat_of__isnull=True)
+             .select_related('module__class_level', 'module__semester__academic_year'))
+    for sitting in loose:
+        earlier = (Student.objects.filter(nactvet_reg_no__iexact=sitting.nactvet_reg_no, attempt=Student.NORMAL,
+                                          module__code__iexact=sitting.module.code,
+                                          module__class_level=sitting.module.class_level)
+                   .exclude(module__semester=semester)
+                   .filter(Q(module__semester__academic_year__name__lt=semester.academic_year.name)
+                           | Q(module__semester__academic_year=semester.academic_year,
+                               module__semester__number__lt=semester.number))
+                   .order_by('-module__semester__academic_year__name', '-module__semester__number').first())
+        if earlier is not None:
+            Student.objects.filter(pk=sitting.pk).update(repeat_of=earlier)
+            OutstandingRepeat.objects.filter(profile_id=sitting.profile_id, module_code__iexact=sitting.module.code,
+                                             origin_enrollment__isnull=True,
+                                             origin_semester=earlier.module.semester).update(origin_enrollment=earlier)
+            linked += 1
+    return linked
 
 
 def tell_settled(review):
@@ -1486,6 +1558,16 @@ def plan_advance(semester):
                             + (' — to admissions' if sem1_repeats else ' — to admissions in semester 2')))
             else:
                 up = _next_level_cached(programme, level, levels_of)
+                if up is None and not (level is not None and is_level_six(level)):
+                    # Only Level 6 finishes (said 25 October 2026). A programme
+                    # taught at one level (PST04, PST05 before the merge) has no
+                    # next level: that is a gap in its levels, not a finish.
+                    blocked.append({'profile_id': profile.id, 'reg_no': profile.nactvet_reg_no,
+                                    'name': profile.name,
+                                    'reason': f'{programme.code if programme else "No programme"} has no level after '
+                                              f'{level.name if level else "theirs"} — add it to the programme '
+                                              '(or merge the programmes), then read the results again'})
+                    continue
                 if up is None:
                     move.update(action='completed', registers=False,
                                 detail='Finished — awaiting clearance')
