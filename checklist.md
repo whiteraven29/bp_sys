@@ -343,11 +343,20 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      first sitting, ungraded, is recorded as the repeat (linked to the year it clears); a module passed that year and
      enrolled again, ungraded, is taken off (withdrawn, kept). Anything already graded is left and reported. NS1314
      replayed: 3 recorded as repeats, PST05207 and PST05211 taken off, FAIL 2.1 under Sem 2 · 2023/2024 as printed
-   - [x] 1230 tests
+   - [x] The year end never finishes a Level 4 or 5 student (left waiting instead, with the reason); and
+     `manage.py place_left_behind` places the ones the single-level programmes left behind, after the merge — the
+     year end again for them alone (dry run first; Level 6, exits after Level 5 and students away left alone)
+   - [x] A repeater's results show when the semester the repeat was sat in is shown — the year it clears comes with
+     it (25 Oct: a repeater who failed again saw only "FAIL" and no results, because Sem 2 · 2024/2025 had not
+     been shown on its own)
+   - [x] 1234 tests
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1230 tests … OK` on the laptop first
-   - [ ] Level 4 / 5 students marked "Finished" by the advance before the merge: run the read-only check (sent 25 Oct),
-     send the output, then repair them (to be written once the list is seen)
+   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1234 tests … OK` on the laptop first
+   - [ ] Level 4 / 5 students left behind by the year end (PST04 / PST05 had no next level): after the merge,
+     `sudo -u bphacoh venv/bin/python manage.py place_left_behind` — read the dry run (who is placed and how; who is
+     left as they are and why) — then the same with `--apply`. Not settled → provisional at the next level, to
+     admissions; confirmed pass → promoted, to admissions. Then settle the provisional ones from Provisional places
+     once 2025/26 Sem 2 results are in. Level 6, exits after Level 5 and students away are left alone
    - [ ] Upload the three 2025/26 first-sitting sheets (MTS1) into 2025/26 Semester 2, as First sitting; settle the
      provisional students (passes, then repeats / FAILs); withhold who should not see theirs; *Show to students*
      per level — the settled students are told then

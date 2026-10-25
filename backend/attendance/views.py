@@ -1139,18 +1139,20 @@ def student_dashboard(request):
     statement_only = {e.id for e in earlier}
     enrollments += earlier
     # What the examination office has shown to students, semester by level
-    # (ResultRelease); a repeat shows only when the semester it completes does.
+    # (ResultRelease). A repeat goes by the semester it was sat in: shown, it
+    # shows the year it completes too — that year's own grades with it (said
+    # 25 October 2026: a repeater who failed again saw only "FAIL", because the
+    # year the repeat clears had not been shown on its own).
     shown = set(ResultRelease.objects.filter(
         visible=True, semester_id__in={e.module.semester_id for e in enrollments}
         | {e.repeat_of.module.semester_id for e in enrollments if e.repeat_of_id})
         .values_list('semester_id', 'class_level_id'))
+    shown |= {(e.repeat_of.module.semester_id, e.repeat_of.module.class_level_id) for e in enrollments
+              if e.repeat_of_id and (e.module.semester_id, e.module.class_level_id) in shown}
 
     def results_shown(enrollment):
         module = enrollment.module
-        if (module.semester_id, module.class_level_id) not in shown:
-            return False
-        origin = enrollment.repeat_of.module if enrollment.repeat_of_id else None
-        return origin is None or (origin.semester_id, origin.class_level_id) in shown
+        return (module.semester_id, module.class_level_id) in shown
 
     # Semesters whose results the college is keeping from the student for now.
     withheld_semesters = set(ResultWithholding.objects.filter(

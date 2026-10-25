@@ -133,6 +133,25 @@ class EarlierResultsTests(EarlierBase):
         sitting.refresh_from_db()
         self.assertEqual(sitting.attempt, Student.NORMAL)
 
+    def test_showing_the_semester_a_repeat_was_sat_shows_what_it_clears(self):
+        """Said 25 October 2026: a repeater who failed again saw only "FAIL" — the
+        semester they repeated in was shown, the year it clears was not. Showing
+        the repeat's own semester shows their statement, the year's grades too."""
+        from django.test import Client
+        from .models import ResultRelease
+        self.history('NS1129/0008/2023', 'Failed Again', first={'PST04208': 'C', 'PST04209': 'B', 'PST04211': 'C*'},
+                     supp={'PST04208': 'C', 'PST04209': 'B', 'PST04211': 'C*'},
+                     repeat={'PST04208': 'C', 'PST04209': 'B', 'PST04211': 'D*'})
+        repeat = Student.objects.get(nactvet_reg_no='NS1129/0008/2023', attempt=Student.REPEAT)
+        repeat.set_portal_pin('Portal#2026', require_change=False); repeat.save()
+        ResultRelease.objects.create(semester=self.sem2_2526, class_level=self.level4, visible=True)   # 2025/26 only
+        client = Client(); session = client.session; session['student_id'] = repeat.id; session.save()
+        statements = client.get('/student-dashboard/').context['result_statements']
+        self.assertEqual([s['label'] for s in statements], ['Sem 2 · 2024/2025'])
+        self.assertEqual((statements[0]['remark'], statements[0]['comment']), ('FAIL', 'PST04211'))
+        rows = {m['code']: m['grade'] for m in statements[0]['modules']}
+        self.assertEqual((rows['PST04208'], rows['PST04211']), ('C', 'D*'))
+
     def test_carried_grades_are_checked_never_written(self):
         done = self.history('NS2182/0032/2023', 'Carried', first={'PST04208': 'C', 'PST04209': 'B***', 'PST04211': 'B'},
                             supp={'PST04208': 'C', 'PST04209': 'C***', 'PST04211': 'B'},

@@ -1703,18 +1703,23 @@ def provisional_past_cutoff(today=None):
 
 
 @transaction.atomic
-def apply_advance(semester, target, *, actor=None):
+def apply_advance(semester, target, *, actor=None, only=None):
     """Move every reviewed student into the semester the college is opening.
 
     Registrations are created, standings updated and enrollments made. Students
     who are not coming — discontinued, postponed, deferred, finished — are left
     with the standing that says where they are and what they come back to.
+
+    `only` (profile ids): the same, for those students alone — the ones the
+    year end left behind (`left_behind`), placed after the fact.
     """
     summary = {'registered': 0, 'promoted': 0, 'repeating': 0, 'discontinued': 0,
                'completed': 0, 'deferred': 0, 'away': 0, 'returned': 0, 'enrolled': 0,
                'applications': 0, 'students': []}
 
     people = students_of(semester)
+    if only is not None:
+        people = [(profile, registration) for profile, registration in people if profile.id in only]
     profiles = [profile for profile, _ in people]
     reviews = {review.profile_id: review for review in
                SemesterReview.objects.filter(semester=semester, profile__in=profiles)
@@ -1780,6 +1785,11 @@ def apply_advance(semester, target, *, actor=None):
                 summary['repeating'] += 1
             else:
                 up = _next_level_cached(programme, level, levels_of)
+                if up is None and not (level is not None and is_level_six(level)):
+                    # Only Level 6 finishes (said 25 October 2026): no next level in
+                    # the programme is a gap in its levels — left for `left_behind`.
+                    summary['waiting'] = summary.get('waiting', 0) + 1
+                    continue
                 if up is None:
                     set_standing(profile, StudentStanding.COMPLETED, actor=actor,
                                  semester=semester, class_level=level, programme=programme,
@@ -1844,11 +1854,62 @@ def apply_advance(semester, target, *, actor=None):
             'kind': kind, 'level': to_level.name, 'modules': len(made),
         })
 
-    summary['returned'] = len(register_returning_repeats(target, actor=actor, summary=summary))
+    if only is None:
+        summary['returned'] = len(register_returning_repeats(target, actor=actor, summary=summary))
 
     logger.info('Advanced %s → %s: %s', semester, target,
                 {key: value for key, value in summary.items() if key != 'students'})
     return summary
+
+
+FINISHED_BY_THE_ADVANCE = 'Finished the programme.'
+
+
+def left_behind(semester, target):
+    """The students of `semester` the year end did not carry into `target` —
+    no registration and no application there — although nothing says they
+    finish: left waiting, or marked finished, because their programme had no
+    next level (PST04 and PST05 before the merge, said 25 October 2026).
+
+    Never Level 6, a student who chose to finish after Level 5, one finished
+    any other way, or one away (postponed, failed, absconded …). Returns
+    (profile ids to place, [(reg no, name, why left out)])."""
+    from .models import Application, ExitRequest
+    placed = set(SemesterRegistration.objects.filter(semester=target)
+                 .exclude(status=SemesterRegistration.CANCELLED).values_list('profile_id', flat=True))
+    placed |= set(Application.objects.filter(semester=target)
+                  .exclude(state__in=[Application.REJECTED, Application.CANCELLED]).values_list('profile_id', flat=True))
+    exited = set(ExitRequest.objects.filter(status=ExitRequest.APPROVED).values_list('profile_id', flat=True))
+    people = students_of(semester)
+    profiles = [profile for profile, _ in people]
+    reviews = {r.profile_id: r for r in SemesterReview.objects.filter(semester=semester, profile__in=profiles)
+               .select_related('class_level', 'programme')}
+    standings = standings_by_profile(profiles)
+    chosen, skipped = set(), []
+    for profile, registration in people:
+        if profile.id in placed:
+            continue
+        standing = standings.get(profile.id)
+        programme, level = programme_and_level(profile, reviews.get(profile.id), standing, registration, semester)
+        row = lambda why: skipped.append((profile.nactvet_reg_no, profile.name, why))
+        if level is not None and is_level_six(level):
+            row('Level 6 — finishes')
+        elif profile.id in exited:
+            row('chose to finish after their level (exit approved)')
+        elif standing is not None and standing.status not in (StudentStanding.ACTIVE, StudentStanding.REPEATING,
+                                                               StudentStanding.COMPLETED):
+            row(f'standing: {standing.get_status_display()}')
+        elif standing is not None and standing.status == StudentStanding.COMPLETED and not StandingChange.objects.filter(
+                profile=profile, to_status=StudentStanding.COMPLETED, reason=FINISHED_BY_THE_ADVANCE).exists():
+            row('finished by another route')
+        elif reviews.get(profile.id) is None:
+            row('no review yet — Semester Review ▸ Read the results again, then run this again')
+        elif programme is None or _next_level_cached(programme, level, {}) is None:
+            row(f'{programme.code if programme else "no programme"} still has no level after '
+                f'{level.name if level else "theirs"} — merge or add the level first')
+        else:
+            chosen.add(profile.id)
+    return chosen, skipped
 
 
 def returning_repeats(target):
