@@ -97,6 +97,42 @@ class EarlierResultsTests(EarlierBase):
         self.assertEqual(row['grade'], 'C*')
         self.assertIn('Not sat at the repeat, Sem 2 · 2025/2026', row['note'])
 
+    def test_enrolled_with_the_class_is_recorded_as_the_repeat_nactvet_says(self):
+        """NS1314 on the server (25 October 2026): enrolled in 2025/26 Sem 2 with
+        the class, as first sittings — NACTVET's repeat sheet says the owed
+        modules were repeats. They become repeats; the ones passed before are
+        taken off (withdrawn, kept)."""
+        self.history('NS1314/0060/2021', 'Class Enrolled', first={'PST04208': 'B', 'PST04209': 'A', 'PST04211': 'C*'},
+                     supp={'PST04208': 'B', 'PST04209': 'A', 'PST04211': 'D*'})
+        profile = StudentProfile.objects.get(nactvet_reg_no='NS1314/0060/2021')
+        for module in Module.objects.filter(semester=self.sem2_2526):
+            Student.objects.create(nactvet_reg_no=profile.nactvet_reg_no, name=profile.name, profile=profile, module=module)
+        done = self.earlier('repeat', sheet('NS1314/0060/2021', 'Class Enrolled', PST04208='B', PST04209='A',
+                                            PST04211='C'), sat_in=self.sem2_2526)
+        self.assertEqual(done.status_code, 200, done.data)
+        self.assertEqual((done.data['repeats_converted'], done.data['saved'], len(done.data['withdrawn'])), (1, 1, 2))
+        sitting = Student.objects.get(nactvet_reg_no='NS1314/0060/2021', module__semester=self.sem2_2526,
+                                      module__code='PST04211')
+        self.assertEqual((sitting.attempt, sitting.repeat_of.module.semester.academic_year.name),
+                         (Student.REPEAT, '2024/2025'))
+        row = self.repeaters('NS1314/0060/2021')
+        self.assertEqual((row['origin'], row['remark']), ('Sem 2 · 2024/2025', 'PASS'))
+        self.assertEqual(Student.objects.filter(nactvet_reg_no='NS1314/0060/2021', module__semester=self.sem2_2526,
+                                                withdrawn_at__isnull=False).count(), 2)
+
+    def test_a_class_enrollment_already_graded_is_left_alone(self):
+        self.history('NS1315/0001/2021', 'Graded Already', first={'PST04208': 'B', 'PST04209': 'A', 'PST04211': 'C*'},
+                     supp={'PST04208': 'B', 'PST04209': 'A', 'PST04211': 'D*'})
+        profile = StudentProfile.objects.get(nactvet_reg_no='NS1315/0001/2021')
+        module = Module.objects.get(semester=self.sem2_2526, code='PST04211')
+        sitting = Student.objects.create(nactvet_reg_no=profile.nactvet_reg_no, name=profile.name, profile=profile,
+                                         module=module)
+        StudentResult.objects.create(student=sitting, authority_grade='B', final_approved=True)
+        done = self.earlier('repeat', sheet('NS1315/0001/2021', 'Graded Already', PST04211='C'), sat_in=self.sem2_2526)
+        self.assertIn('already graded', done.data['warnings'][0])
+        sitting.refresh_from_db()
+        self.assertEqual(sitting.attempt, Student.NORMAL)
+
     def test_carried_grades_are_checked_never_written(self):
         done = self.history('NS2182/0032/2023', 'Carried', first={'PST04208': 'C', 'PST04209': 'B***', 'PST04211': 'B'},
                             supp={'PST04208': 'C', 'PST04209': 'C***', 'PST04211': 'B'},

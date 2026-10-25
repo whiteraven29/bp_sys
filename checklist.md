@@ -338,9 +338,14 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      confirmed or not
    - [x] No GPA for an INCOMPLETE student anywhere (Results Summary, Semester Review, portal) — NACTVET prints NA —
      and none in the class average (it used to show a GPA from the modules graded so far)
-   - [x] 1228 tests
+   - [x] Earlier Results ▸ Repeat sitting follows NACTVET's repeat sheet when the server enrolled a repeater with the
+     class (25 Oct, NS1314: "enrolled … as a first sitting, not a repeat — not written"): an owed module enrolled as a
+     first sitting, ungraded, is recorded as the repeat (linked to the year it clears); a module passed that year and
+     enrolled again, ungraded, is taken off (withdrawn, kept). Anything already graded is left and reported. NS1314
+     replayed: 3 recorded as repeats, PST05207 and PST05211 taken off, FAIL 2.1 under Sem 2 · 2023/2024 as printed
+   - [x] 1230 tests
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1228 tests … OK` on the laptop first
+   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1230 tests … OK` on the laptop first
    - [ ] Level 4 / 5 students marked "Finished" by the advance before the merge: run the read-only check (sent 25 Oct),
      send the output, then repair them (to be written once the list is seen)
    - [ ] Upload the three 2025/26 first-sitting sheets (MTS1) into 2025/26 Semester 2, as First sitting; settle the

@@ -6701,7 +6701,8 @@ async function uploadEarlierResults(event) {
     const owed = Object.entries(r.owed || {}).filter(([, codes]) => codes.length).map(([reg, codes]) => `${reg}: ${codes.join(', ')}`);
     document.getElementById('er-report').innerHTML = `<div class="${(r.errors || []).length ? 'missing-note' : 'success-note'}">
       <strong>${safeText(r.semester || '')}${r.clears ? ` — clears ${safeText(r.clears)}` : ''}:</strong>
-      ${r.saved} grade(s) saved, ${r.unchanged || 0} already there${r.carried ? `, ${r.carried} carried` : ''}${r.students_recorded ? `, ${r.students_recorded} student(s) newly on file` : ''}${r.repeats_added || r.repeats_linked ? `, ${r.repeats_added || 0} repeat sitting(s) added, ${r.repeats_linked || 0} linked` : ''}.
+      ${r.saved} grade(s) saved, ${r.unchanged || 0} already there${r.carried ? `, ${r.carried} carried` : ''}${r.students_recorded ? `, ${r.students_recorded} student(s) newly on file` : ''}${r.repeats_added || r.repeats_linked || r.repeats_converted ? `, ${r.repeats_added || 0} repeat sitting(s) added, ${r.repeats_linked || 0} linked, ${r.repeats_converted || 0} recorded as repeats (they were enrolled as first sittings)` : ''}.
+      ${(r.withdrawn || []).length ? `<div style="margin-top:6px;"><b>Taken off — passed in that year, not sat again:</b>${list(r.withdrawn)}</div>` : ''}
       ${(r.errors || []).length ? `<div style="margin-top:6px;"><b>Not saved:</b>${list(r.errors)}</div>` : ''}
       ${(r.not_sitting || []).length ? `<div style="margin-top:6px;"><b>Not enrolled in that module:</b>${list(r.not_sitting)}</div>` : ''}
       ${(r.warnings || []).length ? `<div style="margin-top:6px;"><b>To look at:</b>${list(r.warnings)}</div>` : ''}

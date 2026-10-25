@@ -234,7 +234,7 @@ def import_repeat_sitting(year_name, number, level, sat_in, rows, *, actor=None)
     if not later:
         raise EarlierResultsError(f'The repeat was sat after {origin.label}: choose the semester it was sat in.')
     sat_modules = {m.code.upper(): m for m in Module.objects.filter(semester=sat_in, class_level=level)}
-    serializer_rows, warnings, created, linked, owing = [], [], 0, 0, {}
+    serializer_rows, warnings, created, linked, converted, withdrawn, owing = [], [], 0, 0, 0, [], {}
     by_reg = {}
     for row in rows:
         reg = str(row.get('reg_no') or '').strip().upper()
@@ -275,16 +275,43 @@ def import_repeat_sitting(year_name, number, level, sat_in, rows, *, actor=None)
                                        repeat_of=origin_row)
                 created += 1
             elif sitting.attempt != Student.REPEAT:
-                warnings.append(f'{reg} / {code}: enrolled in {sat_in.label} as a first sitting, not a repeat — '
-                                'not written')
-                continue
+                # Enrolled with the class as a first sitting, but NACTVET's repeat
+                # sheet says it is the repeat of a module owed (said 25 October
+                # 2026): recorded as the repeat it is, linked to the year it
+                # clears — only while nothing is graded on it.
+                if _final_grade(sitting) or getattr(getattr(sitting, 'result', None), 'final_approved', False):
+                    warnings.append(f'{reg} / {code}: already graded in {sat_in.label} as a first sitting — not '
+                                    'written; correct it under Corrections if it was the repeat')
+                    continue
+                Student.objects.filter(pk=sitting.pk).update(attempt=Student.REPEAT, repeat_of=record[code])
+                converted += 1
             elif sitting.repeat_of_id is None:
                 Student.objects.filter(pk=sitting.pk).update(repeat_of=record[code])
                 linked += 1
             serializer_rows.append({'reg_no': reg, 'module_code': code, 'grade': grade})
+        # A module already passed in that year, enrolled again with the class as a
+        # first sitting: NACTVET's repeat sheet carries its old grade — not sat
+        # now. Taken off (withdrawn, never deleted), while nothing is graded on it.
+        for extra in (Student.objects.filter(nactvet_reg_no__iexact=reg, module__semester=sat_in,
+                                             module__class_level=level, attempt=Student.NORMAL,
+                                             withdrawn_at__isnull=True)
+                      .select_related('module', 'result')):
+            code = extra.module.code.upper()
+            if code in owed or code not in record:
+                continue
+            if _final_grade(extra) or getattr(getattr(extra, 'result', None), 'final_approved', False):
+                warnings.append(f'{reg} / {code}: passed in {origin.label}, but graded again in {sat_in.label} — '
+                                'left as it is')
+                continue
+            Student.objects.filter(pk=extra.pk).update(
+                withdrawn_at=timezone.now(),
+                withdrawn_reason=(f'Passed in {origin.label} ({_final_grade(record[code])}); NACTVET\'s repeat sheet: '
+                                  f'not sat again')[:300])
+            withdrawn.append(f'{reg} / {code}')
     saved = save_rows(sat_in, serializer_rows, 'first')
     return {**saved, 'semester': sat_in.label, 'clears': origin.label, 'repeats_added': created,
-            'repeats_linked': linked, 'warnings': warnings, 'owed': owing}
+            'repeats_linked': linked, 'repeats_converted': converted, 'withdrawn': withdrawn,
+            'warnings': warnings, 'owed': owing}
 
 
 # ── the emergency correction ──────────────────────────────────────────────────
