@@ -333,9 +333,12 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] Your example in the browser: a grade typed under module A that was module B's, confirmed as passed → A removed,
      B corrected, confirmed again (provisional: A's result missing); the student reads A empty INCOMPLETE, B A,
      semester INCOMPLETE; DPARC and the Principal told each time
-   - [x] 1226 tests
+   - [x] A correction recalculates the GPA everywhere: the Results Summary, the repeaters' sheet and the portal work it
+     out from the grades each time; the student's semester review (which keeps its own copy) is refreshed too,
+     confirmed or not
+   - [x] 1227 tests
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1226 tests … OK` on the laptop first
+   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1227 tests … OK` on the laptop first
    - [ ] Level 4 / 5 students marked "Finished" by the advance before the merge: run the read-only check (sent 25 Oct),
      send the output, then repair them (to be written once the list is seen)
    - [ ] Upload the three 2025/26 first-sitting sheets (MTS1) into 2025/26 Semester 2, as First sitting; settle the

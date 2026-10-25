@@ -367,14 +367,17 @@ def correct_grade(enrollment, field, new_value, reason, reference='', *, actor=N
     change = (f'{enrollment.module.code} ({semester.label}): {current or "nothing"} → {new or "no result"}. '
               f'{reason}' + (f' Ref. {made.reference}.' if made.reference else ''))
     warning = ''
-    review = (SemesterReview.objects.filter(profile=enrollment.profile, semester=semester)
-              .exclude(confirmed__in=['', SemesterReview.PROVISIONAL]).first()) if enrollment.profile_id else None
+    # The review keeps its own copy of the GPA and proposal: brought up to date
+    # whatever its state, so Semester Review never shows the grade before the
+    # correction (everything else works the GPA out from the grades each time).
+    review = (SemesterReview.objects.filter(profile=enrollment.profile, semester=semester).first()
+              if enrollment.profile_id else None)
     if review is not None:
         fresh = progression.evaluate(enrollment.profile, semester)
         review.modules, review.gpa = fresh['modules'], fresh['gpa']
         review.proposed, review.proposed_reason = fresh['proposed'], fresh['reason'][:300]
         review.save(update_fields=['modules', 'gpa', 'proposed', 'proposed_reason', 'updated_at'])
-        if fresh['proposed'] != review.confirmed:
+        if review.confirmed not in ('', SemesterReview.PROVISIONAL) and fresh['proposed'] != review.confirmed:
             warning = (f'{enrollment.name} was confirmed as "{review.get_confirmed_display()}" on {semester.label}; '
                        f'the corrected results now say "{review.get_proposed_display()}". Confirm it again in '
                        'Semester Review ▸ Show: Results now differ from the decision.')

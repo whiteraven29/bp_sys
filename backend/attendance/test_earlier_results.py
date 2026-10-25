@@ -170,6 +170,23 @@ class CorrectionTests(EarlierBase):
         self.assertEqual(self.propose(new='B', client=self.dparc).status_code, 403)   # DPARC reads, does not correct
         self.assertEqual(len(self.dparc.get('/api/result-corrections/').data['rows']), 1)
 
+    def test_the_gpa_follows_the_correction_everywhere(self):
+        """C and B, three credits each: 2.5. Corrected to A and B: 3.5 — on the
+        Results Summary, the portal and a review not yet confirmed."""
+        from django.test import Client
+        review = SemesterReview.objects.create(profile=self.profile, semester=self.sem1, class_level=self.level4,
+                                               proposed=SemesterReview.CLEAR, gpa='2.5')
+        self.assertEqual(self.propose(new='A').status_code, 201)
+        review.refresh_from_db()
+        self.assertEqual(float(review.gpa), 3.5)
+        summary = self.exam.get(f'/api/results-summary/?semester_id={self.sem1.id}'
+                                f'&class_level_id={self.level4.id}').data
+        self.assertEqual(next(s['gpa'] for s in summary['students'] if s['reg_no'] == 'NIT/50'), 3.5)
+        self.enrollment.set_portal_pin('Portal#2026', require_change=False); self.enrollment.save()
+        client = Client(); session = client.session; session['student_id'] = self.enrollment.id; session.save()
+        show_all_results()
+        self.assertEqual(client.get('/student-dashboard/').context['result_statements'][0]['gpa'], 3.5)
+
     def test_what_may_not_be_corrected(self):
         self.assertEqual(self.propose(new='C').status_code, 400)               # the grade already there
         self.assertEqual(self.propose(new='NS').status_code, 400)              # NS only on a repeat
