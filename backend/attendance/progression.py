@@ -744,7 +744,8 @@ def confirm_review(review, outcome, *, actor, reason='', enrollments=None,
         # reversed, so the student comes back through admissions (named below).
         # Whatever the new outcome, a module these results still fail stays owed.
         still_owed = {row['code'].upper() for row in review.modules
-                      if row['status'] in FAILED_STATUSES or row.get('direct_repeat')}
+                      if row['status'] in FAILED_STATUSES or row.get('direct_repeat')
+                      or row['status'] == NOT_SAT or row.get('not_sat')}
         for repeat in OutstandingRepeat.objects.filter(profile=review.profile, origin_semester=review.semester,
                                                        status=OutstandingRepeat.OPEN,
                                                        attempt_enrollment__isnull=True):
@@ -1007,12 +1008,30 @@ def _raise_repeats(review, *, actor=None, enrollments=None, known=None):
     """Record every module this student still has to pass, and hold them to it."""
     failed = {row['code'].upper() for row in review.modules
               if row['status'] in FAILED_STATUSES or row.get('direct_repeat')}
-    if not failed:
+    # A repeat not sat (NS) is still owed (said 24 October 2026). It was left
+    # out here, so a provisional repeater who did not sit kept the place and
+    # the finance application a REPEAT takes away (found 26 October 2026).
+    not_sat = {row['code'].upper() for row in review.modules
+               if row['status'] == NOT_SAT or row.get('not_sat')}
+    if not failed and not not_sat:
         return []
     sittings = {e.module.code.upper(): e for e in
                 (enrollments if enrollments is not None
                  else enrollments_for(review.profile, review.semester))}
     raised = []
+    owed = {repeat.module_code.upper() for repeat in open_repeats(review.profile)} if not_sat else set()
+    for code in sorted(not_sat - failed - owed):
+        # Its repeat is normally still open; if not, it is owed to the year it clears.
+        origin = getattr(sittings.get(code), 'repeat_of', None)
+        if origin is None:
+            continue
+        repeat, created = OutstandingRepeat.objects.get_or_create(
+            profile=review.profile, module_code=origin.module.code,
+            origin_semester=origin.module.semester,
+            defaults={'module_name': origin.module.name, 'class_level': origin.module.class_level,
+                      'semester_number': origin.module.semester.number, 'origin_enrollment': origin})
+        if created:
+            raised.append(repeat)
     for code in sorted(failed):
         enrollment = sittings.get(code)
         if enrollment is None:
@@ -1932,6 +1951,50 @@ def left_behind(semester, target):
         else:
             chosen.add(profile.id)
     return chosen, skipped
+
+
+def repeat_places_kept():
+    """Students whose last confirmed review is REPEAT and who still hold a
+    place after it — an application at a desk or a registration — for a
+    semester in which they owe no module (said 26 October 2026: a semester 2
+    repeat has no business at semester 1's finance desk). Settled before the
+    fix for a repeat not sat (NS), confirming the REPEAT took nothing away.
+
+    Returns (to call off, kept): rows of review, places and owed modules;
+    `kept` are those who do owe a module in the semester they are placed in."""
+    from .models import Application
+    latest = {}
+    for review in (SemesterReview.objects.exclude(confirmed='').exclude(confirmed=SemesterReview.PROVISIONAL)
+                   .select_related('profile', 'semester__academic_year', 'class_level')
+                   .order_by('semester__academic_year__name', 'semester__number')):
+        latest[review.profile_id] = review
+    repeaters = {pid: review for pid, review in latest.items() if review.confirmed == SemesterReview.REPEAT}
+    owed = repeats_by_profile(list(repeaters))
+    to_call_off, kept = [], []
+    for profile_id, review in sorted(repeaters.items(), key=lambda item: item[1].profile.name):
+        later = (Q(semester__academic_year__name__gt=review.semester.academic_year.name)
+                 | Q(semester__academic_year=review.semester.academic_year,
+                     semester__number__gt=review.semester.number))
+        places = ([application.semester for application in Application.objects.filter(
+                      later, profile_id=profile_id, state__in=sorted(Application.OPEN_STATES))
+                  .select_related('semester__academic_year')]
+                  + [registration.semester for registration in SemesterRegistration.objects.filter(
+                      later, profile_id=profile_id).exclude(status=SemesterRegistration.CANCELLED)
+                  .select_related('semester__academic_year')])
+        if not places:
+            continue
+        repeats = owed.get(profile_id, [])
+        row = {'review': review, 'places': places, 'owed': repeats}
+        due = {repeat.semester_number for repeat in repeats}
+        (kept if all(place.number in due for place in places) else to_call_off).append(row)
+    return to_call_off, kept
+
+
+@transaction.atomic
+def call_off_repeat_place(review, *, actor=None):
+    """Hold a REPEAT to what a REPEAT does: what they owe, a standing that
+    brings them back in the semester they repeat, and no place before it."""
+    return _raise_repeats(review, actor=actor)
 
 
 def returning_repeats(target):

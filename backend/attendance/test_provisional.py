@@ -482,3 +482,102 @@ class HoldUntilResultsTests(ProvisionalBase):
     def test_results_in_are_settled_not_held(self):
         self.publish(self.profile, 80)
         self.assertEqual(self.hold(self.principal).data['changed'], 0)
+
+
+class NotSatRepeatSettledTests(ProvisionalBase):
+    """Found 26 October 2026 (NS3522 on the server): a repeater placed
+    provisionally on 19 October — their earlier years were uploaded after —
+    whose repeat sitting reads NS. Settled REPEAT, they stayed at finance for
+    semester 1: a not-sat repeat raised nothing, so nothing took the place
+    away. A semester 2 repeat comes back in semester 2."""
+
+    def setUp(self):
+        super().setUp()
+        from .models import AcademicYear, Semester
+        old = Semester.objects.create(academic_year=AcademicYear.objects.create(name='2024/2025'), number=2)
+        self.profile = self.student('NS3522/0015/2013')
+        self.origin = self.enrol(self.profile, self.module('PST04208', self.level4, old))
+        self.grade(self.origin, 10, supp=10)
+        self.register(self.profile, self.sem2, self.level4, kind=SemesterRegistration.REPEATING)
+        self.sitting = self.enrol(self.profile, self.module('PST04208', self.level4, self.sem2),
+                                  attempt=Student.REPEAT, repeat_of=self.origin)
+        self.grade(self.sitting, 80, approved=False)          # results not out on 19 October
+        self.open_year()
+        self.review = SemesterReview.objects.get(profile=self.profile, semester=self.sem2)
+        self.assertEqual(self.review.confirmed, SemesterReview.PROVISIONAL)
+        self.assertTrue(Application.objects.filter(profile=self.profile, semester=self.next_sem1).exists())
+        # The repeat sheet comes in: NS.
+        self.sitting.result.authority_grade = 'NS'
+        self.sitting.result.save()
+
+    def settle(self):
+        progression.refresh_provisional()
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.proposed, SemesterReview.REPEAT)
+        progression.confirm_review(self.review, SemesterReview.REPEAT, actor=self.exam_user)
+
+    def assert_back_in_semester_2(self):
+        self.assertFalse(Application.objects.filter(profile=self.profile, semester=self.next_sem1)
+                         .exclude(state__in=[Application.CANCELLED, Application.REJECTED]).exists())
+        standing = StudentStanding.objects.get(profile=self.profile)
+        self.assertEqual((standing.status, standing.return_semester_number, standing.return_year),
+                         (StudentStanding.REPEATING, 2, self.next_year))
+
+    def test_settled_repeat_leaves_finance_and_keeps_the_one_debt(self):
+        from .models import OutstandingRepeat
+        owed = OutstandingRepeat.objects.create(
+            profile=self.profile, module_code='PST04208', module_name='PST04208', class_level=self.level4,
+            origin_semester=self.origin.module.semester, semester_number=2, origin_enrollment=self.origin)
+        self.settle()
+        self.assert_back_in_semester_2()
+        self.assertEqual(list(OutstandingRepeat.objects.filter(profile=self.profile).values_list('id', 'status')),
+                         [(owed.id, OutstandingRepeat.OPEN)])
+
+    def test_a_debt_never_raised_is_owed_to_the_year_it_clears(self):
+        from .models import OutstandingRepeat
+        self.settle()
+        self.assert_back_in_semester_2()
+        repeat = OutstandingRepeat.objects.get(profile=self.profile)
+        self.assertEqual((repeat.origin_semester, repeat.semester_number, repeat.status),
+                         (self.origin.module.semester, 2, OutstandingRepeat.OPEN))
+
+    def test_the_ones_settled_before_the_fix_are_put_right(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from .models import OutstandingRepeat
+        OutstandingRepeat.objects.create(
+            profile=self.profile, module_code='PST04208', module_name='PST04208', class_level=self.level4,
+            origin_semester=self.origin.module.semester, semester_number=2, origin_enrollment=self.origin)
+        progression.refresh_provisional()
+        self.review.refresh_from_db()
+        # Settled as it was before the fix: the REPEAT recorded, nothing taken away.
+        with mock.patch.object(progression, '_raise_repeats', return_value=[]):
+            progression.confirm_review(self.review, SemesterReview.REPEAT, actor=self.exam_user)
+        self.assertTrue(Application.objects.filter(profile=self.profile, semester=self.next_sem1,
+                                                   state=Application.FINANCE).exists())
+        dry = StringIO()
+        call_command('call_off_repeat_places', stdout=dry)
+        self.assertIn('NS3522/0015/2013', dry.getvalue())
+        self.assertIn('PST04208 (sem 2)', dry.getvalue())
+        self.assertTrue(Application.objects.filter(profile=self.profile, state=Application.FINANCE).exists())
+        call_command('call_off_repeat_places', '--apply', stdout=StringIO())
+        self.assert_back_in_semester_2()
+        again = StringIO()
+        call_command('call_off_repeat_places', stdout=again)
+        self.assertIn('0 REPEAT student(s)', again.getvalue())
+
+    def test_a_semester_1_repeat_is_left_at_finance(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from .models import OutstandingRepeat
+        OutstandingRepeat.objects.create(
+            profile=self.profile, module_code='PST04101', module_name='PST04101', class_level=self.level4,
+            origin_semester=self.sem1, semester_number=1)
+        progression.refresh_provisional()
+        self.review.refresh_from_db()
+        with mock.patch.object(progression, '_raise_repeats', return_value=[]):
+            progression.confirm_review(self.review, SemesterReview.REPEAT, actor=self.exam_user)
+        out = StringIO()
+        call_command('call_off_repeat_places', '--apply', stdout=out)
+        self.assertIn('Left where they are', out.getvalue())
+        self.assertTrue(Application.objects.filter(profile=self.profile, state=Application.FINANCE).exists())

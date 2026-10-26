@@ -953,3 +953,10 @@ match NACTVET's supplementary pages, not its first-sitting pages); the 2023/24 w
 first sittings (exam numbers JMS1). NS1314's 2023/24 first sitting (B C*** B*** D* A, REPEAT 2.3), completed
 by the 2024 repeat sitting, gives FAIL 2.1 through the system's rules — as NACTVET printed it. Extracted for
 the 27 students: `~/Documents/BPHACOH/RESULTS/extracted/last_time_results_repeaters.xlsx`.
+
+**Found (26 October 2026):** four REPEAT students (NS3522, NS5001, NP1042, NS4084) were at semester 1's
+finance desk though they repeat semester 2 modules — you asked why. They were placed provisionally on
+19 October (their earlier years were not in the system yet) and their repeat read NS; settling that
+REPEAT took nothing away, because a repeat not sat raised nothing. Fixed: an NS REPEAT now calls off the
+place like any REPEAT, and `call_off_repeat_places` puts right the ones settled before. They come back
+when semester 2 opens.

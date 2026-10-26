@@ -354,9 +354,17 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] Hold until results (DPARC / Principal, Semester Review ▸ Provisional places): a student whose results are not
      complete leaves the desk lists and cannot be cleared until settled, or is let through to start admission; one
      button holds all of them; a pass settled lifts the hold by itself; a REPEAT / FAIL settled cancels the place
-   - [x] 1239 tests; checked in the browser (held, off the finance list, let through)
+   - [x] A repeat not sat (NS) settled REPEAT takes the place away like any REPEAT (26 Oct: four repeaters — NS3522,
+     NS5001, NP1042, NS4084 — sat at semester 1's finance desk owing only semester 2 modules: confirming a REPEAT
+     that came from NS raised nothing, so nothing took their provisional place). Their debt stays the one already
+     open; they come back in semester 2. `manage.py call_off_repeat_places` puts right the ones settled before
+     (dry run first; a repeater who owes a module of the semester they are placed in is left)
+   - [x] 1243 tests; checked in the browser (held, off the finance list, let through)
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1239 tests … OK` on the laptop first
+   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1243 tests … OK` on the laptop first
+   - [ ] REPEAT students at semester 1's finance desk who owe only semester 2 modules:
+     `sudo -u bphacoh venv/bin/python manage.py call_off_repeat_places` — read the dry run, then `--apply`. Run it
+     again after the provisional students are settled (it should list nobody)
    - [ ] Level 4 / 5 students left behind by the year end (PST04 / PST05 had no next level): after the merge,
      `sudo -u bphacoh venv/bin/python manage.py place_left_behind` — read the dry run (who is placed and how; who is
      left as they are and why) — then the same with `--apply`. Not settled → provisional at the next level, to
