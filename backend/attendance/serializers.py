@@ -379,6 +379,16 @@ def _page_rows(serializer, obj):
     return list(rows) if rows is not None else [obj]
 
 
+def _provisional_results(context):
+    """What each provisional student's results say — read once per response."""
+    if context is None:
+        context = {}
+    if '_provisional_results' not in context:
+        from .progression import provisional_results
+        context['_provisional_results'] = provisional_results()
+    return context['_provisional_results']
+
+
 def _provisional_ids(context):
     """Students placed provisionally — read once per response, not per row."""
     if context is None:
@@ -2019,6 +2029,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     held_by_name = serializers.SerializerMethodField()
     residence = serializers.SerializerMethodField()
     provisional = serializers.SerializerMethodField()
+    results_say = serializers.SerializerMethodField()
 
     class Meta:
         model = Application
@@ -2028,7 +2039,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'programme', 'programme_code', 'class_level', 'class_level_name',
             'returning_to', 'registration', 'note', 'decided_reason', 'steps',
             'requirement_checks', 'balance', 'details', 'missing_details', 'academic', 'payment',
-            'items', 'on_hold', 'hold_reason', 'held_at', 'held_by_name', 'residence', 'provisional',
+            'items', 'on_hold', 'hold_reason', 'held_at', 'held_by_name', 'residence', 'provisional', 'results_say',
             'created_at', 'updated_at',
         ]
         read_only_fields = fields
@@ -2111,6 +2122,11 @@ class ApplicationSerializer(serializers.ModelSerializer):
     def get_provisional(self, obj):
         """Placed while the results of the level before are not out."""
         return _provisional_ids(self.context).__contains__(obj.profile_id)
+
+    def get_results_say(self, obj):
+        """For a provisional student: what their results say now (PASS, REPEAT,
+        FAIL, not complete) — a REPEAT or FAIL is still to be settled."""
+        return _provisional_results(self.context).get(obj.profile_id, '')
 
     def get_residence(self, obj):
         """Day or hostel for the year — the finance desk states it."""

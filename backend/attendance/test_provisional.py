@@ -416,3 +416,69 @@ class LateResultsBelongToTheirOwnSemesterTests(ProvisionalBase):
         self.assertNotIn(self.profile.id, [r.profile_id for r in reviews])
         # 2025/26's own record still reads the failed sitting, unchanged.
         self.assertEqual(StudentResult.objects.get(student=self.failed).supplementary_mark, 30)
+
+
+class HoldUntilResultsTests(ProvisionalBase):
+    """Said 26 October 2026: a provisional student whose results are not complete
+    may be held off the desk lists until they are settled, or let through — DPARC's
+    or the Principal's call; the desks see what each one's results say."""
+
+    def setUp(self):
+        super().setUp()
+        self.profile = self.waiting_student('REG/121')
+        self.open_year()
+        self.application = Application.objects.get(profile=self.profile, semester=self.next_sem1)
+        self.review = SemesterReview.objects.get(profile=self.profile, semester=self.sem2)
+        _, self.accounts = office('money', 'accountant')
+
+    def hold(self, client, hold=True, **extra):
+        return client.post('/api/provisional/hold/', {'review_ids': [self.review.id], 'hold': hold, **extra},
+                           format='json')
+
+    def at_finance(self):
+        return [row['reg_no'] for row in
+                self.accounts.get(f'/api/applications/?mine=1&open=1&semester_id={self.next_sem1.id}').data]
+
+    def listed(self):
+        return next(r for r in self.accounts.get(f'/api/applications/?open=1&semester_id={self.next_sem1.id}').data
+                    if r['reg_no'] == 'REG/121')
+
+    def test_the_desks_see_what_the_results_say(self):
+        row = self.listed()
+        self.assertEqual((row['provisional'], row['results_say']), (True, 'not complete'))
+        self.publish(self.profile, 20)                     # failed: not a pass
+        progression.refresh_provisional()
+        self.assertIn(self.listed()['results_say'], ('REPEAT', 'FAIL'))
+
+    def test_held_off_the_desks_then_let_through(self):
+        self.assertIn('REG/121', self.at_finance())
+        self.assertEqual(self.hold(self.exam).status_code, 403)          # DPARC or the Principal
+        self.assertEqual(self.hold(self.dparc).data['changed'], 1)
+        self.application.refresh_from_db()
+        self.assertTrue(admissions.is_held_for_results(self.application))
+        self.assertNotIn('REG/121', self.at_finance())
+        with self.assertRaises(admissions.AdmissionError):
+            admissions.complete_step(self.application, actor=self.principal_user)
+        self.assertEqual(self.hold(self.principal, hold=False).data['changed'], 1)
+        self.assertIn('REG/121', self.at_finance())
+
+    def test_all_whose_results_are_not_complete_at_once(self):
+        other = self.waiting_student('REG/122')
+        progression.build_reviews(self.sem2)
+        self.advance()
+        done = self.principal.post('/api/provisional/hold/', {'all_incomplete': True, 'hold': True}, format='json')
+        self.assertEqual(done.data['changed'], 2)
+        self.assertFalse({'REG/121', 'REG/122'} & set(self.at_finance()))
+        self.assertTrue(Application.objects.filter(profile=other, on_hold=True).exists())
+
+    def test_a_pass_settled_lifts_the_hold(self):
+        self.hold(self.principal)
+        self.publish(self.profile, 80)
+        self.principal.post('/api/provisional/settle-passes/', {}, format='json')
+        self.application.refresh_from_db()
+        self.assertFalse(self.application.on_hold)
+        self.assertIn('REG/121', self.at_finance())
+
+    def test_results_in_are_settled_not_held(self):
+        self.publish(self.profile, 80)
+        self.assertEqual(self.hold(self.principal).data['changed'], 0)

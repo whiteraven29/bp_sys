@@ -2337,10 +2337,12 @@
         <div class="card-title">Placed while their results were out <span class="tip" tabindex="0" role="note" aria-label="Help: provisional places" data-tip="When the year opens before NACTVET's results, students are placed where a pass takes them. Once the grades are uploaded, their results show here: confirm the passes in one go; a repeat or discontinuation is confirmed one by one, and takes the place away and reverses its fees. A provisional student sits no end-of-semester exam until settled.">?</span></div>
         <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
           <button class="btn btn-primary btn-sm" id="prov-settle-btn" onclick="settleProvisionalPasses(event)">Confirm all passes</button>
+          <button class="btn btn-secondary btn-sm" id="prov-hold-all" style="display:none;" onclick="holdProvisional(null, true, true)"
+            title="Take everyone whose results are not complete off the desk lists until their results are settled">Hold all whose results are not complete</button>
           <span id="prov-summary" style="font-size:.82rem;color:var(--muted);"></span>
         </div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Reg. No.</th><th>Name</th><th>Results of</th><th>Placed in</th><th>Results now say</th><th></th></tr></thead>
+          <thead><tr><th>Reg. No.</th><th>Name</th><th>Results of</th><th>Placed in</th><th>Results now say</th><th>At the desks</th><th></th></tr></thead>
           <tbody id="prov-tbody"></tbody>
         </table></div>
       </div>
@@ -5635,7 +5637,14 @@ function repeatTag(s) {
 }
 // Placed while the results of the level before were not out (said 18 October 2026).
 function provisionalTag(s) {
-  return s.provisional ? ' <span class="badge" style="background:var(--accent);font-size:.65rem;vertical-align:middle" title="Placed while the results of the level before were not out">Provisional</span>' : '';
+  if (!s.provisional) return '';
+  // What their results say now (said 26 October 2026): a REPEAT or FAIL is
+  // still to be settled — the desks should not carry on as if it were a pass.
+  const says = s.results_say || '';
+  const tone = { PASS: 'badge-green', REPEAT: 'badge-red', FAIL: 'badge-red' }[says] || 'badge-gen';
+  const held = s.on_hold && String(s.hold_reason || '').startsWith('Held until results') ? ' · held' : '';
+  return ' <span class="badge" style="background:var(--accent);font-size:.65rem;vertical-align:middle" title="Placed while the results of the level before were not out">Provisional</span>'
+    + (says ? ` <span class="badge ${tone}" style="font-size:.65rem;vertical-align:middle" title="${['REPEAT', 'FAIL'].includes(says) ? 'The results say so: to be settled in Semester Review ▸ Provisional places' : 'What their results say now'}">results: ${safeText(says)}${held}</span>` : '');
 }
 // First sittings, then the repeaters under their own heading.
 function repeatersLast(rows) {
@@ -13143,6 +13152,8 @@ async function loadProvisional() {
     const data = await api('GET', '/provisional/');
     const passes = data.rows.filter(r => ['clear', 'completed'].includes(r.proposed)).length;
     document.getElementById('prov-settle-btn').style.display = data.can_settle_passes && passes ? '' : 'none';
+    document.getElementById('prov-hold-all').style.display =
+      data.can_hold && data.rows.some(r => !r.results_in && r.application_id && !r.held) ? '' : 'none';
     document.getElementById('prov-summary').textContent = data.rows.length
       ? `${data.rows.length} provisional · ${data.rows.filter(r => r.results_in).length} with results in · ${passes} passed`
       : 'Nobody is provisional.';
@@ -13152,6 +13163,9 @@ async function loadProvisional() {
         <td>${r.results_in ? `<span class="badge ${['clear', 'completed'].includes(r.proposed) ? 'badge-green' : 'badge-red'}">${safeText(r.proposed_display)}</span>`
                             : '<span class="badge badge-gen">Results not out</span>'}
             <div style="font-size:.72rem;color:var(--muted)">${safeText(r.reason || '')}</div></td>
+        <td>${r.application_id ? (r.held ? '<span class="badge badge-orange">Held until results</span>' : safeText(r.desk)) : '<span style="color:var(--muted)">—</span>'}
+            ${data.can_hold && r.application_id && (r.held || !r.results_in)
+              ? `<div><button class="btn btn-ghost btn-sm" onclick="holdProvisional(${r.review_id}, ${!r.held})">${r.held ? 'Let through' : 'Hold until results'}</button></div>` : ''}</td>
         <td>${data.can_settle && r.results_in && !['clear', 'completed'].includes(r.proposed)
               ? `<button class="btn btn-ghost btn-sm" onclick="settleProvisional(${r.review_id}, '${r.proposed}', ${jsArg(r.name)}, ${jsArg(r.proposed_display)})">Confirm…</button>` : ''}</td></tr>`).join('')
       : '<tr><td colspan="6"><div class="empty">Nobody is provisional</div></td></tr>';
@@ -13164,6 +13178,21 @@ async function loadProvisional() {
           : `<strong>${c.cutoff ? safeText(c.cutoff) : 'not set'}</strong> <span style="color:var(--muted)">— set by the examination officer</span>`}
       </div>`).join('') || '<span style="color:var(--muted)">No active semester.</span>';
   } catch (e) { toast(apiErrorText(e, 'Could not load provisional places'), 'var(--red)'); }
+}
+
+// Results not complete (said 26 October 2026): DPARC or the Principal holds a
+// student off the desk lists until their results are settled, or lets them
+// through to start admission. A pass settled lifts the hold by itself.
+async function holdProvisional(reviewId, hold, all = false) {
+  const ask = all ? 'Hold everyone whose results are not complete? They leave the desk lists until their results are settled.'
+    : hold ? 'Hold this student until their results are settled? They leave the desk lists meanwhile.'
+    : 'Let this student through? They carry on at the desks before their results are settled.';
+  if (!confirm(ask)) return;
+  try {
+    const r = await api('POST', '/provisional/hold/', all ? { all_incomplete: true, hold: true } : { review_ids: [reviewId], hold });
+    toast(hold ? `${r.changed} held until results` : 'Let through to the desks', 'var(--green)');
+    loadProvisional();
+  } catch (e) { toast(apiErrorText(e, 'Could not change it'), 'var(--red)'); }
 }
 
 async function settleProvisionalPasses(event) {

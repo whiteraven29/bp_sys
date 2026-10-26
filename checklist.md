@@ -349,9 +349,14 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] A repeater's results show when the semester the repeat was sat in is shown — the year it clears comes with
      it (25 Oct: a repeater who failed again saw only "FAIL" and no results, because Sem 2 · 2024/2025 had not
      been shown on its own)
-   - [x] 1234 tests
+   - [x] The desks see what a provisional student's results say: "Provisional · results: PASS / REPEAT / FAIL / not
+     complete" (26 Oct: REPEAT students were at finance — their results were in but not yet settled)
+   - [x] Hold until results (DPARC / Principal, Semester Review ▸ Provisional places): a student whose results are not
+     complete leaves the desk lists and cannot be cleared until settled, or is let through to start admission; one
+     button holds all of them; a pass settled lifts the hold by itself; a REPEAT / FAIL settled cancels the place
+   - [x] 1239 tests; checked in the browser (held, off the finance list, let through)
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1234 tests … OK` on the laptop first
+   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1239 tests … OK` on the laptop first
    - [ ] Level 4 / 5 students left behind by the year end (PST04 / PST05 had no next level): after the merge,
      `sudo -u bphacoh venv/bin/python manage.py place_left_behind` — read the dry run (who is placed and how; who is
      left as they are and why) — then the same with `--apply`. Not settled → provisional at the next level, to

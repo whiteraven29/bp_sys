@@ -98,6 +98,7 @@ urlpatterns = [
     path('inventory/staff/', views.inventory_staff, name='inventory-staff'),
     path('provisional/', views.provisional_places, name='provisional-places'),
     path('provisional/settle-passes/', views.provisional_settle_passes, name='provisional-settle-passes'),
+    path('provisional/hold/', views.provisional_hold, name='provisional-hold'),
     path('provisional/cutoff/', views.provisional_cutoff, name='provisional-cutoff'),
     path('student-statuses/', views.student_statuses, name='student-statuses'),
     path('nhif-sheet/', views.nhif_sheet, name='nhif-sheet'),

@@ -3764,11 +3764,40 @@ def provisional_places(request):
     # Settling passes is the examination officer's too (said 24 October 2026);
     # a repeat or discontinuation, which takes the place away, stays with the
     # Principal and DPARC.
-    return Response({'rows': rows, 'can_settle': can_confirm_reviews(user) or can_manage_exams(user),
+    return Response({'rows': rows, 'can_hold': can_confirm_reviews(user),
+                     'can_settle': can_confirm_reviews(user) or can_manage_exams(user),
                      'can_settle_passes': can_confirm_reviews(user) or can_manage_exams(user),
                      'can_set_cutoff': can_manage_exams(user),
                      'cutoffs': [{'semester_id': sem.id, 'semester': sem.label, 'cutoff': sem.provisional_cutoff}
                                  for sem in Semester.objects.filter(is_active=True)]})
+
+
+@api_view(['POST'])
+@login_required
+def provisional_hold(request):
+    """DPARC or the Principal: hold provisional students whose results are not
+    complete off the desks until they are settled, or let them through to start
+    admission (said 26 October 2026). `review_ids`, or `all_incomplete`."""
+    if not can_confirm_reviews(request.user):
+        raise PermissionDenied('DPARC or the Principal decides.')
+    hold = request.data.get('hold') in (True, 'true', '1', 1)
+    rows = progression.refresh_provisional()
+    wanted = {pk_or_none(value) for value in (request.data.get('review_ids') or [])}
+    if request.data.get('all_incomplete') in (True, 'true', '1', 1):
+        wanted |= {row['review_id'] for row in rows if not row['results_in']}
+    done = 0
+    for row in rows:
+        if row['review_id'] not in wanted or not row['application_id'] or row['held'] == hold:
+            continue
+        if hold and row['results_in']:
+            continue                       # results are in: settle them instead
+        application = Application.objects.get(pk=row['application_id'])
+        if hold:
+            admissions.hold_for_results(application, reason=row['reason'], actor=request.user)
+        else:
+            admissions.release_hold(application, actor=request.user)
+        done += 1
+    return Response({'changed': done, 'hold': hold})
 
 
 @api_view(['POST'])
@@ -4260,6 +4289,8 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         if params.get('mine') == '1':
             desks = [step for step, (_, held) in DESK_ROLES.items() if held(self.request.user)]
             qs = qs.filter(state__in=desks) if desks else qs.none()
+            # Held until their results are settled: off the desk lists (said 26 October 2026).
+            qs = qs.exclude(on_hold=True, hold_reason__startswith=admissions.RESULTS_HOLD)
         search = (params.get('search') or '').strip()
         if search:
             qs = qs.filter(Q(profile__name__icontains=search)
@@ -4542,7 +4573,8 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         if semester is None:
             return Response({'detail': 'No semester given and none is active.'},
                             status=status.HTTP_400_BAD_REQUEST)
-        rows = Application.objects.filter(semester=semester)
+        rows = Application.objects.filter(semester=semester).exclude(
+            on_hold=True, hold_reason__startswith=admissions.RESULTS_HOLD)
         visible = visible_application_states(request.user)
         if visible is not None:
             rows = rows.filter(state__in=sorted(visible))

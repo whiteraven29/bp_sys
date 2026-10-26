@@ -905,6 +905,8 @@ def complete_step(application, *, actor=None, note=''):
     """Clear the desk the application is at, and hand it to the next one."""
     if not application.is_open:
         raise AdmissionError(f'This application is {application.get_state_display().lower()}.')
+    if is_held_for_results(application):
+        raise AdmissionError('Held until their results are settled (DPARC or the Principal let them through).')
 
     step = application.state
     # A first year is written down at the records desk, and it is not cleared
@@ -1016,6 +1018,9 @@ WAIVER_MARK = 'Item check: '
 #: The reason on a hold the items put on, so that bringing them lifts it — and
 #: only it: a hold the officer put on by hand stays until they lift it.
 ITEM_HOLD = 'Missing: '
+#: A provisional student whose results are not complete, held off the desks
+#: until they are settled (said 26 October 2026): DPARC's or the Principal's call.
+RESULTS_HOLD = 'Held until results: '
 
 
 def item_desks(requirement):
@@ -1296,6 +1301,25 @@ def hold(application, *, reason, actor=None):
     application.save(update_fields=['on_hold', 'hold_reason', 'held_at', 'held_by', 'updated_at'])
     logger.info('Application %s held: %s', application.id, reason)
     return application
+
+
+def hold_for_results(application, *, reason='', actor=None):
+    """Take a provisional student off the desk lists until their results are
+    settled — at whichever desk they are; nothing clears them meanwhile. Some
+    whose results are incomplete will turn out REPEAT or FAIL."""
+    if not application.is_open:
+        raise AdmissionError(f'This application is {application.get_state_display().lower()}.')
+    application.on_hold = True
+    application.hold_reason = (RESULTS_HOLD + (reason or 'their results are not complete').strip())[:300]
+    application.held_at = timezone.now()
+    application.held_by = actor if getattr(actor, 'is_authenticated', False) else None
+    application.save(update_fields=['on_hold', 'hold_reason', 'held_at', 'held_by', 'updated_at'])
+    logger.info('Application %s held until results by %s', application.id, actor)
+    return application
+
+
+def is_held_for_results(application):
+    return bool(application.on_hold and application.hold_reason.startswith(RESULTS_HOLD))
 
 
 def release_hold(application, *, actor=None):

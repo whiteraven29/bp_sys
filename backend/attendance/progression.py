@@ -787,6 +787,12 @@ def confirm_review(review, outcome, *, actor, reason='', enrollments=None,
                 actor=actor, semester=review.semester, class_level=review.class_level,
                 programme=review.programme, reason=review.confirmed_reason,
                 known=known_standings)
+    if was_provisional and outcome in (SemesterReview.CLEAR, SemesterReview.COMPLETED):
+        # Settled as a pass: a hold until the results comes off (said 26 October 2026).
+        from .admissions import RESULTS_HOLD
+        from .models import Application
+        Application.objects.filter(profile=review.profile, on_hold=True, hold_reason__startswith=RESULTS_HOLD,
+                                   state__in=sorted(Application.OPEN_STATES)).update(on_hold=False)
     if was_provisional and outcome != SemesterReview.PROVISIONAL:
         # Told once the results are on their portal, never before (said 24
         # October 2026): settled while they are hidden, the message waits.
@@ -1624,6 +1630,18 @@ def provisional_reviews():
             .order_by('semester__academic_year__name', 'semester__number', 'profile__name'))
 
 
+#: What a provisional student's results say, in a word, for the desks.
+RESULTS_SAY = {SemesterReview.CLEAR: 'PASS', SemesterReview.COMPLETED: 'PASS', SemesterReview.REPEAT: 'REPEAT',
+               SemesterReview.DISCONTINUED: 'FAIL', SemesterReview.PENDING: 'not complete'}
+
+
+def provisional_results():
+    """{profile id: what their results say now} for every provisional student —
+    so the desks see a REPEAT or a FAIL waiting to be settled."""
+    return {profile_id: RESULTS_SAY.get(proposed, proposed) for profile_id, proposed in
+            SemesterReview.objects.filter(confirmed=SemesterReview.PROVISIONAL).values_list('profile_id', 'proposed')}
+
+
 def provisional_profile_ids():
     return set(SemesterReview.objects.filter(confirmed=SemesterReview.PROVISIONAL)
                .values_list('profile_id', flat=True))
@@ -1663,6 +1681,7 @@ def refresh_provisional(reviews=None):
         review.proposed_reason = fresh['reason'][:300]
         review.save(update_fields=['modules', 'gpa', 'proposed', 'proposed_reason', 'updated_at'])
         placed, applied, target_semester = _placement(review)
+        held = bool(applied and applied.on_hold and applied.hold_reason.startswith('Held until results: '))
         rows.append({
             'review_id': review.id, 'profile_id': review.profile_id, 'reg_no': review.profile.nactvet_reg_no,
             'name': review.profile.name, 'semester': review.semester.label,
@@ -1673,6 +1692,9 @@ def refresh_provisional(reviews=None):
             'proposed': review.proposed, 'proposed_display': review.get_proposed_display(),
             'reason': review.proposed_reason, 'gpa': review.gpa,
             'results_in': review.proposed != SemesterReview.PENDING,
+            'application_id': applied.id if applied else None,
+            'desk': applied.get_state_display() if applied else '',
+            'held': held,
             'cutoff': target_semester.provisional_cutoff if target_semester else None,
         })
     return rows
