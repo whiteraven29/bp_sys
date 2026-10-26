@@ -359,9 +359,12 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      that came from NS raised nothing, so nothing took their provisional place). Their debt stays the one already
      open; they come back in semester 2. `manage.py call_off_repeat_places` puts right the ones settled before
      (dry run first; a repeater who owes a module of the semester they are placed in is left)
-   - [x] 1243 tests; checked in the browser (held, off the finance list, let through)
+   - [x] The dry run says what each student will owe (26 Oct, the server's dry run: all four "owe nothing open" —
+     their 2024/25 reviews never confirmed; the debt is raised from the repeat sitting's link to 2024/25 Sem 2, and
+     that is what brings them back in semester 2). A student whose debt cannot be read is never called off
+   - [x] 1245 tests; checked in the browser (held, off the finance list, let through)
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1243 tests … OK` on the laptop first
+   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1245 tests … OK` on the laptop first
    - [ ] REPEAT students at semester 1's finance desk who owe only semester 2 modules:
      `sudo -u bphacoh venv/bin/python manage.py call_off_repeat_places` — read the dry run, then `--apply`. Run it
      again after the provisional students are settled (it should list nobody)

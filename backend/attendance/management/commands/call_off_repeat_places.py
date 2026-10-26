@@ -28,10 +28,10 @@ from attendance import progression
 
 def describe(row):
     review = row['review']
-    owed = ', '.join(f'{repeat.module_code} (sem {repeat.semester_number})' for repeat in row['owed']) or 'nothing open'
+    owed = ', '.join(f'{code} (sem {number}, {label})' for code, number, label in row['will_owe']) or 'nothing'
     places = ', '.join(sorted({place.label for place in row['places']}))
     return (f'  {review.profile.nactvet_reg_no:<20} {review.profile.name:<32} REPEAT in {review.semester.label}; '
-            f'owes {owed}; placed in {places}')
+            f'will owe {owed}; placed in {places}')
 
 
 class Command(BaseCommand):
@@ -41,10 +41,19 @@ class Command(BaseCommand):
         parser.add_argument('--apply', action='store_true', help='Write the changes. Without it: a dry run.')
 
     def handle(self, *args, **options):
-        to_call_off, kept = progression.repeat_places_kept()
+        found, kept = progression.repeat_places_kept()
+        # Nothing to owe means nothing would bring them back: never call off a
+        # place that leaves a student with no way back.
+        to_call_off = [row for row in found if row['will_owe']]
+        unknown = [row for row in found if not row['will_owe']]
         self.stdout.write(f'{len(to_call_off)} REPEAT student(s) placed in a semester they owe nothing in:')
         for row in to_call_off:
             self.stdout.write(describe(row))
+        if unknown:
+            self.stdout.write(f'Left where they are — what they owe cannot be read from their results '
+                              f'(check their repeat sheet; {len(unknown)}):')
+            for row in unknown:
+                self.stdout.write(describe(row))
         if kept:
             self.stdout.write(f'Left where they are — they repeat a module of that semester ({len(kept)}):')
             for row in kept:

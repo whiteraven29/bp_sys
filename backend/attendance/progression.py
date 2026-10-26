@@ -1004,46 +1004,53 @@ def _resolve_repeat_sittings(review, *, enrollments=None, repeats=None):
         repeat.save(update_fields=['attempt_enrollment', 'status', 'resolved_at', 'note'])
 
 
-def _raise_repeats(review, *, actor=None, enrollments=None, known=None):
-    """Record every module this student still has to pass, and hold them to it."""
+def _owing_codes(review):
     failed = {row['code'].upper() for row in review.modules
               if row['status'] in FAILED_STATUSES or row.get('direct_repeat')}
     # A repeat not sat (NS) is still owed (said 24 October 2026). It was left
     # out here, so a provisional repeater who did not sit kept the place and
     # the finance application a REPEAT takes away (found 26 October 2026).
     not_sat = {row['code'].upper() for row in review.modules
-               if row['status'] == NOT_SAT or row.get('not_sat')}
+               if row['status'] == NOT_SAT or row.get('not_sat')} - failed
+    return failed, not_sat
+
+
+def repeats_owed_by(review, *, enrollments=None):
+    """The modules a REPEAT on this review holds the student to, as
+    (code, the sitting it is owed from, the repeat already open for it): a
+    module failed here is owed from here; a repeat not sat from the year it
+    clears, whose repeat is normally still open (else its `repeat_of`)."""
+    failed, not_sat = _owing_codes(review)
     if not failed and not not_sat:
         return []
     sittings = {e.module.code.upper(): e for e in
                 (enrollments if enrollments is not None
                  else enrollments_for(review.profile, review.semester))}
-    raised = []
-    owed = {repeat.module_code.upper() for repeat in open_repeats(review.profile)} if not_sat else set()
-    for code in sorted(not_sat - failed - owed):
-        # Its repeat is normally still open; if not, it is owed to the year it clears.
+    already = {repeat.module_code.upper(): repeat for repeat in open_repeats(review.profile)} if not_sat else {}
+    owed = [(code, sittings[code], None) for code in sorted(failed) if code in sittings]
+    for code in sorted(not_sat):
         origin = getattr(sittings.get(code), 'repeat_of', None)
-        if origin is None:
+        if code in already or origin is not None:
+            owed.append((code, origin, already.get(code)))
+    return owed
+
+
+def _raise_repeats(review, *, actor=None, enrollments=None, known=None):
+    """Record every module this student still has to pass, and hold them to it."""
+    if not any(_owing_codes(review)):
+        return []
+    raised = []
+    for _code, origin, open_repeat in repeats_owed_by(review, enrollments=enrollments):
+        if open_repeat is not None:
             continue
         repeat, created = OutstandingRepeat.objects.get_or_create(
             profile=review.profile, module_code=origin.module.code,
             origin_semester=origin.module.semester,
-            defaults={'module_name': origin.module.name, 'class_level': origin.module.class_level,
-                      'semester_number': origin.module.semester.number, 'origin_enrollment': origin})
-        if created:
-            raised.append(repeat)
-    for code in sorted(failed):
-        enrollment = sittings.get(code)
-        if enrollment is None:
-            continue
-        repeat, created = OutstandingRepeat.objects.get_or_create(
-            profile=review.profile, module_code=enrollment.module.code,
-            origin_semester=review.semester,
             defaults={
-                'module_name': enrollment.module.name,
-                'class_level': enrollment.module.class_level,
-                'semester_number': review.semester.number,
-                'origin_enrollment': enrollment,
+                'module_name': origin.module.name,
+                'class_level': origin.module.class_level,
+                'semester_number': origin.module.semester.number,
+                'origin_enrollment': origin,
             },
         )
         if created:
@@ -1984,8 +1991,12 @@ def repeat_places_kept():
         if not places:
             continue
         repeats = owed.get(profile_id, [])
-        row = {'review': review, 'places': places, 'owed': repeats}
-        due = {repeat.semester_number for repeat in repeats}
+        # What the REPEAT holds them to once it is applied: (code, semester number, the year it clears).
+        will_owe = [(code, repeat.semester_number, repeat.origin_semester.label) if repeat is not None
+                    else (code, origin.module.semester.number, origin.module.semester.label)
+                    for code, origin, repeat in repeats_owed_by(review)]
+        row = {'review': review, 'places': places, 'owed': repeats, 'will_owe': will_owe}
+        due = {repeat.semester_number for repeat in repeats} | {number for _code, number, _label in will_owe}
         (kept if all(place.number in due for place in places) else to_call_off).append(row)
     return to_call_off, kept
 

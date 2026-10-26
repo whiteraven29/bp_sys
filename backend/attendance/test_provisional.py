@@ -558,7 +558,7 @@ class NotSatRepeatSettledTests(ProvisionalBase):
         dry = StringIO()
         call_command('call_off_repeat_places', stdout=dry)
         self.assertIn('NS3522/0015/2013', dry.getvalue())
-        self.assertIn('PST04208 (sem 2)', dry.getvalue())
+        self.assertIn('PST04208 (sem 2, Sem 2 · 2024/2025)', dry.getvalue())
         self.assertTrue(Application.objects.filter(profile=self.profile, state=Application.FINANCE).exists())
         call_command('call_off_repeat_places', '--apply', stdout=StringIO())
         self.assert_back_in_semester_2()
@@ -580,4 +580,39 @@ class NotSatRepeatSettledTests(ProvisionalBase):
         out = StringIO()
         call_command('call_off_repeat_places', '--apply', stdout=out)
         self.assertIn('Left where they are', out.getvalue())
+        self.assertTrue(Application.objects.filter(profile=self.profile, state=Application.FINANCE).exists())
+
+    def settled_before_the_fix(self):
+        progression.refresh_provisional()
+        self.review.refresh_from_db()
+        with mock.patch.object(progression, '_raise_repeats', return_value=[]):
+            progression.confirm_review(self.review, SemesterReview.REPEAT, actor=self.exam_user)
+
+    def test_as_on_the_server_nothing_open_the_debt_is_raised_and_brings_them_back(self):
+        """The server's dry run, 26 October 2026: the four owed "nothing open" —
+        their 2024/25 reviews were never confirmed. Applied, the debt comes from
+        the repeat sitting's link to the year it clears, and semester 2 finds them."""
+        from io import StringIO
+        from django.core.management import call_command
+        from .models import OutstandingRepeat
+        self.settled_before_the_fix()
+        dry = StringIO()
+        call_command('call_off_repeat_places', stdout=dry)
+        self.assertIn('will owe PST04208 (sem 2, Sem 2 · 2024/2025)', dry.getvalue())
+        self.assertFalse(OutstandingRepeat.objects.filter(profile=self.profile).exists())
+        call_command('call_off_repeat_places', '--apply', stdout=StringIO())
+        self.assert_back_in_semester_2()
+        repeat = OutstandingRepeat.objects.get(profile=self.profile)
+        self.assertEqual((repeat.semester_number, repeat.status), (2, OutstandingRepeat.OPEN))
+        self.assertIn(self.profile.id, [standing.profile_id for standing, _ in
+                                        progression.returning_repeats(self.next_sem2)])
+
+    def test_nothing_to_owe_is_never_called_off(self):
+        from io import StringIO
+        from django.core.management import call_command
+        Student.objects.filter(pk=self.sitting.pk).update(repeat_of=None)
+        self.settled_before_the_fix()
+        out = StringIO()
+        call_command('call_off_repeat_places', '--apply', stdout=out)
+        self.assertIn('cannot be read from their results', out.getvalue())
         self.assertTrue(Application.objects.filter(profile=self.profile, state=Application.FINANCE).exists())
