@@ -172,12 +172,20 @@ class RepeaterTests(ReturningBase):
 
 
 class PostponementReturnTests(ReturningBase):
-    def test_a_postponement_return_comes_back_as_continuing(self):
-        self.record(kind='postponed', reg_no='NS0099/0001/2024', return_semester=1)
+    def test_a_level_4_postponement_return_comes_back_as_new(self):
+        # Said 27 October 2026: Level 4 comes back as new — the first year's route
+        # and one-time charges; Level 5 and 6 as continuing (test_student_statuses).
+        self.record(kind='postponed', reg_no='NS0099/0001/2024', return_semester=1, modules='NILL')
         self.assertEqual([s.status for s in admissions.due_back(self.sem1)], [StudentStanding.POSTPONED])
         profile, application = self.take_back(Application.CONTINUING)
+        self.assertEqual(application.kind, Application.NEW)
+        self.assertIn('postponed at Level 4', application.note)
+        from .test_admissions import full_record
+        application.profile = full_record(profile)
+        while application.state != Application.FINANCE:
+            admissions.complete_step(application, actor=self.officer)
         billed = set(StudentCharge.objects.filter(profile=profile).values_list('charge_type__name', flat=True))
-        self.assertEqual(billed, {'Tuition Fee'})          # continuing: no one-time charges
+        self.assertEqual(billed, {'Tuition Fee', 'Admission fee'})
         self.admit(application)
         self.assertEqual(Student.objects.filter(profile=profile, module__semester=self.sem1).count(), 3)
 
@@ -225,6 +233,16 @@ class PostponedRepeaterTests(ReturningBase):
         self.record(kind='postponed')
         profile = StudentProfile.objects.get(nactvet_reg_no='NS0099/0001/2024')
         self.assertFalse(admissions.is_repeat_only(profile))
+
+    def test_nill_in_the_modules_column_means_none(self):
+        # Said 27 October 2026: NP1211, back from a postponement owing nothing, was refused for "NILL".
+        recorded = self.record(kind='postponed', modules='NILL').data['results'][0]
+        self.assertTrue(recorded['ok'], recorded)
+        profile = StudentProfile.objects.get(nactvet_reg_no='NS0099/0001/2024')
+        self.assertFalse(OutstandingRepeat.objects.filter(profile=profile).exists())
+        self.assertFalse(admissions.is_repeat_only(profile))
+        for word in ('nil', 'None', 'N/A', '-'):
+            self.assertEqual(admissions.NO_MODULES & {word.upper()}, {word.upper()})
 
     def test_a_readmission_carries_no_modules(self):
         result = self.record(kind='readmission', modules='PST04101').data['results'][0]

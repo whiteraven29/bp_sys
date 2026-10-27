@@ -51,6 +51,19 @@ def complete_record(profile):
     return profile
 
 
+def full_record(profile):
+    """Everything the records desk takes down for a first year (missing_details)."""
+    complete_record(profile)
+    StudentProfile.objects.filter(pk=profile.pk).update(
+        phone=profile.phone or '0712000111', gender=profile.gender or 'F',
+        date_of_birth=profile.date_of_birth or date(2006, 4, 12), form_four_index=profile.form_four_index or next_index())
+    if profile.next_of_kin.count() < 2:
+        NextOfKin.objects.create(profile=profile, position=2, name='Baba', phone='0714000333',
+                                 relationship=NextOfKin.FATHER)
+    profile.refresh_from_db()
+    return profile
+
+
 class AdmissionBase(TestCase):
     def setUp(self):
         self.year = AcademicYear.objects.create(name='2026/2027', is_active=True)

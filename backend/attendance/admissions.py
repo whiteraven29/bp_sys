@@ -548,6 +548,9 @@ def returns_as_new(profile, *, today=None):
       absconded (ABS)                 not before two years; then as new
       discontinued (disciplinary)     as new
       postponed more than two years   as new
+      postponed at Level 4            as new, back into semester 1 (said
+                                      27 October 2026; Level 5 and 6 come
+                                      back as continuing students)
       finished after Level 5          as new (for Level 6, in any later year)
 
     "As new": the first year's route and its one-time charges, on the same
@@ -579,6 +582,11 @@ def returns_as_new(profile, *, today=None):
     if status == StudentStanding.POSTPONED and standing.since and \
             today > lifecycle.years_after(standing.since, lifecycle.AWAY_YEARS):
         return 'postponed more than two years ago'
+    if (status == StudentStanding.POSTPONED and standing.class_level_id and standing.class_level.order == 4
+            and standing.return_semester_number in (None, 1) and not progression.open_repeats(profile).exists()):
+        # A first year who postponed starts the first year again: its route and
+        # one-time charges. One owing modules comes back as a repeater for them.
+        return 'postponed at Level 4'
     if status in (StudentStanding.COMPLETED, StudentStanding.ARCHIVED) and standing.class_level_id \
             and standing.class_level.order in lifecycle.EXIT_LEVELS:
         return 'finished after Level 5'
@@ -1449,6 +1457,10 @@ RETURNING_KINDS = {
     'postponed': 'Back from a postponement',
 }
 
+#: What the papers write in the modules column for "none" (said 27 October
+#: 2026: NP1211, back from a postponement with nothing owed, was refused for "NILL").
+NO_MODULES = {'NIL', 'NILL', 'NULL', 'NONE', 'NA', 'N/A', '-', '--', '—', '0'}
+
 
 @transaction.atomic
 def record_returning_student(*, reg_no, name, programme, class_level, kind, return_semester,
@@ -1514,7 +1526,7 @@ def record_returning_student(*, reg_no, name, programme, class_level, kind, retu
               'postponed': StudentStanding.POSTPONED}[kind]
     reason = f'From the paper record: {reference}'
     owed = []
-    codes = sorted({str(code).strip().upper() for code in modules if str(code).strip()})
+    codes = sorted({str(code).strip().upper() for code in modules if str(code).strip()} - NO_MODULES)
     if kind == 'readmission' and codes:
         raise ReturningError('A readmission sits the semester afresh: leave the modules empty.')
     if kind == 'repeat' and not codes:

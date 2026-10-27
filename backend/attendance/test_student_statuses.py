@@ -133,7 +133,21 @@ class ComingBackAsNewTests(StatusBase):
         self.assertEqual(self.back(kind=Application.CONTINUING).kind, Application.NEW)
 
     def test_a_recent_postponement_comes_back_as_it_was(self):
+        self.stand(StudentStanding.POSTPONED, since=timezone.localdate() - timedelta(days=200), level=self.level5)
+        self.assertEqual(self.back(kind=Application.CONTINUING).kind, Application.CONTINUING)
+
+    def test_a_level_4_postponement_comes_back_as_new(self):
+        # Said 27 October 2026: only Level 5 and 6 come back as continuing.
         self.stand(StudentStanding.POSTPONED, since=timezone.localdate() - timedelta(days=200))
+        application = self.back(kind=Application.CONTINUING)
+        self.assertEqual(application.kind, Application.NEW)
+        self.assertIn('postponed at Level 4', application.note)
+
+    def test_a_level_4_semester_2_postponement_comes_back_as_it_was(self):
+        # Semester 1 was studied and paid for: back into semester 2 as before.
+        self.stand(StudentStanding.POSTPONED, since=timezone.localdate() - timedelta(days=200))
+        StudentStanding.objects.filter(profile=self.profile).update(return_semester_number=2)
+        self.profile.refresh_from_db()
         self.assertEqual(self.back(kind=Application.CONTINUING).kind, Application.CONTINUING)
 
     def test_a_level_five_finisher_comes_back_as_new(self):

@@ -209,6 +209,12 @@ class PostponementTests(LifecycleBase):
         application = admissions.open_application(
             profile=self.profile, semester=next_sem1, programme=self.pst, class_level=self.level4,
             kind=Application.CONTINUING, actor=self.officer, ignore_window=True)
+        # Level 4 comes back as new (said 27 October 2026): intake and records, then the bill.
+        self.assertEqual(application.kind, Application.NEW)
+        from .test_admissions import full_record
+        application.profile = full_record(self.profile)
+        while application.state != Application.FINANCE:
+            admissions.complete_step(application, actor=self.officer)
 
         next_bill = finance.balance_for(self.profile, next_year)
         self.assertEqual(finance.balance_for(self.profile, self.year)['balance'], 0)

@@ -960,3 +960,10 @@ finance desk though they repeat semester 2 modules — you asked why. They were 
 REPEAT took nothing away, because a repeat not sat raised nothing. Fixed: an NS REPEAT now calls off the
 place like any REPEAT, and `call_off_repeat_places` puts right the ones settled before. They come back
 when semester 2 opens.
+
+### Q70. Coming back from a postponement at Level 4 ●
+
+**Answer (27 October 2026):** a student back from a postponement at Level 4 is charged as new — the first year's
+route and its one-time charges, on the same record and college ID. Level 5 and 6 come back as continuing students.
+Built the same day (`admissions.returns_as_new`); a Level 4 student back for semester 2, or owing modules, comes
+back as before. (NP1211's "NILL" in the modules column now means none.)

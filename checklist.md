@@ -362,9 +362,14 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] The dry run says what each student will owe (26 Oct, the server's dry run: all four "owe nothing open" —
      their 2024/25 reviews never confirmed; the debt is raised from the repeat sitting's link to 2024/25 Sem 2, and
      that is what brings them back in semester 2). A student whose debt cannot be read is never called off
-   - [x] 1245 tests; checked in the browser (held, off the finance list, let through)
+   - [x] Returning Students: NILL / NIL / NONE / N/A / - in the modules column means none (27 Oct: NP1211, back from a
+     postponement owing nothing, was refused for "NILL")
+   - [x] A postponement return at Level 4 (into semester 1) comes back as new — first-year route, one-time charges,
+     same record and college ID; Level 5 and 6 come back as continuing (27 Oct, NP1211). A Level 4 student back for
+     semester 2, or owing modules, comes back as before
+   - [x] 1248 tests; checked in the browser (held, off the finance list, let through)
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1245 tests … OK` on the laptop first
+   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1248 tests … OK` on the laptop first
    - [ ] REPEAT students at semester 1's finance desk who owe only semester 2 modules:
      `sudo -u bphacoh venv/bin/python manage.py call_off_repeat_places` — read the dry run, then `--apply`. Run it
      again after the provisional students are settled (it should list nobody)
