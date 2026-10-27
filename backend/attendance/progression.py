@@ -1563,6 +1563,8 @@ def plan_advance(semester):
 
         if standing.status == StudentStanding.POSTPONED:
             move.update(action='away', detail='Postponed', registers=False)
+        elif standing.status == StudentStanding.TRANSFERRED:
+            move.update(action='away', detail='Transferred to another college', registers=False)
         elif outcome == SemesterReview.DISCONTINUED:
             move.update(action='discontinued', registers=False,
                         detail=f'Returns on readmission to semester {semester.number}')
@@ -1652,6 +1654,7 @@ PROVISIONAL_REASON = 'Results not out when {target} opened: placed provisionally
 def provisional_reviews():
     """Every review confirmed provisional and not settled since."""
     return (SemesterReview.objects.filter(confirmed=SemesterReview.PROVISIONAL)
+            .exclude(profile__standing__status=StudentStanding.TRANSFERRED)      # gone: nothing to settle
             .select_related('profile', 'semester__academic_year', 'class_level', 'programme')
             .order_by('semester__academic_year__name', 'semester__number', 'profile__name'))
 
@@ -1801,7 +1804,7 @@ def apply_advance(semester, target, *, actor=None, only=None):
         if blanks:
             SemesterReview.objects.filter(pk=review.pk).update(**blanks)
 
-        if standing.status == StudentStanding.POSTPONED:
+        if standing.status in (StudentStanding.POSTPONED, StudentStanding.TRANSFERRED):
             summary['away'] += 1
             continue
         if outcome == SemesterReview.DISCONTINUED:

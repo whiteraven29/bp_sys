@@ -547,6 +547,7 @@ def returns_as_new(profile, *, today=None):
       suspended                       still the college's: back when it ends
       absconded (ABS)                 not before two years; then as new
       discontinued (disciplinary)     as new
+      transferred to another college  as new
       postponed more than two years   as new
       postponed at Level 4            as new, back into semester 1 (said
                                       27 October 2026; Level 5 and 6 come
@@ -579,6 +580,8 @@ def returns_as_new(profile, *, today=None):
         return 'absconded more than two years ago'
     if status == StudentStanding.DISCONTINUED:
         return 'discontinued by the Principal'
+    if status == StudentStanding.TRANSFERRED:
+        return 'transferred to another college'
     if status == StudentStanding.POSTPONED and standing.since and \
             today > lifecycle.years_after(standing.since, lifecycle.AWAY_YEARS):
         return 'postponed more than two years ago'

@@ -101,6 +101,16 @@ class OneMenuItemOneViewTests(TestCase):
             self.assertNotIn('display:none', tag, card)          # the switcher decides, not a fixed style
         self.assertIn('body.is-admin .admin-only.card:not(.sec-off)', self.html)
 
+    def test_transfers_is_a_menu_of_its_own(self):
+        """Said 27 October 2026: a Transfers menu, its two items dropping down."""
+        self.assertEqual(self.html.count('id="transfers-nav-group"'), 1)
+        group = self.html.split('id="transfers-nav-group"')[1].split('</div>\n    </div>')[0]
+        self.assertIn('Transfers <span class="nav-caret">', group)
+        self.assertEqual(re.findall(r'>([^<>]+)</button>', group), ['Transfer', 'Transferred records'])
+        self.assertIn('data-adm-section="transfer" data-roles="principal admission"', group)
+        self.assertIn('data-adm-section="transferred" data-roles="principal dparc admission records finance"', group)
+        self.assertEqual(self.html.count('nav-sub-btn" data-adm-section="transfer'), 2)    # nowhere else
+
     def test_admissions_keeps_the_applications_and_students_the_lists(self):
         """Said 21 October 2026: the Admissions menu had too many items."""
         group = self.html.split('id="admissions-nav-group"')[1].split('</div>\n    </div>')[0]

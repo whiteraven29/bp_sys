@@ -3930,6 +3930,86 @@ def mark_not_reported(request, pk):
         return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     return Response({'ok': True})
 
+
+# ── transfers to another college (said 27 October 2026) ──────────────────────
+
+def _may_transfer(user):
+    return is_admission_officer(user) or is_principal(user) or is_break_glass(user)
+
+
+def _may_read_transfers(user):
+    # The accountant too: what was paid this year is theirs to settle.
+    return _may_transfer(user) or is_dparc(user) or is_records_officer(user) or is_accountant(user)
+
+
+def _transfer_row(transfer):
+    return {
+        'id': transfer.id, 'reg_no': transfer.profile.nactvet_reg_no, 'name': transfer.profile.name,
+        'to_college': transfer.to_college, 'reason': transfer.reason, 'reference': transfer.reference,
+        'transferred_on': transfer.transferred_on,
+        'programme': transfer.programme.code if transfer.programme_id else '',
+        'class_level': transfer.class_level.name if transfer.class_level_id else '',
+        'details': transfer.details, 'last_results': transfer.last_results,
+        'fees_reversed': str(transfer.fees_reversed), 'credit': str(transfer.credit), 'debt_check': transfer.debt_check,
+        'recorded_by': full_name_for(transfer.recorded_by) if transfer.recorded_by_id else '',
+    }
+
+
+@api_view(['GET', 'POST'])
+@login_required
+def transfers(request):
+    """GET: the transferred students' records. POST {reg_no, to_college,
+    reason, reference, transferred_on}: approve a transfer."""
+    from .models import Transfer
+    user = request.user
+    if request.method == 'GET':
+        if not _may_read_transfers(user):
+            raise PermissionDenied('Transfer records are for the admission office, the Principal, DPARC and records.')
+        rows = Transfer.objects.select_related('profile', 'programme', 'class_level', 'recorded_by')
+        query = str(request.query_params.get('q') or '').strip()
+        if query:
+            rows = rows.filter(Q(profile__nactvet_reg_no__icontains=query) | Q(profile__name__icontains=query)
+                               | Q(to_college__icontains=query))
+        return Response([_transfer_row(transfer) for transfer in rows[:500]])
+    if not _may_transfer(user):
+        raise PermissionDenied('The admission office or the Principal approves a transfer.')
+    profile = _profile_by_number(request.data.get('reg_no'))
+    if profile is None:
+        return Response({'detail': 'No student with that number.'}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        on_date = (parse_date(str(request.data.get('transferred_on')))
+                   if request.data.get('transferred_on') else None)
+        if request.data.get('transferred_on') and on_date is None:
+            raise ValueError('The date is not a date.')
+        transfer = lifecycle.transfer_student(
+            profile, to_college=str(request.data.get('to_college') or ''),
+            reason=str(request.data.get('reason') or ''), reference=str(request.data.get('reference') or ''),
+            on_date=on_date, actor=user, finance_confirmed=str(request.data.get('finance_confirmed') or ''))
+    except (lifecycle.LifecycleError, ValueError, TypeError) as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(_transfer_row(transfer), status=status.HTTP_201_CREATED)
+
+
+def _profile_by_number(number):
+    number = str(number or '').strip()
+    if not number:
+        return None
+    return StudentProfile.objects.filter(Q(nactvet_reg_no__iexact=number) | Q(college_id__iexact=number)).first()
+
+
+@api_view(['GET'])
+@login_required
+def transfer_lookup(request):
+    """The student behind a NACTVET number (or college ID): details, last
+    results and this year's bill, before the transfer is approved."""
+    if not _may_transfer(request.user):
+        raise PermissionDenied('The admission office or the Principal approves a transfer.')
+    profile = _profile_by_number(request.query_params.get('reg_no'))
+    if profile is None:
+        return Response({'detail': 'No student with that number.'}, status=status.HTTP_404_NOT_FOUND)
+    return Response(lifecycle.transfer_preview(profile))
+
+
 def _postponements():
     return Postponement.objects.select_related('profile__standing', 'semester', 'return_year',
                                                'entered_by', 'decided_by')

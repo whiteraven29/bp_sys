@@ -1560,6 +1560,8 @@ class StudentStanding(models.Model):
     SUSPENDED = 'suspended'
     DECEASED = 'deceased'
     TERMINATED = 'terminated'
+    # Said 27 October 2026: gone to another college, by the admission office.
+    TRANSFERRED = 'transferred'
     STATUS_CHOICES = [
         (ACTIVE, 'Studying'),
         (REPEATING, 'Repeating failed modules'),
@@ -1573,6 +1575,7 @@ class StudentStanding(models.Model):
         (SUSPENDED, 'Suspended'),
         (DECEASED, 'Deceased'),
         (TERMINATED, 'Terminated — may not be admitted again'),
+        (TRANSFERRED, 'Transferred to another college'),
     ]
 
     #: Statuses whose students are expected back on a stated semester.
@@ -1580,7 +1583,7 @@ class StudentStanding(models.Model):
     #: An archived student is refused the portal, and so is a deceased or a
     #: terminated one's account. A failed or postponed one still needs to see
     #: their results, their balance, and the services they use to come back.
-    PORTAL_BLOCKED = {ARCHIVED, DECEASED, TERMINATED}
+    PORTAL_BLOCKED = {ARCHIVED, DECEASED, TERMINATED, TRANSFERRED}
     #: Never admitted again.
     NEVER_ADMITTED = {DECEASED, TERMINATED}
     #: Set by the Principal (DPARC told); the others by records or admission too.
@@ -2921,6 +2924,39 @@ class ExitRequest(models.Model):
         return f'{self.profile.nactvet_reg_no} · finish after {self.class_level} ({self.status})'
 
 
+class Transfer(models.Model):
+    """A student gone to another college (said 27 October 2026). The admission
+    office finds them by NACTVET number, sees their details and last results,
+    and approves the transfer: the portal closes, their places are called off
+    and this year's fees reversed to nothing. What they were is kept here for
+    reference — their details and last results as they stood that day."""
+    profile = models.ForeignKey(StudentProfile, on_delete=models.PROTECT, related_name='transfers')
+    to_college = models.CharField(max_length=200)
+    reason = models.CharField(max_length=500, blank=True)
+    reference = models.CharField(max_length=200, blank=True,
+                                 help_text='The letter or form it came from.')
+    transferred_on = models.DateField()
+    programme = models.ForeignKey(Programme, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    class_level = models.ForeignKey(ClassLevel, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    details = models.JSONField(default=dict, help_text='Their record as it stood: contacts, next of kin, ID.')
+    last_results = models.JSONField(default=dict, help_text='Their last semester\'s results as they stood.')
+    fees_reversed = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    credit = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                 help_text='Their money the college holds after the transfer: paid towards the '
+                                           'fees reversed, and any on account. A refund is the accountant\'s.')
+    debt_check = models.CharField(max_length=300, blank=True,
+                                  help_text='How it was known they owed nothing for the period before.')
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-transferred_on', '-created_at']
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} → {self.to_college} ({self.transferred_on})'
+
+
 class Postponement(models.Model):
     """A student stopping for a while, with the Principal's leave.
 
@@ -3953,6 +3989,7 @@ class Notification(models.Model):
     EXIT_REQUESTED = 'exit.requested'
     EXIT_DECIDED = 'exit.decided'
     STATUS_RECORDED = 'status.recorded'
+    TRANSFERRED = 'student.transferred'
     DISPOSAL_PROPOSED = 'disposal.proposed'
     DISPOSAL_DECIDED = 'disposal.decided'
     PASSWORD_RESET = 'password.reset'
@@ -3981,6 +4018,7 @@ class Notification(models.Model):
         (EXIT_REQUESTED, 'A student asked to finish after a level'),
         (EXIT_DECIDED, 'A request to finish after a level was decided'),
         (STATUS_RECORDED, 'A student\'s status was recorded (deceased, absconded, suspended, terminated, discontinued)'),
+        (TRANSFERRED, 'A student transferred to another college'),
         (DISPOSAL_PROPOSED, 'An asset disposal needs approval'),
         (DISPOSAL_DECIDED, 'An asset disposal was decided'),
         (PASSWORD_RESET, 'Your password was reset by the office'),

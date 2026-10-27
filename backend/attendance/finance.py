@@ -467,13 +467,15 @@ RESET_MARK = 'Fees reset: '
 
 
 @transaction.atomic
-def reset_fees(profile, academic_year, *, from_semester_number=1, reason, actor=None, charges=None):
+def reset_fees(profile, academic_year, *, from_semester_number=1, reason, actor=None, charges=None,
+               one_time=False):
     """Take a period's fees off a student's bill — a postponed year or
     semester. Never deletes: each charge is waived in full, so what was paid
     against it stands as credit, carried to the next charges raised.
 
     One-time charges (admission, caution money, ID card…) are for the whole
-    programme, not the period, and stay. Returns the amount taken off.
+    programme, not the period, and stay — unless `one_time` (a transfer: the
+    student has gone). Returns the amount taken off.
     """
     sem2 = semester_two_dates(academic_year)
     pool = charges if charges is not None else (
@@ -481,8 +483,8 @@ def reset_fees(profile, academic_year, *, from_semester_number=1, reason, actor=
         .select_related('charge_type', 'semester', 'fee_structure'))
     total = ZERO
     for charge in pool:
-        if charge.charge_type.frequency == ChargeType.ONCE or (
-                charge.fee_structure_id and charge.fee_structure.billing_period == FeeStructure.ONCE):
+        if not one_time and (charge.charge_type.frequency == ChargeType.ONCE or (
+                charge.fee_structure_id and charge.fee_structure.billing_period == FeeStructure.ONCE)):
             continue
         if charge_semester_number(charge, sem2) < from_semester_number:
             continue

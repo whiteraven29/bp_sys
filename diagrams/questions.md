@@ -967,3 +967,16 @@ when semester 2 opens.
 route and its one-time charges, on the same record and college ID. Level 5 and 6 come back as continuing students.
 Built the same day (`admissions.returns_as_new`); a Level 4 student back for semester 2, or owing modules, comes
 back as before. (NP1211's "NILL" in the modules column now means none.)
+
+### Q71. Transfers to another college, and last year's debts ●
+
+**Asked (27 October 2026):** students who passed may transfer to another college: admission finds them by NACTVET
+number, sees their details and last results, approves; the portal closes; the fees go to zero so no year total counts
+them; admission keeps the record. Nobody may leave owing for the period before (semester 1 when in semester 2, last
+academic year when in semester 1) — but last year's debts are not in the system.
+
+**Built (27 October 2026):** a sidebar menu, Transfers ▸ Transfer and ▸ Transferred records. Where the system holds no bill for the
+period before, the admission office writes down finance's confirmation that nothing is owed (who, reference); it is
+kept on the transfer. Once last year's balances are entered (or a year passes, so the period before is in the
+system), the check is the system's own. Money the student paid stays as credit; a refund is the accountant's.
+

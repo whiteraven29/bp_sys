@@ -1114,6 +1114,14 @@
         <button class="nav-sub-btn" data-health-nav data-roles="dean principal records" onclick="showHealthSection(this)">Health records</button>
       </div>
     </div>
+    <!-- Transfers to another college: a menu of its own (said 27 October 2026). -->
+    <div class="nav-group" id="transfers-nav-group" data-roles="principal dparc admission records finance">
+      <button class="nav-btn" data-page="transfers" onclick="toggleTransfersMenu(event)"><span class="icon"><i class="bi bi-box-arrow-right"></i></span> Transfers <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-adm-section="transfer" data-roles="principal admission" onclick="showAdmissionSection('transfer', this)">Transfer</button>
+        <button class="nav-sub-btn" data-adm-section="transferred" data-roles="principal dparc admission records finance" onclick="showAdmissionSection('transferred', this)">Transferred records</button>
+      </div>
+    </div>
     <div class="nav-group" id="status-nav-group" data-roles="principal dparc records finance dean admission">
       <button class="nav-btn" data-page="status" onclick="toggleStatusMenu(event)"><span class="icon"><i class="bi bi-hourglass-split"></i></span> Postpone &amp; Finish <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
@@ -1165,7 +1173,7 @@
       <div class="nav-submenu"><button class="nav-sub-btn" data-inventory-section="register-list" onclick="showInventorySection('register-list',this)">Asset Register</button><button class="nav-sub-btn" data-inventory-section="register" onclick="showInventorySection('register',this)">Register Asset</button></div>
     </div>
     <button class="nav-btn estate-only inventory-nav-btn" title="Inventory Setup" data-page="inventory" data-inventory-section="locations" onclick="showInventorySection('locations',this)"><span class="icon"><i class="bi bi-gear"></i></span> Inventory Setup</button>
-    <button class="nav-btn estate-only inventory-nav-btn" title="Transfers" data-page="inventory" data-inventory-section="transfers" onclick="showInventorySection('transfers',this)"><span class="icon"><i class="bi bi-arrow-left-right"></i></span> Transfers</button>
+    <button class="nav-btn estate-only inventory-nav-btn" title="Asset transfers" data-page="inventory" data-inventory-section="transfers" onclick="showInventorySection('transfers',this)"><span class="icon"><i class="bi bi-arrow-left-right"></i></span> Asset transfers</button>
     <button class="nav-btn estate-only inventory-nav-btn" title="Custody &amp; Handover" data-page="inventory" data-inventory-section="custody" onclick="showInventorySection('custody',this)"><span class="icon"><i class="bi bi-person-badge"></i></span> Custody &amp; Handover</button>
     <button class="nav-btn estate-only inventory-nav-btn" title="Repairs" data-page="inventory" data-inventory-section="maintenance" onclick="showInventorySection('maintenance',this)"><span class="icon"><i class="bi bi-tools"></i></span> Repairs</button>
     <button class="nav-btn estate-only inventory-nav-btn" title="Physical Inspections" data-page="inventory" data-inventory-section="inspections" onclick="showInventorySection('inspections',this)"><span class="icon"><i class="bi bi-clipboard-check"></i></span> Physical Inspections</button>
@@ -2046,6 +2054,26 @@
         <div class="table-wrap"><table>
           <thead><tr><th>Reg. No.</th><th>Name</th><th>Going to</th><th>At the desk</th><th>Last checked</th><th></th></tr></thead>
           <tbody id="ns-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" data-adm-section="transfer">
+        <div class="card-title">Transfer to another college <span class="tip" tabindex="0" role="note" aria-label="Help: transfer" data-tip="Find the student by NACTVET registration number (or college ID): their details and last results show. Nobody leaves owing: the period before this one must be paid — semester 1 in semester 2, last academic year in semester 1; where the system holds no bill for it, write down finance's confirmation. Approving the transfer closes their portal, cancels their places from this semester on (modules withdrawn, marks kept) and reverses the fees from this semester on to nothing (in semester 1, one-time charges too). What they paid stays on their account as credit; a refund is the accountant's. The record is kept under Transferred records. Should they come back, it is as a new student.">?</span></div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field"><label>NACTVET Reg. No. or college ID</label><input id="tr-reg" placeholder="e.g. NS1234/0001/2024" onkeydown="if(event.key==='Enter')lookupTransfer()"></div>
+          <div class="field" style="align-self:end"><button class="btn btn-secondary" onclick="lookupTransfer()"><i class="bi bi-search"></i> Find</button></div>
+        </div>
+        <div id="tr-found"></div>
+      </div>
+
+      <div class="card" data-adm-section="transferred">
+        <div class="card-title">Transferred students <span class="tip" tabindex="0" role="note" aria-label="Help: transferred" data-tip="Every student transferred to another college: where to, when, the fees reversed and what they had paid (kept as credit). View shows their details and last results as they stood on the day.">?</span></div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field"><label>Find</label><input id="trd-search" placeholder="Name, registration or college" oninput="clearTimeout(window._trdT);window._trdT=setTimeout(loadTransferred,300)"></div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Reg. No.</th><th>Name</th><th>Was at</th><th>Gone to</th><th>On</th><th>Fees reversed</th><th>Their money held</th><th></th></tr></thead>
+          <tbody id="trd-tbody"></tbody>
         </table></div>
       </div>
 
@@ -9079,6 +9107,7 @@ const NOTIFICATION_LINKS = {
   'status:exits': () => showStatusSection('exits', document.querySelector('[data-status-section="exits"].nav-sub-btn')),
   'status:standing': () => showStatusSection('standing', document.querySelector('[data-status-section="standing"].nav-sub-btn')),
   'status:finish': () => showStatusSection('finish', document.querySelector('[data-status-section="finish"].nav-sub-btn')),
+  'adm:transferred': () => showAdmissionSection('transferred', document.querySelector('[data-adm-section="transferred"].nav-sub-btn')),
   'finance:hostel': () => showFinanceSection('hostel', document.querySelector('[data-finance-section="hostel"].nav-sub-btn')),
 };
 
@@ -11490,9 +11519,24 @@ const ADMISSION_SECTIONS = {
   items: ['Items check', 'Items checked again each semester — the TPH book by finance, rim paper and the other checked items by the admission office.'],
   classlist: ['Class lists', 'A level\'s students this semester: first sitting or repeater.'],
   noshow: ['Did not report', 'Continuing students who never came: decide three months after admission opened.'],
+  transfer: ['Transfer', 'A student going to another college: find them, check, approve.'],
+  transferred: ['Transferred records', 'Students transferred to another college, with their details and last results.'],
 };
 
 const STUDENT_SIDE_SECTIONS = ['pass', 'classlist', 'items', 'noshow'];
+const TRANSFER_SECTIONS = ['transfer', 'transferred'];
+
+function toggleTransfersMenu(event) {
+  const group = document.getElementById('transfers-nav-group');
+  group.classList.toggle('open');
+  if (!TRANSFER_SECTIONS.includes(state.admissionSection)
+      || !document.getElementById('page-admissions').classList.contains('active')) {
+    const me = state.offices || {};
+    const first = me.admission || me.principal ? 'transfer' : 'transferred';
+    showAdmissionSection(first, group.querySelector(`[data-adm-section="${first}"]`));
+  }
+  event.stopPropagation();
+}
 
 function toggleAdmissionsMenu(event) {
   const group = document.getElementById('admissions-nav-group');
@@ -11516,7 +11560,8 @@ async function showAdmissionSection(section, btn) {
   // The student lists and the pass sit under Students (said 21 October 2026);
   // their cards are still on this page.
   const groupId = (btn && btn.closest('.nav-group')?.id)
-    || (STUDENT_SIDE_SECTIONS.includes(section) && !state.offices?.finance ? 'students-nav-group' : 'admissions-nav-group');
+    || (TRANSFER_SECTIONS.includes(section) ? 'transfers-nav-group'
+        : STUDENT_SIDE_SECTIONS.includes(section) && !state.offices?.finance ? 'students-nav-group' : 'admissions-nav-group');
   showPage('admissions', document.querySelector(`#${groupId} .nav-btn`));
   document.getElementById(groupId).classList.add('open');
   const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = title;
@@ -11557,6 +11602,100 @@ async function showAdmissionSection(section, btn) {
     }
     await loadNotReported();
   }
+  if (section === 'transferred') await loadTransferred();
+}
+
+// ── transfers to another college (said 27 October 2026) ──
+function transferDetailsHtml(details, results) {
+  const d = details || {}, r = results || {};
+  const kin = (d.next_of_kin || []).map(k => `${safeText(k.name)} (${safeText(k.relationship)}) ${safeText(k.phone)}`).join('<br>') || '—';
+  const facts = [['Name', d.name], ['NACTVET Reg. No.', d.reg_no], ['College ID', d.college_id], ['Phone', d.phone],
+    ['Gender', d.gender], ['Date of birth', d.date_of_birth], ['Form Four index', d.form_four_index]]
+    .map(([k, v]) => `<tr><th style="width:38%">${k}</th><td>${safeText(v || '—')}</td></tr>`).join('')
+    + `<tr><th>Next of kin</th><td>${kin}</td></tr>`;
+  const modules = (r.modules || []).map(m => `<tr><td style="font-family:var(--font-mono);font-size:.78rem">${safeText(m.code)}</td>
+    <td>${safeText(m.name)}</td><td>${safeText(m.grade || '—')}</td><td>${safeText(m.status)}</td></tr>`).join('');
+  const head = r.semester
+    ? `${safeText(r.semester)} · ${safeText(r.class_level)}${r.gpa ? ` · GPA ${safeText(r.gpa)}` : ''} · ${safeText(r.decision || r.results_say || '')}`
+    : 'No results in the system.';
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:16px">
+    <div><div class="card-title" style="font-size:.9rem">Details</div><div class="table-wrap"><table>${facts}</table></div></div>
+    <div><div class="card-title" style="font-size:.9rem">Last results</div><div style="margin-bottom:6px">${head}</div>
+      ${modules ? `<div class="table-wrap"><table><thead><tr><th>Code</th><th>Module</th><th>Grade</th><th>Status</th></tr></thead><tbody>${modules}</tbody></table></div>` : ''}</div>
+  </div>`;
+}
+
+async function lookupTransfer() {
+  const reg = document.getElementById('tr-reg').value.trim();
+  const out = document.getElementById('tr-found');
+  if (!reg) return;
+  out.innerHTML = '<div class="empty">Looking…</div>';
+  try {
+    const p = await api('GET', `/transfers/lookup/?reg_no=${encodeURIComponent(reg)}`);
+    state.transferProfile = p;
+    const bill = p.bill ? `Billed ${money(p.bill.billed)}, waived ${money(p.bill.waived)}, paid ${money(p.bill.paid)} — balance ${money(p.bill.balance)}` : 'No bill';
+    const debt = p.debt || {};
+    const debtLine = !debt.period ? '' : Number(debt.owed) > 0
+      ? `<br><strong style="color:var(--red)">Owes ${money(debt.owed)} for ${safeText(debt.period)}</strong>`
+      : debt.in_system ? `<br>Nothing owed for ${safeText(debt.period)}.`
+      : `<br><strong>${safeText(debt.period)}: no bill in the system</strong> — finance must confirm nothing is owed.`;
+    out.innerHTML = `<div class="missing-note" style="margin-bottom:12px">${safeText(p.details.name)} · ${safeText(p.class_level || '—')} · ${safeText(p.programme || '—')} · <strong>${safeText(p.standing)}</strong><br>${safeText(p.year)}: ${bill}${debtLine}</div>
+      ${transferDetailsHtml(p.details, p.last_results)}
+      ${p.can_transfer ? `<div class="form-grid-3" style="margin-top:14px">
+        ${debt.in_system ? '' : `<div class="field" style="grid-column:1/-1"><label>Finance confirmed nothing owed for ${safeText(debt.period)} (who, and the reference)</label><input id="tr-finance" placeholder="e.g. Accountant J. Mushi, 2025/26 ledger, 27 Oct"></div>`}
+        <div class="field"><label>Going to (college)</label><input id="tr-college" placeholder="Name of the college"></div>
+        <div class="field"><label>Date</label><input id="tr-date" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
+        <div class="field"><label>Reference (letter or form)</label><input id="tr-reference"></div>
+        <div class="field" style="grid-column:1/-1"><label>Reason (optional)</label><input id="tr-reason"></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:8px" onclick="approveTransfer()"><i class="bi bi-box-arrow-right"></i> Approve transfer</button>`
+      : `<div class="missing-note" style="margin-top:12px;border-left-color:var(--red)">${safeText(p.why_not)}</div>`}`;
+  } catch (e) {
+    out.innerHTML = '';
+    toast(apiErrorText(e, 'No student with that number'), 'var(--red)');
+  }
+}
+
+async function approveTransfer() {
+  const p = state.transferProfile;
+  const college = document.getElementById('tr-college').value.trim();
+  if (!p || !college) { toast('Say which college they are going to', 'var(--red)'); return; }
+  if (!confirm(`Transfer ${p.details.name} to ${college}?\n\nTheir portal closes, their places from this semester on are cancelled and the fees from this semester on are reversed to nothing. What they paid for it stays as credit.`)) return;
+  try {
+    const financeBox = document.getElementById('tr-finance');
+    if (financeBox && !financeBox.value.trim()) { toast("Write down finance's confirmation that nothing is owed", 'var(--red)'); return; }
+    await api('POST', '/transfers/', { reg_no: p.details.reg_no, to_college: college,
+      finance_confirmed: financeBox ? financeBox.value.trim() : '',
+      transferred_on: document.getElementById('tr-date').value, reference: document.getElementById('tr-reference').value,
+      reason: document.getElementById('tr-reason').value });
+    toast(`${p.details.name}: transferred`, 'var(--green)');
+    document.getElementById('tr-found').innerHTML = '';
+    document.getElementById('tr-reg').value = '';
+    state.transferProfile = null;
+  } catch (e) { toast(apiErrorText(e, 'Could not record the transfer'), 'var(--red)'); }
+}
+
+async function loadTransferred() {
+  const body = document.getElementById('trd-tbody');
+  const q = document.getElementById('trd-search').value.trim();
+  try {
+    const rows = await api('GET', `/transfers/${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    state.transferred = rows;
+    body.innerHTML = rows.length ? rows.map((r, i) => `<tr>
+        <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}</td><td>${safeText(r.name)}</td>
+        <td>${safeText(r.class_level || '—')} · ${safeText(r.programme || '—')}</td><td>${safeText(r.to_college)}</td>
+        <td>${safeText(r.transferred_on)}</td><td>${money(r.fees_reversed)}</td><td>${money(r.credit)}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="toggleTransferred(${i})">View</button></td></tr>
+        <tr id="trd-more-${i}" style="display:none"><td colspan="8">
+          <div style="margin-bottom:8px">${r.reference ? `Reference: ${safeText(r.reference)} · ` : ''}${r.reason ? `${safeText(r.reason)} · ` : ''}Recorded by ${safeText(r.recorded_by || '—')}${r.debt_check ? `<br>${safeText(r.debt_check)}` : ''}</div>
+          ${transferDetailsHtml(r.details, r.last_results)}</td></tr>`).join('')
+      : '<tr><td colspan="8"><div class="empty">No transferred students</div></td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load the list'), 'var(--red)'); }
+}
+
+function toggleTransferred(i) {
+  const row = document.getElementById(`trd-more-${i}`);
+  row.style.display = row.style.display === 'none' ? '' : 'none';
 }
 
 async function loadNotReported() {

@@ -368,8 +368,21 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      same record and college ID; Level 5 and 6 come back as continuing (27 Oct, NP1211). A Level 4 student back for
      semester 2, or owing modules, comes back as before
    - [x] 1248 tests; checked in the browser (held, off the finance list, let through)
+3g. **Transfer to another college — 27 Oct (not committed; migration 0083).**
+   - [x] Transfers ▸ Transfer (admission office, Principal): find by NACTVET number or college ID → details, last
+     results, this year's bill → approve. Portal closed (standing *Transferred*), places from this semester on
+     cancelled (modules withdrawn, marks kept), fees from this semester on reversed to nothing (semester 1: one-time
+     charges too); their money held stays as credit. Principal, DPARC and the accountant told. Back later = as new
+   - [x] Nobody leaves owing: semester 1 checks last academic year, semester 2 checks semester 1. No bill in the system
+     for that period (last year's fees were never entered) → finance's confirmation is written down (who, reference)
+   - [x] Transfers ▸ Transferred records (admission, Principal, DPARC, records, the accountant): where
+     to, when, fees reversed, money held, and their details and last results as they stood
+   - [x] A sidebar menu of its own, **Transfers**, its two items dropping down (your instruction, 27 Oct); the estate
+     officer's inventory item "Transfers" is now "Asset transfers" so no two menus share a name
+   - [x] 1259 tests; checked in the browser (found, finance's word required, approved, listed; the menu for the
+     admission officer, DPARC and the accountant at phone width)
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0082 applied by the deploy (release guide B1–B4); `Ran 1248 tests … OK` on the laptop first
+   - [ ] Migrations to 0083 applied by the deploy (release guide B1–B4); `Ran 1259 tests … OK` on the laptop first
    - [ ] REPEAT students at semester 1's finance desk who owe only semester 2 modules:
      `sudo -u bphacoh venv/bin/python manage.py call_off_repeat_places` — read the dry run, then `--apply`. Run it
      again after the provisional students are settled (it should list nobody)

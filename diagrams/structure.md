@@ -216,6 +216,8 @@ sign in.
   OutstandingRepeat      a failed module still to be passed
   Postponement           request → Principal decides
   ExitRequest            finish after Level 5: portal → Principal decides
+  Transfer               gone to another college: details and last results as
+                         they stood, fees reversed, money held, debt check
   CompletionClearance    finance clear → Principal declares cleared
   ResultWithholding      hides one semester's results on the portal
   ResultCorrection       one grade corrected: old and new, reason, NACTVET
@@ -424,4 +426,4 @@ are dropped once the production row counts are checked.
 | `place_left_behind [--apply]` | once: places the Level 4/5 students the 2026/27 year end left behind (single-level PST04/PST05) |
 | `call_off_repeat_places [--apply]` | once: calls off the place a settled REPEAT still holds in a semester they owe nothing in (a repeat not sat, settled before 26 Oct 2026) |
 
-Tests: 1248, run as described in `ops/guides/06-release-2026-27.md`.
+Tests: 1259, run as described in `ops/guides/06-release-2026-27.md`.
