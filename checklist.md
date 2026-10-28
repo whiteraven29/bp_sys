@@ -418,6 +418,8 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      package; opened by pdftoppm / mutool without complaint
    - [x] Dashboard, first thing: when the password expires (always, with *Change it*), and *Your semester pass is ready —
      Download pass* once this semester's instalment is paid
+   - [x] Finance's desk (My desk): *Find a student* by name, NS number or college ID; the tag says what the results say —
+     SUPP, INCOMPLETE, PASS, REPEAT, FAIL — instead of "Provisional" (your request, 28 Oct)
    - [x] The rail narrower (52px) with smaller icons; its toggle stands where the EduTrack mark was — ☰ opens the full
      menu, ✕ closes it (your question: how to close it); the top bar's toggle hidden on phones. Desktop unchanged
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**

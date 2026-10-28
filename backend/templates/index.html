@@ -1985,6 +1985,9 @@
 
       <div class="card" id="adm-desk-card" data-adm-section="desk">
         <div class="card-title">On my desk <span id="adm-desk-count" style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;"></span></div>
+        <div class="form-grid-3" style="margin-bottom:10px;">
+          <div class="field"><label>Find a student</label><input id="adm-desk-search" type="search" placeholder="Name, NS number or college ID" oninput="clearTimeout(window._deskT);window._deskT=setTimeout(loadMyDesk,250)"></div>
+        </div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Student</th><th>Kind</th><th>Level</th><th>At</th><th class="num">Owes</th><th></th></tr></thead>
@@ -5716,13 +5719,18 @@ function repeatTag(s) {
 // Placed while the results of the level before were not out (said 18 October 2026).
 function provisionalTag(s) {
   if (!s.provisional) return '';
-  // What their results say now (said 26 October 2026): a REPEAT or FAIL is
-  // still to be settled — the desks should not carry on as if it were a pass.
-  const says = s.results_say || '';
-  const tone = { PASS: 'badge-green', REPEAT: 'badge-red', FAIL: 'badge-red' }[says] || 'badge-gen';
+  // What their results say now, not "Provisional" (said 28 October 2026): SUPP
+  // — a supplementary still to sit — INCOMPLETE — a result not in yet — or
+  // PASS / REPEAT / FAIL, still to be settled. The tag's tip says the place is
+  // provisional.
+  const says = s.results_say || 'INCOMPLETE';
+  const tone = { PASS: 'badge-green', REPEAT: 'badge-red', FAIL: 'badge-red', SUPP: 'badge-orange' }[says] || 'badge-gen';
   const held = s.on_hold && String(s.hold_reason || '').startsWith('Held until results') ? ' · held' : '';
-  return ' <span class="badge" style="background:var(--accent);font-size:.65rem;vertical-align:middle" title="Placed while the results of the level before were not out">Provisional</span>'
-    + (says ? ` <span class="badge ${tone}" style="font-size:.65rem;vertical-align:middle" title="${['REPEAT', 'FAIL'].includes(says) ? 'The results say so: to be settled in Semester Review ▸ Provisional places' : 'What their results say now'}">results: ${safeText(says)}${held}</span>` : '');
+  const tip = ['REPEAT', 'FAIL'].includes(says) ? 'Placed provisionally; the results say so — to be settled in Semester Review ▸ Provisional places'
+    : says === 'SUPP' ? 'Placed provisionally while a supplementary is still to sit'
+    : says === 'INCOMPLETE' ? 'Placed provisionally while a result is not in yet'
+    : 'Placed provisionally; the results say PASS — to be settled';
+  return ` <span class="badge ${tone}" style="font-size:.65rem;vertical-align:middle" title="${tip}">${safeText(says)}${held}</span>`;
 }
 // First sittings, then the repeaters under their own heading.
 function repeatersLast(rows) {
@@ -11978,11 +11986,13 @@ function applicationRow(row) {
 }
 
 async function loadMyDesk() {
+  // Find one student without walking the whole list (said 28 October 2026).
+  const search = document.getElementById('adm-desk-search')?.value.trim() || '';
   try {
-    const rows = await api('GET', '/applications/?mine=1&open=1');
+    const rows = await api('GET', `/applications/?mine=1&open=1${search ? `&search=${encodeURIComponent(search)}` : ''}`);
     const list = rows.results ?? rows;
     state.myDesk = list;
-    document.getElementById('adm-desk-count').textContent = list.length ? `${list.length} waiting` : '';
+    document.getElementById('adm-desk-count').textContent = list.length ? `${list.length} ${search ? 'found' : 'waiting'}` : '';
     document.getElementById('adm-desk-tbody').innerHTML = list.length
       ? list.map(row => `<tr>
           <td>${personCell(row.student_name, row.college_id || row.reg_no, provisionalTag(row))}</td>
@@ -11992,7 +12002,7 @@ async function loadMyDesk() {
           <td class="num">${owesCell(row.balance)}</td>
           <td class="act"><button class="btn btn-primary btn-sm" onclick="openApplicationModal(${row.id})">Work it <i class="bi bi-arrow-right"></i></button></td>
         </tr>`).join('')
-      : '<tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-inbox"></i></div>Nothing waiting on you</div></td></tr>';
+      : `<tr><td colspan="6"><div class="empty"><div class="ei"><i class="bi bi-inbox"></i></div>${search ? `Nobody on your desk matches “${safeText(search)}”` : 'Nothing waiting on you'}</div></td></tr>`;
   } catch (e) { /* not every office has a desk */ }
 }
 

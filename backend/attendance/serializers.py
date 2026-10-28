@@ -2125,7 +2125,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
 
     def get_results_say(self, obj):
         """For a provisional student: what their results say now (PASS, REPEAT,
-        FAIL, not complete) — a REPEAT or FAIL is still to be settled."""
+        FAIL, SUPP, INCOMPLETE) — a REPEAT or FAIL is still to be settled."""
         return _provisional_results(self.context).get(obj.profile_id, '')
 
     def get_residence(self, obj):

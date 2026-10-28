@@ -1666,9 +1666,17 @@ RESULTS_SAY = {SemesterReview.CLEAR: 'PASS', SemesterReview.COMPLETED: 'PASS', S
 
 def provisional_results():
     """{profile id: what their results say now} for every provisional student —
-    so the desks see a REPEAT or a FAIL waiting to be settled."""
-    return {profile_id: RESULTS_SAY.get(proposed, proposed) for profile_id, proposed in
-            SemesterReview.objects.filter(confirmed=SemesterReview.PROVISIONAL).values_list('profile_id', 'proposed')}
+    so the desks see a REPEAT or a FAIL waiting to be settled. Waiting is told
+    apart (said 28 October 2026): SUPP — a supplementary still to sit — or
+    INCOMPLETE — a result not in yet."""
+    said = {}
+    for profile_id, proposed, modules in SemesterReview.objects.filter(
+            confirmed=SemesterReview.PROVISIONAL).values_list('profile_id', 'proposed', 'modules'):
+        if proposed == SemesterReview.PENDING:
+            said[profile_id] = 'SUPP' if decide(modules or [])['remark'] == SUPP else 'INCOMPLETE'
+        else:
+            said[profile_id] = RESULTS_SAY.get(proposed, proposed)
+    return said
 
 
 def provisional_profile_ids():

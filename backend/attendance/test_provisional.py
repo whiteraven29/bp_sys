@@ -445,7 +445,7 @@ class HoldUntilResultsTests(ProvisionalBase):
 
     def test_the_desks_see_what_the_results_say(self):
         row = self.listed()
-        self.assertEqual((row['provisional'], row['results_say']), (True, 'not complete'))
+        self.assertEqual((row['provisional'], row['results_say']), (True, 'INCOMPLETE'))
         self.publish(self.profile, 20)                     # failed: not a pass
         progression.refresh_provisional()
         self.assertIn(self.listed()['results_say'], ('REPEAT', 'FAIL'))
@@ -616,3 +616,31 @@ class NotSatRepeatSettledTests(ProvisionalBase):
         call_command('call_off_repeat_places', '--apply', stdout=out)
         self.assertIn('cannot be read from their results', out.getvalue())
         self.assertTrue(Application.objects.filter(profile=self.profile, state=Application.FINANCE).exists())
+
+
+class TheDeskTagAndSearchTests(HoldUntilResultsTests):
+    """Said 28 October 2026: the desks see SUPP or INCOMPLETE rather than
+    "Provisional", and finance finds a student by name or number."""
+
+    def test_supp_and_incomplete_are_told_apart(self):
+        self.assertEqual(progression.provisional_results()[self.profile.id], 'INCOMPLETE')
+        SemesterReview.objects.filter(pk=self.review.pk).update(modules=[
+            {'code': 'X1', 'status': 'PASS', 'points': 3, 'credits': 10, 'attempt': 'normal'},
+            {'code': 'X2', 'status': 'SUPP', 'points': 1, 'credits': 10, 'attempt': 'normal'},
+            {'code': 'X3', 'status': 'PASS', 'points': 4, 'credits': 10, 'attempt': 'normal'}],
+            proposed=SemesterReview.PENDING)
+        self.assertEqual(progression.provisional_results()[self.profile.id], 'SUPP')
+        self.assertEqual(self.listed()['results_say'], 'SUPP')
+
+    def test_finance_finds_a_student_on_its_desk(self):
+        other = self.waiting_student('REG/131')
+        progression.build_reviews(self.sem2)
+        self.advance()
+        url = f'/api/applications/?mine=1&open=1&semester_id={self.next_sem1.id}'
+        self.assertEqual({row['reg_no'] for row in self.accounts.get(url).data}, {'REG/121', 'REG/131'})
+        self.assertEqual([row['reg_no'] for row in self.accounts.get(url + '&search=reg/131').data], ['REG/131'])
+        self.assertEqual(self.accounts.get(url + '&search=nobody').data, [])
+
+
+for _name in [n for n in dir(HoldUntilResultsTests) if n.startswith('test_')]:
+    setattr(TheDeskTagAndSearchTests, _name, None)
