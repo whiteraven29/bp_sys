@@ -418,12 +418,18 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      package; opened by pdftoppm / mutool without complaint
    - [x] Dashboard, first thing: when the password expires (always, with *Change it*), and *Your semester pass is ready —
      Download pass* once this semester's instalment is paid
+   - [x] A repeater is not held INCOMPLETE by a module they passed before (28 Oct: field practice cleared last year,
+     enrolled again with the class and never graded) or one they were taken off — repeaters only: a first sitter
+     (readmitted ones too) with no field result yet still reads INCOMPLETE, as it should (your note, same day): `progression.not_holding` — the
+     review, the desk tag, the Results Summary and the portal all leave such an ungraded first sitting out. Nothing is
+     changed; a grade entered for it counts as usual. After the deploy, open Semester Review ▸ Provisional places
+     once (it reads the results again)
    - [x] Finance's desk (My desk): *Find a student* by name, NS number or college ID; the tag says what the results say —
      SUPP, INCOMPLETE, PASS, REPEAT, FAIL — instead of "Provisional" (your request, 28 Oct)
    - [x] The rail narrower (52px) with smaller icons; its toggle stands where the EduTrack mark was — ☰ opens the full
      menu, ✕ closes it (your question: how to close it); the top bar's toggle hidden on phones. Desktop unchanged
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0083 applied by the deploy (release guide B1–B4); `Ran 1274 tests … OK` on the laptop first
+   - [ ] Migrations to 0083 applied by the deploy (release guide B1–B4); `Ran 1281 tests … OK` on the laptop first
    - [ ] Students ▸ Supplementary consent: check the amounts in Sehemu B (copied from the 2025 form), then Open
    - [ ] REPEAT students at semester 1's finance desk who owe only semester 2 modules:
      `sudo -u bphacoh venv/bin/python manage.py call_off_repeat_places` — read the dry run, then `--apply`. Run it

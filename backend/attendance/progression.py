@@ -322,6 +322,53 @@ def module_row(enrollment, serializer=None):
     return row
 
 
+def _ungraded(enrollment):
+    result = getattr(enrollment, 'result', None)
+    return result is None or not (result.final_approved or result.authority_grade)
+
+
+def not_holding(enrollments, serializer=None):
+    """The ids of enrollments that hold nobody's results (said 28 October
+    2026: repeaters read INCOMPLETE over a field practice they cleared the year
+    before): an ungraded first sitting they were taken off; and, for a student
+    repeating a module in that same semester, an ungraded first sitting of a
+    module they already passed in an earlier sitting. A first sitter — a
+    readmitted student sitting the semester afresh too — is held by every
+    module of theirs until its result is in (said the same day). Nothing is
+    changed — the enrollment, and any mark entered later, stay as they are; a
+    grade entered for it counts as any grade does."""
+    idle = [e for e in enrollments if e.attempt != Student.REPEAT and _ungraded(e)]
+    if not idle:
+        return set()
+    skip = {e.id for e in idle if e.withdrawn_at}
+    repeating_in = {(e.nactvet_reg_no.upper(), e.module.semester_id) for e in enrollments
+                    if e.attempt == Student.REPEAT and not e.withdrawn_at}
+    rest = [e for e in idle if e.id not in skip
+            and (e.nactvet_reg_no.upper(), e.module.semester_id) in repeating_in]
+    if not rest:
+        return skip
+    serializer = serializer or _result_serializer()
+    by_person = {}
+    for e in rest:
+        by_person.setdefault(e.nactvet_reg_no.upper(), []).append(e)
+    for reg_no, rows in by_person.items():
+        codes = {e.module.code.upper() for e in rows}
+        earlier = (Student.objects.filter(nactvet_reg_no__iexact=reg_no, module__code__in=[e.module.code for e in rows])
+                   .exclude(id__in=[e.id for e in rows])
+                   .select_related('module__class_level', 'module__semester__academic_year', 'result'))
+        passed = {}
+        for sitting in earlier:
+            if sitting.module.code.upper() in codes and module_row(sitting, serializer)['status'] == 'PASS':
+                when = (sitting.module.semester.academic_year.name, sitting.module.semester.number)
+                code = sitting.module.code.upper()
+                passed[code] = min(passed.get(code, when), when)
+        for e in rows:
+            here = (e.module.semester.academic_year.name, e.module.semester.number)
+            if passed.get(e.module.code.upper(), here) < here:
+                skip.add(e.id)
+    return skip
+
+
 def complete_with_repeats(origin_rows, repeat_rows):
     """A repeater's original semester, completed by their repeat sittings —
     as NACTVET keeps it (said 12 October 2026): the repeat result takes the
@@ -399,6 +446,8 @@ def repeaters_summary(semester, class_level, *, programme=None):
 
     students = []
     for rows_for_person in people.values():
+        idle = not_holding(rows_for_person, serializer)
+        rows_for_person = [s for s in rows_for_person if s.id not in idle] or rows_for_person
         first = rows_for_person[0]
         origin = next((s.repeat_of.module.semester for s in rows_for_person if s.repeat_of_id), None)
         origin_rows = []
@@ -539,6 +588,9 @@ def evaluate(profile, semester, *, registration=None, enrollments=None,
     serializer = serializer or _result_serializer()
     if enrollments is None:
         enrollments = list(enrollments_for(profile, semester))
+    # A module already passed, or one they were taken off, holds nothing.
+    idle = not_holding(enrollments, serializer)
+    enrollments = [enrollment for enrollment in enrollments if enrollment.id not in idle]
     rows = [module_row(enrollment, serializer) for enrollment in enrollments]
     decision = decide(rows)
     gpa = decision['gpa']

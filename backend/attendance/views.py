@@ -832,7 +832,8 @@ def _result_statements(modules, class_level):
                 'points': [], 'supp': [], 'failed': [], 'withheld': True})['withheld'] = True
             continue
         if not module['has_final_result'] or not module['result']:
-            if not module.get('completes') and module.get('attempt') != Student.REPEAT:
+            if (not module.get('completes') and module.get('attempt') != Student.REPEAT
+                    and not module.get('not_holding')):
                 no_result.append((key, module))
             continue
         statement = statements.setdefault(key, {
@@ -1168,6 +1169,9 @@ def student_dashboard(request):
     modules = []
     attendance_sum = 0
     attendance_count = 0
+    # A module already passed before, or one they were taken off, is never
+    # shown INCOMPLETE on a statement (said 28 October 2026).
+    not_holding = progression.not_holding(enrollments)
     for enrollment in enrollments:
         serializer = StudentSerializer(enrollment)
         data = serializer.data
@@ -1233,6 +1237,7 @@ def student_dashboard(request):
 
         modules.append({
             'statement_only': enrollment.id in statement_only,
+            'not_holding': enrollment.id in not_holding,
             'module_name': data['module_name'],
             'module_code': data['module_code'],
             'teacher': enrollment.module.teacher,
