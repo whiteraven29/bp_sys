@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from . import veta_views, views
+from . import consent_views, veta_views, views
 
 router = DefaultRouter()
 router.register('academic-years', views.AcademicYearViewSet, basename='academicyear')
@@ -108,6 +108,10 @@ urlpatterns = [
     path('not-reported/<int:pk>/', views.mark_not_reported, name='not-reported-mark'),
     path('transfers/', views.transfers, name='transfers'),
     path('transfers/lookup/', views.transfer_lookup, name='transfer-lookup'),
+    path('my-supp-consent/', consent_views.my_supp_consent, name='my-supp-consent'),
+    path('supp-consent/form/', consent_views.supp_consent_form, name='supp-consent-form'),
+    path('supp-consent/', consent_views.supp_consents, name='supp-consents'),
+    path('supp-consent/<int:pk>/paper/', consent_views.supp_consent_paper, name='supp-consent-paper'),
     path('inventory/handovers/', views.asset_handovers, name='inventory-handovers'),
     path('lab/report/', views.lab_report, name='lab-report'),
     path('class-list/', views.class_list, name='class-list'),

@@ -173,6 +173,8 @@
   .nav-submenu.open { display: grid; }
   .nav-submenu .nav-item { padding: 9px 16px 9px 42px; font-size: .79rem; background: transparent; }
   .nav-icon { display: grid; place-items: center; width: 19px; color: var(--muted); font-size: .95rem; }
+  .nav-short { display: none; }          /* the rail's own short name, phones only */
+  .rail-toggle { display: none; }        /* phones: the menu's own open / close, where the brand mark is */
   .nav-item.active .nav-icon { color: var(--blue); }
   .nav-badge { margin-left: auto; padding: 1px 7px; border-radius: 2px; color: var(--on-fill); background: var(--grey-fill); font-size: .68rem; font-weight: 600; }
   .nav-item.active .nav-badge { background: var(--blue-fill); }
@@ -695,38 +697,161 @@
     .kv th, .kv td { padding: 10px 11px; }
     .panel-body, .panel-actions { padding: 14px 14px 16px; }
   }
+
+  /* ════════════════════════════════════════════════════════════════════════
+     PHONES (said 28 October 2026: students use Android phones, and the words,
+     cards and amounts were too large — the design system above set desktop
+     sizes after the phone rules and won). Last in the sheet, so it wins.
+     ════════════════════════════════════════════════════════════════════════ */
+  /* Amounts never leave their card, at any width. */
+  .stat-card strong, .qf-item strong, .rem-amount, td, th { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  .stat-card, .qf-item { min-width: 0; }
+
+  @media (max-width: 600px) {
+    body { font-size: 15px; }
+    .topbar { min-height: 54px; padding: 0 10px; gap: 8px; }
+    .menu-button, .top-icon { width: 36px; height: 36px; border-radius: 9px; }
+    .top-meta { gap: 6px; }
+    .search { display: none; }
+    .crumb-bar { padding: 10px 12px 0; font-size: .74rem; }
+    .crumb-bar .crumb-meta { display: none; }        /* the semester is on the page itself */
+    .content { padding: 10px 10px 32px; }
+
+    h1 { font-size: 1.1rem; }
+    .section-title { margin-bottom: 12px; }
+    .section-title h2 { font-size: 1.15rem; }
+    .section-title p, .page-copy { font-size: .8rem; line-height: 1.45; }
+    .eyebrow { font-size: .7rem; margin-bottom: 2px; }
+    .welcome { gap: 10px; }
+    .photo-sm { width: 44px; height: 44px; font-size: 1.05rem; }
+    .notice { padding: 10px 12px; font-size: .78rem; line-height: 1.5; }
+
+    /* Facts and totals: two to a row, figures sized to fit. */
+    .quick-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .qf-item { padding: 10px 12px; border-radius: 10px; }
+    .qf-item span { font-size: .58rem; margin-bottom: 2px; }
+    .qf-item strong { font-size: 1.1rem; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .stat-card { padding: 11px 12px; border-radius: 12px; }
+    .stat-top { margin-bottom: 6px; }
+    .stat-icon { width: 28px; height: 28px; border-radius: 8px; font-size: .85rem; }
+    .stat-card strong { font-size: clamp(.92rem, 4.3vw, 1.2rem); letter-spacing: 0; line-height: 1.25; }
+    .stat-card p { font-size: .7rem; }
+
+    .view .panel { margin-bottom: 12px; }
+    .panel { border-radius: 12px; }
+    .panel-head { flex-direction: column; align-items: flex-start; gap: 2px; padding: 11px 14px; }
+    .panel-head h2 { font-size: .9rem; }
+    .panel-head span { font-size: .72rem; }
+    .panel-body, .panel-actions { padding: 12px 14px 14px; }
+    .panel-body > p { font-size: .82rem; }
+    .panel-note { padding: 10px 14px; font-size: .76rem; }
+    .btn { padding: 9px 12px; font-size: .82rem; }
+    .btn-row { gap: 8px; }
+    .btn-row > .btn { flex: 1 1 auto; justify-content: center; }
+    .inline-note, .invoice-msg { font-size: .8rem; padding: 10px 12px; }
+
+    .module-card { padding: 12px; border-radius: 12px; }
+    .module-card h3 { font-size: .9rem; }
+    .result-total { margin: 10px 0 8px; padding: 8px 10px; }
+    .choice-grid { grid-template-columns: 1fr; gap: 8px; }
+    .choice { min-height: 0; padding: 12px 14px; }
+    .option-bar { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+    .option-bar button { flex: 0 0 auto; }
+    .profile-item { flex-direction: column; gap: 2px; }
+    .photo-lg { width: 120px; height: 120px; }
+    .profile-item span { flex: none; }
+    .rem-item { flex-wrap: wrap; gap: 4px 10px; padding: 10px 12px; }
+    .rem-what { flex-basis: 100%; }
+    .rem-when { min-width: 0; text-align: left; }
+    .statement-title { padding: 11px 14px; font-size: .92rem; }
+
+    /* A table becomes a card per row, each value labelled by its column —
+       nothing to scroll sideways (labels set by labelTables below). */
+    .table-wrap { border-radius: 0; }
+    table.stackable { min-width: 0; }
+    table.stackable thead { display: none; }
+    table.stackable tr { display: block; padding: 9px 14px; border-bottom: 1px solid var(--line); }
+    table.stackable tbody tr:last-child { border-bottom: 0; }
+    table.stackable tfoot tr { background: var(--surface-2); border-top: 1px solid var(--line); }
+    table.stackable td, table.stackable th { display: block; position: relative; min-height: 1.5em;
+      padding: 3px 0 3px 40%; border: 0; background: transparent; white-space: normal; text-align: left;
+      text-transform: none; letter-spacing: 0; font-size: .8rem; color: var(--text); overflow-wrap: break-word; }
+    table.stackable td::before, table.stackable th::before { content: attr(data-label); position: absolute; left: 0; top: 4px;
+      width: 37%; color: var(--muted); font-size: .7rem; font-weight: 500; line-height: 1.3; }
+    table.stackable td.wide, table.stackable th.wide { padding-left: 0; font-weight: 600; }
+    table.stackable td.wide::before, table.stackable th.wide::before { content: none; }
+    table.stackable td:first-child:not(.wide) { font-weight: 600; }
+    table.stackable tbody tr:hover td { background: transparent; }
+    .statement-summary table { min-width: 0; }
+  }
+  @media (max-width: 339px) {               /* the smallest phones only: 360px still takes two */
+    .stats, .quick-facts { grid-template-columns: 1fr; }
+  }
+
+  /* The icon rail on phones and tablets (said 28 October 2026): the menu is
+     on the left from the moment the student signs in — small icons, each
+     with its name under it — and ☰ (or a group) slides the full menu out. */
+  @media (max-width: 820px) {
+    :root { --rail: 52px; }
+    .sidebar { transform: none; width: var(--rail); }
+    .workspace, body.nav-collapsed .workspace { margin-left: var(--rail); }
+    .sidebar.open { width: min(var(--sidebar-width), 78vw); box-shadow: var(--shadow-2); }
+    .sidebar:not(.open) .brand > div:not(.brand-mark), .sidebar:not(.open) .student-mini > div:not(.avatar),
+    .sidebar:not(.open) .nav-label, .sidebar:not(.open) .nav-caret, .sidebar:not(.open) .nav-badge,
+    .sidebar:not(.open) .nav-submenu { display: none !important; }
+    body .sidebar:not(.open) .brand { justify-content: center; padding: 0; min-height: 54px; }
+    body .sidebar:not(.open) .student-mini { justify-content: center; margin: 2px 5px 6px; padding: 6px 0; border-radius: 9px; }
+    .sidebar:not(.open) .avatar { width: 28px; height: 28px; font-size: .74rem; }
+    body .sidebar:not(.open) .nav-item { flex-direction: column; justify-content: center; gap: 3px; margin: 2px 4px;
+      width: calc(100% - 8px); padding: 8px 1px; border-left-width: 0; text-align: center; }
+    body .sidebar:not(.open) .nav-icon { width: auto; font-size: .92rem; }
+    body .sidebar:not(.open) .nav-item { gap: 2px; padding: 6px 2px; }
+    body .sidebar:not(.open) .nav-item .nav-text { display: none; }
+    body .sidebar:not(.open) .nav-item .nav-short { display: block; font-size: .56rem; line-height: 1.15; font-weight: 500;
+      white-space: nowrap; }
+    /* The menu's toggle stands where the EduTrack mark was (said 28 October
+       2026): ☰ opens the full menu, ✕ closes it; the top bar's copy goes. */
+    .menu-button { display: none; }
+    .brand .brand-mark { display: none; }
+    .rail-toggle { display: grid; place-items: center; flex: 0 0 auto; width: 34px; height: 34px; padding: 0;
+      border: 0; border-radius: 9px; background: rgba(255,255,255,.14); color: #fff; font-size: 1.05rem; cursor: pointer; }
+    .rail-toggle:hover, .rail-toggle:focus-visible { background: rgba(255,255,255,.26); outline: none; }
+    .sidebar.open .brand { gap: 12px; padding: 0 14px; }
+    .sidebar:not(.open) .nav-item.active { box-shadow: inset 0 -2px 0 #fff; }
+  }
 </style>
 </head>
 <body>
 <div class="app">
   <aside class="sidebar" id="sidebar">
-    <div class="brand"><div class="brand-mark">E</div><div>EduTrack<small>Student portal</small></div></div>
+    <div class="brand"><button type="button" class="rail-toggle" id="rail-toggle" aria-label="Open the menu" aria-expanded="false"><i class="bi bi-list"></i></button><div class="brand-mark">E</div><div>EduTrack<small>Student portal</small></div></div>
     <div class="student-mini">
       <div class="avatar" data-photo="small">{% if record.passport_url %}<img src="{{ record.passport_url }}" alt="">{% else %}{{ student_name|slice:":1"|upper }}{% endif %}</div>
       <div><strong>{{ student_name }}</strong><span>{{ registration_number }}</span></div>
     </div>
     <nav class="nav" aria-label="Student portal navigation">
       <div class="nav-label">Overview</div>
-      <button class="nav-item active" data-view="dashboard" title="Dashboard"><span class="nav-icon"><i class="bi bi-grid-1x2"></i></span><span class="nav-text">Dashboard</span></button>
+      <button class="nav-item active" data-view="dashboard" title="Dashboard"><span class="nav-icon"><i class="bi bi-grid-1x2"></i></span><span class="nav-text">Dashboard</span><span class="nav-short">Home</span></button>
       <div class="nav-label">Academic</div>
       <div class="nav-group">
-        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="attendance-menu" title="Attendance"><span class="nav-icon"><i class="bi bi-calendar-check"></i></span><span class="nav-text">Attendance</span><span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="attendance-menu" title="Attendance"><span class="nav-icon"><i class="bi bi-calendar-check"></i></span><span class="nav-text">Attendance</span><span class="nav-short">Attend</span><span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
         <div class="nav-submenu" id="attendance-menu">
           <button class="nav-item" data-view="attendance-sem1" title="Attendance · Semester 1"><span class="nav-icon">1</span><span class="nav-text">Semester 1</span><span class="nav-badge">{{ semester1_modules|length }}</span></button>
           <button class="nav-item" data-view="attendance-sem2" title="Attendance · Semester 2"><span class="nav-icon">2</span><span class="nav-text">Semester 2</span><span class="nav-badge">{{ semester2_modules|length }}</span></button>
         </div>
       </div>
       <div class="nav-group">
-        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="results-menu" title="Results"><span class="nav-icon"><i class="bi bi-file-earmark-text"></i></span><span class="nav-text">Results</span><span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="results-menu" title="Results"><span class="nav-icon"><i class="bi bi-file-earmark-text"></i></span><span class="nav-text">Results</span><span class="nav-short">Results</span><span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
         <div class="nav-submenu" id="results-menu">
           <button class="nav-item" data-view="ca-results" title="CA Results"><span class="nav-icon"><i class="bi bi-clipboard-data"></i></span><span class="nav-text">CA Results</span>{% if ca_count %}<span class="nav-badge">{{ ca_count }}</span>{% endif %}</button>
           <button class="nav-item" data-view="final-results" title="End of Semester"><span class="nav-icon"><i class="bi bi-award"></i></span><span class="nav-text">End of Semester</span>{% if published_result_count %}<span class="nav-badge">{{ published_result_count }}</span>{% endif %}</button>
         </div>
       </div>
-      <button class="nav-item" data-view="modules" title="Enrolled Modules"><span class="nav-icon"><i class="bi bi-journal-bookmark"></i></span><span class="nav-text">Enrolled Modules</span><span class="nav-badge">{{ module_count }}</span></button>
-      <button class="nav-item" data-view="eligibility" title="Exam Eligibility"><span class="nav-icon"><i class="bi bi-person-check"></i></span><span class="nav-text">Exam Eligibility</span></button>
+      <button class="nav-item" data-view="modules" title="Enrolled Modules"><span class="nav-icon"><i class="bi bi-journal-bookmark"></i></span><span class="nav-text">Enrolled Modules</span><span class="nav-short">Modules</span><span class="nav-badge">{{ module_count }}</span></button>
+      <button class="nav-item" data-view="eligibility" title="Exam Eligibility"><span class="nav-icon"><i class="bi bi-person-check"></i></span><span class="nav-text">Exam Eligibility</span><span class="nav-short">Exams</span></button>
       <div class="nav-group">
-        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="payments-menu" title="Payments"><span class="nav-icon"><i class="bi bi-credit-card"></i></span><span class="nav-text">Payments</span><span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="payments-menu" title="Payments"><span class="nav-icon"><i class="bi bi-credit-card"></i></span><span class="nav-text">Payments</span><span class="nav-short">Fees</span><span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
         <div class="nav-submenu" id="payments-menu">
           <button class="nav-item" data-view="invoice-generate" title="Generate Invoice"><span class="nav-icon"><i class="bi bi-file-earmark-plus"></i></span><span class="nav-text">Generate Invoice</span></button>
           <button class="nav-item" data-view="invoice-list" title="My Invoices"><span class="nav-icon"><i class="bi bi-files"></i></span><span class="nav-text">My Invoices</span><span class="nav-badge">{{ finance_invoice_rows|length }}</span></button>
@@ -734,7 +859,7 @@
         </div>
       </div>
       <div class="nav-group">
-        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="services-menu" title="Services"><span class="nav-icon"><i class="bi bi-life-preserver"></i></span><span class="nav-text">Services</span><span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
+        <button class="nav-item nav-toggle" type="button" aria-expanded="false" data-menu="services-menu" title="Services"><span class="nav-icon"><i class="bi bi-life-preserver"></i></span><span class="nav-text">Services</span><span class="nav-short">Services</span><span class="nav-caret"><i class="bi bi-chevron-down"></i></span></button>
         <div class="nav-submenu" id="services-menu">
           <button class="nav-item" data-view="services" title="Request a Service"><span class="nav-icon"><i class="bi bi-hand-index-thumb"></i></span><span class="nav-text">Request a Service</span>{% if service_forms %}<span class="nav-badge">{{ service_forms|length }}</span>{% endif %}</button>
           <button class="nav-item" data-view="my-requests" title="My Requests"><span class="nav-icon"><i class="bi bi-inbox"></i></span><span class="nav-text">My Requests</span>{% if requests_pending %}<span class="nav-badge">{{ requests_pending }}</span>{% endif %}</button>
@@ -742,7 +867,7 @@
         </div>
       </div>
       <div class="nav-label">Account</div>
-      <button class="nav-item" data-view="profile" title="My Profile"><span class="nav-icon"><i class="bi bi-person-circle"></i></span><span class="nav-text">My Profile</span></button>
+      <button class="nav-item" data-view="profile" title="My Profile"><span class="nav-icon"><i class="bi bi-person-circle"></i></span><span class="nav-text">My Profile</span><span class="nav-short">Profile</span></button>
     </nav>
   </aside>
   <div class="overlay" id="overlay"></div>
@@ -777,16 +902,32 @@
       {% if standing_banner %}
       <div class="notice" style="margin-bottom:14px;border-left-color:var(--{{ standing_banner.tone }});"><strong>{{ standing_banner.text }}</strong></div>
       {% endif %}
-      {% if provisional_notice %}
-      <div class="notice" id="provisional-notice" style="margin-bottom:14px;border-left-color:var(--amber);"><strong>{{ provisional_notice.title }}</strong> {{ provisional_notice.body }}</div>
-      {% endif %}
       <section class="view active" id="view-dashboard">
         {% if password and password.state != 'ok' %}
         <div class="notice" id="password-alert" style="margin:0 0 14px;{% if password.state == 'expired' or password.state == 'locked' %}border-left-color:var(--red);{% else %}border-left-color:var(--amber);{% endif %}">
           <strong>{{ password.message }}</strong> Expires {{ password.expires_on|date:"d M Y" }}.
           <button type="button" class="btn-mini" data-profile-option="password" style="margin-left:6px;">Change it now</button>
         </div>
+        {% elif password %}
+        {# Always said, not only near the end (said 28 October 2026). #}
+        <div class="notice" id="password-expiry" style="margin:0 0 14px;border-left-color:var(--blue);">
+          <i class="bi bi-shield-lock"></i> Your password expires on <strong>{{ password.expires_on|date:"d M Y" }}</strong>
+          — in {{ password.days_left }} day{{ password.days_left|pluralize }}.
+          <button type="button" class="btn-mini" data-profile-option="password" style="margin-left:6px;">Change it</button>
+        </div>
         {% endif %}
+        {% if pass_ready %}
+        <div class="notice" id="pass-ready" style="margin:0 0 14px;border-left-color:var(--green);">
+          <i class="bi bi-ticket-perforated"></i> <strong>Your semester pass is ready</strong> — valid until
+          {{ pass_ready.valid_until|date:"d M Y" }}.
+          <a class="btn-mini" href="{% url 'my-semester-pass' %}" target="_blank" rel="noopener" style="margin-left:6px;">Download pass</a>
+        </div>
+        {% endif %}
+        {# On the dashboard only (said 28 October 2026): on every page they filled a phone's first screen. #}
+        {% if provisional_notice %}
+        <div class="notice" id="provisional-notice" style="margin:0 0 14px;border-left-color:var(--amber);"><strong>{{ provisional_notice.title }}</strong> {{ provisional_notice.body }}</div>
+        {% endif %}
+        <div id="supp-consent-box"></div>
         <div class="page-head"><div class="welcome"><div class="photo-sm" data-photo="small" title="Your passport photo">{% if record.passport_url %}<img src="{{ record.passport_url }}" alt="Your photo">{% else %}{{ student_name|slice:":1"|upper }}{% endif %}</div><div><p class="eyebrow">{{ academic_year }} · {{ active_semester }}</p><h1>Welcome, {{ student_name }}</h1><p class="page-copy">Here is your academic progress at a glance.{% if record and not record.passport_url %} <button type="button" class="btn-mini" data-profile-option="personal">Add your passport photo</button>{% endif %}</p></div></div></div>
         <div class="quick-facts">
           <div class="qf-item"><span>Overall attendance</span><strong title="Counts Present and all Sick days. Exam eligibility only counts Sick days backed by a submitted certificate — see the eligibility table for that figure.">{% if overall_attendance is not None %}{{ overall_attendance }}%{% else %}—{% endif %}</strong></div>
@@ -1014,7 +1155,7 @@
         <section class="panel">
           <div class="panel-head"><h2>Semester pass</h2><span>Your pass to classes and exams</span></div>
           <div class="panel-body">
-            <p>Paid up for this semester? Download your pass, print it at ID-card size and have it stamped at the admission office.</p>
+            <p>Paid up for this semester? Open your pass and download it to your phone — show it when you are asked.</p>
             <div class="btn-row"><a class="btn" href="{% url 'my-semester-pass' %}" target="_blank" rel="noopener"><i class="bi bi-ticket-perforated"></i> My semester pass</a></div>
           </div>
         </section>
@@ -1835,10 +1976,16 @@
     showView(returnView);
   }
 
-  function closeSidebar() {
-    sidebar.classList.remove('open');
-    overlay.classList.remove('show');
+  function setDrawer(open) {
+    sidebar.classList.toggle('open', open);
+    overlay.classList.toggle('show', open);
+    const toggle = document.getElementById('rail-toggle');
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Close the menu' : 'Open the menu');
+    toggle.innerHTML = `<i class="bi ${open ? 'bi-x-lg' : 'bi-list'}"></i>`;
   }
+
+  function closeSidebar() { setDrawer(false); }
 
   function showView(name, updateHash = true) {
     if (name === 'attendance') name = 'attendance-sem1';
@@ -1880,6 +2027,14 @@
 
   viewNavItems.forEach(item => item.addEventListener('click', () => showView(item.dataset.view)));
   navToggles.forEach(toggle => toggle.addEventListener('click', () => {
+    // On a phone the rail shows no submenus: a group slides the full menu
+    // out with that group open (said 28 October 2026).
+    if (isMobile() && !sidebar.classList.contains('open')) {
+      setDrawer(true);
+      toggle.setAttribute('aria-expanded', 'true');
+      document.getElementById(toggle.dataset.menu)?.classList.add('open');
+      return;
+    }
     // Submenus are hidden in the collapsed rail, so a group header would be a
     // dead button there — expand the rail first, then open the group.
     if (document.body.classList.contains('nav-collapsed') && !isMobile()) {
@@ -1916,6 +2071,8 @@
     document.querySelectorAll('.option-bar [data-profile-option]').forEach(button => {
       button.classList.toggle('on', button.dataset.profileOption === name);
       button.setAttribute('aria-selected', String(button.dataset.profileOption === name));
+      // On a phone the options scroll in a row: bring the chosen one into sight.
+      if (button.dataset.profileOption === name && button.offsetParent) button.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     });
     document.querySelectorAll('[data-profile-pane]').forEach(pane => pane.classList.toggle('on', pane.dataset.profilePane === name));
   }
@@ -1932,15 +2089,16 @@
 
   document.getElementById('menu-button').addEventListener('click', () => {
     if (isMobile()) {
-      sidebar.classList.toggle('open');
-      overlay.classList.toggle('show');
+      setDrawer(!sidebar.classList.contains('open'));
     } else {
       applyCollapsed(!document.body.classList.contains('nav-collapsed'));
     }
   });
   overlay.addEventListener('click', closeSidebar);
+  document.getElementById('rail-toggle').addEventListener('click', () => setDrawer(!sidebar.classList.contains('open')));
   try {
-    if (localStorage.getItem('studentNavCollapsed') === '1') document.body.classList.add('nav-collapsed');
+    // A desktop's collapsed rail is a desktop choice: a phone has its own rail.
+    if (localStorage.getItem('studentNavCollapsed') === '1' && !isMobile()) document.body.classList.add('nav-collapsed');
   } catch (e) { /* storage unavailable — start expanded */ }
   // Leaving mobile width must not strand the drawer/overlay in an open state.
   window.addEventListener('resize', () => { if (!isMobile()) closeSidebar(); });
@@ -2222,6 +2380,73 @@
   });
 
   loadPostponements();
+
+  // On a phone a table is a card per row (said 28 October 2026): each cell
+  // carries its column's name, which the phone stylesheet shows beside it. A
+  // cell spanning the whole row (an empty-table message) is shown as it is.
+  function labelTables(root) {
+    root.querySelectorAll('table').forEach(table => {
+      if (table.matches('.kv, .q-matrix, .q-grid') || table.closest('.statement-summary')) return;
+      const heads = [];
+      table.querySelectorAll('thead tr:first-child th, thead tr:first-child td').forEach(cell => {
+        for (let i = 0; i < (cell.colSpan || 1); i++) heads.push(cell.textContent.trim());
+      });
+      if (!heads.length) return;
+      table.querySelectorAll('tbody tr, tfoot tr').forEach(row => {
+        let col = 0;
+        [...row.cells].forEach(cell => {
+          const span = cell.colSpan || 1;
+          cell.dataset.label = span > 1 ? '' : (heads[col] || '');
+          cell.classList.toggle('wide', span > 1 || !heads[col]);
+          col += span;
+        });
+      });
+      table.classList.add('stackable');
+    });
+  }
+  labelTables(document);
+  // Tables drawn later (results, attendance, requests) are labelled as they appear.
+  let labelling = null;
+  new MutationObserver(() => {
+    clearTimeout(labelling);
+    labelling = setTimeout(() => labelTables(document.querySelector('.content') || document), 60);
+  }).observe(document.querySelector('.content') || document.body, { childList: true, subtree: true });
+
+  // The consent form for supplementary students (said 28 October 2026): fill it
+  // in here, print it, sign it, and bring it back for the Principal's
+  // signature and stamp. Optional; shown only when the results ask for a
+  // supplementary.
+  async function loadSuppConsent() {
+    const box = document.getElementById('supp-consent-box');
+    let data;
+    try { data = await api('GET', '/my-supp-consent/'); } catch (error) { return; }
+    if (!data?.shown) { box.innerHTML = ''; return; }
+    const esc = value => String(value ?? '').replace(/[&<>"']/g,
+      c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const lines = text => String(text || '').split('\n').filter(l => l.trim()).map(l => `<p style="margin:0 0 6px">${esc(l)}</p>`).join('');
+    const w = data.wording;
+    const status = !data.filled_in ? ''
+      : data.paper_received_at
+        ? `<p style="margin:8px 0 0"><strong>Signed copy received</strong> ${esc(new Date(data.paper_received_at).toLocaleDateString())}${data.decision ? ` — the Principal: ${esc(data.decision)}` : ''}.</p>`
+        : `<p style="margin:8px 0 0">Filled in on ${esc(new Date(data.agreed_at).toLocaleDateString())}. <strong>Print it, sign Part C and bring it to the admission office</strong> for the Principal's signature and stamp.</p>`;
+    box.innerHTML = `<div class="notice" style="margin:0 0 14px;border-left-color:var(--amber);">
+      <strong>Consent form — supplementary examination</strong>
+      Your results ask for a supplementary. To continue to ${esc(data.level || 'the next level')} while you prepare for it, read the conditions${data.filled_in ? '' : ' and fill in the form'}.
+      <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:600">${esc(w.title)}</summary>
+        <div style="margin-top:8px"><strong>Sehemu A</strong>${lines(w.part_a)}<strong>Sehemu B</strong>${lines(w.part_b)}<strong>Sehemu C</strong>${lines(w.part_c)}</div>
+      </details>
+      ${data.filled_in
+        ? `${status}<p style="margin:8px 0 0"><a class="btn-mini" href="/supp-consent/${data.consent_id}/print/?download=1" target="_blank" rel="noopener">Print the form</a></p>`
+        : `<label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="supp-consent-agree"> <span>Nimesoma masharti na ninaridhia (I have read the conditions and agree).</span></label>
+           <p style="margin:8px 0 0"><button type="button" class="btn-mini" id="supp-consent-send">Fill in the form</button></p>`}
+    </div>`;
+    document.getElementById('supp-consent-send')?.addEventListener('click', async () => {
+      if (!document.getElementById('supp-consent-agree').checked) { toast('Tick that you have read the conditions and agree.'); return; }
+      try { await api('POST', '/my-supp-consent/'); toast('Filled in — now print it, sign it and bring it back.'); loadSuppConsent(); }
+      catch (error) { toast(error?.detail || 'Could not send it.'); }
+    });
+  }
+  loadSuppConsent();
 
   applyTheme(currentTheme());
   loadNotifications();

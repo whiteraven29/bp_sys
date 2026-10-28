@@ -19,6 +19,7 @@ The student portal, the same way:
 """
 
 import re
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -86,7 +87,7 @@ class OneMenuItemOneViewTests(TestCase):
         group = self.html.split('id="students-nav-group"')[1].split('</div>\n    </div>')[0]
         self.assertEqual(re.findall(r'>([^<>]+)</button>', group),
                          ['Find a student', 'Semester pass', 'Class lists', 'Items check', 'Did not report',
-                          'Enrollments', 'College ID import', 'NHIF sheets', 'Health records'])
+                          'Supplementary consent', 'Enrollments', 'College ID import', 'NHIF sheets', 'Health records'])
         self.assertNotIn('data-page="health"', self.html)        # not a menu item of its own
         self.assertNotIn('Upload / Register', self.html)
         self.assertNotIn('Bulk Upload via Excel', self.html)
@@ -100,6 +101,21 @@ class OneMenuItemOneViewTests(TestCase):
             self.assertIn('data-res-view=', tag, card)
             self.assertNotIn('display:none', tag, card)          # the switcher decides, not a fixed style
         self.assertIn('body.is-admin .admin-only.card:not(.sec-off)', self.html)
+
+    def test_veta_is_a_menu_of_its_own(self):
+        """Said 28 October 2026: VETA gets its own menu — applicants, a new
+        application, admitted students, intakes, courses — each a view of its own."""
+        self.assertEqual(self.html.count('id="veta-nav-group"'), 1)
+        group = self.html.split('id="veta-nav-group"')[1].split('</div>\n    </div>')[0]
+        self.assertIn('VETA <span class="nav-caret">', group)
+        self.assertEqual(re.findall(r'>([^<>]+)</button>', group),
+                         ['Applicants', 'New application', 'Admitted students', 'Intakes', 'Courses &amp; modules'])
+        self.assertIn('data-adm-section="veta-new" data-roles="principal admission"', group)
+        self.assertNotIn('data-page="veta-courses"', self.html)              # no second VETA button
+        page = self.html.split('id="page-admissions"')[1]
+        for section in ('veta-applicants', 'veta-new', 'veta-admitted', 'veta-intakes'):
+            self.assertIn(f'class="card" data-adm-section="{section}"', page)
+        self.assertNotIn('data-adm-section="veta"', self.html)
 
     def test_transfers_is_a_menu_of_its_own(self):
         """Said 27 October 2026: a Transfers menu, its two items dropping down."""
@@ -115,7 +131,7 @@ class OneMenuItemOneViewTests(TestCase):
         """Said 21 October 2026: the Admissions menu had too many items."""
         group = self.html.split('id="admissions-nav-group"')[1].split('</div>\n    </div>')[0]
         self.assertEqual(re.findall(r'>([^<>]+)</button>', group),
-                         ['My desk', 'New application', 'VETA applications', 'Pending', 'Applications',
+                         ['My desk', 'New application', 'Pending', 'Applications',
                           'Expected back', 'Items check', 'Class lists', 'Settings'])
         # Those two only for the accountant, who has no Students menu (said 22 October 2026).
         for item in ('items', 'classlist'):
@@ -180,3 +196,41 @@ class PortalOptionsTests(TestCase):
         options = re.findall(r'data-profile-option="([a-z]+)"', profile)
         self.assertEqual(options, ['personal', 'academic', 'kin', 'documents', 'health', 'password'])
         self.assertEqual(profile.count('class="pane on"'), 1)
+
+
+class StudentPhonesTests(TestCase):
+    """Said 28 October 2026: students use Android phones — the portal's phone
+    rules come last so the desktop design system cannot undo them, tables
+    become labelled cards, and the notices stay on the dashboard."""
+
+    def setUp(self):
+        self.html = open(Path(__file__).resolve().parent.parent / 'templates' / 'student_dashboard.html').read()
+
+    def test_the_phone_rules_come_after_the_design_system(self):
+        design = self.html.index('DESIGN SYSTEM (said 21 October 2026)')
+        phones = self.html.index('PHONES (said 28 October 2026')
+        self.assertLess(design, phones)
+        self.assertGreater(phones, self.html.rindex('.content { padding: 18px 28px 48px; }'))
+        self.assertIn('table.stackable td::before', self.html)
+        self.assertIn('function labelTables(root)', self.html)
+
+    def test_notices_only_on_the_dashboard(self):
+        dashboard = self.html.split('id="view-dashboard"')[1]
+        before = self.html.split('id="view-dashboard"')[0]
+        self.assertIn('id="provisional-notice"', dashboard)
+        self.assertNotIn('id="supp-consent-box"', before)
+
+    def test_the_menu_is_an_icon_rail_on_a_phone(self):
+        """Said 28 October 2026: on a phone the menu shows on the left from sign-in —
+        small icons, each with a short name — and a group opens the full menu."""
+        self.assertEqual(self.html.count('class="nav-short"'), 8)
+        for short in ('Home', 'Attend', 'Results', 'Modules', 'Exams', 'Fees', 'Services', 'Profile'):
+            self.assertIn(f'<span class="nav-short">{short}</span>', self.html)
+        rail = self.html.split('The icon rail on phones and tablets')[1]
+        self.assertIn('.sidebar { transform: none; width: var(--rail); }', rail)
+        self.assertIn("if (isMobile() && !sidebar.classList.contains('open'))", self.html)
+        # The toggle stands where the EduTrack mark is: ☰ opens, ✕ closes; the top bar's copy hides.
+        self.assertIn('id="rail-toggle" aria-label="Open the menu"', self.html)
+        self.assertIn("open ? 'bi-x-lg' : 'bi-list'", self.html)
+        self.assertIn(':root { --rail: 52px; }', rail)
+        self.assertIn('.menu-button { display: none; }', rail)

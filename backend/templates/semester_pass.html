@@ -47,6 +47,7 @@
   .card .stamp { width: 21mm; height: 12mm; border: .25mm dashed var(--muted); border-radius: 1mm; color: var(--muted);
           font-size: 4.6pt; display: flex; align-items: flex-end; justify-content: center; padding-bottom: .6mm; }
   .note { color: var(--muted); font-size: .85rem; text-align: center; max-width: 420px; }
+  .download { padding: 12px 22px; font-size: 1rem; }
   @page { size: 85.6mm 54mm; margin: 0; }
   @media print {
     body { background: #fff; }
@@ -80,8 +81,87 @@
         <div class="stamp">Admission office stamp</div>
       </div>
     </div>
+    {% if for_student %}
+    <button class="no-print download" id="pass-download" type="button">Download pass</button>
+    <p class="note no-print">Saved to your phone as a picture: show it when you are asked — staff check it by its pass code. Valid until {{ issued.valid_until|date:"j M Y" }} — {{ issued.basis }}.</p>
+    <script id="pass-data" type="application/json">{"name": "{{ profile.name|escapejs }}", "college_id": "{{ profile.college_id|default:'—'|escapejs }}", "reg_no": "{{ profile.nactvet_reg_no|escapejs }}", "programme": "{{ result.programme_code|escapejs }} · {{ result.class_level|escapejs }}", "until": "{{ issued.valid_until|date:'j M Y' }}", "code": "{{ issued.code|escapejs }}", "semester": "{{ issued.semester|escapejs }}", "college": "{{ college|escapejs }}"}</script>
+    <script>
+      // The pass as a picture the phone keeps (said 28 October 2026): drawn
+      // from the card's own facts at 12 px per millimetre, ID-card proportions.
+      (() => {
+        const card = document.querySelector('.card');
+        const fit = () => { card.style.zoom = Math.min(1.7, (document.documentElement.clientWidth - 40) / 323.5); };
+        fit(); window.addEventListener('resize', fit);
+        const d = JSON.parse(document.getElementById('pass-data').textContent);
+        const MM = 12, PT = 0.3528 * MM, W = 85.6 * MM, H = 54 * MM;
+        const sans = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+        const fitText = (ctx, text, weight, size, maxWidth, family = sans) => {
+          let px = size * PT;
+          do { ctx.font = `${weight} ${px}px ${family}`; px -= 1; } while (ctx.measureText(text).width > maxWidth && px > 8);
+        };
+        const draw = img => new Promise(resolve => (!img || img.complete) ? resolve() : img.addEventListener('load', resolve, { once: true }));
+        document.getElementById('pass-download').addEventListener('click', async () => {
+          const logo = document.querySelector('.band img'), photo = document.querySelector('img.photo');
+          await Promise.all([draw(logo), draw(photo)]);
+          const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(0, 0, W, H, 3 * MM) : ctx.rect(0, 0, W, H); ctx.fill(); ctx.save(); ctx.clip();
+          ctx.fillStyle = '#123F80'; ctx.fillRect(0, 0, W, 10 * MM);
+          let x = 2.2 * MM;
+          if (logo) {
+            ctx.save(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + 3.5 * MM, 5 * MM, 3.5 * MM, 0, Math.PI * 2);
+            ctx.fill(); ctx.clip(); ctx.drawImage(logo, x + .4 * MM, 1.9 * MM, 6.2 * MM, 6.2 * MM); ctx.restore(); x += 8.8 * MM;
+          }
+          ctx.fillStyle = '#fff'; ctx.textBaseline = 'alphabetic';
+          fitText(ctx, d.college.toUpperCase(), 700, 6.2, 56 * MM); ctx.fillText(d.college.toUpperCase(), x, 4.6 * MM);
+          ctx.font = `400 ${5.4 * PT}px ${sans}`; ctx.globalAlpha = .85; ctx.fillText(d.semester, x, 7.6 * MM); ctx.globalAlpha = 1;
+          ctx.font = `800 ${6.4 * PT}px ${sans}`; ctx.textAlign = 'right';
+          ctx.fillText('STUDENT', W - 2.2 * MM, 4.6 * MM); ctx.fillText('PASS', W - 2.2 * MM, 7.4 * MM); ctx.textAlign = 'left';
+          const px = 2.2 * MM, py = 12 * MM, pw = 19 * MM, ph = 24 * MM;
+          ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = .2 * MM;
+          if (photo) {
+            const r = Math.max(pw / photo.naturalWidth, ph / photo.naturalHeight);
+            const sw = pw / r, sh = ph / r;
+            ctx.drawImage(photo, (photo.naturalWidth - sw) / 2, (photo.naturalHeight - sh) / 2, sw, sh, px, py, pw, ph);
+          } else {
+            ctx.fillStyle = '#f4f6f9'; ctx.fillRect(px, py, pw, ph); ctx.fillStyle = '#64748B';
+            ctx.font = `400 ${5 * PT}px ${sans}`; ctx.textAlign = 'center';
+            ctx.fillText('No photo', px + pw / 2, py + ph / 2 - 1 * MM); ctx.fillText('on record', px + pw / 2, py + ph / 2 + 2 * MM); ctx.textAlign = 'left';
+          }
+          ctx.strokeRect(px, py, pw, ph);
+          const tx = px + pw + 2.2 * MM, room = W - tx - 2.2 * MM;
+          ctx.fillStyle = '#1E293B'; fitText(ctx, d.name, 800, 7.6, room); ctx.fillText(d.name, tx, py + 3 * MM);
+          let y = py + 7 * MM;
+          for (const [label, value] of [['College ID', d.college_id], ['Reg. No.', d.reg_no], ['Programme', d.programme]]) {
+            ctx.fillStyle = '#64748B'; ctx.font = `400 ${6.6 * PT}px ${sans}`; ctx.fillText(label, tx, y);
+            ctx.fillStyle = '#1E293B'; fitText(ctx, value, 700, 6.6, room - 14.2 * MM); ctx.fillText(value, tx + 14.2 * MM, y);
+            y += 3.3 * MM;
+          }
+          ctx.font = `400 ${7.2 * PT}px ${sans}`; ctx.fillStyle = '#1E293B'; ctx.fillText('Valid until ', tx, y + 1 * MM);
+          const lead = ctx.measureText('Valid until ').width;
+          ctx.font = `700 ${7.2 * PT}px ${sans}`; ctx.fillStyle = '#B42318'; ctx.fillText(d.until, tx + lead, y + 1 * MM);
+          ctx.fillStyle = '#64748B'; ctx.font = `600 ${4.8 * PT}px ${sans}`; ctx.fillText('Pass code', 2.2 * MM, H - 5.6 * MM);
+          ctx.fillStyle = '#1E293B'; ctx.font = `800 ${8 * PT}px ui-monospace, Menlo, Consolas, monospace`;
+          ctx.fillText(d.code, 2.2 * MM, H - 2 * MM);
+          ctx.setLineDash([.8 * MM, .6 * MM]); ctx.strokeStyle = '#64748B'; ctx.lineWidth = .25 * MM;
+          ctx.strokeRect(W - 23.2 * MM, H - 13.8 * MM, 21 * MM, 12 * MM); ctx.setLineDash([]);
+          ctx.fillStyle = '#64748B'; ctx.font = `400 ${4.6 * PT}px ${sans}`; ctx.textAlign = 'center';
+          ctx.fillText('Admission office stamp', W - 12.7 * MM, H - 2.6 * MM);
+          ctx.restore();
+          canvas.toBlob(blob => {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `semester-pass-${d.code}.png`;
+            document.body.appendChild(link); link.click(); link.remove();
+            setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+          }, 'image/png');
+        });
+      })();
+    </script>
+    {% else %}
     <p class="note no-print">Print on card or paper at actual size (85.6 × 54 mm), then take it to the admission office to be stamped. Valid until {{ issued.valid_until|date:"j M Y" }} — {{ issued.basis }}.</p>
     <button class="no-print" onclick="window.print()">Print / save as PDF</button>
+    {% endif %}
   </div>
 
 {% elif mode == 'refused' %}

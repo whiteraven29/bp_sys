@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ consent.profile.nactvet_reg_no }} — {{ wording.title|truncatechars:60 }}</title>
+<style>
+  :root { --navy:#123A6B; --ink:#1B2430; --muted:#6B7785; --rule:#DCE2EA; --paper:#FFFFFF; --ground:#EDEFF2; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ground); color:var(--ink);
+         font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; font-size:13px; line-height:1.6; }
+  .sheet { max-width:820px; margin:24px auto; background:var(--paper); padding:40px 48px 32px;
+           box-shadow:0 1px 6px rgba(0,0,0,.13); }
+  .head { text-align:center; padding-bottom:14px; border-bottom:2px solid var(--navy); }
+  .head .college { font-size:1.2rem; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:.02em; }
+  .head img { width:76px; height:76px; object-fit:contain; margin:10px auto 0; display:block; }
+  h1 { font-size:.95rem; font-weight:700; text-align:center; margin:18px 0 18px; line-height:1.5; }
+  .sec { margin-bottom:18px; page-break-inside:avoid; }
+  .sec h2 { font-size:.86rem; font-weight:700; margin:0 0 6px; }
+  .sec p { margin:0 0 6px; text-align:justify; }
+  .sign { display:flex; gap:24px; margin-top:12px; align-items:flex-end; flex-wrap:wrap; }
+  .sign span { white-space:nowrap; }
+  .line { display:inline-block; border-bottom:1px solid #6B7785; min-width:240px; height:18px; vertical-align:bottom; }
+  .line.short { min-width:110px; }
+  .stamp { margin:14px 0 0 auto; width:160px; height:80px; border:1px dashed #9AA5B1; display:flex;
+           align-items:center; justify-content:center; color:var(--muted); font-style:italic; font-size:.78rem; }
+  .foot { margin-top:22px; padding-top:10px; border-top:1px solid var(--rule); color:var(--muted);
+          font-size:.72rem; text-align:center; }
+  .actions { max-width:820px; margin:0 auto 18px; text-align:right; }
+  .actions button { font:inherit; font-weight:600; cursor:pointer; padding:10px 20px; background:var(--navy);
+                    color:#fff; border:0; border-radius:4px; }
+  @media print {
+    body { background:#fff; }
+    .sheet { box-shadow:none; margin:0; max-width:none; padding:0; }
+    .actions { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div>
+
+<div class="sheet">
+  <div class="head">
+    <div class="college">{{ college.name }}</div>
+    {% if college.logo %}<img src="{{ college.logo.url }}" alt="">{% elif logo %}<img src="{{ logo }}" alt="">{% endif %}
+  </div>
+
+  <h1>{{ wording.title }}</h1>
+
+  <div class="sec">
+    <h2>Sehemu A: Uelewa kuhusiana na Miongozo</h2>
+    {% for line in part_a %}<p>{{ line }}</p>{% endfor %}
+  </div>
+
+  <div class="sec">
+    <h2>Sehemu B: Masharti ya kuendelea na ngazi inayofuata</h2>
+    {% for line in part_b %}<p>{{ line }}</p>{% endfor %}
+  </div>
+
+  <div class="sec">
+    <h2>Sehemu C: Ridhaa ya Mwanafunzi</h2>
+    <p>{{ wording.part_c }}</p>
+    <div class="sign"><span>Saini: <span class="line"></span></span><span>Tarehe: <span class="line short"></span></span></div>
+  </div>
+
+  <div class="sec">
+    <h2>Sehemu D: Ruhusa ya Mkuu wa Chuo</h2>
+    {% for line in part_d %}<p>{{ line }}</p>{% endfor %}
+    <div class="sign"><span>Saini: <span class="line"></span></span><span>Tarehe: <span class="line short"></span></span></div>
+    <div class="stamp">Muhuri wa ofisi</div>
+  </div>
+
+  <div class="foot">{{ consent.profile.nactvet_reg_no }} · {{ consent.profile.name }} · {{ consent.next_level }} ·
+    Imejazwa mtandaoni (filled in online) {{ consent.agreed_at|date:"d M Y H:i" }} · {{ consent.form.academic_year.name }}</div>
+</div>
+
+{% if auto_print %}
+<script>window.addEventListener('load', () => setTimeout(() => window.print(), 250));</script>
+{% endif %}
+</body>
+</html>

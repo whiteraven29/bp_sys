@@ -112,8 +112,9 @@
              text-transform:uppercase; color:var(--muted); }
 
   .actions { max-width:820px; margin:0 auto 20px; text-align:right; }
-  .actions button { font:inherit; font-weight:600; cursor:pointer; padding:10px 20px;
-    background:var(--navy); color:#fff; border:0; border-radius:4px; }
+  .actions button, .actions .dl { display:inline-block; font:inherit; font-weight:600; cursor:pointer; padding:10px 20px;
+    background:var(--navy); color:#fff; border:0; border-radius:4px; text-decoration:none; }
+  .actions button { background:#fff; color:var(--navy); border:1px solid var(--navy); }
   @media print {
     body { background:#fff; }
     .sheet { box-shadow:none; margin:0; max-width:none; padding:0; }
@@ -125,7 +126,7 @@
 </head>
 <body>
 
-<div class="actions"><button onclick="window.print()">Download / Print (Save as PDF)</button></div>
+<div class="actions"><a class="dl" href="?download=1">Download PDF</a> <button onclick="window.print()">Print</button></div>
 
 <div class="sheet">
   <div class="head">

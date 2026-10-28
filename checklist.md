@@ -381,8 +381,48 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      officer's inventory item "Transfers" is now "Asset transfers" so no two menus share a name
    - [x] 1259 tests; checked in the browser (found, finance's word required, approved, listed; the menu for the
      admission officer, DPARC and the accountant at phone width)
+3h. **VETA: a menu of its own — 28 Oct (not committed; no migration).**
+   - [x] VETA ▸ Applicants · New application · Admitted students · Intakes · Courses & modules (your request: the
+     VETA admission showed too little). Replaces Admissions ▸ VETA applications and the separate VETA Courses button
+   - [x] Applicants: filter by intake and desk (default: still at the desks), search name / phone / number; phone,
+     gender, course · intake, applied on, desk, what they owe. Admitted students: by intake, college ID, gender,
+     phone, first next of kin, day / hostel, status and NVA level, admitted on, what they owe
+   - [x] Open → the whole record (details, every next of kin, education, items, fees, each desk passed); DPARC and the
+     coordinator see no money. Nothing new is asked of the student — records' form is as it was (3 Oct)
+   - [x] 1264 tests; checked in the browser (admission officer, DPARC, coordinator, accountant at phone width)
+3i. **Supplementary students' consent form — 28 Oct (not committed; migration 0084).**
+   - [x] Your form (Fomu ya kuridhia … mitihani ya marudio): students whose results say SUPP (not yet settled) see it on
+     the portal — optional (your choice) — read Sehemu A and B, tick that they agree, fill it in (the soft copy keeps
+     the wording they agreed to, their name, NACTVET number and the level they continue to), print it with Sehemu D
+     and the stamp box blank, sign it and bring it back
+   - [x] Students ▸ Supplementary consent: the list (not filled in / filled in, signed copy not back / signed copy back),
+     print any copy, and **Signed copy back** with the Principal's answer (Allowed / Not allowed) — the admission office
+     or the Principal (your choice); DPARC and records read. Nothing is held while it is missing (your choice)
+   - [x] The wording is edited there each year (your choice); made from the 2025 form with the years moved on and left
+     **closed** until the office checks the amounts and opens it
+   - [x] 1271 tests; checked in the browser (opened, filled in on a phone, printed, signed copy recorded); a first-visit
+     race that made the wording twice (one request failing) found in the browser and fixed
+3j. **The student portal on Android phones — 28 Oct (not committed; no migration).**
+   - [x] Why it was too large: the 21 Oct design system came after the phone rules and put desktop sizes back; tables
+     had a 620–720px minimum width; amounts were 1.6rem in half-width cards. A phone sheet now comes last
+   - [x] The menu is an icon rail on the left from sign-in (≤ 820px): small icons with short names (Home, Attend,
+     Results, Modules, Exams, Fees, Services, Profile); a group opens the full menu with it expanded; ☰ opens it too
+   - [x] Tables become a card per row with each value labelled; totals two to a row, sized to fit; the provisional and
+     consent notices on the dashboard only; the module search hidden on phones; profile options scroll in a row
+   - [x] Semester pass: the student downloads it as a picture (PNG, ID-card proportions, 1027 × 648) — no print; the
+     admission office still prints. The card fits the phone screen
+   - [x] 1274 tests; every view checked at 360 and 412px (nothing wider than the screen), tablet 768 and desktop 1366
+     unchanged apart from the rail on the tablet
+   - [x] Invoices download as a PDF file (`invoice-<ref>.pdf`, your request): `?download=1` serves it; the invoice page
+     has *Download PDF* beside *Print*. Written by the system itself (`attendance/pdf.py`, `invoice_pdf.py`) — no new
+     package; opened by pdftoppm / mutool without complaint
+   - [x] Dashboard, first thing: when the password expires (always, with *Change it*), and *Your semester pass is ready —
+     Download pass* once this semester's instalment is paid
+   - [x] The rail narrower (52px) with smaller icons; its toggle stands where the EduTrack mark was — ☰ opens the full
+     menu, ✕ closes it (your question: how to close it); the top bar's toggle hidden on phones. Desktop unchanged
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0083 applied by the deploy (release guide B1–B4); `Ran 1259 tests … OK` on the laptop first
+   - [ ] Migrations to 0083 applied by the deploy (release guide B1–B4); `Ran 1274 tests … OK` on the laptop first
+   - [ ] Students ▸ Supplementary consent: check the amounts in Sehemu B (copied from the 2025 form), then Open
    - [ ] REPEAT students at semester 1's finance desk who owe only semester 2 modules:
      `sudo -u bphacoh venv/bin/python manage.py call_off_repeat_places` — read the dry run, then `--apply`. Run it
      again after the provisional students are settled (it should list nobody)

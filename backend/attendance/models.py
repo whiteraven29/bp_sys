@@ -2957,6 +2957,58 @@ class Transfer(models.Model):
         return f'{self.profile.nactvet_reg_no} → {self.to_college} ({self.transferred_on})'
 
 
+class SuppConsentForm(models.Model):
+    """The year's consent form for students with a supplementary still to sit
+    (said 28 October 2026): they continue to the next level while they prepare
+    for it, on the conditions it sets out. Its wording is the college's to
+    change each year (the amounts, the month of the examination) without a
+    release. Part C names the student — {name}, {reg_no} and {level} are
+    filled in for each; Part D is the Principal's, on paper."""
+    academic_year = models.OneToOneField(AcademicYear, on_delete=models.PROTECT, related_name='supp_consent_form')
+    title = models.CharField(max_length=300)
+    part_a = models.TextField('Sehemu A', blank=True)
+    part_b = models.TextField('Sehemu B', blank=True)
+    part_c = models.TextField('Sehemu C', blank=True,
+                              help_text='{name}, {reg_no} and {level} are filled in for each student.')
+    part_d = models.TextField('Sehemu D', blank=True, help_text='Printed for the Principal to complete on paper.')
+    is_open = models.BooleanField(default=False, help_text='Shown to supplementary students on their portal.')
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.academic_year} · {self.title}'
+
+
+class SuppConsent(models.Model):
+    """One student's consent: filled in on the portal (the soft copy, with the
+    wording as they agreed to it), printed and signed, then brought back — the
+    admission office records the signed hard copy and the Principal's answer
+    on it."""
+    ALLOWED = 'allowed'
+    NOT_ALLOWED = 'not_allowed'
+    DECISION_CHOICES = [(ALLOWED, 'Allowed to continue'), (NOT_ALLOWED, 'Not allowed')]
+
+    form = models.ForeignKey(SuppConsentForm, on_delete=models.PROTECT, related_name='consents')
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='supp_consents')
+    review = models.ForeignKey('SemesterReview', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    next_level = models.CharField(max_length=60, blank=True)
+    wording = models.JSONField(default=dict, help_text='The form as the student agreed to it.')
+    agreed_at = models.DateTimeField(auto_now_add=True)
+    paper_received_at = models.DateTimeField(null=True, blank=True)
+    paper_received_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                          blank=True, related_name='+')
+    principal_decision = models.CharField(max_length=20, choices=DECISION_CHOICES, blank=True)
+    paper_note = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ['-agreed_at']
+        constraints = [models.UniqueConstraint(fields=['form', 'profile'], name='one_supp_consent_per_year')]
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · {self.form.academic_year}'
+
+
 class Postponement(models.Model):
     """A student stopping for a while, with the Principal's leave.
 

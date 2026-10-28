@@ -989,6 +989,13 @@ def _provisional_notice(profile):
                                    'what they mean for your place.'}
 
 
+def _pass_ready(profile):
+    if profile is None:
+        return None
+    result = semester_pass.status(profile)
+    return result if result.get('ok') else None
+
+
 def _student_record_for_portal(profile):
     """What the records office holds on the student, for them to read and
     check. They cannot change it here: a correction goes through records."""
@@ -1446,6 +1453,9 @@ def student_dashboard(request):
         'result_statements': result_statements,
         'provisional_notice': _provisional_notice(profile),
         'password': passwords.student_reading(student),
+        # Paid up to this semester's instalment: the pass is offered on the
+        # dashboard itself (said 28 October 2026).
+        'pass_ready': _pass_ready(profile),
         'overall_attendance': overall_attendance,
         'total_present': total_present,
         'total_sick': total_sick,
@@ -9512,11 +9522,9 @@ def my_invoice(request):
 def invoice_print(request, reference):
     """The invoice as a printable page, and as the student's download.
 
-    Deliberately HTML rather than a generated PDF: the project has no PDF
-    library, and the browser's print dialogue produces one anyway — which works
-    from a phone, which is what most students have. `?download=1` opens that
-    dialogue on load, so "Download" on the portal lands the student straight in
-    Save as PDF instead of on a page they then have to work out how to save.
+    The page is HTML, printed from the browser. `?download=1` is the PDF file
+    itself (invoice_pdf, said 28 October 2026): a phone saves it straight to
+    its downloads, where the print dialogue left students stuck.
     """
     viewer_profile = None
     if portal_signed_in(request):
@@ -9544,7 +9552,7 @@ def invoice_print(request, reference):
     components = finance.invoice_components(invoice)
     installments = max((c['installments'] for c in components), default=0)
 
-    return render(request, 'invoice_print.html', {
+    context = {
         'invoice': invoice,
         'components': components,
         'itemised': len(components) > 1,
@@ -9558,8 +9566,19 @@ def invoice_print(request, reference):
         'class_level': level.name if level else '',
         'college': college,
         'terms': [t.strip() for t in (college.invoice_terms or '').splitlines() if t.strip()],
-        'auto_print': request.GET.get('download') in ('1', 'true', 'yes'),
-    })
+    }
+    if request.GET.get('download') in ('1', 'true', 'yes'):
+        # Download is a file (said 28 October 2026): the phone saves the PDF
+        # instead of opening a print dialogue the student has to work out.
+        from . import invoice_pdf
+        data = invoice_pdf.build(invoice, **{key: context[key] for key in (
+            'college', 'components', 'itemised', 'installments', 'transactions', 'total', 'paid',
+            'outstanding', 'expires_on', 'class_level', 'terms')})
+        response = HttpResponse(data, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="invoice-{invoice.reference}.pdf"'
+        response['Cache-Control'] = 'no-store'
+        return response
+    return render(request, 'invoice_print.html', context)
 
 
 class BankAccountViewSet(viewsets.ModelViewSet):
@@ -10164,10 +10183,13 @@ def _pass_photo(profile):
     return f'data:{kind};base64,' + base64.b64encode(data).decode()
 
 
-def _render_pass(request, profile, issued, result):
+def _render_pass(request, profile, issued, result, *, for_student=False):
+    # A student downloads it to their phone; the admission office prints it
+    # (said 28 October 2026: students use phones, not printers).
     response = render(request, 'semester_pass.html', {
         'mode': 'pass' if issued else 'refused', 'result': result, 'issued': issued, 'profile': profile,
         'photo': _pass_photo(profile) if issued else '', 'logo': _pass_logo(), 'college': COLLEGE_NAME,
+        'for_student': for_student,
     })
     response['Cache-Control'] = 'no-store'
     return response
@@ -10214,7 +10236,7 @@ def my_semester_pass(request):
     if profile is None:
         return redirect('login')
     issued, result = semester_pass.issue(profile, source=StudentPass.PORTAL)
-    return _render_pass(request, profile, issued, result)
+    return _render_pass(request, profile, issued, result, for_student=True)
 
 
 @login_required

@@ -1166,16 +1166,23 @@ class OneInvoicePerPaymentTests(TestCase):
         self.assertIn(reference, body)
         self.assertIn(f'/invoice/{reference}/?download=1', body)
 
-    def test_downloading_opens_the_save_dialogue(self):
+    def test_downloading_gives_the_pdf_file(self):
+        """Said 28 October 2026: on a phone the invoice downloads as a file."""
+        import zlib
         reference = self._generate(family=ChargeType.FEE).json()[0]['reference']
 
         viewed = self.portal.get(f'/invoice/{reference}/').content.decode()
-        self.assertNotIn('window.print()', viewed.split('<div class="actions">')[1]
-                         .split('</div>')[1])
+        self.assertIn('href="?download=1">Download PDF</a>', viewed)
 
-        downloaded = self.portal.get(f'/invoice/{reference}/?download=1').content.decode()
-        self.assertIn('setTimeout(() => window.print()', downloaded)
-        self.assertIn('Expire date', downloaded)
+        downloaded = self.portal.get(f'/invoice/{reference}/?download=1')
+        self.assertEqual(downloaded['Content-Type'], 'application/pdf')
+        self.assertEqual(downloaded['Content-Disposition'], f'attachment; filename="invoice-{reference}.pdf"')
+        data = downloaded.content
+        self.assertTrue(data.startswith(b'%PDF-1.4') and data.rstrip().endswith(b'%%EOF'))
+        text = b''.join(zlib.decompress(part.split(b'stream\n', 1)[1].rsplit(b'\nendstream', 1)[0])
+                        for part in data.split(b'/Filter /FlateDecode >>\n')[1:])
+        for words in (b'INVOICE', reference.encode(), b'Expire date', b'Amount required', b'Invoice transactions'.upper()):
+            self.assertIn(words, text)
 
     # ── how a bill reads ─────────────────────────────────────────────────────
 

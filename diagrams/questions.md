@@ -980,3 +980,34 @@ period before, the admission office writes down finance's confirmation that noth
 kept on the transfer. Once last year's balances are entered (or a year passes, so the period before is in the
 system), the check is the system's own. Money the student paid stays as credit; a refund is the accountant's.
 
+### Q72. Why VETA admission showed less ●
+
+**Asked (28 October 2026):** why less information on VETA admission — could it have its own menu?
+
+**Answer:** records asks a VETA student for less (your decision of 3 October: phone, gender, a next of kin, who pays;
+no documents), but the screens showed even less than was recorded — a list of name, intake and desk, and a one-line
+summary. Built the same day: the VETA menu (Applicants, New application, Admitted students, Intakes, Courses &
+modules) and the whole record behind Open. If more must be *asked* of VETA students (date of birth, national ID…),
+say which and records' form will require it.
+
+### Q73. The supplementary students' consent form ●
+
+**Asked (28 October 2026):** the college's form (Fomu ya kuridhia kuendelea na ngazi inayofuata …) should be filled
+in by supplementary students, printed and signed, and brought back for the Principal's signature and stamp, so the
+college has both the soft and the signed hard copy.
+
+**Answers (same day):** optional for students whose results say SUPP; the wording is edited each year without a
+release; the admission office records the signed copy (the Principal too); nothing is held while it is missing.
+Built the same day: Students ▸ Supplementary consent and the portal card. **Still to check:** the amounts in Sehemu B
+were copied from the 2025 form (605,000 and 400,000) — confirm them for 2026/27 before opening it.
+
+### Q74. The student portal on phones ●
+
+**Asked (28 October 2026):** on students' phones the words, cards and amounts are too large (amounts spill out of the
+What I Owe cards); the pass should download, not print; the menu icons should show on the left from sign-in, small
+but readable.
+
+**Built the same day:** the icon rail, tables as labelled cards, compact phone sizes, the pass as a picture download.
+**Answer (same day):** invoices download as a file — built (a PDF the system writes itself); the dashboard also says
+when the password expires and offers the pass once the instalment is paid.
+

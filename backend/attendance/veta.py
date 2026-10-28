@@ -317,6 +317,28 @@ def raise_fees(application, *, residence, actor=None):
     return raised
 
 
+def owing_by_intake(pairs):
+    """What each (profile id, intake id) still owes on that intake's bill —
+    one grouped query each for the charges and the payments, for a list."""
+    from django.db.models import Sum
+    from .models import PaymentAllocation
+    pairs = set(pairs)
+    owed = {pair: finance.ZERO for pair in pairs}
+    profile_ids, intake_ids = {p for p, _ in pairs}, {i for _, i in pairs}
+    for row in (StudentCharge.objects.filter(profile_id__in=profile_ids, intake_id__in=intake_ids)
+                .order_by().values('profile_id', 'intake_id')
+                .annotate(billed=Sum('amount'), waived=Sum('waived_amount'))):
+        pair = (row['profile_id'], row['intake_id'])
+        if pair in owed:
+            owed[pair] += (row['billed'] or finance.ZERO) - (row['waived'] or finance.ZERO)
+    for row in (PaymentAllocation.objects.filter(charge__profile_id__in=profile_ids, charge__intake_id__in=intake_ids)
+                .order_by().values('charge__profile_id', 'charge__intake_id').annotate(paid=Sum('amount'))):
+        pair = (row['charge__profile_id'], row['charge__intake_id'])
+        if pair in owed:
+            owed[pair] -= row['paid'] or finance.ZERO
+    return {pair: finance.money(amount) for pair, amount in owed.items()}
+
+
 def money_position(application):
     """What the admission desk weighs: billed, paid, owing, and what was due
     on or before the start date."""

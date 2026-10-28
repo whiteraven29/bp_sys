@@ -1090,7 +1090,6 @@
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-adm-section="desk" data-roles="principal admission records finance" onclick="showAdmissionSection('desk', this)">My desk</button>
         <button class="nav-sub-btn" data-adm-section="new" data-roles="principal admission" onclick="showAdmissionSection('new', this)">New application</button>
-        <button class="nav-sub-btn" data-adm-section="veta" data-roles="principal dparc admission records finance" onclick="showAdmissionSection('veta', this)">VETA applications</button>
         <button class="nav-sub-btn" data-adm-section="pending" onclick="showAdmissionSection('pending', this)">Pending</button>
         <button class="nav-sub-btn" data-adm-section="all" onclick="showAdmissionSection('all', this)">Applications</button>
         <button class="nav-sub-btn" data-adm-section="dueback" data-roles="principal admission" onclick="showAdmissionSection('dueback', this)">Expected back</button>
@@ -1098,6 +1097,18 @@
         <button class="nav-sub-btn" data-adm-section="items" data-roles="finance" onclick="showAdmissionSection('items', this)">Items check</button>
         <button class="nav-sub-btn" data-adm-section="classlist" data-roles="finance" onclick="showAdmissionSection('classlist', this)">Class lists</button>
         <button class="nav-sub-btn" data-adm-section="settings" data-roles="principal admission" onclick="showAdmissionSection('settings', this)">Settings</button>
+      </div>
+    </div>
+    <!-- VETA: a menu of its own (said 28 October 2026) — applicants, admitted
+         students, intakes, courses; each office sees its items. -->
+    <div class="nav-group" id="veta-nav-group" data-roles="principal dparc admission records finance coordinator">
+      <button class="nav-btn" data-page="veta" onclick="toggleVetaMenu(event)"><span class="icon"><i class="bi bi-scissors"></i></span> VETA <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-adm-section="veta-applicants" data-roles="principal dparc admission records finance coordinator" onclick="showAdmissionSection('veta-applicants', this)">Applicants</button>
+        <button class="nav-sub-btn" data-adm-section="veta-new" data-roles="principal admission" onclick="showAdmissionSection('veta-new', this)">New application</button>
+        <button class="nav-sub-btn" data-adm-section="veta-admitted" data-roles="principal dparc admission records finance coordinator" onclick="showAdmissionSection('veta-admitted', this)">Admitted students</button>
+        <button class="nav-sub-btn" data-adm-section="veta-intakes" data-roles="principal dparc admission records finance coordinator" onclick="showAdmissionSection('veta-intakes', this)">Intakes</button>
+        <button class="nav-sub-btn" data-veta-courses data-roles="coordinator principal dparc" onclick="showVetaCourses(this)">Courses &amp; modules</button>
       </div>
     </div>
     <div class="nav-group" id="students-nav-group" data-roles="principal dparc records admission runs dean">
@@ -1108,6 +1119,7 @@
         <button class="nav-sub-btn" data-adm-section="classlist" data-roles="principal dparc admission records" onclick="showAdmissionSection('classlist', this)">Class lists</button>
         <button class="nav-sub-btn" data-adm-section="items" data-roles="principal admission" onclick="showAdmissionSection('items', this)">Items check</button>
         <button class="nav-sub-btn" data-adm-section="noshow" data-roles="principal admission" onclick="showAdmissionSection('noshow', this)">Did not report</button>
+        <button class="nav-sub-btn" data-adm-section="suppconsent" data-roles="principal dparc admission records" onclick="showAdmissionSection('suppconsent', this)">Supplementary consent</button>
         <button class="nav-sub-btn" data-student-section="manage" data-roles="runs" onclick="showStudentSection('manage', this)">Enrollments</button>
         <button class="nav-sub-btn" data-rec-section="ids" data-roles="principal records admission" onclick="showRecordsSection('ids', this)">College ID import</button>
         <button class="nav-sub-btn" data-rec-section="nhif" data-roles="principal dparc records admission" onclick="showRecordsSection('nhif', this)">NHIF sheets</button>
@@ -1131,7 +1143,6 @@
         <button class="nav-sub-btn" data-status-section="standing" data-roles="principal dparc records admission dean" onclick="showStatusSection('standing', this)">Student status</button>
       </div>
     </div>
-    <button class="nav-btn" data-page="veta-courses" data-roles="coordinator principal dparc" onclick="showPage('veta-courses',this); loadVetaCourses()"><span class="icon"><i class="bi bi-scissors"></i></span> VETA Courses</button>
     <div class="nav-group" id="lab-nav-group" data-roles="lab">
       <button class="nav-btn" data-page="lab" onclick="toggleLabMenu(event)"><span class="icon"><i class="bi bi-eyedropper"></i></span> Laboratory <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
@@ -1955,14 +1966,6 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-title">Intakes and students</div>
-        <div class="form-grid-3"><div class="field"><label>Intake</label><select id="vc-intake" onchange="loadVetaStudents()"></select></div></div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Name</th><th>Registration</th><th>Phone</th><th>Lives</th><th>Status</th></tr></thead>
-          <tbody id="vc-students-tbody"></tbody>
-        </table></div>
-      </div>
     </div>
 
     <div class="page" id="page-admissions">
@@ -2057,6 +2060,35 @@
         </table></div>
       </div>
 
+      <div class="card" data-adm-section="suppconsent">
+        <div class="card-title">Supplementary students' consent <span class="tip" tabindex="0" role="note" aria-label="Help: supplementary consent" data-tip="Students whose results ask for a supplementary may fill in the consent form on their portal (optional), print it, sign it and bring it back. The Principal signs and stamps the paper; record it here with the Principal's answer. Nothing is held while it is missing — this list is for following up.">?</span></div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field"><label>Show</label>
+            <select id="sc-state" onchange="loadSuppConsents()">
+              <option value="">Everyone</option><option value="not_filled">Not filled in</option>
+              <option value="online">Filled in — signed copy not back</option><option value="paper">Signed copy back</option>
+            </select></div>
+          <div class="field"><label>Find</label><input id="sc-search" placeholder="Name or registration" oninput="clearTimeout(window._scT);window._scT=setTimeout(loadSuppConsents,300)"></div>
+        </div>
+        <div id="sc-note" class="help-note" style="margin-bottom:8px;"></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Reg. No.</th><th>Name</th><th>Continues to</th><th>Filled in online</th><th>Signed copy</th><th></th></tr></thead>
+          <tbody id="sc-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" data-adm-section="suppconsent">
+        <div class="card-title">The form's wording <span class="tip" tabindex="0" role="note" aria-label="Help: consent wording" data-tip="This year's wording, from the college's 2025 form with the years moved on: check the amounts and the month before opening it. In Part C, {name}, {reg_no} and {level} are filled in for each student. A student who has filled it in keeps the wording they agreed to.">?</span></div>
+        <div id="sc-form-note" class="help-note" style="margin-bottom:8px;"></div>
+        <div class="field"><label>Title</label><input id="sc-title"></div>
+        <div class="field"><label>Sehemu A — one point per line</label><textarea id="sc-a" rows="4"></textarea></div>
+        <div class="field"><label>Sehemu B — one point per line</label><textarea id="sc-b" rows="10"></textarea></div>
+        <div class="field"><label>Sehemu C — the student's consent ({name}, {reg_no}, {level})</label><textarea id="sc-c" rows="4"></textarea></div>
+        <div class="field"><label>Sehemu D — the Principal, on paper</label><textarea id="sc-d" rows="3"></textarea></div>
+        <label style="display:flex;gap:8px;align-items:center;margin:6px 0 10px;"><input type="checkbox" id="sc-open"> Open — supplementary students see it on their portal</label>
+        <button class="btn btn-primary btn-sm" id="sc-save" onclick="saveSuppConsentForm(event)">Save</button>
+      </div>
+
       <div class="card" data-adm-section="transfer">
         <div class="card-title">Transfer to another college <span class="tip" tabindex="0" role="note" aria-label="Help: transfer" data-tip="Find the student by NACTVET registration number (or college ID): their details and last results show. Nobody leaves owing: the period before this one must be paid — semester 1 in semester 2, last academic year in semester 1; where the system holds no bill for it, write down finance's confirmation. Approving the transfer closes their portal, cancels their places from this semester on (modules withdrawn, marks kept) and reverses the fees from this semester on to nothing (in semester 1, one-time charges too). What they paid stays on their account as credit; a refund is the accountant's. The record is kept under Transferred records. Should they come back, it is as a new student.">?</span></div>
         <div class="form-grid-3" style="margin-bottom:12px;">
@@ -2140,7 +2172,7 @@
             <tbody id="adm-pending-tbody"><tr><td colspan="7"><div class="empty">Loading…</div></td></tr></tbody>
           </table>
         </div>
-        <p class="help-note" style="margin-top:8px;">VETA applications on their way are listed under VETA applications.</p>
+        <p class="help-note" style="margin-top:8px;">VETA applicants on their way are listed under VETA ▸ Applicants.</p>
       </div>
 
       <div class="card" data-adm-section="all">
@@ -2164,7 +2196,7 @@
         </div>
       </div>
 
-      <div class="card" data-adm-section="veta">
+      <div class="card" data-adm-section="veta-intakes">
         <div class="card-title">Intakes <span class="tip" tabindex="0" role="note" aria-label="Help: intakes" data-tip="A VETA course runs in intakes, not semesters. The end date follows the course's duration. The accountant sets the course's fees under Fee Setup ▸ Course Fees.">?</span></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Intake</th><th>Course</th><th>Runs</th><th>Admitted</th><th>Applying</th><th>Taking applications</th></tr></thead>
@@ -2182,7 +2214,7 @@
         </div>
       </div>
 
-      <div class="card" data-adm-section="veta" data-roles="principal admission">
+      <div class="card" data-adm-section="veta-new" data-roles="principal admission">
         <div class="card-title">Take someone on <span class="tip" tabindex="0" role="note" aria-label="Help: taking someone on" data-tip="Same desks as a first year: records takes the details and a next of kin (no documents needed), finance states day or hostel and raises the fees, then admission admits. The college ID number comes at admission.">?</span></div>
         <div class="form-grid-3">
           <div class="field"><label>Intake *</label><select id="veta-app-intake"></select></div>
@@ -2196,19 +2228,36 @@
         <button class="btn btn-primary btn-sm" onclick="createVetaApplication(event)">Start the application</button>
       </div>
 
-      <div class="card" data-adm-section="veta">
-        <div class="card-title">Applications
-          <div style="margin-left:auto;">
-            <select id="veta-app-filter" class="btn btn-secondary btn-sm" onchange="loadVetaApplications()">
-              <option value="">Every desk I see</option><option value="intake">Intake</option>
+      <div class="card" data-adm-section="veta-applicants">
+        <div class="card-title">Applicants <span class="tip" tabindex="0" role="note" aria-label="Help: applicants" data-tip="Everybody applying for a VETA course, at the desks you see. Open one for their whole record: details, next of kin, education, items, fees and every desk they passed. Admitted students are under VETA ▸ Admitted students.">?</span></div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field"><label>Intake</label><select id="veta-app-intake-filter" onchange="loadVetaApplications()"></select></div>
+          <div class="field"><label>Where it is</label>
+            <select id="veta-app-filter" onchange="loadVetaApplications()">
+              <option value="open">Still at the desks</option><option value="intake">Intake</option>
               <option value="information">Records</option><option value="finance">Finance</option>
               <option value="admission">Admission</option><option value="admitted">Admitted</option>
-            </select>
-          </div>
+              <option value="rejected">Refused</option><option value="cancelled">Withdrawn</option><option value="">Every one</option>
+            </select></div>
+          <div class="field"><label>Find</label><input id="veta-app-search" placeholder="Name, phone or number" oninput="clearTimeout(window._vaT);window._vaT=setTimeout(loadVetaApplications,300)"></div>
         </div>
+        <div id="veta-app-count" class="help-note" style="margin-bottom:8px;"></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Name</th><th>Intake</th><th>Where it is</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Phone</th><th>Gender</th><th>Course · intake</th><th>Applied</th><th>Where it is</th><th class="veta-money-col">Owing</th><th></th></tr></thead>
           <tbody id="veta-apps-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" data-adm-section="veta-admitted">
+        <div class="card-title">Admitted students <span class="tip" tabindex="0" role="note" aria-label="Help: admitted VETA students" data-tip="Every student admitted to a VETA course, by intake: college ID, contacts, first next of kin, day or hostel, NVA level and what they still owe on the course. Open one for their whole record.">?</span></div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field"><label>Intake</label><select id="veta-adm-intake" onchange="loadVetaAdmitted()"></select></div>
+          <div class="field"><label>Find</label><input id="veta-adm-search" placeholder="Name, phone or college ID" oninput="clearTimeout(window._vdT);window._vdT=setTimeout(loadVetaAdmitted,300)"></div>
+        </div>
+        <div id="veta-adm-count" class="help-note" style="margin-bottom:8px;"></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>College ID</th><th>Name</th><th>Gender</th><th>Phone</th><th>Next of kin</th><th>Course · intake</th><th>Lives</th><th>Status</th><th>Admitted</th><th class="veta-money-col">Owing</th><th></th></tr></thead>
+          <tbody id="veta-adm-tbody"></tbody>
         </table></div>
       </div>
 
@@ -4193,6 +4242,7 @@
     <input type="hidden" id="veta-modal-id">
     <div id="veta-modal-summary" style="font-size:.84rem;margin-bottom:12px;"></div>
     <div id="veta-modal-blockers"></div>
+    <div id="veta-modal-profile" style="margin-bottom:12px;"></div>
     <div id="veta-modal-details" style="display:none;">
       <div class="card-title" style="font-size:.9rem;">Details — the records desk <span class="tip" tabindex="0" role="note" aria-label="Help: VETA details" data-tip="The admission form (Fomu ya Kujiunga): who the student is, where they were born and live, their religion and education level, a parent or guardian, who pays the fees, and any long-term health problem they declare.">?</span></div>
       <div id="veta-d-form"></div>
@@ -4594,6 +4644,7 @@ function showPage(name, btn) {
     const keep =
       (g.id === 'modules-nav-group' && name === 'modules') ||
       (g.id === 'students-nav-group' && (name === 'students' || name === 'student-records' || name === 'health')) ||
+      (g.id === 'veta-nav-group' && name === 'veta-courses') ||
       (g.id === 'attendance-nav-group' && (name === 'attendance' || name === 'reports')) ||
       (g.id === 'results-nav-group' && name === 'results') ||
       (g.id === 'declarations-nav-group' && name === 'declarations') ||
@@ -4994,8 +5045,7 @@ async function boot() {
       showPage('accounts', document.querySelector('[data-page="accounts"]'));
       loadStaffAccounts();
     } else if ((state.offices || {}).coordinator && !state.isStaff) {
-      showPage('veta-courses', document.querySelector('[data-page="veta-courses"]'));
-      loadVetaCourses();
+      showVetaCourses(document.querySelector('[data-veta-courses].nav-sub-btn'));
     } else if ((state.offices || {}).lab && !state.isStaff) {
       showLabSection('stock');
     } else if ((state.offices || {}).dean && !state.isStaff && !state.isRecordsOffice) {
@@ -11515,16 +11565,37 @@ const ADMISSION_SECTIONS = {
   pass: ['Semester pass', 'Paid up to the semester\'s first instalment: print their pass. Students can download it from the portal.'],
   dueback: ['Expected back', 'FAIL and postponed students due this semester.'],
   settings: ['Settings', 'When admissions run, the college ID format, and the required items.'],
-  veta: ['VETA applications', 'Intakes, and VETA students on their way through the desks.'],
+  'veta-applicants': ['VETA applicants', 'Everybody applying for a VETA course, and where they are.'],
+  'veta-new': ['New VETA application', 'Take someone on for an intake.'],
+  'veta-admitted': ['VETA admitted students', 'Every student admitted to a VETA course, by intake.'],
+  'veta-intakes': ['VETA intakes', 'The intakes the VETA courses run in.'],
   items: ['Items check', 'Items checked again each semester — the TPH book by finance, rim paper and the other checked items by the admission office.'],
   classlist: ['Class lists', 'A level\'s students this semester: first sitting or repeater.'],
   noshow: ['Did not report', 'Continuing students who never came: decide three months after admission opened.'],
+  suppconsent: ['Supplementary consent', 'The consent form supplementary students fill in, print and bring back signed.'],
   transfer: ['Transfer', 'A student going to another college: find them, check, approve.'],
   transferred: ['Transferred records', 'Students transferred to another college, with their details and last results.'],
 };
 
-const STUDENT_SIDE_SECTIONS = ['pass', 'classlist', 'items', 'noshow'];
+const STUDENT_SIDE_SECTIONS = ['pass', 'classlist', 'items', 'noshow', 'suppconsent'];
 const TRANSFER_SECTIONS = ['transfer', 'transferred'];
+const VETA_SECTIONS = ['veta-applicants', 'veta-new', 'veta-admitted', 'veta-intakes'];
+
+function toggleVetaMenu(event) {
+  const group = document.getElementById('veta-nav-group');
+  group.classList.toggle('open');
+  const onVeta = (VETA_SECTIONS.includes(state.admissionSection) && document.getElementById('page-admissions').classList.contains('active'))
+    || document.getElementById('page-veta-courses').classList.contains('active');
+  if (!onVeta) showAdmissionSection('veta-applicants', group.querySelector('[data-adm-section="veta-applicants"]'));
+  event.stopPropagation();
+}
+
+function showVetaCourses(btn) {
+  showPage('veta-courses', btn);
+  document.getElementById('veta-nav-group').classList.add('open');
+  const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = 'Courses & modules';
+  loadVetaCourses();
+}
 
 function toggleTransfersMenu(event) {
   const group = document.getElementById('transfers-nav-group');
@@ -11561,6 +11632,7 @@ async function showAdmissionSection(section, btn) {
   // their cards are still on this page.
   const groupId = (btn && btn.closest('.nav-group')?.id)
     || (TRANSFER_SECTIONS.includes(section) ? 'transfers-nav-group'
+        : VETA_SECTIONS.includes(section) ? 'veta-nav-group'
         : STUDENT_SIDE_SECTIONS.includes(section) && !state.offices?.finance ? 'students-nav-group' : 'admissions-nav-group');
   showPage('admissions', document.querySelector(`#${groupId} .nav-btn`));
   document.getElementById(groupId).classList.add('open');
@@ -11582,7 +11654,7 @@ async function showAdmissionSection(section, btn) {
   }
   if (section === 'pending') await loadPending();
   if (section === 'dueback') await loadDueBack();
-  if (section === 'veta') await loadVeta();
+  if (VETA_SECTIONS.includes(section)) await loadVeta(section);
   if (section === 'items') {
     const picker = document.getElementById('items-semester');
     if (!picker.options.length) {
@@ -11603,6 +11675,63 @@ async function showAdmissionSection(section, btn) {
     await loadNotReported();
   }
   if (section === 'transferred') await loadTransferred();
+  if (section === 'suppconsent') await Promise.all([loadSuppConsentForm(), loadSuppConsents()]);
+}
+
+// ── the supplementary students' consent form (said 28 October 2026) ──
+async function loadSuppConsentForm() {
+  try {
+    const f = await api('GET', '/supp-consent/form/');
+    const keeps = !!(state.offices?.admission || state.offices?.principal);
+    [['sc-title', f.title], ['sc-a', f.part_a], ['sc-b', f.part_b], ['sc-c', f.part_c], ['sc-d', f.part_d]]
+      .forEach(([id, value]) => { const el = document.getElementById(id); el.value = value; el.readOnly = !keeps; });
+    const open = document.getElementById('sc-open'); open.checked = f.is_open; open.disabled = !keeps;
+    document.getElementById('sc-save').style.display = keeps ? '' : 'none';
+    document.getElementById('sc-form-note').textContent = `${f.academic_year} · ${f.is_open ? 'open: supplementary students see it' : 'closed: students do not see it yet'}`
+      + (f.updated_by ? ` · last saved by ${f.updated_by}` : '');
+  } catch (e) { toast(apiErrorText(e, 'Could not load the form'), 'var(--red)'); }
+}
+
+async function saveSuppConsentForm(event) {
+  const payload = { title: document.getElementById('sc-title').value, part_a: document.getElementById('sc-a').value,
+    part_b: document.getElementById('sc-b').value, part_c: document.getElementById('sc-c').value,
+    part_d: document.getElementById('sc-d').value, is_open: document.getElementById('sc-open').checked };
+  const done = working(event?.currentTarget, 'Saving…');
+  try { await api('PUT', '/supp-consent/form/', payload); toast('Saved', 'var(--green)'); await loadSuppConsentForm(); }
+  catch (e) { toast(apiErrorText(e, 'Could not save it'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function loadSuppConsents() {
+  const params = new URLSearchParams();
+  const wanted = document.getElementById('sc-state').value, q = document.getElementById('sc-search').value.trim();
+  if (wanted) params.set('state', wanted);
+  if (q) params.set('q', q);
+  const keeps = !!(state.offices?.admission || state.offices?.principal);
+  try {
+    const rows = await api('GET', `/supp-consent/?${params}`);
+    const count = s => rows.filter(r => r.state === s).length;
+    document.getElementById('sc-note').textContent = wanted ? `${rows.length} student(s)`
+      : `${rows.length} student(s): ${count('not_filled')} not filled in · ${count('online')} filled in, signed copy not back · ${count('paper')} signed copy back`;
+    document.getElementById('sc-tbody').innerHTML = rows.length ? rows.map(r => `<tr>
+        <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}</td>
+        <td>${safeText(r.name)}${r.still_supp ? '' : ' <span class="badge badge-gen" title="Their results no longer ask for a supplementary">results in</span>'}</td>
+        <td>${safeText(r.level || '—')}</td>
+        <td>${r.agreed_at ? safeText(new Date(r.agreed_at).toLocaleDateString()) : '<span style="color:var(--muted)">not yet</span>'}</td>
+        <td>${r.paper_received_at ? `${safeText(new Date(r.paper_received_at).toLocaleDateString())} · <strong>${safeText(r.decision)}</strong>${r.paper_note ? ` <span style="color:var(--muted)">${safeText(r.paper_note)}</span>` : ''}` : (r.consent_id ? '<span class="badge badge-orange">not back</span>' : '—')}</td>
+        <td style="white-space:nowrap">${r.consent_id ? `<a class="btn btn-ghost btn-sm" href="/supp-consent/${r.consent_id}/print/" target="_blank" rel="noopener">Print</a>` : ''}
+          ${r.consent_id && keeps ? `<select id="sc-dec-${r.consent_id}" class="btn btn-secondary btn-sm"><option value="allowed">Allowed</option><option value="not_allowed">Not allowed</option></select>
+          <button class="btn btn-primary btn-sm" onclick="recordSuppPaper(${r.consent_id}, ${jsArg(r.name)})">${r.paper_received_at ? 'Correct' : 'Signed copy back'}</button>` : ''}</td></tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty">Nobody here</div></td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load the list'), 'var(--red)'); }
+}
+
+async function recordSuppPaper(id, name) {
+  const decision = document.getElementById(`sc-dec-${id}`).value;
+  const note = prompt(`${name}: the signed and stamped copy is back — the Principal ${decision === 'allowed' ? 'allowed' : 'did not allow'} it. A note (optional):`, '');
+  if (note === null) return;
+  try { await api('POST', `/supp-consent/${id}/paper/`, { decision, note }); toast('Recorded', 'var(--green)'); loadSuppConsents(); }
+  catch (e) { toast(apiErrorText(e, 'Could not record it'), 'var(--red)'); }
 }
 
 // ── transfers to another college (said 27 October 2026) ──
@@ -14692,10 +14821,16 @@ async function saveExpenseCategory(event) {
 const VETA_DESKS = { intake: 'Intake', information: 'Records', finance: 'Finance', admission: 'Admission',
                      admitted: 'Admitted', rejected: 'Refused', cancelled: 'Withdrawn' };
 
-async function loadVeta() {
+async function loadVeta(section = state.admissionSection) {
   try {
     const [intakes] = await Promise.all([api('GET', '/intakes/'), ensureVetaCourses()]);
     state.vetaIntakes = intakes;
+    const intakeOptions = intakes.map(i => `<option value="${i.id}">${safeText(i.name)}</option>`).join('');
+    ['veta-app-intake-filter', 'veta-adm-intake'].forEach(id => {
+      const select = document.getElementById(id); const kept = select.value;
+      select.innerHTML = '<option value="">Every intake</option>' + intakeOptions;
+      if (kept) select.value = kept;
+    });
     document.getElementById('veta-intakes-tbody').innerHTML = intakes.length ? intakes.map(i => `<tr>
         <td>${safeText(i.name)}</td>
         <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${safeText(i.programme_code)}</span> ${safeText(i.structure_display)}</td>
@@ -14711,8 +14846,60 @@ async function loadVeta() {
       : '<option value="">No VETA course yet — the Principal defines one under Departments</option>';
     document.getElementById('veta-app-intake').innerHTML = intakes.filter(i => i.is_open)
       .map(i => `<option value="${i.id}">${safeText(i.name)}</option>`).join('') || '<option value="">No intake is open</option>';
-    await loadVetaApplications();
+    if (section === 'veta-applicants') await loadVetaApplications();
+    if (section === 'veta-admitted') await loadVetaAdmitted();
   } catch (e) { toast(apiErrorText(e, 'Could not load the VETA courses'), 'var(--red)'); }
+}
+
+// Money columns only for those who see the money (the API leaves it out for the others).
+function showVetaMoney(rows) {
+  const shown = rows.some(r => r.owing !== undefined);
+  document.querySelectorAll('.veta-money-col').forEach(th => th.style.display = shown ? '' : 'none');
+  return shown;
+}
+
+async function loadVetaAdmitted() {
+  const params = new URLSearchParams();
+  const intake = document.getElementById('veta-adm-intake').value;
+  const q = document.getElementById('veta-adm-search').value.trim();
+  if (intake) params.set('intake_id', intake);
+  if (q) params.set('q', q);
+  try {
+    const rows = await api('GET', `/course-enrollments/?${params}`);
+    const withMoney = showVetaMoney(rows);
+    document.getElementById('veta-adm-count').textContent = `${rows.length} student${rows.length === 1 ? '' : 's'}`;
+    document.getElementById('veta-adm-tbody').innerHTML = rows.length ? rows.map(r => `<tr>
+        <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.college_id || r.reg_no)}</td>
+        <td><strong>${safeText(r.name)}</strong></td><td>${safeText(r.gender_display || '—')}</td><td>${safeText(r.phone || '—')}</td>
+        <td>${r.next_of_kin ? `${safeText(r.next_of_kin.name)} <span style="color:var(--muted);font-size:.75rem">${safeText(r.next_of_kin.relationship)} · ${safeText(r.next_of_kin.phone)}</span>` : '—'}</td>
+        <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${safeText(r.programme_code)}</span> ${safeText(r.intake_name)}</td>
+        <td>${safeText(r.residence_display)}</td>
+        <td><span class="badge badge-green">${safeText(r.status_display)}</span>${r.nva_level ? ` Level ${r.nva_level}` : ''}</td>
+        <td style="white-space:nowrap">${safeText(new Date(r.admitted_at).toLocaleDateString())}</td>
+        ${withMoney ? `<td style="white-space:nowrap">${r.owing === null ? '—' : money(r.owing)}</td>` : ''}
+        <td>${r.application ? `<button class="btn btn-ghost btn-sm" onclick="openVetaModal(${r.application})">Open</button>` : ''}</td></tr>`).join('')
+      : '<tr><td colspan="11" style="color:var(--muted)">Nobody admitted yet.</td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load the students'), 'var(--red)'); }
+}
+
+// Their whole record, read only: what records took down at its desk.
+function vetaProfileHtml(a) {
+  const relLabel = Object.fromEntries([...RELATIONSHIPS, ['parent', 'Parent'], ['spouse', 'Spouse'], ['sibling', 'Sibling']]);
+  const born = a.date_of_birth || a.birth_year || '';
+  const facts = [['Gender', a.gender_display], ['Born', [born, a.birth_place].filter(Boolean).join(', ')],
+    ['Marital status', a.marital_status_display], ['National ID', a.national_id], ['NHIF card', a.nhif_card_no],
+    ['Religion', a.religion], ['Education level', a.education_level], ['Address', a.address],
+    ['Phone', a.phone], ['Fees paid by', a.fee_payer_display],
+    ['Sponsor', [a.sponsor_name, a.sponsor_phone].filter(Boolean).join(' · ')],
+    ['Long-term health problem declared', a.has_chronic_condition]]
+    .filter(([, v]) => v).map(([k, v]) => `<tr><th style="width:40%">${k}</th><td>${safeText(v)}</td></tr>`).join('');
+  const kin = (a.next_of_kin || []).map(k => `<tr><td>${safeText(k.name)}</td><td>${safeText(relLabel[k.relationship] || k.relationship_display || k.relationship)}</td><td>${safeText(k.phone)}</td><td>${safeText(k.address || '')}</td></tr>`).join('');
+  const schools = (a.education || []).map(e => `<tr><td>${safeText(e.level_display)}</td><td>${safeText(e.institution)}</td><td>${safeText([e.start_year, e.end_year].filter(Boolean).join('–'))}</td><td>${safeText(e.index_number || '')}</td></tr>`).join('');
+  return `<details open><summary class="card-title" style="font-size:.9rem;cursor:pointer">The student's record</summary>
+    ${facts ? `<div class="table-wrap"><table>${facts}</table></div>` : '<div class="help-note">Records has not taken the details yet.</div>'}
+    ${kin ? `<div class="card-title" style="font-size:.85rem;margin-top:10px">Next of kin</div><div class="table-wrap"><table><thead><tr><th>Name</th><th>Relationship</th><th>Phone</th><th>Address</th></tr></thead><tbody>${kin}</tbody></table></div>` : ''}
+    ${schools ? `<div class="card-title" style="font-size:.85rem;margin-top:10px">Education</div><div class="table-wrap"><table><thead><tr><th>Level</th><th>School</th><th>Years</th><th>Index No.</th></tr></thead><tbody>${schools}</tbody></table></div>` : ''}
+  </details>`;
 }
 
 async function openVetaIntake(event) {
@@ -14749,13 +14936,26 @@ async function createVetaApplication(event) {
 
 async function loadVetaApplications() {
   const wanted = document.getElementById('veta-app-filter').value;
-  const rows = await api('GET', `/course-applications/${wanted ? `?state=${wanted}` : ''}`);
-  document.getElementById('veta-apps-tbody').innerHTML = rows.length ? rows.map(a => `<tr>
-      <td><strong>${safeText(a.name)}</strong><div style="font-size:.72rem;color:var(--muted);font-family:var(--font-mono)">${safeText(a.college_id || a.reg_no)}</div></td>
-      <td>${safeText(a.intake_name)}</td>
-      <td><span class="badge ${a.state === 'admitted' ? 'badge-green' : a.can_work ? 'badge-yellow' : 'badge-gen'}">${safeText(VETA_DESKS[a.state] || a.state)}</span>${a.can_work ? ' <span style="font-size:.72rem;color:var(--muted)">your desk</span>' : ''}</td>
-      <td><button class="btn btn-ghost btn-sm" onclick="openVetaModal(${a.id})">Open</button></td>
-    </tr>`).join('') : '<tr><td colspan="4" style="color:var(--muted)">Nothing here.</td></tr>';
+  const params = new URLSearchParams();
+  if (wanted === 'open') params.set('open', '1'); else if (wanted) params.set('state', wanted);
+  const intake = document.getElementById('veta-app-intake-filter').value;
+  const q = document.getElementById('veta-app-search').value.trim();
+  if (intake) params.set('intake_id', intake);
+  if (q) params.set('q', q);
+  try {
+    const rows = await api('GET', `/course-applications/?${params}`);
+    const withMoney = showVetaMoney(rows);
+    document.getElementById('veta-app-count').textContent = `${rows.length} applicant${rows.length === 1 ? '' : 's'}`;
+    document.getElementById('veta-apps-tbody').innerHTML = rows.length ? rows.map(a => `<tr>
+        <td><strong>${safeText(a.name)}</strong><div style="font-size:.72rem;color:var(--muted);font-family:var(--font-mono)">${safeText(a.college_id || a.reg_no)}</div></td>
+        <td>${safeText(a.phone || '—')}</td><td>${safeText(a.gender_display || '—')}</td>
+        <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${safeText(a.programme_code)}</span> ${safeText(a.intake_name)}</td>
+        <td style="white-space:nowrap">${safeText(new Date(a.created_at).toLocaleDateString())}</td>
+        <td><span class="badge ${a.state === 'admitted' ? 'badge-green' : a.can_work ? 'badge-yellow' : 'badge-gen'}">${safeText(VETA_DESKS[a.state] || a.state)}</span>${a.can_work ? ' <span style="font-size:.72rem;color:var(--muted)">your desk</span>' : ''}</td>
+        ${withMoney ? `<td style="white-space:nowrap">${a.owing === null ? 'not billed' : money(a.owing)}</td>` : ''}
+        <td><button class="btn btn-ghost btn-sm" onclick="openVetaModal(${a.id})">Open</button></td>
+      </tr>`).join('') : '<tr><td colspan="8" style="color:var(--muted)">Nobody here.</td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load the applicants'), 'var(--red)'); }
 }
 
 async function openVetaModal(id) {
@@ -14777,6 +14977,7 @@ async function openVetaModal(id) {
   document.getElementById('veta-modal-blockers').innerHTML = (a.can_work && a.blockers.length)
     ? `<div class="missing-note" style="margin-bottom:10px;">${a.blockers.map(safeText).join(' ')}</div>` : '';
   const atRecords = a.can_work && a.state === 'information';
+  document.getElementById('veta-modal-profile').innerHTML = atRecords ? '' : vetaProfileHtml(a);
   document.getElementById('veta-modal-details').style.display = atRecords ? '' : 'none';
   if (atRecords) document.getElementById('veta-d-form').innerHTML = detailsFormHtml('veta-d', { ...a, veta_only: true });
   renderVetaItems(a);
@@ -14924,11 +15125,6 @@ async function renderVetaCourse() {
       ${long ? `<td>${m.nva_level ? 'Level ' + m.nva_level : '—'}</td>` : ''}
       <td>${m.order}</td><td>${m.is_active ? 'yes' : 'no'}</td></tr>`).join('')
     : `<tr><td colspan="5" style="color:var(--muted)">No modules listed yet.</td></tr>`;
-  const intakes = (state.vetaIntakes || []).filter(i => i.programme === id);
-  document.getElementById('vc-intake').innerHTML = intakes.length
-    ? intakes.map(i => `<option value="${i.id}">${safeText(i.name)} (${i.enrolled})</option>`).join('')
-    : '<option value="">No intake yet</option>';
-  await loadVetaStudents();
 }
 
 async function saveVetaModule(event) {
@@ -14946,17 +15142,6 @@ async function saveVetaModule(event) {
     await renderVetaCourse();
   } catch (e) { toast(apiErrorText(e, 'Could not save the module'), 'var(--red)'); }
   finally { done(); }
-}
-
-async function loadVetaStudents() {
-  const intake = document.getElementById('vc-intake').value;
-  if (!intake) { document.getElementById('vc-students-tbody').innerHTML = ''; return; }
-  const rows = await api('GET', `/course-enrollments/?intake_id=${intake}`);
-  document.getElementById('vc-students-tbody').innerHTML = rows.length ? rows.map(r => `<tr>
-      <td>${safeText(r.name)}</td><td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.college_id || r.reg_no)}</td>
-      <td>${safeText(r.phone || '—')}</td><td>${safeText(r.residence)}</td>
-      <td><span class="badge badge-green">${safeText(r.status_display)}</span>${r.nva_level ? ` Level ${r.nva_level}` : ''}</td></tr>`).join('')
-    : '<tr><td colspan="5" style="color:var(--muted)">Nobody admitted yet.</td></tr>';
 }
 
 // ── EXECUTIVE SUMMARY ──────────────────────────────────────────────────────────

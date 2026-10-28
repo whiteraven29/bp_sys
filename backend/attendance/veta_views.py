@@ -246,7 +246,7 @@ def course_modules(request):
 # ── applications through the desks ────────────────────────────────────────────
 
 def _visible_applications(user):
-    qs = CourseApplication.objects.select_related('profile', 'intake__programme')
+    qs = CourseApplication.objects.select_related('profile', 'intake__programme', 'intake__academic_year')
     if runs_veta_courses(user):
         return qs
     states = visible_application_states(user)
@@ -262,6 +262,9 @@ def _application_row(app, user, *, full=False):
         'college_id': app.profile.college_id, 'residence': app.residence,
         'fees_raised': app.fees_raised_at is not None, 'created_at': app.created_at,
         'can_work': app.is_open and can_work_desk(user, app.state),
+        # The list shows who they are, not only where they are (said 28 October 2026).
+        'phone': app.profile.phone, 'gender_display': app.profile.get_gender_display() if app.profile.gender else '',
+        'programme_name': app.intake.programme.name, 'intake_starts_on': app.intake.starts_on,
     }
     if not full:
         return row
@@ -290,10 +293,19 @@ def course_applications(request):
         if not _reads_veta(user):
             raise PermissionDenied('For the admission desks.')
         qs = _visible_applications(user)
-        for param, field in (('state', 'state'), ('intake_id', 'intake_id')):
+        for param, field in (('state', 'state'), ('intake_id', 'intake_id'), ('programme_id', 'intake__programme_id')):
             if request.query_params.get(param):
                 qs = qs.filter(**{field: request.query_params[param]})
-        return Response([_application_row(a, user) for a in qs[:500]])
+        if request.query_params.get('open') == '1':
+            qs = qs.filter(state__in=sorted(CourseApplication.OPEN_STATES))
+        qs = _matching(qs, request.query_params.get('q'))
+        apps = list(qs.order_by('-created_at')[:500])
+        rows = [_application_row(a, user) for a in apps]
+        if not _hides_money(user):
+            owing = veta.owing_by_intake({(a.profile_id, a.intake_id) for a in apps})
+            for app, row in zip(apps, rows):
+                row['owing'] = str(owing[(app.profile_id, app.intake_id)]) if app.fees_raised_at else None
+        return Response(rows)
     if not can_work_desk(user, CourseApplication.INTAKE):
         raise PermissionDenied('The admission office takes a student on.')
     intake = Intake.objects.filter(id=pk_or_none(request.data.get('intake'))).first()
@@ -385,20 +397,51 @@ def course_application_action(request, pk, action=None):
     return Response(_application_row(app, user, full=True))
 
 
+def _matching(qs, query, prefix=''):
+    """Name, phone, NACTVET or college number."""
+    from django.db.models import Q
+    query = str(query or '').strip()
+    if not query:
+        return qs
+    return qs.filter(Q(**{f'{prefix}profile__name__icontains': query}) | Q(**{f'{prefix}profile__phone__icontains': query})
+                     | Q(**{f'{prefix}profile__nactvet_reg_no__icontains': query})
+                     | Q(**{f'{prefix}profile__college_id__icontains': query}))
+
+
 @api_view(['GET'])
 def course_enrollments(request):
-    if not _reads_veta(request.user):
+    user = request.user
+    if not _reads_veta(user):
         raise PermissionDenied('For the course coordinator and the offices above.')
-    qs = CourseEnrollment.objects.select_related('profile', 'intake__programme')
-    if request.query_params.get('intake_id'):
-        qs = qs.filter(intake_id=request.query_params['intake_id'])
-    return Response([{
-        'id': e.id, 'profile': e.profile_id, 'name': e.profile.name,
+    qs = (CourseEnrollment.objects.select_related('profile', 'intake__programme', 'intake__academic_year')
+          .prefetch_related('profile__next_of_kin'))
+    for param, field in (('intake_id', 'intake_id'), ('programme_id', 'intake__programme_id')):
+        if request.query_params.get(param):
+            qs = qs.filter(**{field: request.query_params[param]})
+    rows = list(_matching(qs, request.query_params.get('q'))[:1000])
+    owing = (None if _hides_money(user)
+             else veta.owing_by_intake({(e.profile_id, e.intake_id) for e in rows}))
+
+    def kin(profile):
+        first = min(profile.next_of_kin.all(), key=lambda k: k.position, default=None)
+        return {'name': first.name, 'phone': first.phone,
+                'relationship': first.get_relationship_display()} if first else None
+
+    def with_money(row, enrollment):
+        if owing is not None:              # DPARC and the coordinator read no money
+            row['owing'] = str(owing[(enrollment.profile_id, enrollment.intake_id)])
+        return row
+
+    return Response([with_money({
+        'id': e.id, 'profile': e.profile_id, 'name': e.profile.name, 'application': e.application_id,
         'reg_no': e.profile.nactvet_reg_no, 'college_id': e.profile.college_id,
-        'phone': e.profile.phone, 'intake': e.intake_id, 'intake_name': str(e.intake),
+        'phone': e.profile.phone, 'gender_display': e.profile.get_gender_display() if e.profile.gender else '',
+        'next_of_kin': kin(e.profile), 'programme_code': e.intake.programme.code,
+        'intake': e.intake_id, 'intake_name': str(e.intake),
         'status': e.status, 'status_display': e.get_status_display(), 'residence': e.residence,
+        'residence_display': e.get_residence_display(),
         'nva_level': e.nva_level, 'admitted_at': e.admitted_at,
-    } for e in qs[:1000]])
+    }, e) for e in rows])
 
 
 # ── expenses ──────────────────────────────────────────────────────────────────

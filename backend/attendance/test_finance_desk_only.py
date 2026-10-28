@@ -11,6 +11,8 @@
     semester's first instalment; its check code catches an edited copy.
 """
 
+import json
+import re
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -306,6 +308,8 @@ class SemesterPassTests(Accounts):
         issued = StudentPass.objects.get(profile=self.profile)
         self.assertContains(page, issued.code)
         self.assertNotContains(page, '/semester-pass/check/')                    # no link on the card
+        self.assertContains(page, 'Print / save as PDF')                         # the desk prints it
+        self.assertNotContains(page, 'id="pass-download"')
         self.assertEqual(issued.issued_by, admission)
         records = User.objects.create_user('rec', password='pw')
         set_roles(records, ['records_officer'], full_name='Records')
@@ -318,14 +322,26 @@ class SemesterPassTests(Accounts):
                                        semester=self.sem1, programme=self.pst, credits=3)
         enrollment = Student.objects.create(nactvet_reg_no=self.profile.nactvet_reg_no, name=self.profile.name,
                                             profile=self.profile, module=module)
+        enrollment.set_portal_pin('Portal#2026', require_change=False)
+        enrollment.save()
         portal = Client()
         session = portal.session
         session['student_id'] = enrollment.id
         session.save()
         self.assertContains(portal.get('/my-semester-pass/'), 'No student pass')
+        dashboard = portal.get('/student-dashboard/')
+        self.assertNotContains(dashboard, 'id="pass-ready"')                     # not paid up: no offer
+        self.assertContains(dashboard, 'id="password-expiry"')                   # always told when it expires
         self.pay('1000000', 'CRDB-ALL')
+        self.assertContains(portal.get('/student-dashboard/'), 'id="pass-ready"')
         page = portal.get('/my-semester-pass/')
         self.assertContains(page, StudentPass.objects.get(profile=self.profile, source=StudentPass.PORTAL).code)
+        # Said 28 October 2026: students use phones — the pass is downloaded as a picture, not printed.
+        self.assertContains(page, 'id="pass-download"')
+        self.assertNotContains(page, 'Print / save as PDF')
+        data = json.loads(re.search(r'<script id="pass-data" type="application/json">(.*?)</script>',
+                                    page.content.decode(), re.S).group(1))
+        self.assertEqual((data['reg_no'], data['college_id']), (self.profile.nactvet_reg_no, self.profile.college_id))
 
     def test_checking_a_pass_is_for_staff_by_code_alone(self):
         self.pay('1000000', 'CRDB-ALL')

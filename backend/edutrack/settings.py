@@ -19,7 +19,7 @@ DEBUG = env_bool('DEBUG', default=False)
 if not DEBUG and (not SECRET_KEY or SECRET_KEY == _INSECURE_KEY):
     from django.core.exceptions import ImproperlyConfigured
     raise ImproperlyConfigured('SECRET_KEY is not set. Put a long random value in the .env file.')
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='192.168.0.100,localhost,127.0.0.1').split(',')
 
 INSTALLED_APPS = [
     'django.contrib.admin',

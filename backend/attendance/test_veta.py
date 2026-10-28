@@ -424,3 +424,47 @@ class TheCosmetologyFormTests(VetaBase):
         admitted = self.admission.post(f'/api/course-applications/{application.id}/clear/', {}, format='json')
         self.assertEqual(admitted.status_code, 200, admitted.data)
         self.assertEqual(admitted.data['state'], 'admitted')
+
+
+class TheVetaListsTests(VetaBase):
+    """Said 28 October 2026: VETA has its own menu, and its lists say who the
+    applicants and students are — not only where they are."""
+
+    def setUp(self):
+        super().setUp()
+        _, self.intake = self.course_with_fees()
+        self.admitted_app, _ = self.through_the_desks(self.intake, 'Neema Juma')
+        self.waiting_app = self.apply(self.intake, 'Rehema Ali')
+
+    def test_applicants_found_filtered_and_described(self):
+        rows = self.admission.get('/api/course-applications/?open=1').data
+        self.assertEqual([row['name'] for row in rows], ['Rehema Ali'])
+        self.assertEqual((rows[0]['phone'], rows[0]['programme_name'], rows[0]['owing']),
+                         ('0712000000', 'Hair Cutting', None))                   # not billed yet
+        everyone = self.admission.get('/api/course-applications/').data
+        self.assertEqual({row['name'] for row in everyone}, {'Neema Juma', 'Rehema Ali'})
+        found = self.admission.get('/api/course-applications/?q=neema').data
+        self.assertEqual([row['name'] for row in found], ['Neema Juma'])
+        self.assertEqual((found[0]['gender_display'], found[0]['owing']), ('Female', '300000.00'))
+
+    def test_admitted_students_with_next_of_kin_and_what_they_owe(self):
+        rows = self.accountant.get(f'/api/course-enrollments/?intake_id={self.intake.id}').data
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual((row['college_id'], row['gender_display'], row['residence_display'], row['owing']),
+                         ('BPH/VETA/HCT/26/001', 'Female', 'Day', '300000.00'))
+        self.assertEqual(row['next_of_kin'], {'name': 'Mama Juma', 'phone': '0713000000', 'relationship': 'Mother'})
+        self.assertEqual(row['application'], self.admitted_app)
+        self.assertEqual(len(self.accountant.get('/api/course-enrollments/?q=VETA/HCT').data), 1)
+        self.assertEqual(len(self.accountant.get('/api/course-enrollments/?q=nobody').data), 0)
+
+    def test_dparc_and_the_coordinator_read_no_money(self):
+        for client in (self.dparc, self.coordinator):
+            self.assertNotIn('owing', client.get('/api/course-enrollments/').data[0])
+            self.assertTrue(all('owing' not in row for row in client.get('/api/course-applications/').data))
+
+    def test_the_full_record_opens_from_the_list(self):
+        record = self.dparc.get(f'/api/course-applications/{self.admitted_app}/').data
+        self.assertEqual(record['next_of_kin'][0]['name'], 'Mama Juma')
+        self.assertEqual(record['gender_display'], 'Female')
+        self.assertEqual([step['desk'] for step in record['steps']][:1], ['intake'])
