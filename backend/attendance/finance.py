@@ -859,14 +859,23 @@ def pending_waivers(profile):
 WAIVER_FAMILIES = {ChargeType.FEE: 'Tuition fee', ChargeType.DIRECT_COST: 'Direct costs'}
 
 
+def billed_as_missing():
+    """An item charge raised because the item was missing — not the fee
+    structure's own charge under an item's charge type. The medical fee is
+    both an item's (insurance) and a line of every year's direct costs: on the
+    instalments it counts, as on the invoice (said 30 October 2026: a Level 5
+    shortfall read 545,000 against an invoice of 605,000)."""
+    return Q(charge_type_id__in=item_charge_type_ids()) & ~Q(source=StudentCharge.STRUCTURE)
+
+
 def instalment_charges(profile, academic_year, family, installment_number):
     """One instalment of the year's tuition or direct costs: its charges,
-    earliest due first. Items are left out — they are billed as missing, not
-    by instalment."""
+    earliest due first. Items billed as missing are left out — they are owed
+    on their own, not by instalment."""
     return list(with_balances(
         StudentCharge.objects.filter(profile=profile, academic_year=academic_year,
                                      charge_type__family=family, installment_number=installment_number)
-        .exclude(charge_type_id__in=item_charge_type_ids())
+        .exclude(billed_as_missing())
         .select_related('charge_type').order_by('due_date', 'charge_type__name', 'id')))
 
 
@@ -877,7 +886,7 @@ def shortfalls(profile, academic_year):
     charges = with_balances(
         StudentCharge.objects.filter(profile=profile, academic_year=academic_year,
                                      charge_type__family__in=list(WAIVER_FAMILIES))
-        .exclude(charge_type_id__in=item_charge_type_ids()).select_related('charge_type'))
+        .exclude(billed_as_missing()).select_related('charge_type'))
     for charge in charges:
         family = charge.charge_type.family
         group = groups.setdefault((family, charge.installment_number), {

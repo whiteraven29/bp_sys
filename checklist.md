@@ -418,6 +418,9 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      package; opened by pdftoppm / mutool without complaint
    - [x] Dashboard, first thing: when the password expires (always, with *Change it*), and *Your semester pass is ready —
      Download pass* once this semester's instalment is paid
+   - [x] A shortfall on direct costs reads what the invoice reads (30 Oct: Level 5 showed 545,000 against an invoice of
+     605,000 — the 60,000 medical fee is also insurance's item charge, and the shortfall left items out). The fee
+     structure's medical fee now counts. The TPH book is not direct costs: an other fee with its own invoice
    - [x] A repeater is not held INCOMPLETE by a module they passed before (28 Oct: field practice cleared last year,
      enrolled again with the class and never graded) or one they were taken off — repeaters only: a first sitter
      (readmitted ones too) with no field result yet still reads INCOMPLETE, as it should (your note, same day): `progression.not_holding` — the
@@ -429,7 +432,7 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] The rail narrower (52px) with smaller icons; its toggle stands where the EduTrack mark was — ☰ opens the full
      menu, ✕ closes it (your question: how to close it); the top bar's toggle hidden on phones. Desktop unchanged
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0083 applied by the deploy (release guide B1–B4); `Ran 1281 tests … OK` on the laptop first
+   - [ ] Migrations to 0083 applied by the deploy (release guide B1–B4); `Ran 1282 tests … OK` on the laptop first
    - [ ] Students ▸ Supplementary consent: check the amounts in Sehemu B (copied from the 2025 form), then Open
    - [ ] REPEAT students at semester 1's finance desk who owe only semester 2 modules:
      `sudo -u bphacoh venv/bin/python manage.py call_off_repeat_places` — read the dry run, then `--apply`. Run it

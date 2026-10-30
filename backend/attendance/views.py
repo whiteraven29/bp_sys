@@ -10292,7 +10292,7 @@ def _waiver_row(waiver, names=None):
         part = (StudentCharge.objects.filter(profile_id=waiver.profile_id, academic_year_id=waiver.academic_year_id,
                                              charge_type__family=waiver.family,
                                              installment_number=waiver.installment_number)
-                .exclude(charge_type_id__in=finance.item_charge_type_ids())
+                .exclude(finance.billed_as_missing())
                 .aggregate(due=Min('due_date'), billed=Sum('amount')))
         family = finance.WAIVER_FAMILIES.get(waiver.family, waiver.family)
         what = {'charge_id': None, 'charge': f'{family} · instalment {waiver.installment_number}',

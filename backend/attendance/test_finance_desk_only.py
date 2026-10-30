@@ -510,3 +510,41 @@ class InstalmentWaiverTests(WaiverDesk):
         refused = self.dpfpa.post(f'/api/waiver-requests/{waiver.id}/decide/', {'approve': True}, format='json')
         self.assertEqual(refused.status_code, 400)
         self.assertIn('Nothing is owed', refused.data['detail'])
+
+
+class MedicalFeeInShortfallTests(Accounts):
+    """Said 30 October 2026: a Level 5 student's direct costs read 545,000 when
+    finance raised a shortfall, against an invoice of 605,000 — the medical fee
+    (60,000) is insurance's item charge too, and the shortfall left items out.
+    The fee structure's own medical fee counts. The TPH book is not direct costs
+    (said the same day): an other fee, invoiced on its own."""
+
+    def setUp(self):
+        super().setUp()
+        from .models import AdmissionRequirement
+        self.medical = ChargeType.objects.create(
+            name='Medical fees (Health Insurance)', family=ChargeType.DIRECT_COST, applies=ChargeType.AUTOMATIC,
+            bank_account=self.other_account, invoice_group='Direct costs')
+        AdmissionRequirement.objects.create(name='Insurance', charge_type=self.medical)
+        book = ChargeType.objects.create(name='TPH book', family=ChargeType.OTHER, applies=ChargeType.ON_REQUEST,
+                                         bank_account=self.other_account, invoice_group='TPH book')
+        AdmissionRequirement.objects.create(name='TPH book', charge_type=book)
+        self.price(self.direct, '545000', self.year, self.level5, [date(2026, 10, 15)])
+        self.price(self.medical, '60000', self.year, self.level5, [date(2026, 10, 15)])
+        self.profile = self.applicant('NS0950/0001/2025', 'Level Five')
+        finance.generate_charges(self.profile, self.year, class_level=self.level5, programme=self.pst)
+        # A TPH book found missing: an other fee, billed and invoiced on its own.
+        finance.raise_charge(self.profile, book, self.year, Decimal('15000'), date(2026, 10, 15))
+        _, self.accounts = office('money', 'accountant')
+
+    def test_the_shortfall_reads_what_the_invoice_reads(self):
+        rows = self.accounts.get(f'/api/waiver-requests/shortfalls/?profile_id={self.profile.id}').data
+        self.assertEqual([(row['family'], Decimal(row['billed'])) for row in rows],
+                         [(ChargeType.DIRECT_COST, Decimal('605000.00'))])          # the TPH book is not here
+        invoice = finance.issue_invoice(self.profile, StudentCharge.objects.filter(
+            profile=self.profile, charge_type__in=[self.direct, self.medical]), self.year)
+        self.assertEqual(finance.money(invoice.total), Decimal('605000.00'))
+        self.assertNotIn('TPH', ' '.join(line.charge.charge_type.name for line in invoice.lines.all()))
+        self.assertEqual(sum(c.amount for c in finance.instalment_charges(self.profile, self.year,
+                                                                         ChargeType.DIRECT_COST, 1)),
+                         Decimal('605000.00'))
