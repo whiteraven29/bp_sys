@@ -453,6 +453,39 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      invoice and audits it; refused, nothing moves
    - [x] 1330 tests; the whole flow checked in the browser (asked, approved, more time, both summaries, phone portal;
      a plan replacing a waiver; an old waiver put back, 5 months)
+3l. **Teaching plans, the curricula and the teaching calendar; the QA office — 8–9 Nov, on the branch
+   `feature/teaching-plans` (not merged; migration 0086). Guide `ops/guides/07-teaching-plans.md`.**
+   - [x] The 2022 PST curriculum loaded from the national documents (NTA 4–6 curricula, Word; assessment plans,
+     PDF): 33 modules, their SEOs and related tasks, weekly hours (L/T/P/A), credits and assessment schemes, with
+     the SEOs and tasks each kind of assessment must be drawn from. Counts checked against the plans' own totals
+     (PST04104: 12 SEOs, 59 tasks). Where the documents disagree, noted on the module, not guessed
+   - [x] CA 40 / SE 60 in every module (your note: the curriculum's 60/40 is a typing error); PST04106's SE,
+     printed 40% of 60, loaded as 60%
+   - [x] Teaching calendar from the almanac: teaching from 2 Nov 2026 (your date), holidays, CAT weeks, special
+     CATs, assignment results deadline, examinations, CQI supervisions. DPARC keeps it
+   - [x] A tutor starts a plan; the week comes from the scheme of study (PST04104: Mon L2+T1, Thu P4+A1 — as your
+     handwritten plan); laid out over 15 weeks around the recess and holidays, outcomes in curriculum order, tests
+     in the CAT weeks, assignments before the results deadline, the exam in its window (5% / 12.5% / 2.5%;
+     15 + 45 — as your plan)
+   - [x] A module the loaded curriculum does not describe (old curriculum) gets a plan without outcomes and the
+     weights results use today
+   - [x] Classes marked done / partly / missed; the register of that day linked as evidence, its absence shown;
+     moves after submission need a reason and keep the first date; make-up classes
+   - [x] Progress against the plan itself (on track ≥90%, behind 70–89%, far behind <70%), as at today or a CQI
+     date; hours, weeks behind, tests late
+   - [x] Approval by the Head of Department (DPARC without one, or when the HOD teaches it); test setting plans
+     moderated; coverage of what the assessment plan requires; tasks tested before they are taught
+   - [x] The tutor's own Word/PDF plan attached (checked to be a real file); review notes; history
+   - [x] Quality Assurance office (Principal appoints): reads every plan, notes, runs the evaluation forms
+     (your note) — never service requests
+   - [x] Results, marks and attendance untouched
+   - [ ] **You:** open the branch and commit (guide 07, A); try it on the laptop
+   - [ ] **DPARC:** confirm the Christmas recess (21 Dec – 3 Jan, from the PST04104 plan, not the almanac) and
+     Semester 2 CAT 1 (3–8 May, before the semester begins in the almanac)
+   - [ ] **Before Level 4 CAT 1 (18 Jan 2027):** the results scheme for the new curriculum, with the exam officer,
+     once all assessment plans are compared (oral tests, case studies, third assignments have no slot today)
+   - [ ] Merge and deploy when there are no doubts (guide 07, C): `load_curriculum`, `load_teaching_calendar`,
+     the QA role
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
    - [ ] Migrations to 0085 applied by the deploy (release guide B1–B4); `Ran 1330 tests … OK` on the laptop first
    - [ ] Students ▸ Supplementary consent: check the amounts in Sehemu B (copied from the 2025 form), then Open

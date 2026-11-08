@@ -540,6 +540,17 @@
   .app-trail summary { cursor: pointer; font-size: .86rem; font-weight: 600; padding: 6px 0; }
   #page-admissions [data-adm-section], #page-student-records [data-rec-section] { display: none; }
   #page-lab [data-lab-section] { display: none; }
+  #page-tplans [data-tp-section] { display: none; }
+  #page-tplans [data-tp-section].sec-on { display: block; }
+  .tp-chip { padding: 4px 10px; border-radius: 999px; font-size: .78rem; border: 1px solid var(--border); }
+  .tp-due-open td { background: var(--yellow-soft); }
+  .tp-stat { display: inline-flex; flex-direction: column; padding: 6px 12px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 6px); min-width: 92px; }
+  .tp-stat b { font-size: 1.1rem; }
+  .tp-stat span { font-size: .72rem; color: var(--muted); }
+  .tp-tasks { columns: 2 280px; font-size: .8rem; }
+  .tp-tasks label { display: block; break-inside: avoid; margin: 2px 0; }
+  #tp-plan table input, #tp-plan table select { font-size: .78rem; padding: 3px 5px; }
   #page-progression [data-review-section] { display: none; }
   #page-progression [data-review-section].sec-on { display: block; }
   #page-lab [data-lab-section].sec-on { display: block; }
@@ -620,6 +631,8 @@
   body.is-secretary .finance-only,
   body.is-secretary .estate-only,
   body.is-secretary .non-secretary-only { display: none !important; }
+  /* QA runs the evaluation forms (said 9 November 2026): the form maker is theirs too. */
+  body.is-qa #page-forms .admin-only.card.sec-on { display: block !important; }
   /* The records and admission officers keep the student record. They hold no
      administrator rights, so the academic menus stay out of their way. */
   .records-only { display: none !important; }
@@ -1219,6 +1232,17 @@
         <button class="nav-sub-btn exam-office-only" data-results-section="windows" onclick="showResultsSection('windows', this)">Entry Windows</button>
       </div>
     </div>
+    <!-- Teaching plans (said 8–9 November 2026): one item, one view. -->
+    <div class="nav-group" id="tp-nav-group" data-roles="tutor hod dparc principal qa">
+      <button class="nav-btn" data-page="tplans" onclick="toggleTpMenu(event)"><span class="icon"><i class="bi bi-journal-check"></i></span> Teaching plans <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-tp-nav="mine" data-roles="tutor" onclick="showTpSection('mine', this)">My plans</button>
+        <button class="nav-sub-btn" data-tp-nav="approve" data-roles="hod dparc" onclick="showTpSection('approve', this)">To approve</button>
+        <button class="nav-sub-btn" data-tp-nav="progress" data-roles="hod dparc principal qa" onclick="showTpSection('progress', this)">Plan progress</button>
+        <button class="nav-sub-btn" data-tp-nav="calendar" onclick="showTpSection('calendar', this)">Teaching calendar</button>
+        <button class="nav-sub-btn" data-tp-nav="curriculum" onclick="showTpSection('curriculum', this)">Curriculum</button>
+      </div>
+    </div>
     <button class="nav-btn" data-page="returning" data-roles="principal dparc exam superuser" onclick="showPage('returning',this); loadReturning()"><span class="icon"><i class="bi bi-arrow-repeat"></i></span> Returning Students</button>
     <button class="nav-btn" data-page="catnumbers" data-roles="principal dparc exam superuser" onclick="showPage('catnumbers',this); openCatNumbers()"><span class="icon"><i class="bi bi-123"></i></span> CAT Exam Numbers</button>
     <div class="nav-group admin-only exam-only" data-roles="principal dparc exam superuser" id="declarations-nav-group">
@@ -1279,12 +1303,12 @@
     </div>
     <button class="nav-btn finance-only" data-page="finance" data-finance-section="audit" onclick="showFinanceSection('audit', this)"><span class="icon"><i class="bi bi-shield-check"></i></span> Audit Trail</button>
     <button class="nav-btn academic-only" data-page="performance" onclick="showPage('performance',this)"><span class="icon"><i class="bi bi-graph-up"></i></span> Performance</button>
-    <div class="nav-group" data-roles="runs secretary dean" id="services-nav-group">
+    <div class="nav-group" data-roles="runs secretary dean qa" id="services-nav-group">
       <button class="nav-btn" data-page="forms" onclick="toggleServicesMenu(event)"><span class="icon"><i class="bi bi-life-preserver"></i></span> Services <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
-        <button class="nav-sub-btn" data-forms-nav="requests" onclick="showFormsSection('requests', this)">Service Requests</button>
+        <button class="nav-sub-btn" data-roles="runs secretary dean" data-forms-nav="requests" onclick="showFormsSection('requests', this)">Service Requests</button>
         <button class="nav-sub-btn non-secretary-only" data-roles="runs" data-forms-nav="services" onclick="showFormsSection('services', this)">Services Offered</button>
-        <button class="nav-sub-btn non-secretary-only" data-roles="runs" data-forms-nav="evaluations" onclick="showFormsSection('evaluations', this)">Evaluation Forms</button>
+        <button class="nav-sub-btn non-secretary-only" data-roles="runs qa" data-forms-nav="evaluations" onclick="showFormsSection('evaluations', this)">Evaluation Forms</button>
       </div>
     </div>
     <button class="nav-btn admin-only" data-roles="runs" data-page="sick" onclick="showPage('sick',this)"><span class="icon"><i class="bi bi-bandaid"></i></span> Sick Records</button>
@@ -1560,6 +1584,81 @@
       </div>
     </div>
 
+    <div class="page" id="page-tplans">
+      <div class="page-title" id="tp-page-title">Teaching plans</div>
+      <div class="page-sub" id="tp-page-sub">Plans, how far each has got, the weeks and the curriculum.</div>
+
+      <div class="card" data-tp-section="mine">
+        <div class="card-title">My modules this semester</div>
+        <p class="help-note">Start a plan, give the days you teach, and the plan is laid out from the curriculum and the teaching calendar. After each class, mark it done.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Module</th><th>Level</th><th>Plan</th><th>On schedule</th><th>Done</th><th></th></tr></thead>
+          <tbody id="tp-mine-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" data-tp-section="approve">
+        <div class="card-title">Plans you approve</div>
+        <p class="help-note">Your department's modules (DPARC: modules with no Head of Department, and any plan a Head of Department teaches). Tests sent for moderation are approved inside each plan.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Module</th><th>Tutors</th><th>Plan</th><th>Tests to moderate</th><th>On schedule</th><th></th></tr></thead>
+          <tbody id="tp-approve-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" data-tp-section="progress">
+        <div class="card-title">How the plans stand
+          <span style="margin-left:auto;display:flex;gap:6px;align-items:center;font-weight:400;font-size:.8rem">
+            <span style="white-space:nowrap">As at</span> <select id="tp-asof" onchange="loadTpProgress()" style="max-width:260px"></select>
+            <input type="date" id="tp-asof-date" onchange="document.getElementById('tp-asof').value='custom'; loadTpProgress()" style="max-width:150px" />
+          </span>
+        </div>
+        <p class="help-note">Each tutor is measured against their own plan: classes done of those due by the day chosen. 90% or more is on track, 70–89% behind, below 70% far behind. A CQI supervision date shows the plans as they stood that day.</p>
+        <div id="tp-progress-counts" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Module</th><th>Tutors</th><th>Plan</th><th>On schedule</th><th>Done</th><th>Hours</th><th>Behind</th><th>No register</th><th>Tests late</th><th></th></tr></thead>
+          <tbody id="tp-progress-tbody"></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" data-tp-section="calendar">
+        <div class="card-title">Teaching weeks
+          <select id="tp-cal-semester" style="margin-left:auto;max-width:240px" onchange="loadTpCalendar(this.value)"></select>
+        </div>
+        <p class="help-note" id="tp-cal-help">From the almanac. Plans are laid out over these weeks; no class is planned on a holiday, in the recess or in the examinations.</p>
+        <div class="form-grid-3" id="tp-cal-form">
+          <div class="field"><label>Teaching starts</label><input type="date" id="tp-cal-start" /></div>
+          <div class="field"><label>Teaching ends</label><input type="date" id="tp-cal-end" /></div>
+          <div class="field"><label>Note</label><input id="tp-cal-note" maxlength="300" /></div>
+        </div>
+        <button class="btn btn-primary btn-sm tp-cal-edit" onclick="saveTpCalendar(event)">Save the teaching weeks</button>
+        <div class="table-wrap" style="margin-top:12px"><table>
+          <thead><tr><th>Dates</th><th>What</th><th>Kind</th><th class="tp-cal-edit"></th></tr></thead>
+          <tbody id="tp-cal-tbody"></tbody>
+        </table></div>
+        <div class="tp-cal-edit" style="margin-top:12px">
+          <div class="card-title" style="font-size:.9rem">Add a date</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Kind</label><select id="tp-ev-kind"></select></div>
+            <div class="field"><label>What</label><input id="tp-ev-title" maxlength="200" placeholder="e.g. Graduation day" /></div>
+            <div class="field"><label>From</label><input type="date" id="tp-ev-start" /></div>
+            <div class="field"><label>To</label><input type="date" id="tp-ev-end" /></div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="addTpEvent(event)">Add</button>
+        </div>
+      </div>
+
+      <div class="card" data-tp-section="curriculum">
+        <div class="card-title">The curricula loaded</div>
+        <p class="help-note">From the national curriculum and assessment plans. Where the documents disagree with each other, it is noted against the module.</p>
+        <div id="tp-curricula"></div>
+      </div>
+      <div class="card" data-tp-section="curriculum" id="tp-cm-card" style="display:none">
+        <div id="tp-cm-detail"></div>
+      </div>
+
+      <div data-tp-section="plan" id="tp-plan"></div>
+    </div>
     <div class="page" id="page-lab">
       <div class="page-title" id="lab-page-title">Laboratory stock</div>
       <div class="page-sub" id="lab-page-sub">Reagents, glassware and consumables.</div>
@@ -2462,6 +2561,7 @@
               <option value="hod" class="senior-role">Head of Department</option>
               <option value="coordinator" class="senior-role">Course Coordinator (VETA)</option>
               <option value="dean" class="senior-role">Dean of Students</option>
+              <option value="qa" class="senior-role">Quality Assurance</option>
               <option value="exam_officer" class="senior-role">Exam Officer</option>
               <option value="ict_officer" class="senior-role">ICT Officer</option>
               <option value="accountant" class="senior-role">Accountant</option>
@@ -4722,7 +4822,7 @@ function showPage(name, btn) {
     // Reached from the group header or a deep link: land on a section rather
     // than a page whose every card is hidden.
     if (!document.querySelector('#page-forms [data-forms-section].sec-on')) {
-      showFormsSection(state.formsSection || 'requests');
+      showFormsSection(state.formsSection || defaultFormsSection());
     }
   }
   if (name === 'performance') loadPerformance();
@@ -5444,7 +5544,7 @@ async function loadPasswordResets() {
 
 const ROLE_LABELS = {
   principal: 'Principal', dparc: 'DPARC', dpfpa: 'DPFPA', hod: 'Head of Department', coordinator: 'Course Coordinator',
-  dean: 'Dean of Students',
+  dean: 'Dean of Students', qa: 'Quality Assurance',
   exam_officer: 'Exam Officer', ict_officer: 'ICT Officer',
   admission_officer: 'Admission Officer', records_officer: 'Records Officer',
   accountant: 'Accountant', estate_officer: 'Estate Officer',
@@ -5461,6 +5561,7 @@ const ROLE_NOTES = {
   hod: 'Runs the department and reads examinations, but does not decide them.',
   coordinator: 'The training (course) coordinator: runs the VETA courses — modules, intakes, class lists.',
   dean: 'Student welfare: reads the health records the records office keeps, for reference.',
+  qa: 'Quality Assurance: follows every teaching plan, leaves review notes, and runs the student and staff evaluation forms.',
   tutor: 'Takes attendance and enters CA marks for their own modules.',
   secretary: 'Answers what students have asked the College for.',
   accountant: 'The fees ledger, payments, clearance and the items check.',
@@ -9263,8 +9364,14 @@ const FORMS_SECTIONS = {
   evaluations: ['Evaluation Forms', 'Feedback forms and their results.'],
 };
 
+// Quality Assurance alone has the evaluation forms, not the requests desk.
+function defaultFormsSection() {
+  const o = state.offices || {};
+  return (o.qa && !o.runs && !o.secretary && !o.dean) ? 'evaluations' : 'requests';
+}
+
 function showFormsSection(section, btn) {
-  if (!FORMS_SECTIONS[section]) section = 'requests';
+  if (!FORMS_SECTIONS[section]) section = defaultFormsSection();
   state.formsSection = section;
   document.querySelectorAll('#page-forms [data-forms-section]').forEach(card => {
     card.classList.toggle('sec-on', card.dataset.formsSection.split(' ').includes(section));
@@ -9282,7 +9389,7 @@ function toggleServicesMenu(event) {
   const group = document.getElementById('services-nav-group');
   group.classList.toggle('open');
   if (!document.getElementById('page-forms').classList.contains('active')) {
-    showFormsSection(state.formsSection || 'requests');
+    showFormsSection(state.formsSection || defaultFormsSection());
   }
   event.stopPropagation();
 }
@@ -11118,6 +11225,478 @@ function renderPasswordAge(reading) {
 }
 
 // ── STUDENT RECORDS ───────────────────────────────────────────────────────────
+// ── TEACHING PLANS ────────────────────────────────────────────────────────────
+// A tutor's plan for a module (teaching_plans.py): laid out from the
+// curriculum's weekly hours and the almanac's weeks, followed class by class.
+// The Head of Department approves and moderates; the Principal, DPARC and QA
+// follow every plan. One menu item, one view; a plan opens inside the view it
+// was opened from.
+const TP_SECTIONS = {
+  mine: ['My plans', 'The modules you teach this semester, and your plan for each.'],
+  approve: ['Plans to approve', 'Plans and tests waiting on you.'],
+  progress: ['Plan progress', 'How far each plan has got, against itself.'],
+  calendar: ['Teaching calendar', 'The weeks plans are laid out over: from the almanac, kept by DPARC.'],
+  curriculum: ['Curriculum', 'Outcomes, tasks, weekly hours and how each module is assessed.'],
+  plan: ['Teaching plan', ''],
+};
+const TP_BANDS = {
+  on_track: ['On track', 'badge-green'], behind: ['Behind', 'badge-yellow'], far_behind: ['Far behind', 'badge-red'],
+  not_started: ['Not started', 'badge-gen'], no_plan: ['No plan', 'badge-gen'],
+};
+const TP_STATUS = { none: 'badge-gen', draft: 'badge-gen', submitted: 'badge-yellow', approved: 'badge-green', returned: 'badge-red' };
+
+function toggleTpMenu(event) {
+  const group = document.getElementById('tp-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-tplans').classList.contains('active')) showTpSection(defaultTpSection());
+  event.stopPropagation();
+}
+
+function defaultTpSection() {
+  const o = state.offices || {};
+  if (o.tutor && !(o.hod || o.dparc || o.principal || o.qa)) return 'mine';
+  return (o.hod || o.dparc) ? 'approve' : 'progress';
+}
+
+function tpDate(value) {
+  if (!value) return '—';
+  const d = new Date(value + 'T00:00:00');
+  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+function tpBand(progress) {
+  const [label, cls] = TP_BANDS[progress?.band] || TP_BANDS.no_plan;
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function tpStatus(row) {
+  return `<span class="badge ${TP_STATUS[row.status] || 'badge-gen'}">${safeText(row.status_display)}</span>`;
+}
+
+function tpPct(value) { return value === null || value === undefined ? '—' : `${value}%`; }
+
+async function showTpSection(section, btn) {
+  if (!TP_SECTIONS[section]) section = defaultTpSection();
+  if (section !== 'plan') state.tpSection = section;
+  showPage('tplans', document.querySelector('#tp-nav-group .nav-btn'));
+  document.getElementById('tp-nav-group').classList.add('open');
+  document.querySelectorAll('#page-tplans [data-tp-section]').forEach(card =>
+    card.classList.toggle('sec-on', card.dataset.tpSection === section));
+  const navSection = section === 'plan' ? state.tpSection : section;
+  document.querySelectorAll('[data-tp-nav]').forEach(b => b.classList.toggle('active', b.dataset.tpNav === navSection));
+  const [title, sub] = TP_SECTIONS[section];
+  if (section !== 'plan') {
+    document.getElementById('tp-page-title').textContent = title;
+    document.getElementById('tp-page-sub').textContent = sub;
+    const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = title;
+  }
+  if (section === 'mine') return loadTpMine();
+  if (section === 'approve') return loadTpApprove();
+  if (section === 'progress') return loadTpProgress();
+  if (section === 'calendar') return loadTpCalendar();
+  if (section === 'curriculum') return loadTpCurricula();
+}
+
+async function loadTpMine() {
+  const body = document.getElementById('tp-mine-tbody');
+  try {
+    const data = await api('GET', '/teaching-plans/?scope=mine');
+    body.innerHTML = data.rows.length ? data.rows.map(r => `<tr>
+        <td><strong>${safeText(r.code)}</strong> ${safeText(r.name)}</td><td>${safeText(r.level)}</td>
+        <td>${tpStatus(r)}</td><td>${r.plan_id ? `${tpPct(r.progress.on_schedule)} ${tpBand(r.progress)}` : '—'}</td>
+        <td>${r.plan_id ? `${r.progress.done} of ${r.progress.sessions}` : '—'}</td>
+        <td>${r.plan_id ? `<button class="btn btn-ghost btn-sm" onclick="openTpPlan(${r.plan_id})">Open</button>`
+          : `<button class="btn btn-primary btn-sm" onclick="startTpPlan(event, ${r.module_id})">Start the plan</button>`}</td></tr>`).join('')
+      : `<tr><td colspan="6"><div class="empty">You teach no module in ${safeText(data.semester)}.</div></td></tr>`;
+  } catch (e) { body.innerHTML = ''; toast(apiErrorText(e, 'Could not load your plans'), 'var(--red)'); }
+}
+
+async function startTpPlan(event, moduleId) {
+  const done = working(event?.currentTarget, 'Starting…');
+  try {
+    const plan = await api('POST', '/teaching-plans/', { module_id: moduleId });
+    renderTpPlan(plan);
+  } catch (e) { toast(apiErrorText(e, 'Could not start the plan'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function loadTpApprove() {
+  const body = document.getElementById('tp-approve-tbody');
+  try {
+    const data = await api('GET', '/teaching-plans/?scope=approve');
+    const rows = data.rows.filter(r => r.plan_id);
+    body.innerHTML = rows.length ? rows.map(r => `<tr>
+        <td><strong>${safeText(r.code)}</strong> ${safeText(r.name)}<div style="font-size:.72rem;color:var(--muted)">${safeText(r.level)}</div></td>
+        <td style="font-size:.8rem">${safeText(r.tutors.join(', ') || '—')}</td><td>${tpStatus(r)}</td>
+        <td>${r.assessments ? `${r.assessments.moderated} of ${r.assessments.total} moderated` : '—'}</td>
+        <td>${tpPct(r.progress.on_schedule)} ${tpBand(r.progress)}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="openTpPlan(${r.plan_id})">Open</button></td></tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty">No plan has been started for the modules you approve.</div></td></tr>';
+  } catch (e) { body.innerHTML = ''; toast(apiErrorText(e, 'Could not load the plans'), 'var(--red)'); }
+}
+
+async function loadTpProgress() {
+  const select = document.getElementById('tp-asof');
+  let asOf = '';
+  if (select.value === 'custom') asOf = document.getElementById('tp-asof-date').value;
+  else if (select.value && select.value !== 'today') asOf = select.value;
+  try {
+    const data = await api('GET', `/teaching-plans/?scope=all${asOf ? `&as_of=${asOf}` : ''}`);
+    const kept = select.value;
+    select.innerHTML = '<option value="today">Today</option>' + data.checkpoints.map(c =>
+      `<option value="${c.on}">${safeText(c.title)} (${tpDate(c.on)})</option>`).join('') + '<option value="custom">Another day…</option>';
+    select.value = kept || 'today';
+    document.getElementById('tp-progress-counts').innerHTML = Object.entries(TP_BANDS).map(([band, [label, cls]]) =>
+      `<span class="tp-chip"><span class="badge ${cls}">${label}</span> ${data.counts[band] || 0}</span>`).join('');
+    document.getElementById('tp-progress-tbody').innerHTML = data.rows.length ? data.rows.map(r => {
+      const p = r.progress || {};
+      return `<tr>
+        <td><strong>${safeText(r.code)}</strong> ${safeText(r.name)}<div style="font-size:.72rem;color:var(--muted)">${safeText(r.level)}${r.department ? ' · ' + safeText(r.department) : ''}</div></td>
+        <td style="font-size:.8rem">${safeText(r.tutors.join(', ') || '—')}</td><td>${tpStatus(r)}${r.has_document ? ' <i class="bi bi-paperclip" title="Document attached"></i>' : ''}</td>
+        <td>${r.plan_id ? `${tpPct(p.on_schedule)} ${tpBand(p)}` : tpBand(p)}</td>
+        <td>${r.plan_id ? `${p.completion}%` : '—'}</td>
+        <td style="font-size:.8rem">${r.plan_id ? `${Number(p.hours_done)} / ${Number(p.hours_planned)}` : '—'}</td>
+        <td>${r.plan_id && p.weeks_behind ? `${p.weeks_behind} wk` : '—'}</td>
+        <td>${r.plan_id && p.without_register ? `<span class="badge badge-yellow">${p.without_register}</span>` : '—'}</td>
+        <td>${r.assessments?.late ? `<span class="badge badge-red">${r.assessments.late}</span>` : '—'}</td>
+        <td>${r.plan_id ? `<button class="btn btn-ghost btn-sm" onclick="openTpPlan(${r.plan_id})">Open</button>` : ''}</td></tr>`;
+    }).join('') : '<tr><td colspan="10"><div class="empty">No module in this semester.</div></td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load the plans'), 'var(--red)'); }
+}
+
+// ── the teaching calendar ──
+async function loadTpCalendar(semesterId) {
+  try {
+    const data = await api('GET', `/teaching-calendar/${semesterId ? `?semester_id=${semesterId}` : ''}`);
+    state.tpCalendar = data;
+    document.getElementById('tp-cal-semester').innerHTML = data.semesters.map(s =>
+      `<option value="${s.id}" ${s.id === data.semester_id ? 'selected' : ''}>${safeText(s.label)}</option>`).join('');
+    document.getElementById('tp-cal-start').value = data.calendar?.teaching_starts || '';
+    document.getElementById('tp-cal-end').value = data.calendar?.teaching_ends || '';
+    document.getElementById('tp-cal-note').value = data.calendar?.note || '';
+    ['tp-cal-start', 'tp-cal-end', 'tp-cal-note'].forEach(id => document.getElementById(id).disabled = !data.can_edit);
+    document.querySelectorAll('#page-tplans .tp-cal-edit').forEach(el => el.style.display = data.can_edit ? '' : 'none');
+    document.getElementById('tp-ev-kind').innerHTML = data.kinds.map(([v, l]) => `<option value="${v}">${safeText(l)}</option>`).join('');
+    document.getElementById('tp-cal-help').textContent = data.calendar
+      ? 'From the almanac. Plans are laid out over these weeks; no class is planned on a holiday, in the recess or in the examinations.'
+      : 'The teaching weeks of this semester are not set yet' + (data.can_edit ? ': give them below.' : ': DPARC sets them.');
+    document.getElementById('tp-cal-tbody').innerHTML = data.events.length ? data.events.map(e => `<tr>
+        <td style="white-space:nowrap">${tpDate(e.starts_on)}${e.ends_on !== e.starts_on ? ` – ${tpDate(e.ends_on)}` : ''}</td>
+        <td>${safeText(e.title)}</td>
+        <td><span class="badge ${e.no_teaching ? 'badge-red' : 'badge-gen'}">${safeText(e.kind_display)}</span></td>
+        <td class="tp-cal-edit" style="${data.can_edit ? '' : 'display:none'}"><button class="btn btn-ghost btn-sm" onclick="deleteTpEvent(event, ${e.id})">Remove</button></td></tr>`).join('')
+      : '<tr><td colspan="4"><div class="empty">No dates yet</div></td></tr>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load the calendar'), 'var(--red)'); }
+}
+
+async function saveTpCalendar(event) {
+  const done = working(event?.currentTarget, 'Saving…');
+  try {
+    await api('POST', '/teaching-calendar/', { semester_id: state.tpCalendar?.semester_id,
+      teaching_starts: document.getElementById('tp-cal-start').value, teaching_ends: document.getElementById('tp-cal-end').value,
+      note: document.getElementById('tp-cal-note').value });
+    await loadTpCalendar(state.tpCalendar?.semester_id); toast('Saved', 'var(--green)');
+  } catch (e) { toast(apiErrorText(e, 'Could not save'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function addTpEvent(event) {
+  const value = id => document.getElementById(id).value;
+  const done = working(event?.currentTarget, 'Adding…');
+  try {
+    await api('POST', '/teaching-calendar/events/', { semester_id: state.tpCalendar?.semester_id, kind: value('tp-ev-kind'),
+      title: value('tp-ev-title').trim(), starts_on: value('tp-ev-start'), ends_on: value('tp-ev-end') || value('tp-ev-start') });
+    ['tp-ev-title', 'tp-ev-start', 'tp-ev-end'].forEach(id => document.getElementById(id).value = '');
+    await loadTpCalendar(state.tpCalendar?.semester_id);
+  } catch (e) { toast(apiErrorText(e, 'Could not add it'), 'var(--red)'); }
+  finally { done(); }
+}
+
+async function deleteTpEvent(event, id) {
+  if (!confirm('Remove this date from the calendar? Plans already laid out keep their dates.')) return;
+  try { await api('DELETE', `/teaching-calendar/events/${id}/`); await loadTpCalendar(state.tpCalendar?.semester_id); }
+  catch (e) { toast(apiErrorText(e, 'Could not remove it'), 'var(--red)'); }
+}
+
+// ── the curriculum ──
+async function loadTpCurricula() {
+  const box = document.getElementById('tp-curricula');
+  try {
+    const rows = await api('GET', '/curricula/');
+    box.innerHTML = rows.length ? rows.map(c => `
+      <h4 style="margin:8px 0 4px">${safeText(c.name)}</h4><p class="help-note">${safeText(c.note)}</p>
+      <div class="table-wrap"><table><thead><tr><th>Code</th><th>Module</th><th>Level · Sem</th><th>Credits</th><th>Hours a week (L/T/P/A)</th><th>SEOs</th><th>Notes</th><th></th></tr></thead>
+      <tbody>${c.modules.map(m => `<tr><td>${safeText(m.code)}</td><td>${safeText(m.name)}</td><td>${m.level} · ${m.semester}</td><td>${m.credits}</td>
+        <td>${m.hours.L}/${m.hours.T}/${m.hours.P}/${m.hours.A}</td><td>${m.outcomes}</td>
+        <td>${m.checks.length ? `<span class="badge badge-yellow" title="${safeText(m.checks.join(' · '))}">${m.checks.length}</span>` : '—'}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="openTpCurriculumModule(${m.id})">Open</button></td></tr>`).join('')}</tbody></table></div>`).join('')
+      : '<div class="empty">No curriculum loaded yet (python manage.py load_curriculum).</div>';
+  } catch (e) { toast(apiErrorText(e, 'Could not load the curricula'), 'var(--red)'); }
+}
+
+async function openTpCurriculumModule(id) {
+  try {
+    const m = await api('GET', `/curricula/modules/${id}/`);
+    document.getElementById('tp-cm-card').style.display = 'block';
+    document.getElementById('tp-cm-detail').innerHTML = `
+      <div class="card-title">${safeText(m.code)} ${safeText(m.name)}</div>
+      <p class="help-note">NTA Level ${m.level}, semester ${m.semester} · ${m.credits} credits · a week: ${m.hours.L} h lecture, ${m.hours.T} h tutorial, ${m.hours.P} h practical, ${m.hours.A} h assignment.</p>
+      ${m.checks.length ? `<div class="missing-note"><strong>Where the national documents disagree:</strong><ul style="margin:4px 0 0 18px">${m.checks.map(c => `<li>${safeText(c)}</li>`).join('')}</ul></div>` : ''}
+      ${tpSchemeTable(m.scheme.map(c => ({ ...c, label: c.label })), true)}
+      ${tpOutcomesHtml(m.outcomes)}`;
+    document.getElementById('tp-cm-card').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) { toast(apiErrorText(e, 'Could not open it'), 'var(--red)'); }
+}
+
+function tpSchemeTable(parts, withRequired) {
+  const stage = { ca: 'CA', se: 'Semester exam', field: 'Field' };
+  return `<div class="table-wrap"><table><thead><tr><th>Part</th><th>Method</th><th>At least</th><th>Weight</th><th>Tool</th>${withRequired ? '<th>Drawn from</th>' : ''}</tr></thead>
+    <tbody>${parts.map(c => `<tr><td>${stage[c.stage] || c.stage}</td><td>${safeText(c.label)}</td><td>${c.count}</td><td>${Number(c.weight)}%</td>
+      <td style="font-size:.78rem">${safeText(c.tool || '')}</td>
+      ${withRequired ? `<td style="font-size:.74rem">${safeText((c.required || []).join(', '))}${c.unplaced ? `<div style="color:var(--orange)">Not tied to an SEO in the plan: ${safeText(c.unplaced)}</div>` : ''}</td>` : ''}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function tpOutcomesHtml(outcomes) {
+  if (!outcomes.length) return '';
+  return `<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">Outcomes and tasks (${outcomes.length} SEOs)</summary>
+    ${outcomes.map(o => `<div style="margin:8px 0"><strong>${safeText(o.code)}</strong> ${safeText(o.text)}
+      <ol type="a" style="margin:4px 0 0 20px;font-size:.82rem">${o.tasks.map(t => `<li value="${t.letter.charCodeAt(0) - 96}">${safeText(t.text)}</li>`).join('')}</ol></div>`).join('')}</details>`;
+}
+
+// ── one plan ──
+async function openTpPlan(id) {
+  try { renderTpPlan(await api('GET', `/teaching-plans/${id}/`)); }
+  catch (e) { toast(apiErrorText(e, 'Could not open the plan'), 'var(--red)'); }
+}
+
+function tpStat(value, label) { return `<div class="tp-stat"><b>${value}</b><span>${label}</span></div>`; }
+
+function renderTpPlan(plan) {
+  state.tpPlan = plan;
+  const can = plan.can, p = plan.progress, cm = plan.curriculum;
+  document.getElementById('tp-page-title').textContent = `${plan.module.code} ${plan.module.name}`;
+  document.getElementById('tp-page-sub').textContent = `${plan.module.level} · ${plan.module.semester} · ${plan.module.tutors.join(', ') || 'no tutor assigned'}`;
+  const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = 'Teaching plan';
+  const outcomeOptions = id => '<option value="">—</option>' + plan.outcomes.map(o =>
+    `<option value="${o.id}" ${o.id === id ? 'selected' : ''}>${safeText(o.code)}</option>`).join('');
+  const kinds = plan.kinds.map(([v, l]) => [v, l]);
+  const pattern = (plan.pattern || []).map((c, i) => `<div class="form-grid-3" data-tp-pattern="${i}" style="align-items:end">
+      <div class="field"><label>Day</label><select class="tp-p-day" ${can.edit ? '' : 'disabled'}>${plan.weekdays.map((d, n) => `<option value="${n}" ${n === c.weekday ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
+      <div class="field"><label>Class</label><select class="tp-p-kind" ${can.edit ? '' : 'disabled'}>${kinds.map(([v, l]) => `<option value="${v}" ${v === c.kind ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="field"><label>Hours</label><input class="tp-p-hours" type="number" min="0.5" max="12" step="0.5" value="${c.hours}" ${can.edit ? '' : 'disabled'} /></div>
+    </div>`).join('');
+  const sessions = plan.sessions.map(s => {
+    const open = s.due && s.status === 'planned';
+    const actions = can.follow ? (s.status === 'planned'
+      ? `<button class="btn btn-ghost btn-sm" title="Taught as planned" onclick="markTpSession(event, ${s.id}, 'done')">Done</button>
+         <button class="btn btn-ghost btn-sm" title="Partly taught" onclick="markTpSession(event, ${s.id}, 'partial')">Part</button>
+         <button class="btn btn-ghost btn-sm" title="Not held" onclick="markTpSession(event, ${s.id}, 'missed')">Missed</button>
+         <button class="btn btn-ghost btn-sm" title="Move to another day" onclick="moveTpSession(${s.id})"><i class="bi bi-calendar-event"></i></button>`
+      : `<button class="btn btn-ghost btn-sm" onclick="markTpSession(event, ${s.id}, 'planned')">Undo</button>`) : '';
+    return `<tr class="${open ? 'tp-due-open' : ''}">
+      <td>${s.week}</td><td style="white-space:nowrap">${tpDate(s.planned_on)}${s.moved_from ? `<div style="font-size:.7rem;color:var(--muted)" title="${safeText(s.move_reason)}">from ${tpDate(s.moved_from)}</div>` : ''}</td>
+      <td>${safeText(s.kind_display)} · ${Number(s.hours)} h</td>
+      <td>${can.follow && plan.outcomes.length ? `<select onchange="editTpSession(${s.id}, {outcome_id: this.value})" title="${safeText(s.outcome_text)}">${outcomeOptions(s.outcome_id)}</select>` : `<span title="${safeText(s.outcome_text)}">${safeText(s.outcome || '—')}</span>`}</td>
+      <td>${can.follow ? `<input value="${safeText(s.topic)}" maxlength="300" placeholder="Topic" onchange="editTpSession(${s.id}, {topic: this.value})" style="min-width:150px" />` : safeText(s.topic || '—')}</td>
+      <td><span class="badge ${ ({ done: 'badge-green', partial: 'badge-yellow', missed: 'badge-red' })[s.status] || 'badge-gen'}">${safeText(s.status_display)}</span>
+        ${s.delivered_on && s.delivered_on !== s.planned_on ? `<div style="font-size:.7rem">on ${tpDate(s.delivered_on)}</div>` : ''}
+        ${['done', 'partial'].includes(s.status) && !s.register ? '<div style="font-size:.7rem;color:var(--orange)">No register that day</div>' : ''}
+        ${s.note ? `<div style="font-size:.7rem;color:var(--muted)">${safeText(s.note)}</div>` : ''}</td>
+      <td style="white-space:nowrap">${actions}</td></tr>`;
+  }).join('');
+  const taskBoxes = (a) => plan.outcomes.map(o => o.tasks.map(t =>
+    `<label><input type="checkbox" value="${t.id}" ${a.task_ids.includes(t.id) ? 'checked' : ''} ${can.follow && !['submitted', 'approved'].includes(a.moderation) ? '' : 'disabled'}/> ${safeText(o.code)} ${t.letter}) ${safeText(t.text)}</label>`).join('')).join('');
+  const assessments = plan.assessments.map(a => `<tr>
+      <td><strong>${safeText(a.title)}</strong><div style="font-size:.72rem;color:var(--muted)">${a.stage === 'se' ? 'Semester exam' : a.stage === 'field' ? 'Field' : 'CA'}</div></td>
+      <td>${a.weight !== null ? Number(a.weight) + '%' : '—'}</td>
+      <td>${can.follow && a.stage !== 'se' ? `<input type="date" value="${a.planned_on || ''}" onchange="editTpAssessment(${a.id}, {planned_on: this.value})" />` : tpDate(a.planned_on)}</td>
+      <td>${can.follow && a.stage !== 'se' ? `<input type="date" value="${a.held_on || ''}" onchange="editTpAssessment(${a.id}, {held_on: this.value})" />` : tpDate(a.held_on)}</td>
+      <td style="font-size:.78rem">${a.stage === 'se' ? '—' : `<details><summary style="cursor:pointer">${a.task_ids.length} task${a.task_ids.length === 1 ? '' : 's'}</summary>
+        ${plan.outcomes.length ? `<div class="tp-tasks" id="tp-a-${a.id}">${taskBoxes(a)}</div>
+        ${can.follow && !['submitted', 'approved'].includes(a.moderation) ? `<button class="btn btn-ghost btn-sm" onclick="saveTpTasks(event, ${a.id})">Save the setting plan</button>` : ''}` : '<em>No outcomes loaded for this module.</em>'}</details>`}</td>
+      <td style="font-size:.78rem">${a.stage === 'se' ? '—' : `<span class="badge ${ ({ approved: 'badge-green', submitted: 'badge-yellow', returned: 'badge-red' })[a.moderation] || 'badge-gen'}">${safeText(a.moderation_display)}</span>
+        ${a.moderation_note ? `<div>${safeText(a.moderation_note)}</div>` : ''}
+        ${can.follow && ['draft', 'returned'].includes(a.moderation) ? `<button class="btn btn-ghost btn-sm" onclick="moderateTp(event, ${a.id}, 'submit')">Send for moderation</button>` : ''}
+        ${can.moderate && a.moderation === 'submitted' ? `<button class="btn btn-primary btn-sm" onclick="moderateTp(event, ${a.id}, 'approve')">Approve</button>
+          <button class="btn btn-ghost btn-sm" onclick="moderateTp(event, ${a.id}, 'return')">Return</button>` : ''}`}</td></tr>`).join('');
+  const cov = plan.coverage;
+  const coverage = (cov.components.length || cov.tested_before_taught.length) ? `
+    <div class="card"><div class="card-title">What the assessment plan requires</div>
+      <p class="help-note">Each kind of assessment must be drawn from the SEOs and tasks the assessment plan names. Tick them on each test's setting plan; what no test covers yet is listed.</p>
+      ${cov.components.map(c => `<div style="margin:6px 0"><strong>${safeText(c.component)}</strong>: ${c.covered} of ${c.required} required tasks covered
+        ${c.missing.length ? `<div style="font-size:.78rem;color:var(--orange)">Not covered yet: ${safeText(c.missing.join(', '))}</div>` : ' <span class="badge badge-green">All covered</span>'}</div>`).join('')}
+      ${cov.tested_before_taught.length ? `<div class="missing-note" style="margin-top:8px"><strong>Tested before it is taught:</strong>
+        ${cov.tested_before_taught.map(e => `${safeText(e.assessment)} — ${safeText(e.task)} (${e.taught ? 'taught ' + tpDate(e.taught) : 'not in the plan'})`).join('; ')}</div>` : ''}
+    </div>` : '';
+  document.getElementById('tp-plan').innerHTML = `
+    <div class="card">
+      <div class="card-title"><button class="btn btn-ghost btn-sm" onclick="showTpSection(state.tpSection || defaultTpSection())">← Back</button>
+        <span style="margin-left:8px">${tpStatus(plan)}</span>
+        ${plan.status === 'approved' && plan.decision.by ? `<span style="font-size:.78rem;color:var(--muted);margin-left:8px">approved by ${safeText(plan.decision.by)}</span>` : ''}
+        ${plan.status === 'returned' ? `<span style="font-size:.78rem;color:var(--red);margin-left:8px">${safeText(plan.decision.note)}</span>` : ''}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${tpStat(tpPct(p.on_schedule), 'on schedule')}${tpStat(`${p.done} / ${p.sessions}`, 'classes done')}
+        ${tpStat(`${Number(p.hours_done)} / ${Number(p.hours_planned)}`, 'hours')}${tpStat(p.weeks_behind ? p.weeks_behind + ' wk' : '—', 'behind')}
+        ${tpStat(p.without_register || '—', 'done, no register')}${tpStat(`${plan.assessment_progress.held} / ${plan.assessment_progress.due}`, 'tests held / due')}
+        <div class="tp-stat" style="justify-content:center">${tpBand(p)}</div>
+      </div>
+      <p class="help-note" style="margin-top:8px">${cm ? `Follows ${safeText(cm.curriculum)}: ${safeText(cm.code)} ${safeText(cm.name)} — ${cm.credits} credits, a week ${cm.hours.L} h lecture, ${cm.hours.T} h tutorial, ${cm.hours.P} h practical, ${cm.hours.A} h assignment, ${cm.weeks_of_study} weeks.`
+        : 'No loaded curriculum describes this module (the old curriculum is not loaded): give the topics yourself; the assessments shown are the ones results use today.'}
+        Weights come from the ${safeText(plan.scheme_source)}.</p>
+      ${cm && cm.checks.length ? `<div class="missing-note"><strong>Where the national documents disagree:</strong> ${safeText(cm.checks.join(' · '))}</div>` : ''}
+    </div>
+
+    <div class="card"><div class="card-title">The week</div>
+      ${plan.calendar ? `<p class="help-note">Teaching runs ${tpDate(plan.calendar.teaching_starts)} to ${tpDate(plan.calendar.teaching_ends)}. ${can.edit ? 'Put each class on the day you teach it, then lay the plan out: classes go on those days every week, around the holidays and the recess, with the outcomes in curriculum order and the tests in the CAT weeks. Laying out again replaces the classes and the tests not yet sent for moderation.' : ''}</p>`
+        : '<div class="missing-note">The teaching calendar for this semester is not set: DPARC sets it before plans can be laid out.</div>'}
+      <div id="tp-pattern">${pattern || '<div class="empty">No class yet</div>'}</div>
+      <p style="font-size:.8rem">${Number(plan.weekly_hours)} hours a week${cm ? ` (the curriculum: ${cm.hours.L + cm.hours.T + cm.hours.P + cm.hours.A})` : ''}.</p>
+      ${can.edit ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+        <button class="btn btn-ghost btn-sm" onclick="addTpPatternRow()">+ A class</button>
+        <div class="field" style="margin:0"><label>Weeks</label><input id="tp-weeks" type="number" min="1" max="30" value="${plan.weeks || ''}" placeholder="${cm ? cm.weeks_of_study : 15}" style="max-width:90px" /></div>
+        <div class="field" style="margin:0"><label>Starts (if late)</label><input id="tp-starts" type="date" value="${plan.starts_on || ''}" /></div>
+        <button class="btn btn-primary btn-sm" onclick="layOutTp(event)">Lay the plan out</button></div>` : ''}
+    </div>
+
+    <div class="card"><div class="card-title">Classes</div>
+      ${can.follow ? '<p class="help-note">After each class, mark it (taught on another day? move it to that day first). The attendance register of that day is linked as the evidence; a class marked done with no register that day is shown to your Head of Department.</p>' : ''}
+      <div class="table-wrap"><table><thead><tr><th>Wk</th><th>Date</th><th>Class</th><th>SEO</th><th>Topic</th><th>State</th><th></th></tr></thead>
+        <tbody>${sessions || '<tr><td colspan="7"><div class="empty">Not laid out yet</div></td></tr>'}</tbody></table></div>
+      ${can.follow && plan.sessions.length ? `<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addTpSession()">+ A make-up class</button>` : ''}
+    </div>
+
+    <div class="card"><div class="card-title">Assessments</div>
+      ${tpSchemeTable(plan.scheme, false)}
+      <div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Assessment</th><th>Weight</th><th>Planned</th><th>Held</th><th>Setting plan</th><th>Moderation</th></tr></thead>
+        <tbody>${assessments || '<tr><td colspan="6"><div class="empty">Laid out with the plan</div></td></tr>'}</tbody></table></div>
+    </div>
+    ${coverage}
+
+    <div class="card"><div class="card-title">Approval</div>
+      ${can.edit ? `<p class="help-note">When the plan is ready, send it to your Head of Department (DPARC where there is none).</p>
+        <button class="btn btn-primary btn-sm" onclick="submitTp(event)" ${plan.sessions.length ? '' : 'disabled'}>Send for approval</button>` : ''}
+      ${can.approve ? `<div class="field"><label>Note (needed to return it)</label><input id="tp-decision-note" maxlength="500" /></div>
+        <button class="btn btn-primary btn-sm" onclick="decideTp(event, true)">Approve</button>
+        <button class="btn btn-ghost btn-sm" onclick="decideTp(event, false)">Return for changes</button>` : ''}
+      ${!can.edit && !can.approve ? `<p class="help-note">${safeText(plan.status_display)}.${plan.decision.note ? ' ' + safeText(plan.decision.note) : ''}</p>` : ''}
+    </div>
+
+    <div class="card"><div class="card-title">The tutor's own document</div>
+      ${plan.document ? `<a class="btn btn-ghost btn-sm" href="/api/teaching-plans/${plan.id}/document/">⬇ ${safeText(plan.document.name)}</a>` : '<p class="help-note">None attached.</p>'}
+      ${can.follow ? `<div style="margin-top:8px"><input type="file" id="tp-doc" accept=".pdf,.docx,.doc" /> <button class="btn btn-ghost btn-sm" onclick="uploadTpDocument(event)">Attach (PDF or Word)</button></div>` : ''}
+    </div>
+
+    <div class="card"><div class="card-title">Review notes</div>
+      ${plan.notes.map(n => `<div style="border-left:3px solid var(--border);padding:4px 10px;margin:6px 0">
+        <div style="font-size:.74rem;color:var(--muted)">${safeText(n.author)} · ${new Date(n.at).toLocaleString()}${n.checkpoint ? ' · ' + safeText(n.checkpoint) : ''}</div>${safeText(n.text)}</div>`).join('') || '<p class="help-note">No notes yet.</p>'}
+      ${can.note ? `<div class="field"><label>A note</label><textarea id="tp-note" rows="2" maxlength="4000"></textarea></div>
+        <div style="display:flex;gap:8px;align-items:end"><div class="field" style="margin:0"><label>Made at</label><input id="tp-note-checkpoint" maxlength="120" placeholder="e.g. Second CQI supervision" /></div>
+        <button class="btn btn-ghost btn-sm" onclick="addTpNote(event)">Add the note</button></div>` : ''}
+    </div>
+
+    <div class="card"><div class="card-title">History</div>
+      <details><summary style="cursor:pointer">${plan.history.length} entries</summary>
+      <div class="table-wrap"><table><tbody>${plan.history.map(h => `<tr><td style="font-size:.74rem;white-space:nowrap">${new Date(h.at).toLocaleString()}</td>
+        <td style="font-size:.8rem">${safeText(h.by)}</td><td style="font-size:.8rem">${safeText(h.action)}${h.detail ? ' — ' + safeText(h.detail) : ''}</td></tr>`).join('')}</tbody></table></div></details>
+      ${tpOutcomesHtml(plan.outcomes)}
+    </div>`;
+  showTpSection('plan');
+}
+
+function tpPatternFromForm() {
+  return [...document.querySelectorAll('#tp-pattern [data-tp-pattern]')].map(row => ({
+    weekday: Number(row.querySelector('.tp-p-day').value), kind: row.querySelector('.tp-p-kind').value,
+    hours: Number(row.querySelector('.tp-p-hours').value) }));
+}
+
+function addTpPatternRow() {
+  const plan = state.tpPlan;
+  plan.pattern = [...tpPatternFromForm(), { weekday: 0, kind: 'lecture', hours: 1 }];
+  renderTpPlan(plan);
+}
+
+async function tpCall(event, label, method, path, body, okMessage) {
+  const done = event ? working(event.currentTarget, label) : () => {};
+  try {
+    const plan = await api(method, path, body);
+    renderTpPlan(plan);
+    if (okMessage) toast(okMessage, 'var(--green)');
+  } catch (e) { toast(apiErrorText(e, 'Could not save it'), 'var(--red)'); }
+  finally { done(); }
+}
+
+function layOutTp(event) {
+  const plan = state.tpPlan;
+  if (plan.sessions.length && !confirm('Lay the plan out again? The classes and the tests not yet sent for moderation are replaced.')) return;
+  tpCall(event, 'Laying out…', 'POST', `/teaching-plans/${plan.id}/lay-out/`, { pattern: tpPatternFromForm(),
+    weeks: document.getElementById('tp-weeks').value || null, starts_on: document.getElementById('tp-starts').value || null }, 'Laid out');
+}
+
+function markTpSession(event, id, status) {
+  const plan = state.tpPlan;
+  const session = plan.sessions.find(s => s.id === id);
+  // Taught on the day planned; a class taught on another day is moved first.
+  let delivered = null, note = '';
+  if (['done', 'partial'].includes(status)) {
+    if (!session.due) { toast('Mark it once it has been taught — or move it to the day it was.', 'var(--red)'); return; }
+    delivered = session.planned_on;
+  }
+  if (status === 'missed') { note = prompt('Why was it not held? (it stays due until you add a make-up class)', '') || ''; }
+  tpCall(event, '…', 'POST', `/teaching-plans/${plan.id}/sessions/${id}/mark/`, { status, delivered_on: delivered, note });
+}
+
+function moveTpSession(id) {
+  const plan = state.tpPlan;
+  const session = plan.sessions.find(s => s.id === id);
+  const day = prompt('Move the class to (YYYY-MM-DD):', session.planned_on);
+  if (!day || day === session.planned_on) return;
+  const reason = plan.status === 'draft' ? '' : prompt('Why does it move?', '');
+  if (plan.status !== 'draft' && !reason) return;
+  tpCall(null, '', 'PATCH', `/teaching-plans/${plan.id}/sessions/${id}/`, { planned_on: day, reason });
+}
+
+function editTpSession(id, change) { tpCall(null, '', 'PATCH', `/teaching-plans/${state.tpPlan.id}/sessions/${id}/`, change); }
+
+function addTpSession() {
+  const day = prompt('The date of the make-up class (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
+  if (!day) return;
+  const topic = prompt('What it covers:', '') || '';
+  tpCall(null, '', 'POST', `/teaching-plans/${state.tpPlan.id}/sessions/`, { planned_on: day, topic, kind: 'lecture', hours: 1 });
+}
+
+function editTpAssessment(id, change) { tpCall(null, '', 'PATCH', `/teaching-plans/${state.tpPlan.id}/assessments/${id}/`, change); }
+
+function saveTpTasks(event, id) {
+  const ids = [...document.querySelectorAll(`#tp-a-${id} input:checked`)].map(i => Number(i.value));
+  tpCall(event, 'Saving…', 'PATCH', `/teaching-plans/${state.tpPlan.id}/assessments/${id}/`, { task_ids: ids }, 'Setting plan saved');
+}
+
+function moderateTp(event, id, action) {
+  const note = action === 'return' ? prompt('What should the setter change?', '') : '';
+  if (action === 'return' && !note) return;
+  tpCall(event, '…', 'POST', `/teaching-plans/${state.tpPlan.id}/assessments/${id}/moderate/`, { action, note });
+}
+
+function submitTp(event) { tpCall(event, 'Sending…', 'POST', `/teaching-plans/${state.tpPlan.id}/submit/`, {}, 'Sent for approval'); }
+
+function decideTp(event, approve) {
+  tpCall(event, '…', 'POST', `/teaching-plans/${state.tpPlan.id}/decide/`,
+    { approve, note: document.getElementById('tp-decision-note').value }, approve ? 'Approved' : 'Returned');
+}
+
+function addTpNote(event) {
+  tpCall(event, 'Adding…', 'POST', `/teaching-plans/${state.tpPlan.id}/notes/`,
+    { text: document.getElementById('tp-note').value, checkpoint: document.getElementById('tp-note-checkpoint').value });
+}
+
+async function uploadTpDocument(event) {
+  const file = document.getElementById('tp-doc').files[0];
+  if (!file) { toast('Choose the file', 'var(--red)'); return; }
+  const body = new FormData();
+  body.append('file', file);
+  tpCall(event, 'Uploading…', 'POST', `/teaching-plans/${state.tpPlan.id}/document/`, body, 'Attached');
+}
+
 // ── THE LABORATORY ────────────────────────────────────────────────────────────
 // The lab technician's stock book (inventory.py): received, issued, written
 // off; the balance is the sum, and an entry is never edited.
@@ -15845,6 +16424,7 @@ installWebIconReplacements();
     estate: {% if request.user.estate_officer_profile.is_active %}true{% else %}false{% endif %},
     secretary: {% if request.user.secretary_profile.is_active %}true{% else %}false{% endif %},
     lab: {% if request.user.lab_technician_profile.is_active %}true{% else %}false{% endif %},
+    qa: {% if request.user.qa_profile.is_active %}true{% else %}false{% endif %},
     tutor: {% if request.user.profile %}true{% else %}false{% endif %},
   };
   // A superuser holding no office at all is the emergency account; one that
@@ -15879,6 +16459,10 @@ installWebIconReplacements();
   if (offices.coordinator && !offices.academic && !offices.tutor) document.body.classList.add('is-coordinator-only');
   if (offices.dean && !offices.academic && !offices.tutor) document.body.classList.add('is-coordinator-only');
   if (offices.lab && !offices.academic && !offices.tutor) document.body.classList.add('is-coordinator-only');
+  if (offices.qa && !offices.academic && !offices.tutor) document.body.classList.add('is-coordinator-only');
+  if (offices.qa) document.body.classList.add('is-qa');
+  // QA makes evaluations, never service requests: only the departments do.
+  if (offices.qa && !offices.runs) document.querySelector('#fm-kind option[value="request"]')?.remove();
   // The roles only the Principal gives are not offered to anyone else.
   if (!state.canAppoint) document.querySelectorAll('#acct-role .senior-role').forEach(o => o.remove());
   // Anything marked data-roles is for those offices only. Hidden rather than
@@ -15910,9 +16494,9 @@ installWebIconReplacements();
       isHod ? 'Head of Department' : isPrincipal ? 'Principal' : offices.dparc ? 'DPARC'
       : offices.exam ? 'Exam Officer' : 'Administrator';
     document.getElementById('role-badge').className    = 'role-badge admin';
-  } else if (offices.dpfpa || offices.ict || offices.coordinator || offices.dean) {
+  } else if (offices.dpfpa || offices.ict || offices.coordinator || offices.dean || offices.qa) {
     document.getElementById('role-badge').textContent  = offices.dpfpa ? 'DPFPA' : offices.ict ? 'ICT Officer'
-      : offices.coordinator ? 'Course Coordinator' : 'Dean of Students';
+      : offices.coordinator ? 'Course Coordinator' : offices.dean ? 'Dean of Students' : 'Quality Assurance';
     document.getElementById('role-badge').className    = 'role-badge admin';
   } else {
     document.getElementById('role-badge').textContent  = 'Tutor';

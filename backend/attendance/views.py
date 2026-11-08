@@ -47,6 +47,7 @@ from .roles import (
     is_coordinator, runs_veta_courses, can_approve_expenses, can_view_expenses,
     is_dean, can_read_health_records, can_keep_health_records, can_reset_passwords, can_issue_student_passwords,
     can_record_returning_students, can_approve_disposals, can_keep_lab_stock, can_read_lab_stock,
+    is_quality_assurance,
 )
 from .security import neutralise_formulas
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
@@ -68,6 +69,7 @@ from .models import (
     PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultCorrection, ResultRelease, ResultWithholding,
     StudentDocument, HealthRecord, HealthReport, ExitRequest, PasswordReset, AssetHandover, LabItem, LabStockMovement, ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile,
     ICTOfficerProfile, RoleChange, TrainingCoordinatorProfile, DeanOfStudentsProfile, LabTechnicianProfile,
+    QualityAssuranceProfile,
     Intake, CourseFee, CourseFeeInstalment, CourseModule, CourseApplication, CourseEnrollment,
     ExpenseCategory, ExpenseBudget, Expense,
     Form, FormSection, FormQuestion, FormAnswer, FormResponse, FormSubmissionReceipt,
@@ -307,6 +309,37 @@ class ReadStaffWriteDepartments(BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated
                     and (request.method in SAFE_METHODS or runs_departments(request.user)))
+
+
+def _form_of(obj):
+    return getattr(obj, 'form', None) or getattr(getattr(obj, 'section', None), 'form', None) or obj
+
+
+class ReadStaffWriteForms(ReadStaffWriteDepartments):
+    """The college's forms, and the Quality Assurance Manager besides: QA runs
+    every student and staff evaluation form (said 9 November 2026). Service
+    requests stay with the departments — an evaluation is QA's, a request is
+    a department's to answer."""
+
+    def has_permission(self, request, view):
+        if super().has_permission(request, view):
+            return True
+        if not is_quality_assurance(request.user):
+            return False
+        if request.method != 'POST' or getattr(view, 'action', None) != 'create':
+            return True                         # the object check below decides
+        data = request.data
+        if 'kind' in data or view.basename == 'form':
+            return data.get('kind', Form.EVALUATION) == Form.EVALUATION
+        if 'form' in data:
+            return Form.objects.filter(pk=pk_or_none(data.get('form')), kind=Form.EVALUATION).exists()
+        section = FormSection.objects.filter(pk=pk_or_none(data.get('section'))).select_related('form').first()
+        return section is not None and section.form.kind == Form.EVALUATION
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in SAFE_METHODS or runs_departments(request.user):
+            return True
+        return is_quality_assurance(request.user) and _form_of(obj).kind == Form.EVALUATION
 
 
 class IsFinanceUser(BasePermission):
@@ -1547,13 +1580,14 @@ ROLE_PROFILES = {
     'coordinator': TrainingCoordinatorProfile,
     'dean': DeanOfStudentsProfile,
     'lab_technician': LabTechnicianProfile,
+    'qa': QualityAssuranceProfile,
 }
 #: The roles that open Django's own admin site. The ICT officer's role makes
 #: the account a Django superuser (every table in /admin/); nothing inside the
 #: app reads either flag for anybody else (see roles.py).
 STAFF_ROLES = ('ict_officer',)
 #: Which title an account is listed under when it holds more than one.
-ROLE_ORDER = ('principal', 'dparc', 'dpfpa', 'hod', 'coordinator', 'dean', 'exam_officer', 'ict_officer',
+ROLE_ORDER = ('principal', 'dparc', 'dpfpa', 'hod', 'coordinator', 'dean', 'qa', 'exam_officer', 'ict_officer',
               'admission_officer', 'records_officer', 'accountant', 'estate_officer',
               'lab_technician', 'secretary', 'tutor')
 ROLE_LABELS = {
@@ -1562,7 +1596,7 @@ ROLE_LABELS = {
     'exam_officer': 'Exam Officer', 'ict_officer': 'ICT Officer',
     'dparc': 'DPARC', 'dpfpa': 'DPFPA', 'coordinator': 'Course Coordinator', 'dean': 'Dean of Students',
     'records_officer': 'Records Officer', 'admission_officer': 'Admission Officer',
-    'lab_technician': 'Lab Technician',
+    'lab_technician': 'Lab Technician', 'qa': 'Quality Assurance',
 }
 
 
@@ -9658,7 +9692,7 @@ class FormViewSet(viewsets.ModelViewSet):
     (is_academic_admin) may create, edit or publish one.
     """
     serializer_class = FormSerializer
-    permission_classes = [ReadStaffWriteDepartments]
+    permission_classes = [ReadStaffWriteForms]
 
     def get_queryset(self):
         qs = (
@@ -9713,7 +9747,7 @@ class FormViewSet(viewsets.ModelViewSet):
             return Response(
                 {'detail': 'That form is answered by students on their portal.'},
                 status=status.HTTP_400_BAD_REQUEST)
-        if not runs_departments(request.user):
+        if not (runs_departments(request.user) or is_quality_assurance(request.user)):
             raise PermissionDenied('Only the admin can fill this form in.')
 
         answers = request.data.get('answers')
@@ -9779,7 +9813,7 @@ class FormViewSet(viewsets.ModelViewSet):
 
 class FormSectionViewSet(viewsets.ModelViewSet):
     serializer_class = FormSectionSerializer
-    permission_classes = [ReadStaffWriteDepartments]
+    permission_classes = [ReadStaffWriteForms]
 
     def get_queryset(self):
         qs = FormSection.objects.select_related('form').prefetch_related('questions')
@@ -9800,7 +9834,7 @@ class FormSectionViewSet(viewsets.ModelViewSet):
 
 class FormQuestionViewSet(viewsets.ModelViewSet):
     serializer_class = FormQuestionSerializer
-    permission_classes = [ReadStaffWriteDepartments]
+    permission_classes = [ReadStaffWriteForms]
 
     def get_queryset(self):
         qs = FormQuestion.objects.select_related('section__form')

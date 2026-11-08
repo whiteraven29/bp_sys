@@ -112,7 +112,7 @@ dialog button { position: absolute; top: 8px; right: 8px; background: #0f1a1d; c
   <div class="kicker">Blue Pharma Institute of Science and Technology · EduTrack</div>
   <h1>Desk manuals for 2026/27</h1>
   <p class="lede">How each office works in EduTrack this year, step by step, with the real screens. Pick your office below. The screens show example students (Grace, Amina, Baraka, Pendo, Eliya, Nuru), not real records.</p>
-  <div class="meta"><span>Version <b>18 October 2026</b></span><span>Admissions opened <b>12 October 2026</b></span><span>Questions: <b>the ICT officer</b></span></div>
+  <div class="meta"><span>Version <b>9 November 2026</b></span><span>Admissions opened <b>12 October 2026</b></span><span>Questions: <b>the ICT officer</b></span></div>
 </header>
 
 <nav class="tabs" aria-label="Choose your office">
@@ -122,6 +122,7 @@ dialog button { position: absolute; top: 8px; right: 8px; background: #0f1a1d; c
     <button class="tab" role="tab" id="tab-accounts" data-tab="accounts" aria-selected="false">Accountant</button>
     <button class="tab" role="tab" id="tab-students" data-tab="students" aria-selected="false">Students</button>
     <button class="tab" role="tab" id="tab-records" data-tab="records" aria-selected="false">Records &amp; Principal</button>
+    <button class="tab" role="tab" id="tab-plans" data-tab="plans" aria-selected="false">Teaching plans (on trial)</button>
   </div>
 </nav>
 
@@ -617,6 +618,78 @@ dialog button { position: absolute; top: 8px; right: 8px; background: #0f1a1d; c
     </div>
     <figure><button class="shot" type="button" data-full="img/principal_exits.jpg" data-cap="Postpone & Finish ▸ Finishing after Level 5"><img src="img/principal_exits.jpg" alt="Finishing after Level 5 list with Approve and Decline" loading="lazy"></button>
       <figcaption>Eliya's request waiting for the Principal.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ───────────────────────── TEACHING PLANS (ON TRIAL) ───────────────────────── -->
+<section class="manual" id="plans" role="tabpanel" aria-labelledby="tab-plans" hidden>
+  <header>
+    <div class="kicker">On trial — not yet in the live system</div>
+    <h2>Teaching plans</h2>
+    <p class="role">For tutors, Heads of Department, DPARC, the Principal and Quality Assurance. This part is being tried before it goes live; the ICT officer will say when it does. Nothing here changes marks, results or attendance.</p>
+  </header>
+
+  <div class="step wide">
+    <div>
+      <h3><span class="num">T1</span>Tutor: start your plan</h3>
+      <p><span class="path">Teaching plans ▸ My plans</span> lists the modules you teach this semester. Press <span class="ui">Start the plan</span>.</p>
+      <ul>
+        <li>The week is already filled in from the curriculum's scheme of study. For PST04104: Monday lecture 2 h and tutorial 1 h, Thursday practical 4 h and assignment 1 h — 8 hours a week, 120 over 15 weeks. Put each class on the day <b>you</b> teach it.</li>
+        <li>Press <span class="ui">Lay the plan out</span>. Every class goes on its day each week from the start of teaching, around public holidays and the recess (a class on a holiday moves to another day of that week, and says so). The outcomes (SEOs) follow the curriculum's order; change any class's SEO or write its topic.</li>
+        <li>The assessments are laid out too, as your module's assessment plan sets them: tests in the CAT weeks, assignments before the deadline for their results, the examination in its window, each with its weight (PST04104: written tests 5% each, practical tests 12.5%, assignments 2.5%; examination 15% + 45%).</li>
+        <li>A late start, or fewer weeks? Give <b>Starts</b> and <b>Weeks</b> before laying out.</li>
+        <li>You may attach your own Word or PDF plan; it is kept as the reference copy.</li>
+        <li>When it is right, <span class="ui">Send for approval</span>.</li>
+      </ul>
+      <p>A Level 5 or 6 module (old curriculum) gets a plan without outcomes: type the topics; its assessments are the ones results use today.</p>
+    </div>
+  </div>
+
+  <div class="step wide">
+    <div>
+      <h3><span class="num">T2</span>Tutor: after each class</h3>
+      <ul>
+        <li><span class="ui">Done</span>, <span class="ui">Part</span> (partly taught) or <span class="ui">Missed</span> (why). Taught on another day? Move it to that day first (the calendar button); once the plan has been sent, a move needs a reason and the first date is kept.</li>
+        <li>The attendance register you took that day is linked by itself as the evidence. A class marked done with <b>no register that day</b> is shown to your Head of Department.</li>
+        <li><span class="ui">+ A make-up class</span> for a class that was missed.</li>
+        <li>For each test, open its <b>setting plan</b>, tick the SEOs and tasks it covers, save, and <span class="ui">Send for moderation</span>. The plan shows what the assessment plan requires that no test covers yet, and any task tested before it is taught.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step wide">
+    <div>
+      <h3><span class="num">T3</span>Head of Department: approve and moderate</h3>
+      <p><span class="path">Teaching plans ▸ To approve</span> lists your department's plans. Open one: <span class="ui">Approve</span>, or <span class="ui">Return for changes</span> with what to change. Tests sent for moderation are approved or returned the same way. A plan you teach yourself goes to DPARC, as do modules with no Head of Department.</p>
+    </div>
+  </div>
+
+  <div class="step wide">
+    <div>
+      <h3><span class="num">T4</span>HOD, DPARC, Principal, QA: how the plans stand</h3>
+      <p><span class="path">Teaching plans ▸ Plan progress</span>: every module of the semester, with or without a plan.</p>
+      <ul>
+        <li><b>On schedule</b> is classes done of those due by the day: 90% or more is <b>on track</b>, 70–89% <b>behind</b>, below 70% <b>far behind</b>. Each tutor is measured against their own plan, so a small module and a large one are judged alike.</li>
+        <li>Also: classes done of all, hours done of planned, how many weeks behind, classes done with no register, tests late.</li>
+        <li><b>As at</b> a CQI supervision date shows the plans as they stood that day.</li>
+        <li>Open a plan to read it whole, with its history; leave a <b>review note</b> (with the supervision it was made at).</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step wide">
+    <div>
+      <h3><span class="num">T5</span>DPARC: the teaching calendar; everyone: the curriculum</h3>
+      <p><span class="path">Teaching plans ▸ Teaching calendar</span> holds the almanac: when teaching starts and ends, public holidays, the recess, CAT weeks, examinations, deadlines and CQI supervisions. DPARC sets the weeks and adds or removes dates; plans already laid out keep theirs.</p>
+      <p><span class="path">Teaching plans ▸ Curriculum</span>: every module of the 2022 curriculum (NTA 4–6) — SEOs, tasks, weekly hours and how it is assessed. Where the national curriculum and assessment plan disagree with each other, it is noted on the module.</p>
+    </div>
+  </div>
+
+  <div class="step wide">
+    <div>
+      <h3><span class="num">Q1</span>Quality Assurance: the evaluation forms</h3>
+      <p>Quality Assurance runs every student and staff evaluation form: <span class="path">Services ▸ Evaluation Forms</span> — make a form, add its sections and questions, open it, read and download the responses, see who has answered. Service requests stay with the departments.</p>
+    </div>
   </div>
 </section>
 </main>

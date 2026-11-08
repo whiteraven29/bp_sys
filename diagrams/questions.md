@@ -1028,3 +1028,34 @@ approved before this release (money already off the bill) must pay that amount a
 **Answer (8 November 2026):** yes, the old waiver goes back on the bill, into the plan, ticked on the plan request;
 a plan is one amount a month for each student, set by the amount or by the number of months. Built the same day.
 
+
+### Q76. Teaching plans: tracking, performance and monitoring ●
+
+**Asked (8 November 2026):** how to bring teaching plans (the PST04104 example) into the system so a tutor tracks what
+is done and not done and is measured against the plan, while the HOD, the Principal and DPARC follow how tutors finish
+theirs — plans differ in length with the module's weight; QA should see them too, uploaded plans included; and what
+should already be in the system so tutors only feed simple data.
+
+**Answers (8–9 November 2026):** CA weights left for now; the new curriculum is at Level 4 (its modules already on the
+live server), Levels 5 and 6 are the last on the old one; semester 1 teaching started on 2 November; implement what is
+possible now on a branch and merge to master when there are no doubts; CA is 40% and SE 60% even in the new curriculum
+(the curriculum's 60/40 is the authority's typing error); QA runs every student and staff evaluation form.
+
+**Built (on the branch):** the curriculum and assessment plans of NTA 4–6 loaded; the almanac as the teaching calendar;
+plans laid out from the days the tutor gives; progress against the plan; approval and test moderation; QA office.
+See `ops/guides/07-teaching-plans.md`.
+
+**Still yours:** DPARC to confirm the Christmas recess (21 Dec – 3 Jan) and Semester 2 CAT 1 (3–8 May); whether the
+Principal, DPARC and the Heads of Department should keep writing evaluation forms once QA has an account (kept for now).
+
+### Q77. The results scheme for the new curriculum ◐
+
+**Asked (8 November 2026), by the documents:** results hold A1, A2, CAT 1, CAT 2 (theory and practical) with fixed
+weights; the Level 4 assessment plans set different weights per module, oral tests and examinations, case studies,
+three tests or three assignments. The new curriculum reaches Level 5 in 2027/28 and Level 6 in 2028/29, so for two
+years one level runs both curricula; repeaters of old-curriculum modules need an old-to-new equivalence.
+
+**Answer (8 November 2026):** gather every assessment plan first, then decide. The NTA 4, 5 and 6 plans and curricula
+are now loaded and compared on the Curriculum screen. **Still needed:** the decision with the exam officer before Level 4
+CAT 1 (18 January 2027); the old curriculum's documents for Levels 5–6; any NACTVET / MoH transition circular for
+repeaters; the MoH examination guidelines (CA eligibility with oral tests and case studies).

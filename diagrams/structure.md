@@ -104,6 +104,8 @@ Every power is defined once, in `attendance/roles.py`.
   ICT OFFICER → staff accounts, passwords, the open roles (tutor, secretary);
                 Django /admin/ with every table (the role makes the account a superuser)
   SECRETARY   → service requests
+  QA          → Quality Assurance (appointed): every teaching plan, review notes;
+                the student and staff evaluation forms (not service requests)
 ```
 
 The staff page hides menu items with `data-roles` and body classes
@@ -212,6 +214,28 @@ sign in.
                          the bill, never changing it (time_to_pay.py); months
                          (set by the number of months), restores (old waivers
                          put back on the bill when DPFPA agrees)
+  Curriculum             a national curriculum as loaded (code, weeks of study);
+                         2022 PST: NTA 4–6 (load_curriculum, curricula/pst_2022.json)
+  CurriculumModule       code + name + NTA level, semester, credits, weekly
+                         L/T/P/A hours, checks (where the documents disagree)
+  LearningOutcome        an SEO (5.1.1), its enabling outcome and criteria
+  RelatedTask            a, b, c … of an SEO
+  AssessmentComponent    how a module is assessed: CA / SE / field, method, at
+                         least how many, weight, required_tasks
+  TeachingCalendar       a semester's teaching start and end (DPARC)
+  CalendarEvent          holiday | recess | cat | special_cat | exam | revision |
+                         deadline | meeting | cqi | field | other (holiday,
+                         recess, exam: no class planned)
+  TeachingPlan           one per module: curriculum_module, pattern (day, kind,
+                         hours), weeks, starts_on, the tutor's document,
+                         draft | submitted | approved | returned
+  PlanSession            a class: week, planned_on, kind, hours, outcome, tasks,
+                         planned | done | partial | missed, delivered_on,
+                         register (the attendance Session that day), moved_from
+  PlanAssessment         Written test 1 …: weight, planned_on, held_on, setting
+                         plan tasks, moderation (HOD; DPARC without one)
+  PlanNote / PlanEvent   review notes (QA, HOD, DPARC) / the plan's history
+  teaching_plans.py      lay_out, progress (done of due), coverage, approval
   StudentPass            a pass issued: random code, valid_until, basis,
                          source (office / portal), issued_by
   semester_pass.py       the pass: coverage (windows paid), status, issue, verify by code
@@ -438,5 +462,7 @@ are dropped once the production row counts are checked.
 | `create_admin` | the first admin account |
 | `place_left_behind [--apply]` | once: places the Level 4/5 students the 2026/27 year end left behind (single-level PST04/PST05) |
 | `call_off_repeat_places [--apply]` | once: calls off the place a settled REPEAT still holds in a semester they owe nothing in (a repeat not sat, settled before 26 Oct 2026) |
+| `load_curriculum [path] [--dry-run]` | the curriculum and assessment plans (default: 2022 PST, NTA 4–6); updates in place |
+| `load_teaching_calendar [path] [--dry-run]` | the almanac's teaching weeks, holidays, CAT weeks, exams, CQI dates (default 2026/27) |
 
-Tests: 1330, run as described in `ops/guides/06-release-2026-27.md`.
+Tests: 1352 on the branch `feature/teaching-plans` (1330 on master), run as described in `ops/guides/06-release-2026-27.md`.

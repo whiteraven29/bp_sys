@@ -482,6 +482,21 @@ class LabTechnicianProfile(models.Model):
         return self.full_name
 
 
+class QualityAssuranceProfile(models.Model):
+    """The Quality Assurance Manager (the almanac names the office). Reads
+    every teaching plan, the documents tutors upload, how far each has got and
+    what changed, and leaves review notes; changes nothing (said 9 November
+    2026). Appointed by the Principal."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='qa_profile',
+    )
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.full_name
+
+
 class DeanOfStudentsProfile(models.Model):
     """The Dean of Students: student welfare. Reads the health records the
     records office keeps, for reference when a student needs care or
@@ -4662,3 +4677,327 @@ class StudentPass(models.Model):
 
     def __str__(self):
         return f'{self.profile.nactvet_reg_no} · {self.code} · until {self.valid_until}'
+
+
+# ── Curricula, the teaching calendar and teaching plans (said 8–9 November 2026)
+#
+# A teaching plan is the tutor's plan for one module in one semester: what is
+# taught each week, and when each assessment is held. Most of it is already
+# known before the tutor starts — the curriculum fixes the module's outcomes,
+# tasks, weekly hours and how it is assessed; the almanac fixes the weeks — so
+# the tutor gives the days and follows it. See teaching_plans.py.
+
+class Curriculum(models.Model):
+    """A national curriculum and its assessment plans, as loaded from the
+    documents (curricula/extract.py, manage.py load_curriculum). The new one
+    (2022) runs at NTA Level 4 from 2026/27 and moves up a level a year; the
+    old one is not loaded."""
+    code = models.CharField(max_length=40, unique=True)
+    name = models.CharField(max_length=200)
+    programme = models.ForeignKey('Programme', on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name='curricula')
+    note = models.TextField(blank=True)
+    weeks_of_study = models.PositiveSmallIntegerField(default=15)
+    weeks_of_assessment = models.PositiveSmallIntegerField(default=2)
+    loaded_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['code']
+
+    def __str__(self):
+        return self.name
+
+
+class CurriculumModule(models.Model):
+    """A module as the curriculum describes it. Codes repeat across curricula
+    (PST04104 is Pharmaceutical Dosage Forms in the old one and Computer
+    Application in Pharmacy Practice in the new), so a module of the college
+    is matched by code and name together."""
+    curriculum = models.ForeignKey(Curriculum, on_delete=models.CASCADE, related_name='modules')
+    code = models.CharField(max_length=20)
+    name = models.CharField(max_length=200)
+    level = models.PositiveSmallIntegerField(help_text='NTA level.')
+    semester = models.PositiveSmallIntegerField()
+    credits = models.PositiveSmallIntegerField(default=0)
+    # The scheme of study: hours a week of each kind.
+    lecture_hours = models.PositiveSmallIntegerField(default=0)
+    tutorial_hours = models.PositiveSmallIntegerField(default=0)
+    practical_hours = models.PositiveSmallIntegerField(default=0)
+    assignment_hours = models.PositiveSmallIntegerField(default=0)
+    # Where the national documents disagree (a code spelt two ways, weights
+    # that do not add up), kept for whoever reads the plan.
+    checks = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        ordering = ['curriculum', 'level', 'semester', 'code']
+        constraints = [models.UniqueConstraint(fields=['curriculum', 'code', 'name'],
+                                               name='unique_curriculum_module')]
+
+    def __str__(self):
+        return f'{self.code} {self.name}'
+
+    @property
+    def hours_per_week(self):
+        return self.lecture_hours + self.tutorial_hours + self.practical_hours + self.assignment_hours
+
+
+class LearningOutcome(models.Model):
+    """A sub-enabling outcome (SEO), e.g. 5.1.1, under its enabling outcome."""
+    module = models.ForeignKey(CurriculumModule, on_delete=models.CASCADE, related_name='outcomes')
+    code = models.CharField(max_length=20)
+    text = models.TextField()
+    enabling_code = models.CharField(max_length=10, blank=True)
+    enabling_text = models.TextField(blank=True)
+    criteria = models.TextField(blank=True, help_text='The assessment criteria the curriculum gives.')
+    order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['module', 'order']
+        constraints = [models.UniqueConstraint(fields=['module', 'code'], name='unique_module_outcome')]
+
+    def __str__(self):
+        return f'{self.code} {self.text[:60]}'
+
+
+class RelatedTask(models.Model):
+    """A related task (a, b, c …) of an SEO: what is taught and assessed."""
+    outcome = models.ForeignKey(LearningOutcome, on_delete=models.CASCADE, related_name='tasks')
+    letter = models.CharField(max_length=3)
+    text = models.TextField()
+    order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['outcome', 'order']
+        constraints = [models.UniqueConstraint(fields=['outcome', 'letter'], name='unique_outcome_task')]
+
+    def __str__(self):
+        return f'{self.outcome.code} {self.letter}) {self.text[:50]}'
+
+
+class AssessmentComponent(models.Model):
+    """One way a module is assessed, as its assessment plan sets it: "Written
+    tests, not less than 2, 10%", and the SEOs and tasks they must be drawn
+    from. Shown on the teaching plan; results do not read it (yet)."""
+    CA = 'ca'
+    SE = 'se'
+    FIELD = 'field'
+    STAGE_CHOICES = [(CA, 'Continuous assessment'), (SE, 'Semester examination'), (FIELD, 'Field practice')]
+    METHOD_CHOICES = [
+        ('written_test', 'Written test'), ('assignment', 'Assignment'), ('practical_test', 'Practical test'),
+        ('oral_test', 'Oral test'), ('case_study', 'Case study'), ('ospe', 'OSPE'), ('project', 'Project'),
+        ('portfolio', 'Portfolio'), ('presentation', 'Presentation'),
+        ('written_exam', 'Written examination'), ('practical_exam', 'Practical examination'),
+        ('oral_exam', 'Oral examination'),
+        ('tutor_report', "Tutor's report"), ('supervisor_report', "Supervisor's report"), ('logbook', 'Log book'),
+        ('other', 'Other'),
+    ]
+    module = models.ForeignKey(CurriculumModule, on_delete=models.CASCADE, related_name='components')
+    stage = models.CharField(max_length=6, choices=STAGE_CHOICES)
+    method = models.CharField(max_length=20, choices=METHOD_CHOICES)
+    label = models.CharField(max_length=120)
+    tool = models.CharField(max_length=200, blank=True)
+    min_count = models.PositiveSmallIntegerField(default=1)
+    weight = models.DecimalField(max_digits=5, decimal_places=2)
+    required_tasks = models.ManyToManyField(RelatedTask, blank=True, related_name='required_by')
+    # Lines of the plan that name tasks but no SEO (Basic Microbiology).
+    unplaced = models.TextField(blank=True)
+    order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['module', 'order']
+
+    def __str__(self):
+        return f'{self.module.code} {self.label} {self.weight}%'
+
+
+class TeachingCalendar(models.Model):
+    """A semester's teaching weeks, from the almanac: DPARC keeps it."""
+    semester = models.OneToOneField(Semester, on_delete=models.CASCADE, related_name='teaching_calendar')
+    teaching_starts = models.DateField()
+    teaching_ends = models.DateField(help_text='The last day classes may run, before the examinations.')
+    note = models.CharField(max_length=300, blank=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.semester}: {self.teaching_starts} – {self.teaching_ends}'
+
+
+class CalendarEvent(models.Model):
+    """A date or span in the semester: a holiday, the recess, CAT weeks, the
+    examinations, a deadline, a CQI supportive supervision."""
+    HOLIDAY = 'holiday'
+    RECESS = 'recess'
+    CAT = 'cat'
+    SPECIAL_CAT = 'special_cat'
+    EXAM = 'exam'
+    REVISION = 'revision'
+    DEADLINE = 'deadline'
+    MEETING = 'meeting'
+    CQI = 'cqi'
+    FIELD = 'field'
+    OTHER = 'other'
+    KIND_CHOICES = [
+        (HOLIDAY, 'Public holiday'), (RECESS, 'Recess'), (CAT, 'CAT week'), (SPECIAL_CAT, 'Special CAT'),
+        (EXAM, 'Examinations'), (REVISION, 'Revision'), (DEADLINE, 'Deadline'), (MEETING, 'Meeting'),
+        (CQI, 'CQI supportive supervision'), (FIELD, 'Field practice'), (OTHER, 'Other'),
+    ]
+    #: No class is planned on these days.
+    NO_TEACHING = frozenset({HOLIDAY, RECESS, EXAM})
+
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name='calendar_events')
+    kind = models.CharField(max_length=12, choices=KIND_CHOICES)
+    title = models.CharField(max_length=200)
+    starts_on = models.DateField()
+    ends_on = models.DateField()
+    note = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ['starts_on', 'kind']
+
+    def __str__(self):
+        return f'{self.title} ({self.starts_on} – {self.ends_on})'
+
+
+class TeachingPlan(models.Model):
+    """A tutor's plan for one module in one semester."""
+    DRAFT = 'draft'
+    SUBMITTED = 'submitted'
+    APPROVED = 'approved'
+    RETURNED = 'returned'
+    STATUS_CHOICES = [(DRAFT, 'Being prepared'), (SUBMITTED, 'Waiting for approval'),
+                      (APPROVED, 'Approved'), (RETURNED, 'Returned for changes')]
+
+    module = models.OneToOneField(Module, on_delete=models.CASCADE, related_name='teaching_plan')
+    curriculum_module = models.ForeignKey(CurriculumModule, on_delete=models.SET_NULL, null=True, blank=True,
+                                          related_name='plans')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=DRAFT)
+    # The week as the tutor teaches it: [{"weekday": 0, "kind": "lecture", "hours": 2}, …]
+    pattern = models.JSONField(default=list, blank=True)
+    starts_on = models.DateField(null=True, blank=True, help_text='Later than the semester, for a late start.')
+    weeks = models.PositiveSmallIntegerField(null=True, blank=True, help_text='Weeks of teaching, if not the usual.')
+    document = models.FileField(upload_to='teaching_plans/%Y/', blank=True,
+                                validators=[FileExtensionValidator(['pdf', 'docx', 'doc'])])
+    document_name = models.CharField(max_length=200, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='teaching_plans_made')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    submitted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+')
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=500, blank=True)
+
+    def __str__(self):
+        return f'Teaching plan · {self.module}'
+
+
+class PlanSession(models.Model):
+    """One class in the plan, and what became of it."""
+    LECTURE = 'lecture'
+    TUTORIAL = 'tutorial'
+    PRACTICAL = 'practical'
+    ASSIGNMENT = 'assignment'
+    REVISION = 'revision'
+    FIELD = 'field'
+    KIND_CHOICES = [(LECTURE, 'Lecture'), (TUTORIAL, 'Tutorial'), (PRACTICAL, 'Practical'),
+                    (ASSIGNMENT, 'Assignment'), (REVISION, 'Revision'), (FIELD, 'Field practice')]
+    PLANNED = 'planned'
+    DONE = 'done'
+    PARTIAL = 'partial'
+    MISSED = 'missed'
+    STATUS_CHOICES = [(PLANNED, 'Planned'), (DONE, 'Done'), (PARTIAL, 'Partly done'), (MISSED, 'Missed')]
+
+    plan = models.ForeignKey(TeachingPlan, on_delete=models.CASCADE, related_name='sessions')
+    order = models.PositiveSmallIntegerField(default=0)
+    week = models.PositiveSmallIntegerField()
+    planned_on = models.DateField()
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    hours = models.DecimalField(max_digits=4, decimal_places=1)
+    outcome = models.ForeignKey(LearningOutcome, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='plan_sessions')
+    tasks = models.ManyToManyField(RelatedTask, blank=True, related_name='plan_sessions')
+    topic = models.CharField(max_length=300, blank=True)
+    tutor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name='plan_sessions')
+    status = models.CharField(max_length=8, choices=STATUS_CHOICES, default=PLANNED)
+    delivered_on = models.DateField(null=True, blank=True)
+    # The attendance register taken that day, when there is one: the evidence.
+    register = models.ForeignKey(Session, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='plan_sessions')
+    note = models.CharField(max_length=300, blank=True)
+    moved_from = models.DateField(null=True, blank=True)
+    move_reason = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ['plan', 'planned_on', 'order']
+
+    def __str__(self):
+        return f'{self.plan.module.code} wk {self.week} {self.get_kind_display()} {self.planned_on}'
+
+
+class PlanAssessment(models.Model):
+    """One assessment the plan holds — Written Test 1, Assignment 2 — with
+    its date and its setting plan (the SEOs and tasks it covers), which the
+    Head of Department moderates before it is given (assessment plan, Part IV)."""
+    DRAFT = 'draft'
+    SUBMITTED = 'submitted'
+    APPROVED = 'approved'
+    RETURNED = 'returned'
+    MODERATION_CHOICES = [(DRAFT, 'Not sent for moderation'), (SUBMITTED, 'Sent for moderation'),
+                          (APPROVED, 'Moderated'), (RETURNED, 'Returned to the setter')]
+
+    plan = models.ForeignKey(TeachingPlan, on_delete=models.CASCADE, related_name='assessments')
+    component = models.ForeignKey(AssessmentComponent, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name='plan_assessments')
+    stage = models.CharField(max_length=6, choices=AssessmentComponent.STAGE_CHOICES,
+                             default=AssessmentComponent.CA)
+    method = models.CharField(max_length=20, choices=AssessmentComponent.METHOD_CHOICES)
+    number = models.PositiveSmallIntegerField(default=1)
+    title = models.CharField(max_length=120)
+    weight = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    planned_on = models.DateField(null=True, blank=True)
+    held_on = models.DateField(null=True, blank=True)
+    tasks = models.ManyToManyField(RelatedTask, blank=True, related_name='plan_assessments')
+    moderation = models.CharField(max_length=10, choices=MODERATION_CHOICES, default=DRAFT)
+    moderated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+')
+    moderated_at = models.DateTimeField(null=True, blank=True)
+    moderation_note = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        ordering = ['plan', 'planned_on', 'stage', 'method', 'number']
+
+    def __str__(self):
+        return f'{self.plan.module.code} {self.title}'
+
+
+class PlanNote(models.Model):
+    """A review note on a plan — QA, the Head of Department, DPARC — or the
+    tutor's answer. Notes are kept, never edited."""
+    plan = models.ForeignKey(TeachingPlan, on_delete=models.CASCADE, related_name='notes')
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                               related_name='plan_notes')
+    text = models.TextField()
+    checkpoint = models.CharField(max_length=120, blank=True, help_text='e.g. the CQI supervision it was made at.')
+    written_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-written_at']
+
+
+class PlanEvent(models.Model):
+    """What happened to a plan and when: made, laid out, submitted, approved,
+    a class moved, an assessment moderated. QA reads the history."""
+    plan = models.ForeignKey(TeachingPlan, on_delete=models.CASCADE, related_name='history')
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='+')
+    action = models.CharField(max_length=40)
+    detail = models.CharField(max_length=500, blank=True)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-at']

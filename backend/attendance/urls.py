@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from . import consent_views, time_to_pay_views, veta_views, views
+from . import consent_views, teaching_plan_views, time_to_pay_views, veta_views, views
 
 router = DefaultRouter()
 router.register('academic-years', views.AcademicYearViewSet, basename='academicyear')
@@ -129,6 +129,29 @@ urlpatterns = [
     path('monthly-plans/options/', time_to_pay_views.plan_options, name='monthly-plan-options'),
     path('monthly-plans/<int:pk>/decide/', time_to_pay_views.decide_plan, name='monthly-plan-decide'),
     path('time-to-pay/', time_to_pay_views.summary, name='time-to-pay'),
+    # Teaching plans, the teaching calendar, the curricula (said 8–9 November 2026).
+    path('teaching-plans/', teaching_plan_views.plans, name='teaching-plans'),
+    path('teaching-plans/<int:pk>/', teaching_plan_views.plan, name='teaching-plan'),
+    path('teaching-plans/<int:pk>/lay-out/', teaching_plan_views.lay_out, name='teaching-plan-lay-out'),
+    path('teaching-plans/<int:pk>/submit/', teaching_plan_views.submit, name='teaching-plan-submit'),
+    path('teaching-plans/<int:pk>/decide/', teaching_plan_views.decide, name='teaching-plan-decide'),
+    path('teaching-plans/<int:pk>/sessions/', teaching_plan_views.add_session, name='teaching-plan-add-session'),
+    path('teaching-plans/<int:pk>/sessions/<int:session_id>/', teaching_plan_views.session,
+         name='teaching-plan-session'),
+    path('teaching-plans/<int:pk>/sessions/<int:session_id>/mark/', teaching_plan_views.mark_session,
+         name='teaching-plan-mark'),
+    path('teaching-plans/<int:pk>/assessments/<int:assessment_id>/', teaching_plan_views.assessment,
+         name='teaching-plan-assessment'),
+    path('teaching-plans/<int:pk>/assessments/<int:assessment_id>/moderate/', teaching_plan_views.moderate,
+         name='teaching-plan-moderate'),
+    path('teaching-plans/<int:pk>/notes/', teaching_plan_views.note, name='teaching-plan-note'),
+    path('teaching-plans/<int:pk>/document/', teaching_plan_views.document, name='teaching-plan-document'),
+    path('teaching-calendar/', teaching_plan_views.calendar, name='teaching-calendar'),
+    path('teaching-calendar/events/', teaching_plan_views.calendar_event, name='teaching-calendar-events'),
+    path('teaching-calendar/events/<int:event_id>/', teaching_plan_views.calendar_event,
+         name='teaching-calendar-event'),
+    path('curricula/', teaching_plan_views.curricula, name='curricula'),
+    path('curricula/modules/<int:pk>/', teaching_plan_views.curriculum_module, name='curriculum-module'),
     path('staff-accounts/<int:user_id>/set-modules/', views.set_staff_modules, name='staff-set-modules'),
     path('staff-accounts/<int:user_id>/roles/', views.set_staff_roles, name='staff-set-roles'),
     path('module-scope/', views.set_module_scope, name='module-scope'),
