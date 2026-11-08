@@ -1011,3 +1011,20 @@ but readable.
 **Answer (same day):** invoices download as a file — built (a PDF the system writes itself); the dashboard also says
 when the password expires and offers the pass once the instalment is paid.
 
+### Q75. Time to pay: waiver dates and monthly plans ●
+
+**Asked (6 November 2026):** a waived student's pass should expire on the day they say they will pay, and DPFPA should
+be able to give more time. Some students pay tuition month by month as DPFPA agreed, with 7 days of grace, or go back
+to the normal instalments; their pass follows the months; DPFPA and finance track the money until it is paid.
+
+**Answers (same day):** the money stays owed, the bill unchanged; the pass runs to month-end + 7 days from approval; the
+desk and exam checks follow the same dates. **Built the same day.** Still yours to say: whether a true write-off (a full
+bursary) is ever needed. New waivers cannot write money off; a bursary would need its own route.
+
+**Answer (8 November 2026), a waived student who wants to pay monthly:** finance asks for the plan as usual; DPFPA's
+yes replaces the tuition waiver and its money joins the plan. Still yours: whether the student whose waiver was
+approved before this release (money already off the bill) must pay that amount after all.
+
+**Answer (8 November 2026):** yes, the old waiver goes back on the bill, into the plan, ticked on the plan request;
+a plan is one amount a month for each student, set by the amount or by the number of months. Built the same day.
+

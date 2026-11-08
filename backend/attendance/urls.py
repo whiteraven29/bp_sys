@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from . import consent_views, veta_views, views
+from . import consent_views, time_to_pay_views, veta_views, views
 
 router = DefaultRouter()
 router.register('academic-years', views.AcademicYearViewSet, basename='academicyear')
@@ -124,6 +124,11 @@ urlpatterns = [
     path('waiver-requests/shortfalls/', views.waiver_shortfalls, name='waiver-shortfalls'),
     path('module-tutors/', views.module_tutors, name='module-tutors'),
     path('waiver-requests/<int:pk>/decide/', views.decide_waiver_request, name='waiver-request-decide'),
+    path('waiver-requests/<int:pk>/extend/', time_to_pay_views.extend_waiver, name='waiver-request-extend'),
+    path('monthly-plans/', time_to_pay_views.monthly_plans, name='monthly-plans'),
+    path('monthly-plans/options/', time_to_pay_views.plan_options, name='monthly-plan-options'),
+    path('monthly-plans/<int:pk>/decide/', time_to_pay_views.decide_plan, name='monthly-plan-decide'),
+    path('time-to-pay/', time_to_pay_views.summary, name='time-to-pay'),
     path('staff-accounts/<int:user_id>/set-modules/', views.set_staff_modules, name='staff-set-modules'),
     path('staff-accounts/<int:user_id>/roles/', views.set_staff_roles, name='staff-set-roles'),
     path('module-scope/', views.set_module_scope, name='module-scope'),

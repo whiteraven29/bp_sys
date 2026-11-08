@@ -3522,7 +3522,11 @@ class WaiverRequest(models.Model):
     PENDING = 'pending'
     APPROVED = 'approved'
     REFUSED = 'refused'
-    STATUS_CHOICES = [(PENDING, 'Waiting for DPFPA'), (APPROVED, 'Approved'), (REFUSED, 'Refused')]
+    # A tuition waiver a monthly plan took over (said 8 November 2026): what
+    # was short is still owed, now under the plan.
+    REPLACED = 'replaced'
+    STATUS_CHOICES = [(PENDING, 'Waiting for DPFPA'), (APPROVED, 'Approved'), (REFUSED, 'Refused'),
+                      (REPLACED, 'Replaced by a monthly plan')]
 
     # Since 22 October 2026 the accountant names an instalment, not a charge:
     # tuition fee or direct costs, which instalment, and what is short. The
@@ -3538,6 +3542,13 @@ class WaiverRequest(models.Model):
                                  help_text='An instalment: what is short, to be waived. One charge (the '
                                            'first requests): what is waived on it in all, once approved.')
     reason = models.CharField(max_length=300)
+    # Since 6 November 2026 a waiver gives time; it does not write the money
+    # off. The shortfall stays on the bill, still owed, and the student is let
+    # through until the day they say they will pay. Approved before that (no
+    # date): it came off the bill and stays off.
+    pay_by = models.DateField(null=True, blank=True, help_text='The day the student says they will pay.')
+    first_pay_by = models.DateField(null=True, blank=True, help_text='The date first agreed, before any extension.')
+    times_extended = models.PositiveSmallIntegerField(default=0)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
                                      related_name='waivers_requested')
@@ -3552,6 +3563,62 @@ class WaiverRequest(models.Model):
 
     def __str__(self):
         return f'{self.profile.nactvet_reg_no} · {self.amount} · {self.status}'
+
+
+class MonthlyPlan(models.Model):
+    """Tuition paid month by month, as agreed by DPFPA (said 6 November 2026).
+
+    An agreement laid over the bill, never a change to it: the tuition charges
+    keep their instalment dates, so a plan that lapses simply stops applying
+    and the student is back on the normal instalments. It covers tuition only.
+    Each month-end asks `monthly_amount`, with seven days' grace. See
+    time_to_pay.py."""
+    PENDING = 'pending'
+    ACTIVE = 'active'
+    COMPLETED = 'completed'
+    LAPSED = 'lapsed'
+    REFUSED = 'refused'
+    CANCELLED = 'cancelled'
+    STATUS_CHOICES = [(PENDING, 'Waiting for DPFPA'), (ACTIVE, 'Running'), (COMPLETED, 'Paid in full'),
+                      (LAPSED, 'Lapsed: back on normal instalments'), (REFUSED, 'Refused'),
+                      (CANCELLED, 'Closed: the tuition bill was reversed')]
+
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='monthly_plans')
+    academic_year = models.ForeignKey('AcademicYear', on_delete=models.PROTECT, related_name='monthly_plans')
+    monthly_amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    first_due = models.DateField(help_text='The first month-end.')
+    # Set by the timeframe (said 8 November 2026): either the amount a month,
+    # or the number of months — then the amount is worked out from what is owed.
+    months = models.PositiveSmallIntegerField(null=True, blank=True,
+                                              help_text='Set by the number of months: the amount a month follows.')
+    restores = models.ManyToManyField('WaiverRequest', blank=True, related_name='restored_by_plans',
+                                      help_text='Waivers approved before 6 November 2026 (written off) that go back '
+                                                'on the bill, into the plan, when DPFPA agrees.')
+    total = models.DecimalField(max_digits=12, decimal_places=2,
+                                help_text='The tuition owed when the plan began: what it pays off.')
+    paid_before = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                      help_text='Paid on the tuition before the plan began.')
+    reason = models.CharField(max_length=300)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                     related_name='monthly_plans_requested')
+    requested_at = models.DateTimeField(auto_now_add=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='monthly_plans_decided')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=300, blank=True)
+    ended_on = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-requested_at']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'academic_year'],
+                                    condition=models.Q(status__in=['pending', 'active']),
+                                    name='one_open_monthly_plan_a_year'),
+        ]
+
+    def __str__(self):
+        return f'{self.profile.nactvet_reg_no} · {self.monthly_amount} a month · {self.status}'
 
 
 class FinanceOverride(models.Model):

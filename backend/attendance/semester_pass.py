@@ -18,7 +18,11 @@ falls due in the payment schedule's windows (its instalment dates):
   * every window paid, in several payments: until the day before the first
     window comes round again a year later;
   * not paid up but let through by an override (Waivers & Overrides): the
-    override's date.
+    override's date;
+  * what is short waived until a date: that date, the day they said they would
+    pay; DPFPA may move it later (said 6 November 2026);
+  * tuition on a monthly plan: the next unpaid month-end plus its seven days of
+    grace, while everything else follows its normal windows. Both must hold.
 
 Each pass is kept with a random code. It is checked by that code alone
 (/semester-pass/check/): an edited copy — another name, a later date — does not
@@ -30,7 +34,7 @@ from datetime import date, timedelta
 
 from django.db import transaction
 
-from . import finance
+from . import finance, time_to_pay
 from .models import (
     ChargeType, FinanceOverride, Payment, Semester, SemesterRegistration, StudentCharge,
     StudentPass, StudentProfile, StudentStanding,
@@ -66,6 +70,11 @@ def coverage(profile, academic_year, today=None):
     the next window they owe and how much, or None)."""
     today = today or date.today()
     bill = [charge for charge in _years_bill(profile, academic_year) if charge.payable > finance.ZERO]
+    relief, caps = time_to_pay.relief_for([profile.id], academic_year, today)
+
+    def owing(charge):
+        return max(finance.charge_balance(charge) - relief.get(charge.id, finance.ZERO), finance.ZERO)
+
     # The student's own windows: the dates on their own bill, which the finance
     # desk raised from the schedule for their entry — new students' or
     # continuing students', never the two mixed (said 21 October 2026). A step
@@ -73,7 +82,7 @@ def coverage(profile, academic_year, today=None):
     windows = sorted({charge.due_date for charge in bill})
     covered = 0
     for number, opens in enumerate(windows, start=1):
-        if all(finance.charge_balance(c) <= finance.ZERO for c in bill if c.due_date <= opens):
+        if all(owing(c) <= finance.ZERO for c in bill if c.due_date <= opens):
             covered = number
         else:
             break
@@ -90,12 +99,15 @@ def coverage(profile, academic_year, today=None):
     elif covered:
         nxt = windows[covered]
         until, basis = nxt - timedelta(days=1), f'paid through instalment {covered} of {len(windows)}'
-        owed = (nxt, sum((finance.charge_balance(c) for c in bill if c.due_date <= nxt), finance.ZERO))
+        owed = (nxt, sum((owing(c) for c in bill if c.due_date <= nxt), finance.ZERO))
     else:
         until, basis = None, 'the first instalment is not paid'
         if windows:
-            owed = (windows[0], sum((finance.charge_balance(c) for c in bill if c.due_date <= windows[0]),
-                                    finance.ZERO))
+            owed = (windows[0], sum((owing(c) for c in bill if c.due_date <= windows[0]), finance.ZERO))
+    # What is let through for now runs only as far as that agreement does.
+    agreed = sorted(caps.get(profile.id, []), key=lambda cap: cap[0])
+    if until is not None and agreed and agreed[0][0] <= until:
+        until, basis = agreed[0]
     # Let through by an override: its date is the pass's (said 21 October 2026).
     override = finance.active_override(profile, academic_year, ChargeType.REGISTRATION, today)
     if (override is not None and override.status == FinanceOverride.CLEARED and override.expires_on

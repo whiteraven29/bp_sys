@@ -202,7 +202,16 @@ sign in.
   WaiverRequest          a shortfall waiver: tuition fee or direct costs, the
                          year and instalment, what is short (or, the first
                          requests, one charge), reason, pending | approved |
-                         refused — DPFPA decides
+                         refused — DPFPA decides; since 6 Nov 2026 it gives
+                         time: pay_by, first_pay_by, times_extended, the bill
+                         unchanged (approved before: came off the bill);
+                         replaced — taken over by a monthly plan
+  MonthlyPlan            tuition by the month, as DPFPA agreed: monthly_amount,
+                         first_due, total, paid_before, pending | active |
+                         completed | lapsed | refused | cancelled — laid over
+                         the bill, never changing it (time_to_pay.py); months
+                         (set by the number of months), restores (old waivers
+                         put back on the bill when DPFPA agrees)
   StudentPass            a pass issued: random code, valid_until, basis,
                          source (office / portal), issued_by
   semester_pass.py       the pass: coverage (windows paid), status, issue, verify by code
@@ -430,4 +439,4 @@ are dropped once the production row counts are checked.
 | `place_left_behind [--apply]` | once: places the Level 4/5 students the 2026/27 year end left behind (single-level PST04/PST05) |
 | `call_off_repeat_places [--apply]` | once: calls off the place a settled REPEAT still holds in a semester they owe nothing in (a repeat not sat, settled before 26 Oct 2026) |
 
-Tests: 1282, run as described in `ops/guides/06-release-2026-27.md`.
+Tests: 1330, run as described in `ops/guides/06-release-2026-27.md`.

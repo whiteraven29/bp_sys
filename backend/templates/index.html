@@ -1160,6 +1160,7 @@
         <button class="nav-sub-btn" data-exec-section="finance" onclick="showExecSection('finance', this)">Fees &amp; collections</button>
         <button class="nav-sub-btn" data-exec-section="spending" onclick="showExecSection('spending', this)">Spending</button>
         <button class="nav-sub-btn" data-exec-section="waivers" data-roles="principal dpfpa" onclick="showExecSection('waivers', this)">Waiver approvals</button>
+        <button class="nav-sub-btn" data-exec-section="timetopay" data-roles="principal dpfpa" onclick="showExecSection('timetopay', this)">Time to pay</button>
       </div>
     </div>
     <div class="nav-group" id="exec-inv-nav-group" data-roles="principal dpfpa">
@@ -1265,6 +1266,7 @@
         <button class="nav-sub-btn" data-finance-section="students" onclick="showFinanceSection('students', this)">Balances &amp; Clearance</button>
         <button class="nav-sub-btn" data-finance-section="extra-charge" onclick="showFinanceSection('extra-charge', this)">Extra Charges</button>
         <button class="nav-sub-btn" data-finance-section="overrides" onclick="showFinanceSection('overrides', this)">Waivers &amp; Overrides</button>
+        <button class="nav-sub-btn" data-finance-section="timetopay" onclick="showFinanceSection('timetopay', this)">Time to pay</button>
         <button class="nav-sub-btn" data-finance-section="hostel" onclick="showFinanceSection('hostel', this)">Hostel</button>
       </div>
     </div>
@@ -1860,20 +1862,30 @@
       <div data-exec-section="waivers">
         <div class="card">
           <div class="card-title">Waiting for your approval <span id="waiver-pending-count" class="badge badge-orange"></span>
-            <span class="tip" tabindex="0" role="note" aria-label="Help: waivers" data-tip="A shortfall the accountant wants waived on tuition or direct costs. Nothing changes on the student's bill until you approve, and the student waits at the finance desk meanwhile. A refusal needs a reason; it goes back to the accountant.">?</span></div>
+            <span class="tip" tabindex="0" role="note" aria-label="Help: waivers" data-tip="A shortfall on tuition or direct costs, and the day the student says they will pay it. Approving does not change the bill: what is short stays owed, and they are let through until that day. The student waits at the finance desk until you decide. A refusal needs a reason; it goes back to the accountant.">?</span></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Student</th><th>Instalment</th><th class="num">Billed</th><th class="num">Short</th><th>Reason</th><th>Asked by</th><th></th></tr></thead>
-            <tbody id="waiver-pending-tbody"><tr><td colspan="7"><div class="empty">Loading…</div></td></tr></tbody>
+            <thead><tr><th>Student</th><th>Instalment</th><th class="num">Billed</th><th class="num">Short</th><th>To pay by</th><th>Reason</th><th>Asked by</th><th></th></tr></thead>
+            <tbody id="waiver-pending-tbody"><tr><td colspan="8"><div class="empty">Loading…</div></td></tr></tbody>
+          </table></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Monthly tuition plans to approve <span id="plan-pending-count" class="badge badge-orange"></span>
+            <span class="tip" tabindex="0" role="note" aria-label="Help: monthly plans" data-tip="Tuition only: the student pays the agreed sum at the end of each month, with 7 days of grace. Their pass follows the months. A month missed past its grace ends the plan and they go back to the normal instalments. The bill does not change.">?</span></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Student</th><th class="num">A month</th><th>First due</th><th>Months</th><th>Ends</th><th class="num">Tuition owed</th><th>Reason</th><th>Asked by</th><th></th></tr></thead>
+            <tbody id="plan-pending-tbody"></tbody>
           </table></div>
         </div>
         <div class="card">
           <div class="card-title">Decided</div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Student</th><th>Instalment</th><th class="num">Short</th><th>Decision</th><th>By</th><th>Note</th></tr></thead>
+            <thead><tr><th>Student</th><th>Instalment</th><th class="num">Short</th><th>To pay by</th><th>Decision</th><th>By</th><th>Note</th></tr></thead>
             <tbody id="waiver-done-tbody"></tbody>
           </table></div>
         </div>
       </div>
+
+      <div data-exec-section="timetopay"><div id="exec-ttp"></div></div>
 
       <div data-exec-section="lab">
         <div class="card">
@@ -3574,10 +3586,12 @@
         </div>
       </div>
 
+      <div class="finance-section" id="finance-section-timetopay"><div id="fin-ttp"></div></div>
+
       <div class="finance-section" id="finance-section-overrides">
         <div class="card finance-only">
           <div class="card-title">Waive a shortfall <span class="badge badge-blue">DPFPA approves</span>
-            <span class="tip" tabindex="0" role="note" aria-label="Help: waiving a shortfall" data-tip="Takes money off a student's tuition or direct costs. It goes to DPFPA first: nothing comes off the bill until DPFPA approves, and the student waits at the finance desk meanwhile.">?</span></div>
+            <span class="tip" tabindex="0" role="note" aria-label="Help: waiving a shortfall" data-tip="Gives a student time on a shortfall on tuition or direct costs, until the day they say they will pay. It goes to DPFPA first, and the student waits at the finance desk meanwhile. The bill does not change: what is short stays owed.">?</span></div>
           <div class="field" style="max-width:460px;"><label>Student</label>
             <select id="fin-wv-profile" onchange="loadWaiverFormFor(this.value)"><option value="">— select student —</option></select></div>
           <div id="fin-wv-form"></div>
@@ -3619,9 +3633,9 @@
         </div>
 
         <div class="card finance-only">
-          <div class="card-title">Shortfall waivers <span class="tip" tabindex="0" role="note" aria-label="Help: shortfall waivers" data-tip="Asked at the finance desk, on tuition or direct costs. DPFPA approves or refuses each; only an approved one comes off the bill.">?</span></div>
+          <div class="card-title">Shortfall waivers <span class="tip" tabindex="0" role="note" aria-label="Help: shortfall waivers" data-tip="Asked at the finance desk, on tuition or direct costs. DPFPA approves or refuses each. An approved one gives time until its date; the money stays owed. Follow them under Time to pay.">?</span></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Student</th><th>Instalment</th><th class="num">Short</th><th>Reason</th><th>Status</th><th>DPFPA's note</th></tr></thead>
+            <thead><tr><th>Student</th><th>Instalment</th><th class="num">Short</th><th>To pay by</th><th>Reason</th><th>Status</th><th>DPFPA's note</th></tr></thead>
             <tbody id="fin-waivers-tbody"></tbody>
           </table></div>
         </div>
@@ -8228,7 +8242,7 @@ function financeNavGroupFor(section = state.financeSection || 'overview') {
   if (['accounts', 'charge-types', 'fee-structure', 'payment-schedule', 'course-fees'].includes(section)) return document.getElementById('finance-setup-nav-group');
   if (['expenses', 'expense-budget'].includes(section)) return document.getElementById('finance-expenses-nav-group');
   if (['record', 'history', 'collections', 'overpayments'].includes(section)) return document.getElementById('finance-payments-nav-group');
-  if (['students', 'extra-charge', 'overrides', 'hostel'].includes(section)) return document.getElementById('finance-students-nav-group');
+  if (['students', 'extra-charge', 'overrides', 'timetopay', 'hostel'].includes(section)) return document.getElementById('finance-students-nav-group');
   return null;
 }
 
@@ -8255,6 +8269,7 @@ const FINANCE_COPY = {
   students:        ['Balances & Clearance', 'What every student owes and what they are cleared to sit.'],
   'extra-charge':  ['Extra Charges', 'Bill one student for a supplementary, a repeat, a hostel place — anything outside the fee structure.'],
   overrides:       ['Waivers & Overrides', 'Bursaries, sponsor delays and manual holds — the exceptions to the ledger.'],
+  timetopay:       ['Time to pay', 'Waivers with a pay-by date and monthly tuition plans: the money still to come, until it is paid.'],
   audit:           ['Audit Trail', 'Every action that has touched money.'],
 };
 
@@ -8272,6 +8287,7 @@ function showFinanceSection(section, btn) {
   document.getElementById('finance-page-sub').textContent = sub;
   // showPage copied the title before it changed: the breadcrumb said the screen before.
   const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = title;
+  if (state.financeSection === 'timetopay') loadTimeToPay('fin');
 }
 
 function toggleFinanceMenu(event, area = 'payments') {
@@ -9157,6 +9173,9 @@ const NOTIFICATION_LINKS = {
   'executive:spending': () => showExecSection('spending', document.querySelector('[data-exec-section="spending"].nav-sub-btn')),
   'executive:waivers': () => showExecSection('waivers', document.querySelector('[data-exec-section="waivers"].nav-sub-btn')),
   'finance:overrides': () => showFinanceSection('overrides', document.querySelector('[data-finance-section="overrides"].nav-sub-btn')),
+  'finance:timetopay': () => state.offices?.finance
+    ? showFinanceSection('timetopay', document.querySelector('[data-finance-section="timetopay"].nav-sub-btn'))
+    : showExecSection('timetopay', document.querySelector('[data-exec-section="timetopay"].nav-sub-btn')),
   'executive:disposals': () => showExecSection('disposals', document.querySelector('[data-exec-section="disposals"].nav-sub-btn')),
   'inventory:disposal': () => showInventorySection('disposal', document.querySelector('[data-inventory-section="disposal"]')),
   'finance:expenses': () => showFinanceSection('expenses', document.querySelector('[data-finance-section="expenses"].nav-sub-btn')),
@@ -10855,10 +10874,10 @@ async function loadOverrides() {
     document.getElementById('fin-waivers-tbody').innerHTML = rows.length ? rows.map(w => `<tr>
       <td>${personCell(w.name, w.college_id || w.reg_no)}</td>
       <td>${safeText(w.charge)}${w.charge_id ? ` · instalment ${w.installment}` : ''}</td>
-      <td class="num">${money(w.shortfall)}</td><td>${safeText(w.reason)}</td>
-      <td><span class="badge ${w.status === 'approved' ? 'badge-green' : w.status === 'refused' ? 'badge-red' : 'badge-yellow'}">${safeText(w.status_display)}</span></td>
+      <td class="num">${money(w.shortfall)}</td><td style="white-space:nowrap">${w.pay_by ? safeText(ttpDate(w.pay_by)) : '—'}</td><td>${safeText(w.reason)}</td>
+      <td><span class="badge ${w.status === 'approved' ? 'badge-green' : w.status === 'refused' ? 'badge-red' : w.status === 'replaced' ? 'badge-gen' : 'badge-yellow'}">${safeText(w.status_display)}</span></td>
       <td>${safeText(w.decision_note || '—')}</td></tr>`).join('')
-      : '<tr><td colspan="6"><div class="empty">No shortfall waivers asked for</div></td></tr>';
+      : '<tr><td colspan="7"><div class="empty">No shortfall waivers asked for</div></td></tr>';
   }).catch(() => {});
   const data = await api('GET', '/finance-overrides/');
   state.financeOverrides = data.results ?? data;
@@ -15242,7 +15261,9 @@ const EXEC_SECTIONS = {
   disposals: ['Inventory summary · Asset disposals',
               'Property the estate officer proposes to write off. DPFPA approves or rejects it.'],
   waivers: ['Finance summary · Waiver approvals',
-            'Shortfalls the accountant wants waived on tuition or direct costs. DPFPA approves or refuses each one.'],
+            'Time asked for on a shortfall, and monthly tuition plans. DPFPA approves or refuses each one.'],
+  timetopay: ['Finance summary · Time to pay',
+              'Waivers with a pay-by date and monthly tuition plans: the money still to come, until it is paid.'],
   lab: ['Inventory summary · Laboratory stock',
         "The laboratory's reagents, glassware and consumables: balances, what is low, what expires. Kept by the lab technician."],
 };
@@ -15277,31 +15298,226 @@ async function loadWaiverApprovals() {
       <td>${safeText(w.charge)}<div style="font-size:.72rem;color:var(--muted)">${w.charge_id ? `${safeText(w.family)} · instalment ${w.installment} · ` : ''}due ${safeText(w.due_date)}</div></td>
       <td class="num">${money(w.charge_amount)}</td>
       <td class="num"><strong>${money(w.shortfall)}</strong></td>
+      <td style="white-space:nowrap">${w.pay_by ? safeText(ttpDate(w.pay_by)) : '<span class="badge badge-yellow">give a date</span>'}</td>
       <td>${safeText(w.reason)}</td>
       <td>${safeText(w.requested_by)}<div style="font-size:.72rem;color:var(--muted)">${safeText(String(w.requested_at).slice(0, 16).replace('T', ' '))}</div></td>
-      <td class="act">${canDecide ? `<button class="btn btn-primary btn-sm" onclick="decideWaiver(${w.id}, true)">Approve</button>
+      <td class="act">${canDecide ? `<button class="btn btn-primary btn-sm" onclick="decideWaiver(${w.id}, true, ${jsArg(w.pay_by || '')})">Approve</button>
         <button class="btn btn-danger btn-sm" onclick="decideWaiver(${w.id}, false)">Refuse</button>` : '<span class="badge badge-yellow">Waiting for DPFPA</span>'}</td>
     </tr>`).join('')
-    : '<tr><td colspan="7"><div class="empty"><div class="ei"><i class="bi bi-check2-circle"></i></div>Nothing waiting</div></td></tr>';
+    : '<tr><td colspan="8"><div class="empty"><div class="ei"><i class="bi bi-check2-circle"></i></div>Nothing waiting</div></td></tr>';
+  const plans = await api('GET', '/monthly-plans/?status=pending');
+  document.getElementById('plan-pending-count').textContent = plans.length ? `${plans.length}` : '';
+  document.getElementById('plan-pending-tbody').innerHTML = plans.length ? plans.map(p => `<tr>
+      <td>${personCell(p.name, p.college_id || p.reg_no)}</td><td class="num"><strong>${money(p.monthly_amount)}</strong></td>
+      <td style="white-space:nowrap">${safeText(ttpDate(p.months[0].due))}</td><td>${p.months.length}</td>
+      <td style="white-space:nowrap">${safeText(ttpDate(p.months[p.months.length - 1].due))}</td>
+      <td class="num">${money(p.total)}</td><td>${safeText(p.reason)}${p.months_set ? `<div style="font-size:.72rem;color:var(--muted)">Set as ${p.months_set} months: the amount follows what is owed when you approve</div>` : ''}${(p.replaces || []).map(r => `<div style="font-size:.72rem;color:var(--muted)">Replaces the waiver on ${safeText(r)}</div>`).join('')}${(p.puts_back || []).map(r => `<div style="font-size:.72rem;color:var(--orange)">Puts back on the bill: ${safeText(r)}</div>`).join('')}</td><td>${safeText(p.requested_by)}</td>
+      <td class="act">${canDecide ? `<button class="btn btn-primary btn-sm" onclick="decidePlan(${p.id}, true)">Approve</button>
+        <button class="btn btn-danger btn-sm" onclick="decidePlan(${p.id}, false)">Refuse</button>` : '<span class="badge badge-yellow">Waiting for DPFPA</span>'}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="9"><div class="empty">Nothing waiting</div></td></tr>';
   document.getElementById('waiver-done-tbody').innerHTML = done.length ? done.map(w => `<tr>
       <td>${personCell(w.name, w.college_id || w.reg_no)}</td><td>${safeText(w.charge)}</td>
       <td class="num">${money(w.shortfall)}</td>
-      <td><span class="badge ${w.status === 'approved' ? 'badge-green' : 'badge-red'}">${safeText(w.status_display)}</span></td>
+      <td style="white-space:nowrap">${w.pay_by ? safeText(ttpDate(w.pay_by)) : '—'}</td>
+      <td><span class="badge ${w.status === 'approved' ? 'badge-green' : w.status === 'replaced' ? 'badge-gen' : 'badge-red'}">${safeText(w.status_display)}</span></td>
       <td>${safeText(w.decided_by)}</td><td>${safeText(w.decision_note || '—')}</td></tr>`).join('')
-    : '<tr><td colspan="6"><div class="empty">Nothing decided yet</div></td></tr>';
+    : '<tr><td colspan="7"><div class="empty">Nothing decided yet</div></td></tr>';
 }
 
-async function decideWaiver(id, approve) {
+async function decideWaiver(id, approve, payBy) {
+  let note = '', day;
+  if (!approve) {
+    note = prompt('Why is it refused? The accountant reads this.') || '';
+    if (!note.trim()) { toast('Say why it is refused', 'var(--red)'); return; }
+  } else if (!payBy) {
+    // Asked before waivers had dates (said 6 November 2026).
+    day = (prompt('The day the student says they will pay (YYYY-MM-DD):') || '').trim();
+    if (!day) return;
+  } else if (!confirm(`Approve? What is short stays owed, and they are let through until ${ttpDate(payBy)}.`)) return;
+  try {
+    await api('POST', `/waiver-requests/${id}/decide/`, { approve, note, pay_by: day });
+    toast(approve ? 'Approved — they are let through until that day' : 'Refused', 'var(--green)');
+    loadWaiverApprovals();
+  } catch (e) { toast(apiErrorText(e, 'Could not decide it'), 'var(--red)'); }
+}
+
+async function decidePlan(id, approve) {
   let note = '';
   if (!approve) {
     note = prompt('Why is it refused? The accountant reads this.') || '';
     if (!note.trim()) { toast('Say why it is refused', 'var(--red)'); return; }
-  } else if (!confirm('Approve this waiver? It comes off the student\'s bill now.')) return;
+  } else if (!confirm('Approve this monthly plan? The tuition follows the months until it is paid or the plan lapses. Any tuition waiver with a date is replaced by it, and any old waiver ticked goes back on the bill.')) return;
   try {
-    await api('POST', `/waiver-requests/${id}/decide/`, { approve, note });
-    toast(approve ? 'Approved — the waiver is on the bill' : 'Refused', 'var(--green)');
+    await api('POST', `/monthly-plans/${id}/decide/`, { approve, note });
+    toast(approve ? 'Approved — the plan is running' : 'Refused', 'var(--green)');
     loadWaiverApprovals();
   } catch (e) { toast(apiErrorText(e, 'Could not decide it'), 'var(--red)'); }
+}
+
+// ── time to pay: both agreements, and the money under them (said 6 November 2026) ──
+function ttpDate(day) {
+  return day ? new Date(`${String(day).slice(0, 10)}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+}
+
+const TTP_STATES = {
+  on_track: ['On track', 'badge-green'], in_grace: ['In grace', 'badge-orange'], lapsed: ['Lapsed', 'badge-red'],
+  completed: ['Paid in full', 'badge-blue'], cancelled: ['Closed', 'badge-gen'], pending: ['Waiting for DPFPA', 'badge-yellow'],
+  running: ['Date running', 'badge-green'], expired: ['Date passed', 'badge-red'], paid: ['Paid', 'badge-blue'],
+};
+
+function ttpBadge(key) {
+  const [label, tone] = TTP_STATES[key] || [key, 'badge-gen'];
+  return `<span class="badge ${tone}">${safeText(label)}</span>`;
+}
+
+async function loadTimeToPay(prefix) {
+  const box = document.getElementById(`${prefix}-ttp`);
+  try {
+    const data = await api('GET', '/time-to-pay/');
+    state.ttp = data;
+    const t = data.totals;
+    const tile = (label, value, note = '') => `<div class="qf-item"><div><span>${label}</span><strong>${value}</strong>${note ? `<div style="font-size:.72rem;color:var(--muted)">${note}</div>` : ''}</div></div>`;
+    box.innerHTML = `<div class="card">
+        <div class="card-title">${safeText(data.academic_year)} <span class="tip" tabindex="0" role="note" aria-label="Help: time to pay" data-tip="These agreements do not change the bill or Collections: the money here is still owed and is counted as paid only when a bank slip is recorded. Lapsed plans and passed dates are back to the normal rules.">?</span></div>
+        <div class="quick-facts">
+          ${tile('Monthly plans running', t.plans_running, `${t.plans_in_grace} in grace · ${t.plans_completed} paid in full`)}
+          ${tile('Paid under plans', money(t.plans_paid), `of ${money(t.plans_agreed)} agreed`)}
+          ${tile('Still to come on plans', money(t.plans_remaining))}
+          ${tile('Owed on lapsed plans', money(t.lapsed_owed), `${t.plans_lapsed} plan(s)`)}
+          ${tile('Waivers: date running', money(t.waivers_running))}
+          ${tile('Waivers: date passed', money(t.waivers_expired), `${t.waivers_expired_count} waiver(s)`)}
+        </div>
+        <div class="form-grid-3" style="margin-top:14px;">
+          <div class="field"><label>Find a student</label><input id="${prefix}-ttp-q" type="search" placeholder="Name, NS number or college ID" oninput="renderTimeToPay('${prefix}')"></div>
+        </div>
+      </div>
+      <div class="card"><div class="card-title">Monthly tuition plans</div><div class="table-wrap"><table>
+        <thead><tr><th>Student</th><th class="num">A month</th><th class="num">Agreed</th><th class="num">Paid</th><th class="num">Remaining</th><th>Months paid</th><th>Next due</th><th>Status</th><th></th></tr></thead>
+        <tbody id="${prefix}-ttp-plans"></tbody></table></div></div>
+      <div class="card"><div class="card-title">Waivers with a pay-by date</div><div class="table-wrap"><table>
+        <thead><tr><th>Student</th><th>On</th><th class="num">Short</th><th class="num">Still owed</th><th>To pay by</th><th>Status</th><th>Reason</th><th></th></tr></thead>
+        <tbody id="${prefix}-ttp-waivers"></tbody></table></div></div>`;
+    renderTimeToPay(prefix);
+  } catch (e) { box.innerHTML = ''; toast(apiErrorText(e, 'Could not load Time to pay'), 'var(--red)'); }
+}
+
+function renderTimeToPay(prefix) {
+  const data = state.ttp;
+  const q = document.getElementById(`${prefix}-ttp-q`).value.trim().toLowerCase();
+  const found = row => !q || [row.name, row.reg_no, row.college_id].some(v => String(v || '').toLowerCase().includes(q));
+  const plans = data.plans.filter(found), waivers = data.waivers.filter(found);
+  document.getElementById(`${prefix}-ttp-plans`).innerHTML = plans.length ? plans.map(p => `<tr>
+      <td>${personCell(p.name, p.college_id || p.reg_no)}</td><td class="num">${money(p.monthly_amount)}</td>
+      <td class="num">${money(p.total)}</td><td class="num">${money(p.paid)}</td><td class="num"><strong>${money(p.remaining)}</strong></td>
+      <td>${p.months_paid} of ${p.months.length}</td>
+      <td>${p.next_due ? `${safeText(ttpDate(p.next_due))}<div style="font-size:.72rem;color:var(--muted)">${money(p.next_amount)}<br>grace to ${safeText(ttpDate(p.until))}</div>` : (p.ended_on ? `ended ${safeText(ttpDate(p.ended_on))}` : '—')}</td>
+      <td>${ttpBadge(p.state)}</td>
+      <td class="act"><button class="btn btn-ghost btn-sm" onclick="document.getElementById('${prefix}-plan-${p.id}').hidden = !document.getElementById('${prefix}-plan-${p.id}').hidden">Months</button></td></tr>
+    <tr id="${prefix}-plan-${p.id}" hidden><td colspan="9"><div style="font-size:.78rem;margin-bottom:6px;color:var(--muted)">${safeText(p.reason)} · asked by ${safeText(p.requested_by)}${p.decided_by ? ` · agreed by ${safeText(p.decided_by)}` : ''}</div>
+      <table><thead><tr><th>Month</th><th>Pay by</th><th class="num">Amount</th><th class="num">Paid</th></tr></thead><tbody>${p.months.map(m => `<tr><td>${m.number}</td><td>${safeText(ttpDate(m.due))}</td><td class="num">${money(m.amount)}</td><td class="num">${m.state === 'paid' ? '<span class="badge badge-green">Paid</span>' : money(m.paid)}</td></tr>`).join('')}</tbody></table></td></tr>`).join('')
+    : '<tr><td colspan="9"><div class="empty">No monthly plans</div></td></tr>';
+  document.getElementById(`${prefix}-ttp-waivers`).innerHTML = waivers.length ? waivers.map(w => `<tr>
+      <td>${personCell(w.name, w.college_id || w.reg_no)}</td><td>${safeText(w.what)}</td>
+      <td class="num">${money(w.amount)}</td><td class="num"><strong>${money(w.outstanding)}</strong></td>
+      <td style="white-space:nowrap">${safeText(ttpDate(w.pay_by))}${w.times_extended ? `<div style="font-size:.72rem;color:var(--muted)">first ${safeText(ttpDate(w.first_pay_by))}, moved ${w.times_extended}×</div>` : ''}</td>
+      <td>${ttpBadge(w.state)}</td><td>${safeText(w.reason)}</td>
+      <td class="act">${data.can_extend && w.state !== 'paid' ? `<button class="btn btn-warning btn-sm" onclick="document.getElementById('${prefix}-ext-${w.id}').hidden = !document.getElementById('${prefix}-ext-${w.id}').hidden">More time</button>` : ''}</td></tr>
+    ${data.can_extend && w.state !== 'paid' ? `<tr id="${prefix}-ext-${w.id}" hidden><td colspan="8"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+      <div class="field" style="margin:0;"><label>New date</label><input type="date" id="${prefix}-ext-date-${w.id}"></div>
+      <div class="field" style="margin:0;flex:1 1 240px;"><label>Why</label><input id="${prefix}-ext-why-${w.id}" placeholder="e.g. sponsor's letter, pays in January"></div>
+      <button class="btn btn-primary btn-sm" onclick="extendWaiver(${w.id}, '${prefix}')">Give more time</button></div></td></tr>` : ''}`).join('')
+    : '<tr><td colspan="8"><div class="empty">No waivers with a pay-by date</div></td></tr>';
+}
+
+async function extendWaiver(id, prefix) {
+  const payBy = document.getElementById(`${prefix}-ext-date-${id}`).value;
+  const reason = document.getElementById(`${prefix}-ext-why-${id}`).value.trim();
+  if (!payBy) { toast('Choose the new date', 'var(--red)'); return; }
+  if (!reason) { toast('Say why', 'var(--red)'); return; }
+  try {
+    await api('POST', `/waiver-requests/${id}/extend/`, { pay_by: payBy, reason });
+    toast(`More time given, until ${ttpDate(payBy)}`, 'var(--green)');
+    loadTimeToPay(prefix);
+  } catch (e) { toast(apiErrorText(e, 'Could not give more time'), 'var(--red)'); }
+}
+
+// The monthly plan, asked from the same place as a waiver. Set by the timeframe
+// (said 8 November 2026): the amount a month, or the number of months; old
+// waivers ticked here go back on the bill when DPFPA agrees.
+async function loadPlanBox(profileId, applicationId) {
+  const box = document.getElementById(`mp-box-${profileId}`);
+  if (!box) return;
+  const year = (state.waiverShortfalls || [])[0]?.academic_year_id;
+  let plans = [], options;
+  try {
+    [plans, options] = await Promise.all([api('GET', `/monthly-plans/?profile_id=${profileId}`),
+      api('GET', `/monthly-plans/options/?profile_id=${profileId}${year ? `&academic_year_id=${year}` : ''}`)]);
+  } catch (e) { return; }
+  const open = plans.find(p => p.status === 'pending' || p.status === 'active');
+  const head = '<div class="card-title" style="font-size:.9rem;margin-top:14px;">Monthly tuition plan <span class="tip" tabindex="0" role="note" aria-label="Help: monthly plan" data-tip="Tuition only. Write the amount a month, or over how many months: the other follows, with the end date. The same amount every month, at each month-end, with 7 days of grace. DPFPA agrees it first, and the student waits at the finance desk meanwhile. A month missed past its grace ends the plan: back to the normal instalments.">?</span></div>';
+  if (open) {
+    box.innerHTML = `${head}<div class="missing-note">${ttpBadge(open.status === 'pending' ? 'pending' : open.state)} ${money(open.monthly_amount)} a month · paid ${money(open.paid)} of ${money(open.total)}${open.next_due ? ` · next ${money(open.next_amount)} by ${safeText(ttpDate(open.next_due))}` : ''}</div>`;
+    return;
+  }
+  const oldOnes = options.old_waivers || [];
+  if (!(Number(options.tuition_owed) > 0) && !oldOnes.length) { box.innerHTML = ''; return; }
+  state.planOptions = { ...options, profileId };
+  const last = plans.find(p => p.status === 'lapsed');
+  box.innerHTML = `${head}${last ? `<div style="font-size:.78rem;color:var(--muted);margin-bottom:6px;">An earlier plan lapsed on ${safeText(ttpDate(last.ended_on))}.</div>` : ''}
+    ${oldOnes.length ? `<div style="font-size:.82rem;margin-bottom:8px;">Waived before, off the bill — tick to put it back, into the plan:${oldOnes.map(w => `
+      <label style="display:flex;gap:8px;align-items:center;margin-top:4px;"><input type="checkbox" name="restore" value="${w.id}" data-amount="${w.amount}" onchange="previewPlan(this)">
+        ${safeText(w.what)}: <strong>${money(w.amount)}</strong> <span style="color:var(--muted)">(${safeText(w.reason)})</span></label>`).join('')}</div>` : ''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+      <div class="field" style="margin:0;flex:0 1 150px;"><label>First month</label><input type="month" name="first_month" oninput="previewPlan(this)"></div>
+      <div class="field" style="margin:0;flex:0 1 150px;"><label>Each month</label><input type="number" name="monthly_amount" min="1" step="0.01" placeholder="e.g. 200000" oninput="this.closest('[id^=mp-box-]').querySelector('[name=months]').value=''; previewPlan(this)"></div>
+      <div class="field" style="margin:0;flex:0 1 120px;"><label>Or months</label><input type="number" name="months" min="1" max="36" step="1" placeholder="e.g. 6" oninput="this.closest('[id^=mp-box-]').querySelector('[name=monthly_amount]').value=''; previewPlan(this)"></div>
+      <div class="field" style="margin:0;flex:2 1 220px;"><label>Why</label><input name="reason" placeholder="e.g. paid monthly by a parent's salary"></div>
+      <button class="btn btn-warning btn-sm" onclick="requestPlan(this, ${profileId}, ${applicationId || 'null'}, ${options.academic_year_id || year || 'null'})">Send to DPFPA</button></div>
+    <p class="help-note plan-preview" style="margin-top:6px;"></p>`;
+  previewPlan(box.querySelector('[name=first_month]'));
+}
+
+// What the plan would be: its total, the amount a month, the months and the last date.
+function previewPlan(input) {
+  const box = input.closest('[id^="mp-box-"]');
+  const options = state.planOptions || {};
+  const putBack = [...box.querySelectorAll('[name=restore]:checked')].reduce((sum, el) => sum + Number(el.dataset.amount), 0);
+  const total = Number(options.tuition_owed || 0) + putBack;
+  const monthly = Number(box.querySelector('[name=monthly_amount]').value || 0);
+  const months = Number(box.querySelector('[name=months]').value || 0);
+  const first = box.querySelector('[name=first_month]').value;
+  const each = months ? Math.ceil(total / months) : monthly;
+  const count = each > 0 ? Math.ceil(total / each) : 0;
+  let line = `Tuition to pay off: ${money(total)}${putBack ? ` (with ${money(putBack)} put back on the bill)` : ''}.`;
+  if (each > 0 && count) {
+    line += ` ${money(each)} a month for ${count} month${count === 1 ? '' : 's'}`;
+    if (first) {
+      const [y, m] = first.split('-').map(Number);
+      const end = new Date(Date.UTC(y, m - 1 + count, 0));
+      line += `, the last on ${end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}`;
+      if (options.closes_on && end.toISOString().slice(0, 10) > options.closes_on) line += ` — <strong style="color:var(--red)">after the year closes on ${safeText(ttpDate(options.closes_on))}</strong>`;
+    }
+    line += '.';
+  }
+  if ((options.replaces || []).length) line += ` Agreed, it replaces the waiver on ${options.replaces.map(w => `${safeText(w.what)} (to pay by ${safeText(ttpDate(w.pay_by))})`).join(', ')}: that money becomes part of the plan.`;
+  box.querySelector('.plan-preview').innerHTML = line;
+}
+
+async function requestPlan(button, profileId, applicationId, year) {
+  const box = button.closest('[id^="mp-box-"]');
+  const read = name => box.querySelector(`[name="${name}"]`).value.trim();
+  if (!read('first_month')) { toast('Choose the first month', 'var(--red)'); return; }
+  if (!(Number(read('monthly_amount')) > 0) && !(Number(read('months')) > 0)) { toast('Write the amount a month, or over how many months', 'var(--red)'); return; }
+  if (!read('reason')) { toast('Say why', 'var(--red)'); return; }
+  try {
+    const r = await api('POST', '/monthly-plans/', { profile_id: profileId, academic_year_id: year,
+      first_month: read('first_month'), monthly_amount: read('monthly_amount') || null, months: read('months') || null,
+      restore: [...box.querySelectorAll('[name=restore]:checked')].map(el => Number(el.value)), reason: read('reason') });
+    toast(r.detail || 'Sent to DPFPA', 'var(--green)');
+    if (applicationId) openApplicationModal(applicationId);
+    else loadWaiverFormFor(profileId);
+  } catch (e) { toast(apiErrorText(e, 'Could not send it'), 'var(--red)'); }
 }
 
 // The accountant asks, from the finance desk, for a shortfall on tuition or
@@ -15327,11 +15543,14 @@ function waiverInstalmentOptions(family) {
 
 function waiverFormHtml(profileId, shortfalls, waivers, applicationId, { title = true } = {}) {
   state.waiverShortfalls = shortfalls;
+  state.waiverList = waivers;
+  // Drawn once the form is on the page.
+  setTimeout(() => loadPlanBox(profileId, applicationId), 0);
   const families = [...new Map(shortfalls.map(s => [s.family, s.family_display])).entries()];
   const mine = waivers.filter(w => w.status === 'pending');
   const recent = waivers.filter(w => w.status !== 'pending').slice(0, 3);
-  return `${title ? `<div class="card-title" style="font-size:.9rem;margin-top:14px;">Waive a shortfall <span class="tip" tabindex="0" role="note" aria-label="Help: waivers" data-tip="Tuition fee or direct costs only: choose which, and which instalment is short, and write what is short. The request goes to DPFPA; nothing comes off the bill until it is approved, and the student waits at this desk meanwhile.">?</span></div>` : ''}
-    ${mine.map(w => `<div class="missing-note" style="margin-bottom:6px;">Waiting for DPFPA: ${money(w.shortfall)} short on ${safeText(w.charge)} — ${safeText(w.reason)}</div>`).join('')}
+  return `${title ? `<div class="card-title" style="font-size:.9rem;margin-top:14px;">Waive a shortfall <span class="tip" tabindex="0" role="note" aria-label="Help: waivers" data-tip="Tuition fee or direct costs only: choose which, which instalment is short, what is short and the day the student says they will pay. It goes to DPFPA, and the student waits at this desk meanwhile. Approved, the bill does not change: what is short stays owed, and they are let through until that day.">?</span></div>` : ''}
+    ${mine.map(w => `<div class="missing-note" style="margin-bottom:6px;">Waiting for DPFPA: ${money(w.shortfall)} short on ${safeText(w.charge)}${w.pay_by ? `, to pay by ${safeText(ttpDate(w.pay_by))}` : ''} — ${safeText(w.reason)}</div>`).join('')}
     ${recent.map(w => `<div style="font-size:.78rem;color:var(--muted);margin-bottom:4px;">${safeText(w.status_display)}: ${safeText(w.charge)} — ${safeText(w.decision_note || w.reason)}</div>`).join('')}
     ${families.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
       <div class="field" style="margin:0;flex:0 1 160px;"><label>Category</label><select id="wv-family"
@@ -15339,8 +15558,10 @@ function waiverFormHtml(profileId, shortfalls, waivers, applicationId, { title =
         `<option value="${value}">${safeText(label)}</option>`).join('')}</select></div>
       <div class="field" style="margin:0;flex:1 1 290px;"><label>Instalment that is short</label><select id="wv-inst">${waiverInstalmentOptions(families[0][0])}</select></div>
       <div class="field" style="margin:0;flex:0 1 140px;"><label>What is short</label><input id="wv-amount" type="number" min="1" step="0.01" placeholder="e.g. 20000"></div>
+      <div class="field" style="margin:0;flex:0 1 150px;"><label>Will pay by</label><input id="wv-pay-by" type="date"></div>
       <div class="field" style="margin:0;flex:2 1 240px;"><label>Why</label><input id="wv-reason" placeholder="e.g. sponsor pays the rest in March"></div>
-      <button class="btn btn-warning btn-sm" onclick="requestWaiver(${profileId}, ${applicationId || 'null'})">Send to DPFPA</button></div>` : ''}`;
+      <button class="btn btn-warning btn-sm" onclick="requestWaiver(${profileId}, ${applicationId || 'null'})">Send to DPFPA</button></div>` : ''}
+    <div id="mp-box-${profileId}"></div>`;
 }
 
 async function requestWaiver(profileId, applicationId) {
@@ -15348,14 +15569,16 @@ async function requestWaiver(profileId, applicationId) {
   const option = document.getElementById('wv-inst').selectedOptions[0];
   const shortfall = Number(document.getElementById('wv-amount').value || 0);
   const reason = document.getElementById('wv-reason').value.trim();
+  const payBy = document.getElementById('wv-pay-by').value;
   if (!option) { toast('Choose the instalment that is short', 'var(--red)'); return; }
   if (!(shortfall > 0)) { toast('Write what is short', 'var(--red)'); return; }
   if (shortfall > Number(option.dataset.owed)) { toast(`More than is owed on that instalment (${money(option.dataset.owed)})`, 'var(--red)'); return; }
+  if (!payBy) { toast('Write the day the student says they will pay', 'var(--red)'); return; }
   if (!reason) { toast('Say why', 'var(--red)'); return; }
   try {
     const r = await api('POST', '/waiver-requests/', {
       profile_id: profileId, academic_year_id: option.dataset.year, family,
-      installment_number: option.value, amount: shortfall.toFixed(2), reason });
+      installment_number: option.value, amount: shortfall.toFixed(2), reason, pay_by: payBy });
     toast(r.detail || 'Sent to DPFPA', 'var(--green)');
     if (applicationId) openApplicationModal(applicationId);
     else { loadWaiverFormFor(profileId); loadOverrides(); }
@@ -15379,6 +15602,7 @@ function showExecSection(section, btn) {
   if (btn) btn.classList.add('active');
   if (section === 'spending') return loadExecutiveSpending();
   if (section === 'waivers') return loadWaiverApprovals();
+  if (section === 'timetopay') return loadTimeToPay('exec');
   if (section === 'disposals') return loadExecutiveDisposals();
   if (section === 'lab') return loadExecutiveLab();
   return section === 'finance' ? loadExecutiveFinance() : loadExecutiveInventory();

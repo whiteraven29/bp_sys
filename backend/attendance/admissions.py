@@ -938,6 +938,8 @@ def complete_step(application, *, actor=None, note=''):
         if waiting:
             # Said 21 October 2026: the student waits at finance until DPFPA decides.
             raise AdmissionError(f'{waiting} waiver(s) on this student are waiting for DPFPA to approve or refuse.')
+        if application.profile.monthly_plans.filter(status='pending').exists():
+            raise AdmissionError('A monthly plan on this student is waiting for DPFPA to approve or refuse.')
     # The one thing that holds a student: not having paid. Judged by the
     # college's own clearance rule on the charges marked "blocks registration",
     # the same rule every other screen uses — and the accountant's override

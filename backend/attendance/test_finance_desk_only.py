@@ -20,7 +20,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client
 from rest_framework.test import APIClient
 
-from . import admissions, finance, passwords, progression, semester_pass
+from . import admissions, finance, passwords, progression, semester_pass, time_to_pay
 from .models import (
     AcademicYear, Application, BankAccount, ChargeType, ClassLevel, FeeStructure, Module, PaymentSchedule,
     PaymentStep, Semester, SemesterRegistration, Student, StudentCharge, StudentPass, StudentProfile,
@@ -29,6 +29,7 @@ from .test_admissions import AdmissionBase, complete_record
 from .views import set_roles
 
 User = get_user_model()
+PAY_BY = (date.today() + timedelta(days=30)).isoformat()
 
 
 def office(username, *roles):
@@ -379,11 +380,12 @@ class ShortfallWaiverTests(WaiverDesk):
     """Said 21 October 2026: a shortfall waived on tuition or direct costs
     waits for DPFPA; the student waits at the finance desk meanwhile; other
     waivers are as they were. (These ask by one charge, as the first requests
-    did; the API still takes them.)"""
+    did; the API still takes them.) Since 6 November 2026 it gives time until a
+    date: the bill does not change (test_time_to_pay)."""
 
     def ask(self, amount='20000', reason='20,000 short on the first instalment'):
         return self.accounts.post(f'/api/student-charges/{self.charge.id}/waive/',
-                                  {'amount': amount, 'reason': reason}, format='json')
+                                  {'amount': amount, 'reason': reason, 'pay_by': PAY_BY}, format='json')
 
     def test_it_waits_for_dpfpa_and_changes_nothing_meanwhile(self):
         from .models import Notification, WaiverRequest
@@ -398,15 +400,15 @@ class ShortfallWaiverTests(WaiverDesk):
         self.assertIn('DPFPA', str(held.exception))
         self.assertEqual(self.ask('30000').status_code, 400)                    # one at a time on a charge
 
-    def test_dpfpa_approves_and_it_is_applied(self):
+    def test_dpfpa_approves_and_the_bill_stays(self):
         from .models import WaiverRequest
         self.ask()
         waiver = WaiverRequest.objects.get()
         decided = self.dpfpa.post(f'/api/waiver-requests/{waiver.id}/decide/', {'approve': True}, format='json')
         self.assertEqual(decided.status_code, 200, decided.data)
         self.charge.refresh_from_db()
-        self.assertEqual(self.charge.waived_amount, Decimal('20000.00'))
-        self.assertIn('approved by', self.charge.waived_reason)
+        self.assertEqual(self.charge.waived_amount, Decimal('0'))
+        self.assertEqual(decided.data['pay_by'], date.fromisoformat(PAY_BY))
         self.assertFalse(finance.pending_waivers(self.profile).exists())
 
     def test_a_refusal_needs_a_reason_and_leaves_the_bill(self):
@@ -444,12 +446,15 @@ class ShortfallWaiverTests(WaiverDesk):
 class InstalmentWaiverTests(WaiverDesk):
     """Said 22 October 2026: the accountant chooses tuition fee or direct
     costs, which instalment is short, writes what is short, and sends it to
-    DPFPA. DPFPA's yes takes it off that instalment's charges."""
+    DPFPA. Since 6 November 2026, with the day the student says they will pay;
+    DPFPA's yes gives them until then, and the bill does not change."""
 
-    def ask_for(self, family='fee', instalment=1, amount='20000', reason='Sponsor pays the rest in March'):
+    def ask_for(self, family='fee', instalment=1, amount='20000', reason='Sponsor pays the rest in March',
+                pay_by=None):
         return self.accounts.post('/api/waiver-requests/', {
             'profile_id': self.profile.id, 'academic_year_id': self.year.id, 'family': family,
-            'installment_number': instalment, 'amount': amount, 'reason': reason}, format='json')
+            'installment_number': instalment, 'amount': amount, 'reason': reason,
+            'pay_by': PAY_BY if pay_by is None else pay_by}, format='json')
 
     def test_the_desk_chooses_from_the_instalments_owed_on(self):
         rows = self.accounts.get(f'/api/waiver-requests/shortfalls/?profile_id={self.profile.id}').data
@@ -459,7 +464,7 @@ class InstalmentWaiverTests(WaiverDesk):
         self.assertEqual(self.dpfpa.get(f'/api/waiver-requests/shortfalls/?profile_id={self.profile.id}').status_code,
                          403)
 
-    def test_it_waits_then_comes_off_the_instalment(self):
+    def test_it_waits_then_gives_time_on_the_instalment(self):
         from .models import WaiverRequest
         asked = self.ask_for()
         self.assertEqual(asked.status_code, 201, asked.data)
@@ -474,9 +479,7 @@ class InstalmentWaiverTests(WaiverDesk):
         decided = self.dpfpa.post(f'/api/waiver-requests/{waiver.id}/decide/', {'approve': True}, format='json')
         self.assertEqual(decided.status_code, 200, decided.data)
         self.charge.refresh_from_db()
-        self.assertEqual(self.charge.waived_amount, Decimal('20000.00'))
-        second = StudentCharge.objects.get(profile=self.profile, charge_type=self.tuition, installment_number=2)
-        self.assertEqual(second.waived_amount, Decimal('0'))
+        self.assertEqual(self.charge.waived_amount, Decimal('0'))              # still owed
 
     def test_what_is_short_spreads_over_the_instalments_charges(self):
         from .models import WaiverRequest
@@ -492,12 +495,17 @@ class InstalmentWaiverTests(WaiverDesk):
         self.dpfpa.post(f'/api/waiver-requests/{waiver.id}/decide/', {'approve': True}, format='json')
         first.refresh_from_db()
         then.refresh_from_db()
-        self.assertEqual((first.waived_amount, then.waived_amount), (Decimal('30000.00'), Decimal('20000.00')))
+        self.assertEqual((first.waived_amount, then.waived_amount), (Decimal('0'), Decimal('0')))
+        relief, _ = time_to_pay.relief_for([self.profile.id], self.year)
+        self.assertEqual((relief[first.id], relief[then.id]), (Decimal('30000.00'), Decimal('20000.00')))
 
     def test_what_the_desk_may_not_ask(self):
         self.assertEqual(self.ask_for(amount='999999999').status_code, 400)      # more than is owed
         self.assertEqual(self.ask_for(amount='0').status_code, 400)
         self.assertEqual(self.ask_for(reason=' ').status_code, 400)
+        self.assertEqual(self.ask_for(pay_by='').status_code, 400)               # the day is part of it
+        self.assertEqual(self.ask_for(pay_by='2020-01-01').status_code, 400)
+        self.assertEqual(self.ask_for(pay_by='not a date').status_code, 400)
         self.assertEqual(self.ask_for(family='other').status_code, 400)
         self.assertEqual(self.ask_for(instalment=7).status_code, 400)           # no such instalment
         self.assertEqual(self.dpfpa.post('/api/waiver-requests/', {}, format='json').status_code, 403)

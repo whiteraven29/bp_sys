@@ -923,6 +923,19 @@
           <a class="btn-mini" href="{% url 'my-semester-pass' %}" target="_blank" rel="noopener" style="margin-left:6px;">Download pass</a>
         </div>
         {% endif %}
+        {% if time_to_pay.plan and time_to_pay.plan.next_due %}
+        <div class="notice" id="monthly-plan-notice" style="margin:0 0 14px;border-left-color:var(--{% if time_to_pay.plan.state == 'in_grace' %}red{% else %}blue{% endif %});">
+          <i class="bi bi-calendar-check"></i> <strong>Monthly tuition plan:</strong> pay {{ time_to_pay.plan.next_amount|floatformat:"2g" }} by {{ time_to_pay.plan.next_due|date:"d M Y" }}.
+          {% if time_to_pay.plan.state == 'in_grace' %}That date has passed: pay by {{ time_to_pay.plan.until|date:"d M Y" }} or you go back to the normal instalments.{% endif %}
+          <button type="button" class="btn-mini" data-goto-view="obligations" style="margin-left:6px;">See my plan</button>
+        </div>
+        {% endif %}
+        {% for waiver in time_to_pay.waivers %}
+        <div class="notice" style="margin:0 0 14px;border-left-color:var(--{% if waiver.expired %}red{% else %}amber{% endif %});">
+          <i class="bi bi-hourglass-split"></i> <strong>{{ waiver.outstanding|floatformat:"2g" }}</strong> on {{ waiver.what }}:
+          {% if waiver.expired %}the day you said you would pay, {{ waiver.pay_by|date:"d M Y" }}, has passed. Pay it or see the Accounts Office.{% else %}you said you will pay by <strong>{{ waiver.pay_by|date:"d M Y" }}</strong>. Your pass runs to that day.{% endif %}
+        </div>
+        {% endfor %}
         {# On the dashboard only (said 28 October 2026): on every page they filled a phone's first screen. #}
         {% if provisional_notice %}
         <div class="notice" id="provisional-notice" style="margin:0 0 14px;border-left-color:var(--amber);"><strong>{{ provisional_notice.title }}</strong> {{ provisional_notice.body }}</div>
@@ -1159,6 +1172,20 @@
             <div class="btn-row"><a class="btn" href="{% url 'my-semester-pass' %}" target="_blank" rel="noopener"><i class="bi bi-ticket-perforated"></i> My semester pass</a></div>
           </div>
         </section>
+        {% if time_to_pay.plan %}
+        <section class="panel" id="monthly-plan-panel">
+          <div class="panel-head"><h2>My monthly tuition plan</h2><span>{{ time_to_pay.plan.monthly_amount|floatformat:"2g" }} at the end of each month, agreed with DPFPA</span></div>
+          <div class="panel-body">
+            <p>Paid {{ time_to_pay.plan.paid|floatformat:"2g" }} of {{ time_to_pay.plan.total|floatformat:"2g" }}; {{ time_to_pay.plan.remaining|floatformat:"2g" }} to go. A month not paid within 7 days of its date ends the plan, and you go back to the normal instalments. Your pass runs to the next date plus those 7 days.</p>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Month</th><th>Pay by</th><th>Amount</th><th>Paid</th></tr></thead><tbody>
+            {% for month in time_to_pay.plan.months %}
+            <tr><td>{{ month.number }}</td><td>{{ month.due|date:"d M Y" }}</td><td>{{ month.amount|floatformat:"2g" }}</td>
+              <td>{% if month.state == 'paid' %}<span class="status pass">Paid</span>{% elif month.state == 'part' %}{{ month.paid|floatformat:"2g" }}{% else %}<span class="status pending">Not yet</span>{% endif %}</td></tr>
+            {% endfor %}
+          </tbody></table></div>
+        </section>
+        {% endif %}
         <section class="panel">
           <div class="panel-head"><h2>My charges</h2><span>School fees, direct costs, and other payments</span></div>
           <div class="table-wrap"><table><thead><tr><th>What it is</th><th>Invoice group</th><th>Installment</th><th>Due</th><th>Amount</th><th>Outstanding</th><th>Status</th></tr></thead><tbody>

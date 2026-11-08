@@ -35,7 +35,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import admissions, authority, analytics, classlists, inventory, registers, evaluations, finance, lifecycle, notifications, passwords, progression, semester_pass, veta, health
+from . import admissions, authority, analytics, classlists, inventory, registers, evaluations, finance, lifecycle, notifications, passwords, progression, semester_pass, time_to_pay, veta, health
 from .roles import (
     OPEN_ROLES, can_advance_semester, can_appoint, can_confirm_reviews, can_decide_requests,
     can_handle_requests, can_manage_accounts, can_manage_departments, can_manage_exams,
@@ -1417,6 +1417,12 @@ def student_dashboard(request):
     # stands all year. They surface here instead, as reminders the student sees
     # before each one falls due.
     fee_reminders = finance.installment_reminders(ledger_profile, ledger_year)
+    # On a monthly plan the tuition's reminders are the plan's months, not the
+    # normal instalments (said 6 November 2026).
+    time_to_pay_view = time_to_pay.portal_view(ledger_profile, ledger_year)
+    if time_to_pay_view and time_to_pay_view['plan']:
+        fee_reminders = [r for r in fee_reminders
+                         if not all(c.charge_type.family == ChargeType.FEE for c in r['charges'])]
     fee_reminders_due = [r for r in fee_reminders
                          if r['urgency'] in (finance.OVERDUE, finance.DUE_SOON)]
     fee_reminders_later = [r for r in fee_reminders if r['urgency'] == finance.UPCOMING]
@@ -1461,6 +1467,7 @@ def student_dashboard(request):
         # Paid up to this semester's instalment: the pass is offered on the
         # dashboard itself (said 28 October 2026).
         'pass_ready': _pass_ready(profile),
+        'time_to_pay': time_to_pay_view,
         'overall_attendance': overall_attendance,
         'total_present': total_present,
         'total_sick': total_sick,
@@ -8686,10 +8693,11 @@ class StudentChargeViewSet(viewsets.ReadOnlyModelViewSet):
             # Tuition and direct costs: DPFPA approves first (said 21 October 2026).
             try:
                 made = finance.request_waiver(charge, serializer.validated_data['amount'],
-                                              serializer.validated_data['reason'], actor=request.user)
+                                              serializer.validated_data['reason'], actor=request.user,
+                                              pay_by=_a_date(request.data.get('pay_by')))
             except finance.WaiverError as exc:
                 return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-            return Response({'detail': 'Sent to DPFPA for approval. Nothing changes on the bill until then.',
+            return Response({'detail': 'Sent to DPFPA for approval. The bill does not change: what is short stays owed.',
                              'waiver_request': _waiver_row(made)}, status=status.HTTP_202_ACCEPTED)
         finance.waive_charge(charge, serializer.validated_data['amount'],
                              serializer.validated_data['reason'], actor=request.user)
@@ -10303,11 +10311,20 @@ def _waiver_row(waiver, names=None):
         'profile_id': waiver.profile_id, 'name': waiver.profile.name,
         'reg_no': waiver.profile.nactvet_reg_no, 'college_id': waiver.profile.college_id or '',
         **what, 'amount': str(waiver.amount), 'reason': waiver.reason,
+        'pay_by': waiver.pay_by, 'first_pay_by': waiver.first_pay_by, 'times_extended': waiver.times_extended,
         'requested_by': name(waiver.requested_by) if waiver.requested_by_id else '',
         'requested_at': waiver.requested_at,
         'decided_by': name(waiver.decided_by) if waiver.decided_by_id else '',
         'decided_at': waiver.decided_at, 'decision_note': waiver.decision_note,
     }
+
+
+def _a_date(value):
+    """A date from a request; None for nothing, or for something that is not one."""
+    try:
+        return parse_date(str(value or ''))
+    except ValueError:
+        return None
 
 
 def _waiver_year(request, source):
@@ -10334,11 +10351,11 @@ def waiver_requests(request):
                 profile, year, str(request.data.get('family') or ''),
                 pk_or_none(request.data.get('installment_number')),
                 Decimal(str(request.data.get('amount') or '0')), str(request.data.get('reason') or ''),
-                actor=request.user)
+                actor=request.user, pay_by=_a_date(request.data.get('pay_by')))
         except (finance.WaiverError, ArithmeticError, ValueError) as exc:
             detail = str(exc) if isinstance(exc, finance.WaiverError) else 'Write how much is short.'
             return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({'detail': 'Sent to DPFPA for approval. Nothing changes on the bill until then.',
+        return Response({'detail': 'Sent to DPFPA for approval. The bill does not change: what is short stays owed.',
                          'waiver_request': _waiver_row(made)}, status=status.HTTP_201_CREATED)
     if not (can_manage_finance(request.user) or is_dpfpa(request.user) or is_principal(request.user)):
         raise PermissionDenied('For the accountant, DPFPA and the Principal.')
@@ -10376,7 +10393,8 @@ def decide_waiver_request(request, pk):
     waiver = get_object_or_404(WaiverRequest, pk=pk)
     try:
         decided = finance.decide_waiver(waiver, approve=bool(request.data.get('approve')), actor=request.user,
-                                        note=str(request.data.get('note') or ''))
+                                        note=str(request.data.get('note') or ''),
+                                        pay_by=_a_date(request.data.get('pay_by')))
     except finance.WaiverError as exc:
         return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     return Response(_waiver_row(decided))

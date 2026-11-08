@@ -431,8 +431,30 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      SUPP, INCOMPLETE, PASS, REPEAT, FAIL — instead of "Provisional" (your request, 28 Oct)
    - [x] The rail narrower (52px) with smaller icons; its toggle stands where the EduTrack mark was — ☰ opens the full
      menu, ✕ closes it (your question: how to close it); the top bar's toggle hidden on phones. Desktop unchanged
+3k. **Time to pay: waiver dates and monthly tuition plans — 6 Nov (not committed; migration 0085).**
+   - [x] A shortfall waiver carries the day the student says they will pay. Approved, the bill does not change (your
+     choice): still owed, cleared at the desk and exams for that amount (your choice), the pass expires that day
+   - [x] DPFPA alone gives more time, with a new date and a reason; the first date is kept, the change audited
+   - [x] Monthly plan, tuition only: finance asks, DPFPA agrees, the student waits at the desk meanwhile. Month-end +
+     7 days of grace; the pass to the next unpaid month-end + 7 days, from approval (your choice); direct costs stay on
+     their instalments. Missed past its grace it lapses for good, back on the normal instalments, which never moved
+   - [x] Judged by the bank-slip date: paid on time and recorded late does not lapse; paid after a lapse does not revive
+   - [x] Time to pay, for finance and DPFPA / Principal: agreed, paid, remaining, month by month, each waiver's date; it
+     adds nothing to Collections. The student sees their months and dates on the portal
+   - [x] A student given time by a tuition waiver may change to a monthly plan (8 Nov): DPFPA's yes on the plan replaces
+     the waiver (status "Replaced by a monthly plan", audited); the money it covered is in the plan's total. A tuition
+     waiver still waiting for DPFPA is decided first. Direct-costs waivers are left alone. A waiver approved before
+     this release stays forgiven, and a plan covers what is still owed
+   - [x] A plan is set by its timeframe (8 Nov, your choice): the amount a month, or the number of months with the
+     amount worked out (rounded up to the shilling; worked out again on what is owed when DPFPA approves); the form
+     shows the months and the last date, and warns past the year's close
+   - [x] A waiver approved before this release (money off the bill) can go back on it, into the plan (your choice: on
+     the plan request): finance ticks it, DPFPA sees "Puts back on the bill", approving restores it, refreshes the
+     invoice and audits it; refused, nothing moves
+   - [x] 1330 tests; the whole flow checked in the browser (asked, approved, more time, both summaries, phone portal;
+     a plan replacing a waiver; an old waiver put back, 5 months)
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
-   - [ ] Migrations to 0083 applied by the deploy (release guide B1–B4); `Ran 1282 tests … OK` on the laptop first
+   - [ ] Migrations to 0085 applied by the deploy (release guide B1–B4); `Ran 1330 tests … OK` on the laptop first
    - [ ] Students ▸ Supplementary consent: check the amounts in Sehemu B (copied from the 2025 form), then Open
    - [ ] REPEAT students at semester 1's finance desk who owe only semester 2 modules:
      `sudo -u bphacoh venv/bin/python manage.py call_off_repeat_places` — read the dry run, then `--apply`. Run it

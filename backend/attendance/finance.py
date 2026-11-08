@@ -902,14 +902,17 @@ def shortfalls(profile, academic_year):
 
 
 @transaction.atomic
-def request_shortfall_waiver(profile, academic_year, family, installment_number, amount, reason, *, actor=None):
-    """The accountant asks DPFPA to waive what is short on one instalment of
-    tuition or direct costs (said 22 October 2026). Nothing changes on the
-    bill until DPFPA approves."""
-    from . import notifications
+def request_shortfall_waiver(profile, academic_year, family, installment_number, amount, reason, *, actor=None,
+                             pay_by=None):
+    """The accountant asks DPFPA for time on what is short on one instalment
+    of tuition or direct costs (said 22 October 2026), until the day the student
+    says they will pay (said 6 November 2026). The bill never changes for it."""
+    from . import notifications, time_to_pay
     from .models import Notification, WaiverRequest
     if family not in WAIVER_FAMILIES:
         raise WaiverError('Choose tuition fee or direct costs.')
+    if family == ChargeType.FEE and time_to_pay.open_plan(profile, academic_year) is not None:
+        raise WaiverError('Their tuition is on a monthly plan: it has its own dates.')
     amount = money(amount or 0)
     reason = (reason or '').strip()
     charges = instalment_charges(profile, academic_year, family, installment_number)
@@ -923,18 +926,20 @@ def request_shortfall_waiver(profile, academic_year, family, installment_number,
         raise WaiverError(f'More than is owed on {label} ({owed:,.2f}).')
     if not reason:
         raise WaiverError('Say why it is waived.')
+    time_to_pay.clean_pay_by(pay_by)
     waiting = WaiverRequest.objects.filter(profile=profile, status=WaiverRequest.PENDING)
     if (waiting.filter(academic_year=academic_year, family=family, installment_number=installment_number).exists()
             or waiting.filter(charge__in=charges).exists()):
         raise WaiverError(f'A waiver on {label} is already waiting for DPFPA.')
     made = WaiverRequest.objects.create(profile=profile, academic_year=academic_year, family=family,
-                                        installment_number=installment_number, amount=amount,
-                                        reason=reason[:300], requested_by=actor)
+                                        installment_number=installment_number, amount=amount, pay_by=pay_by,
+                                        first_pay_by=pay_by, reason=reason[:300], requested_by=actor)
     audit('waiver.request', 'WaiverRequest', actor=actor, entity_id=made.id, profile=profile,
-          summary=f'Asked DPFPA to waive {amount:,.2f} short on {label}: {reason}')
+          summary=f'Asked DPFPA for time on {amount:,.2f} short on {label}, to pay by {pay_by:%d %b %Y}: {reason}')
     notifications.notify(notifications.dpfpa(), kind=Notification.WAIVER_REQUESTED,
                          title=f'Waiver to approve: {profile.name}',
-                         body=f'{amount:,.2f} short on {label}. {reason}', link='executive:waivers')
+                         body=f'{amount:,.2f} short on {label}, to pay by {pay_by:%d %b %Y}. {reason}',
+                         link='executive:waivers')
     return made
 
 
@@ -946,22 +951,23 @@ def waiver_label(waiver):
 
 
 @transaction.atomic
-def request_waiver(charge, amount, reason, *, actor=None):
-    """The accountant asks DPFPA to waive this much on a tuition or direct-cost
-    charge. Nothing changes on the bill until DPFPA approves."""
-    from . import notifications
+def request_waiver(charge, amount, reason, *, actor=None, pay_by=None):
+    """The accountant asks DPFPA for time on a tuition or direct-cost charge,
+    until the day the student says they will pay."""
+    from . import notifications, time_to_pay
     from .models import Notification, WaiverRequest
     amount = money(amount)
     reason = (reason or '').strip()
     if not reason:
         raise WaiverError('Say why it is waived.')
+    time_to_pay.clean_pay_by(pay_by)
     if amount <= charge.waived_amount or amount > charge.amount:
         raise WaiverError(f'Ask for more than is waived now ({money(charge.waived_amount):,.2f}) '
                           f'and no more than the charge ({money(charge.amount):,.2f}).')
     if WaiverRequest.objects.filter(charge=charge, status=WaiverRequest.PENDING).exists():
         raise WaiverError('A waiver on this charge is already waiting for DPFPA.')
-    made = WaiverRequest.objects.create(charge=charge, profile=charge.profile, amount=amount,
-                                        reason=reason[:300], requested_by=actor)
+    made = WaiverRequest.objects.create(charge=charge, profile=charge.profile, amount=amount, pay_by=pay_by,
+                                        first_pay_by=pay_by, reason=reason[:300], requested_by=actor)
     extra = amount - charge.waived_amount
     audit('waiver.request', 'StudentCharge', actor=actor, entity_id=charge.id, profile=charge.profile,
           summary=f'Asked DPFPA to waive {extra:,.2f} on {charge.charge_type}: {reason}')
@@ -973,9 +979,11 @@ def request_waiver(charge, amount, reason, *, actor=None):
 
 
 @transaction.atomic
-def decide_waiver(waiver, *, approve, actor=None, note=''):
-    """DPFPA's yes applies the waiver; a no leaves the bill as it was."""
-    from . import notifications
+def decide_waiver(waiver, *, approve, actor=None, note='', pay_by=None):
+    """DPFPA's yes gives the student until the pay-by date; the bill stays as
+    it was either way (said 6 November 2026: what is short is still owed). A
+    request waiting since before there were dates is given one here."""
+    from . import notifications, time_to_pay
     from .models import Notification, WaiverRequest
     waiver = (WaiverRequest.objects.select_for_update(of=('self',))
               .select_related('charge__charge_type', 'profile', 'academic_year').get(pk=waiver.pk))
@@ -983,40 +991,33 @@ def decide_waiver(waiver, *, approve, actor=None, note=''):
         raise WaiverError('This waiver has already been decided.')
     if not approve and not (note or '').strip():
         raise WaiverError('Say why it is refused.')
-    by = (actor.get_full_name() or actor.username) if actor is not None else 'DPFPA'
     note = (note or '').strip()
     label = waiver_label(waiver)
-    if approve and waiver.charge_id:
-        waive_charge(waiver.charge, waiver.amount, f'{waiver.reason} — approved by {by}'[:300], actor=actor)
-    elif approve:
-        # What is short comes off the instalment's charges in turn, each no
-        # further than what is still owed on it.
-        left = waiver.amount
-        for charge in instalment_charges(waiver.profile, waiver.academic_year, waiver.family,
-                                         waiver.installment_number):
-            take = min(left, charge_balance(charge))
-            if take > ZERO:
-                waive_charge(charge, charge.waived_amount + take,
-                             f'{waiver.reason} — approved by {by}'[:300], actor=actor)
-                left -= take
-            if left <= ZERO:
-                break
-        if left >= waiver.amount:
+    if approve:
+        if pay_by is not None or waiver.pay_by is None:
+            waiver.pay_by = time_to_pay.clean_pay_by(pay_by)
+            waiver.first_pay_by = pay_by
+        elif waiver.pay_by <= timezone.localdate():
+            raise WaiverError(f'The day they said, {waiver.pay_by:%d %b %Y}, has passed. Give a new one.')
+        if time_to_pay.outstanding_on(waiver) <= ZERO:
             raise WaiverError(f'Nothing is owed on {label} now. Refuse it, saying it was paid.')
-        if left > ZERO:
-            note = (f'{waiver.amount - left:,.2f} waived: the rest was paid meanwhile. {note}').strip()
     waiver.status = WaiverRequest.APPROVED if approve else WaiverRequest.REFUSED
     waiver.decided_by = actor
     waiver.decided_at = timezone.now()
     waiver.decision_note = note[:300]
-    waiver.save(update_fields=['status', 'decided_by', 'decided_at', 'decision_note'])
+    waiver.save(update_fields=['status', 'decided_by', 'decided_at', 'decision_note', 'pay_by', 'first_pay_by'])
     audit('waiver.decide', 'WaiverRequest', actor=actor, entity_id=waiver.id, profile=waiver.profile,
-          summary=f"{'Approved' if approve else 'Refused'} the waiver on {label}" + (f': {note}' if note else ''))
+          summary=f"{'Approved' if approve else 'Refused'} the waiver on {label}"
+                  + (f', to pay by {waiver.pay_by:%d %b %Y}' if approve else '') + (f': {note}' if note else ''))
     notifications.notify([u for u in [waiver.requested_by] if u is not None] or notifications.accountants(),
                          kind=Notification.WAIVER_DECIDED,
                          title=f"Waiver {'approved' if approve else 'refused'}: {waiver.profile.name}",
                          body=f'{label}: {waiver.reason}' + (f' — {note}' if note else ''),
                          link='finance:overrides')
+    if approve:
+        notifications.notify(profile=waiver.profile, kind=Notification.WAIVER_DECIDED, title='Time to pay agreed',
+                             body=f'{label}: what is short is still owed. Pay it by {waiver.pay_by:%d %b %Y}; '
+                                  'your pass runs to that day.')
     return waiver
 
 
@@ -1872,15 +1873,19 @@ def _overridden_result(override):
     }
 
 
-def _evaluate(charges, semester, period, today):
+def _evaluate(charges, semester, period, today, relief=None):
     """Decide clearance from charges already in memory.
 
     Split out from exam_clearance so the batch path can fetch once for many
     students and reuse exactly the same rule — one definition, no drift.
+    `relief`: {charge id: what a waiver's date or a monthly plan lets through
+    today} (time_to_pay; said 6 November 2026) — still owed, not counted.
     """
+    relief = relief or {}
+    held = lambda c: charge_balance(c) - relief.get(c.id, ZERO)
     due = _charges_due(charges, semester, period, today)
-    outstanding = [c for c in due if charge_balance(c) > ZERO]
-    balance = money(sum((charge_balance(c) for c in outstanding), ZERO))
+    outstanding = [c for c in due if held(c) > ZERO]
+    balance = money(sum((held(c) for c in outstanding), ZERO))
     cleared = balance <= ZERO
     if cleared:
         reason = 'Finance cleared'
@@ -1941,7 +1946,9 @@ def exam_clearance(profile, academic_year, period, *, semester=None, today=None)
     )
     if semester is not None:
         blocking = blocking.filter(Q(semester=semester) | Q(semester__isnull=True))
-    return _evaluate(list(blocking), semester, period, today)
+    from . import time_to_pay
+    relief, _ = time_to_pay.relief_for([profile.id], academic_year, today)
+    return _evaluate(list(blocking), semester, period, today, relief)
 
 
 def clearance_map(profiles, academic_year, periods, *, semester=None, today=None):
@@ -1964,6 +1971,8 @@ def clearance_map(profiles, academic_year, periods, *, semester=None, today=None
         .filter(profile_id__in=profile_ids, academic_year=academic_year)
         .select_related('charge_type')
     ))
+    from . import time_to_pay
+    relief, _ = time_to_pay.relief_for(profile_ids, academic_year, today, charges=charges)
     items = item_charge_type_ids()
     by_profile = {}
     for charge in charges:
@@ -1993,7 +2002,7 @@ def clearance_map(profiles, academic_year, periods, *, semester=None, today=None
                 continue
             field = ChargeType.PERIOD_FIELDS[period]
             blocking = [c for c in mine if getattr(c.charge_type, field)]
-            per_period[period] = _evaluate(blocking, semester, period, today)
+            per_period[period] = _evaluate(blocking, semester, period, today, relief)
         results[profile_id] = per_period
     return results
 
