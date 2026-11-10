@@ -1059,3 +1059,22 @@ years one level runs both curricula; repeaters of old-curriculum modules need an
 are now loaded and compared on the Curriculum screen. **Still needed:** the decision with the exam officer before Level 4
 CAT 1 (18 January 2027); the old curriculum's documents for Levels 5–6; any NACTVET / MoH transition circular for
 repeaters; the MoH examination guidelines (CA eligibility with oral tests and case studies).
+
+### Q78. A new visual identity ●
+
+**Asked (10 November 2026):** read `.claude/skill.md` (frontend design) and redesign as an experienced UX/UI engineer.
+
+**Answers (same day):** the whole app with a new visual identity; on the teaching plan, the semester strip plus one line
+of figures. A first identity, "the ledger", was built; on review ("still more work to do", with a Vuexy admin template
+as an example) you approved **Proposal B** — rounded cards, grouped menu, the welcome panel — with the base colour still
+blue, in the colours of your second reference (royal blue into navy). **Built (on the branch, uncommitted):** Proposal B
+across the staff app, the student portal and the six small pages; the dashboard rebuilt; the cut-off dates moved to
+Semester Review ▸ Academic period; Sign out in the menu under the name. See guide 07 and the canvas
+https://claude.ai/artifact/BQNj7A8xiPh8Ghet4dStWa.
+
+**Later the same day:** Lato for the whole system; the sign-in page rearranged under a bold "College management system";
+the student portal reworked for phones, keeping the menu on the left (your decision, not a bottom bar).
+
+**Still yours:** to look at it on your own laptop and phone before merging. **Not built:** a "Waiting on you" list made
+of more than notifications (plans to approve, tests to moderate, corrections — it needs a server list of its own); the
+printouts (invoices, passes, registers), which keep their plain style.

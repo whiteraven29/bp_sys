@@ -1507,6 +1507,7 @@ def student_dashboard(request):
         'total_absent': total_absent,
         'total_sessions': total_sessions,
         'eligibility_rows': eligibility_rows,
+        'eligibility_summary': _eligibility_summary(eligibility_rows),
         'finance_charges': finance_charges,
         'finance_payments': finance_payments,
         'finance_invoices': finance_invoices,
@@ -1517,6 +1518,8 @@ def student_dashboard(request):
         'fee_reminders': fee_reminders,
         'fee_reminders_due': fee_reminders_due,
         'fee_reminders_later': fee_reminders_later,
+        # The next instalment, for the dashboard's fees card.
+        'fee_next': (list(fee_reminders_due) or list(fee_reminders_later) or [None])[0],
         'academic_year_closes_on': ledger_year.closes_on if ledger_year else None,
         'finance_waived': ledger_totals['waived'],
         'finance_required': finance_required,
@@ -1529,6 +1532,24 @@ def student_dashboard(request):
         ),
         'active_semester': active_sem.label if active_sem else 'N/A',
     })
+
+
+def _eligibility_summary(rows):
+    """One line for the student's dashboard (said 10 November 2026): are they
+    clear to sit, held back somewhere, or still being checked. Read from the
+    rows the eligibility page shows; nothing is worked out twice."""
+    blocked = [row['module_code'] for row in rows
+               if False in (row['cat1_ok'], row['cat2_ok'], row['ese_ok'])]
+    clear = sum(1 for row in rows if row['ese_ok'] is True and row['module_code'] not in blocked)
+    if not rows:
+        state = 'none'
+    elif blocked:
+        state = 'blocked'
+    elif clear == len(rows):
+        state = 'clear'
+    else:
+        state = 'pending'
+    return {'state': state, 'modules': len(rows), 'blocked': len(blocked), 'clear': clear}
 
 
 def logout_view(request):
@@ -5142,6 +5163,7 @@ def dashboard(request):
             'is_secretary': False, 'is_principal': False,
             'is_head_of_department': False, 'can_manage_exams': False,
             'teaches': False, 'module_scope': 'college',
+            'full_name': full_name_for(request.user),
         })
     today = timezone.localdate()
     # This year's work. Counting every year the college has ever run made the
@@ -5224,6 +5246,8 @@ def dashboard(request):
         })
 
     return Response({
+        # For the dashboard's greeting (said 10 November 2026).
+        'full_name': full_name_for(request.user),
         'modules': subjects_count,
         'students': students_count,
         'sessions_today': sessions_today,

@@ -486,6 +486,43 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      once all assessment plans are compared (oral tests, case studies, third assignments have no slot today)
    - [ ] Merge and deploy when there are no doubts (guide 07, C): `load_curriculum`, `load_teaching_calendar`,
      the QA role
+3m. **The new look — 10 Nov, on `feature/teaching-plans` (uncommitted). Guide 07, "Also on this branch".**
+   - [x] First identity ("the ledger") reviewed against the frontend-design brief and published as a canvas:
+     https://claude.ai/artifact/BQNj7A8xiPh8Ghet4dStWa. On review you chose Proposal B (soft cards, grouped
+     menu, blue base) in the colours of your reference: royal blue #1B5EAB running into navy #152945
+   - [x] Staff app, student portal and the six small pages (sign-in, both password changes, registration, the
+     required form, the course portal) on one palette: ground #F2F5FA, white cards (soft corners, faint
+     shadow), the blue for actions and position, status colours only for status. Earlier look layers replaced,
+     not stacked
+   - [x] Lato for the whole system (your choice, replacing Atkinson Hyperlegible Next the same day), served from
+     `static/vendor/lato` (OFL, @fontsource/lato 5.2.7: 400, 400 italic, 700, 700 italic, 900); loaded on the staff
+     app, the portal and the six small pages (checked in the browser); tabular figures only in number columns
+   - [x] Student portal on a phone, everything but the menu (which stays on the left): a 64 px strip with 12 px
+     names; the top bar names the page and semester; one menu under the photo (My profile, Change my password,
+     Light or dark, Sign out); Fees / Results / Exams cards on the dashboard (`fee_next` and
+     `eligibility_summary` added to the view, read only); eligibility notes as a list; profile tabs wrap.
+     Measured on all 13 screens at 390 px: no sideways scrolling, no target under 44 px, no text under 12 px
+   - [x] Contrast calculated: text 4.5:1 or better and input edges 3:1 or better, light and dark, and the pale
+     text on the blue panels (5:1 or better)
+   - [x] The frame: menu grouped under headings that show only when the office sees one of their items
+     (checked for DPARC, tutor, accountant); the top bar floats, the semester once; one menu under the name
+     with My profile and password and Sign out (Escape and a click outside close it)
+   - [x] The dashboard: blue welcome panel with the counts and an attendance ring; New for you (unread
+     notifications, opening where each is dealt with); Attendance by level as bars; Recent registers in five
+     columns; announcements. `full_name` added to the dashboard API for the greeting
+   - [x] Cut-off dates and Advance Semester moved to Semester Review ▸ Academic period (same people as before)
+   - [x] Student portal: the welcome in a blue panel with today's date (the semester shows there on a phone),
+     the four figures as cards with their signs
+   - [x] Teaching plan screen: the semester strip, one line of figures, this week first; each class's topic on
+     its own line with Done / Part / Missed under it; move, missed, make-up class and returning a test are
+     inline forms; the strip in miniature in My plans, To approve and Plan progress
+   - [x] Sign-in: the blue panel led by **College management system** in bold, five bullets of what it covers, the motto;
+     the help under the form as three bullets (staff, students, forgotten password → ICT officer or Principal)
+   - [x] Checked in the browser: DPARC, accountant, tutor (dashboard and a plan), the Academic period page, the
+     user menu, the student portal (desktop, 390 px phone, dark), sign-in, the staff phone menu, dark mode;
+     no script errors, no sideways scrolling on a phone
+   - [ ] Look at the screens on your own laptop and phone before merging
+
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
    - [ ] Migrations to 0085 applied by the deploy (release guide B1–B4); `Ran 1330 tests … OK` on the laptop first
    - [ ] Students ▸ Supplementary consent: check the amounts in Sehemu B (copied from the 2025 form), then Open

@@ -466,3 +466,32 @@ are dropped once the production row counts are checked.
 | `load_teaching_calendar [path] [--dry-run]` | the almanac's teaching weeks, holidays, CAT weeks, exams, CQI dates (default 2026/27) |
 
 Tests: 1352 on the branch `feature/teaching-plans` (1330 on master), run as described in `ops/guides/06-release-2026-27.md`.
+
+## 7. The look (said 10 November 2026)
+
+Every page reads colour tokens from `:root` (and `html[data-theme="dark"]`); the last "look layer" in each page's
+`<style>` sets them. The staff app (`index.html`) and the student portal (`student_dashboard.html`) each have one
+layer, "SOFT CARDS, ROYAL BLUE" (Proposal B; it replaced "the ledger" the same day), placed before `@media print`
+(staff) and before the phone rules (portal), so printouts and phones keep their own rules. The six small pages
+carry the same tokens in a short tail. The typeface is Lato, `static/vendor/lato/lato.css` (eight woff2 files, OFL),
+linked from every page. The identity and its rules: https://claude.ai/artifact/BQNj7A8xiPh8Ghet4dStWa.
+
+The staff frame:
+
+- **Menu** (`aside#sidebar`): the brand first, then every top-level item. `groupSidebar()` (run by `uncloak()`)
+  gives each item a CSS `order` from `NAV_SECTIONS` and inserts the headings (Academic, Students, Money, Stores,
+  College); a heading is hidden when none of its items is displayed. Role gating is unchanged (`data-roles`,
+  the `*-only` classes); the grouping only reads it. For the accountant (`body.accountant-desk`) their
+  admissions desk comes first, then Money.
+- **Top bar** (`header`): fixed, floating beside the menu; the semester badge, light/dark, the bell, and the
+  menu under the name (`#user-menu`: My profile and password, Sign out).
+- **Dashboard** (`#page-dashboard`): `renderDashHero`, `renderLevelBars`, `renderRecentSessions` from
+  `GET /api/dashboard/` (which now carries `full_name`); `renderForYou` from the notifications, called by
+  `loadNotifications()` every minute.
+- **Academic period**: the cut-off card lives in `#page-progression` as review section `period`.
+
+The student portal (`student_dashboard.html`): the last layer, "PHONES, SECOND PASS", sets the phone rules. The menu
+stays a strip on the left under 820 px (`--rail: 64px`). The top bar carries `#top-title` (set by `showView`) and the
+menu under the photo (`#me-chip`, `#me-menu`; items use the existing `data-profile-option` handlers). The dashboard's
+three cards (`.next-card`, `data-goto-view`) read `finance_*`, `fee_next`, `published_result_count`, `gpa`,
+`has_ca_results` and `eligibility_summary` (`_eligibility_summary` in `views.py`, from the eligibility rows).

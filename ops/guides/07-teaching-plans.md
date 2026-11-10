@@ -139,6 +139,73 @@ Then deploy as in guide 03 (it applies migration 0086). After the deploy, on the
   by itself; picking the plan's class while taking attendance is not built.
 - **No notifications yet.** The Head of Department sees plans waiting under *To approve*.
 
+## Also on this branch: the new look (10 November 2026)
+
+You chose a new visual identity for the whole system. It is on this branch, uncommitted, beside
+the teaching plans, and goes to master with them. Proposal and screens (Proposal B is the one built):
+https://claude.ai/artifact/BQNj7A8xiPh8Ghet4dStWa (private until you share it).
+
+The same morning a first identity, "the ledger" (square sheets, heavy black rules), was built; on
+review you chose Proposal B instead, in the colours of a reference you gave (royal blue running into
+navy). Proposal B replaced the ledger in every page; nothing of the ledger's look remains.
+
+- **What changes for everyone:** white cards with soft corners and a faint shadow on a cool grey
+  ground; the college blue as the base (#1B5EAB, running into navy #152945 on the welcome panels and
+  the sign-in page) for buttons, links and where you are; green, amber and red for status only.
+  Status words are rounded labels on a pale ground. Table heads are tinted, in sentence case.
+  Dark mode is the same layout on the reference's navy.
+- **The frame:** the menu runs the full height with EduTrack at its head and is grouped under plain
+  headings (Academic, Students, Money, Stores, College). A heading shows only when you see one of
+  its items, so each office meets only its own. The accountant's menu still starts at their desk,
+  then Money, then Students. The top bar floats over the page: the semester once, the light/dark
+  switch, the bell, and one menu under your name with **My profile and password** and **Sign out**
+  (Sign out was a separate button). The breadcrumb line is gone on a computer; on a phone the
+  semester shows there, because the badge is hidden.
+- **The dashboard (academic staff):** a blue welcome panel (good morning and your name, today's date,
+  your modules, students and registers taken today, a **Take attendance** button, and the
+  semester's attendance as a ring); **New for you** (your unread notifications, each opening where it
+  is dealt with); **Attendance by level** as bars (green from 85%, amber from 80%, red below);
+  **Recent registers** in five columns (module with level and topic, type, date, present of total,
+  rate); announcements.
+- **Moved:** the CAT and end-of-semester cut-off dates and **Advance Semester** are now under
+  **Semester Review ▸ Academic period**, seen by the same people as before (the academic offices).
+  Settings do not belong on a dashboard.
+- **The student portal:** the same cards and blue; the welcome in a blue panel with today's date;
+  under it three cards that open their pages: **Fees** (not billed / what is owed and the next
+  instalment / paid up), **Results** (modules out and the GPA, or CA marks so far) and **Exams**
+  (eligible everywhere, not eligible in N modules, or being checked); then the four figures as cards.
+  The photo at the top right opens one menu: My profile, Change my password, Sign out (and, on a
+  phone, Light or dark). Sign out is no longer a small icon beside the bell.
+- **The student portal on a phone:** the menu strip stays on the left (your decision), 64 px wide
+  with its names at 12 px (they were 9 px). The top bar names the page and the semester. Nothing to
+  press is under 44 px and no text under 12 px, measured on all 13 screens at 390 px; nothing scrolls
+  sideways. The profile's tabs wrap instead of scrolling; an odd last figure takes the full row; the
+  eligibility notes are a list (CAT 1, CAT 2, ESE) instead of three lines running together.
+- **The typeface:** Lato for the whole system (your choice, 10 November 2026), served from the
+  college's own server (`backend/static/vendor/lato/`, SIL Open Font License; Regular, Italic, Bold,
+  Bold Italic and Black). It replaced Atkinson Hyperlegible Next the same day. Lato's zero is not
+  slashed and its capital I and small l are alike, so take care reading registration numbers aloud.
+  Text is a sixteenth larger than before.
+- **Contrast:** every text colour reaches 4.5:1 on its ground and every input edge 3:1, in both themes,
+  including the pale text on the blue panels (checked by calculation).
+- **The teaching plan screen:** the semester as a strip (a column per teaching week, a cell per class,
+  filled as classes are done; the break hatched; CAT weeks, the results deadline and the exams marked);
+  one line of figures; this week's classes first, each with its topic on a line of its own and
+  Done / Part / Missed under it; earlier and later weeks folded away. Moving a class, marking one
+  missed, adding a make-up class and returning a test are forms in the page, not pop-up questions.
+  The lists show the strip in miniature.
+- **Sign-in page:** the blue panel, in order: EduTrack and the college's name; **College management
+  system** in bold; one line; five bullets (admissions and records; fees, payments and invoices;
+  attendance, results and eligibility; teaching plans and the calendar; notices, requests and
+  evaluation forms); the motto. Under the form, three bullets: staff, students, and a forgotten
+  password (reset by the ICT officer or the Principal, not "the administrator"). On a phone the bold
+  line stays in the header and the bullets go, so the form comes first.
+- **The server:** the dashboard API also sends `full_name`, for the greeting. Nothing else in the
+  data changes; the screens' steps are the same.
+- **Deploy:** nothing extra. `deploy.sh` already runs `collectstatic`, which copies the font files.
+  Browsers keep `/static/` for 30 days, but the pages carry their styles inline, so the new look shows
+  at once.
+
 ## Where the national documents disagree (kept on each module)
 
 The curriculum and the assessment plan spell some codes differently (PST04105/04205 Dispensing,
@@ -159,7 +226,8 @@ backend/attendance/teaching_plans.py            the rules
 backend/attendance/teaching_plan_views.py       the API
 backend/attendance/urls.py                      /api/teaching-plans/…, /api/teaching-calendar/…, /api/curricula/…
 backend/attendance/roles.py                     is_quality_assurance; the office in OFFICE_MODELS
-backend/attendance/views.py                     the QA role in the role editor; ReadStaffWriteForms
+backend/attendance/views.py                     the QA role in the role editor; ReadStaffWriteForms;
+                                                full_name in the dashboard API (the greeting)
 backend/attendance/admin.py                     the QA office in Django admin
 backend/attendance/curricula/extract.py         reads the national documents into the JSON (laptop only)
 backend/attendance/curricula/pst_2022.json      the 2022 PST curriculum and assessment plans
@@ -168,5 +236,12 @@ backend/attendance/management/commands/load_curriculum.py
 backend/attendance/management/commands/load_teaching_calendar.py
 backend/attendance/test_teaching_plans.py
 backend/templates/index.html                    the Teaching plans menu and page; QA in the role editor,
-                                                the header and the evaluation forms
+                                                the header and the evaluation forms; the soft-cards look
+                                                layer (replaces the 21 October one); the semester strip;
+                                                the grouped menu (groupSidebar), the menu under your name,
+                                                the new dashboard; Semester Review ▸ Academic period
+backend/templates/student_dashboard.html        the soft-cards look layer for the portal; the welcome panel
+backend/templates/login.html, password_change.html, student_password_change.html, register.html,
+  student_required_form.html, course_portal.html  the soft-cards tokens; new sign-in wording
+backend/static/vendor/lato/                     the typeface (eight woff2 files), lato.css, OFL.txt
 ```

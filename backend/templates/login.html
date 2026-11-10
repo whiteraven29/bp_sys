@@ -5,14 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light">
 <link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet">
+<link href="{% static 'vendor/lato/lato.css' %}" rel="stylesheet">
 <title>EduTrack — Sign In</title>
 <style>
   :root {
-    --bg: #eceff3; --surface: #ffffff; --surface2: #f3f5f7; --border: #ccd4dc;
-    --accent: #123F80; --accent-dark: #0C2D5E; --accent-soft: #EFF6FF;
-    --green: #16a34a; --red: #dc2626; --text: #2b3440; --muted: #71808f;
-    --radius: 3px;
-    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --bg: #F2F5FA; --surface: #FFFFFF; --surface2: #F4F7FB; --border: #E0E6EF;
+    --accent: #1B5EAB; --accent-dark: #164C8C; --accent-soft: #E7EFF9;
+    --green: #187A38; --red: #B42318; --text: #1B2430; --muted: #5E6B7A;
+    --radius: 2px;
+    --font-sans: 'Lato', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -38,13 +39,15 @@
     font-size: 1.05rem; font-weight: 700;
   }
   .brand-lockup strong { display: block; font-size: 1.1rem; font-weight: 600; letter-spacing: .01em; }
-  .brand-lockup small { display: block; margin-top: 2px; color: rgba(255,255,255,.85); font-size: .74rem; }
+  .brand-lockup small { display: block; margin-top: 2px; color: rgba(255,255,255,.88); font-size: .8rem; }
   .brand-body { margin: 30px 0; }
-  .brand-body p { color: rgba(255,255,255,.88); font-size: .85rem; line-height: 1.65; }
-  .brand-points { display: grid; gap: 9px; margin-top: 20px; }
-  .brand-points div { display: flex; align-items: flex-start; gap: 9px; font-size: .82rem; color: rgba(255,255,255,.92); }
-  .brand-points i { flex: 0 0 auto; margin-top: 2px; }
-  .brand-foot { color: rgba(255,255,255,.7); font-size: .74rem; }
+  .brand-head { font-size: 2rem; line-height: 1.12; font-weight: 800; letter-spacing: -.015em; margin-bottom: 10px; max-width: 14ch; }
+  .brand-lead { color: #DCE8F8; font-size: .95rem; line-height: 1.5; }
+  .brand-points { list-style: none; display: grid; gap: 12px; margin-top: 22px; }
+  .brand-points li { display: flex; align-items: center; gap: 12px; font-size: .9rem; color: #fff; }
+  .brand-points i { flex: 0 0 auto; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px;
+    background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.24); font-size: .95rem; }
+  .brand-foot { color: rgba(255,255,255,.85); font-size: .82rem; border-top: 1px solid rgba(255,255,255,.3); padding-top: 14px; }
 
   .form-side { padding: 34px 32px; }
   .form-side h2 { font-size: 1.15rem; font-weight: 600; margin-bottom: 4px; }
@@ -78,39 +81,51 @@
   }
   .btn:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
   .helper {
-    margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--border);
-    color: var(--muted); font-size: .78rem; line-height: 1.6;
+    list-style: none; display: grid; gap: 10px;
+    margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: .82rem; line-height: 1.5;
   }
+  .helper li { display: flex; align-items: flex-start; gap: 10px; }
+  .helper i { flex: 0 0 auto; color: var(--accent); font-size: .95rem; margin-top: 1px; }
+  .helper b { color: var(--text); font-weight: 700; }
   .helper a { color: var(--accent); text-decoration: none; font-weight: 500; }
   .helper a:hover { text-decoration: underline; }
 
   @media (max-width: 760px) {
     body { padding: 0; align-items: stretch; }
     .shell { grid-template-columns: 1fr; max-width: 460px; margin: auto; border: 0; border-radius: 0; }
-    /* On a phone the brand panel shrinks to a header strip — the form is
-       what matters on a small screen, so the sales copy is dropped. */
+    /* On a phone the brand panel shrinks to a header strip: the name and the
+       bold message stay, the list and the motto go, so the form comes first. */
     .brand-side { padding: 18px 20px; }
-    .brand-body, .brand-foot { display: none; }
+    .brand-body { margin: 16px 0 0; }
+    .brand-head { font-size: 1.35rem; max-width: none; margin-bottom: 0; }
+    .brand-lead, .brand-points, .brand-foot { display: none; }
     .form-side { padding: 24px 20px 32px; }
   }
 
-  /* DESIGN SYSTEM (said 21 October 2026): primary blue #123F80, light blue
-     #EFF6FF, white, cool grey #F1F5F9 — the dashboards' tokens and shapes. */
+  /* SOFT CARDS, ROYAL BLUE (said 10 November 2026; replaces "the ledger" of the
+     same morning): the dashboards' tokens and shapes — a cool grey ground, a
+     white card with soft corners and a faint shadow, the blue panel running
+     from royal blue #1B5EAB into navy #152945 — in Lato, the whole
+     system's typeface since 10 November 2026. */
   :root {
-    --bg: #F1F5F9; --surface: #FFFFFF; --surface2: #F8FAFC; --border: #E2E8F0;
-    --accent: #123F80; --accent-dark: #0C2D5E; --accent-soft: #EFF6FF;
-    --text: #1E293B; --muted: #64748B; --radius: 10px;
+    --bg: #F2F5FA; --surface: #FFFFFF; --surface2: #F4F7FB; --border: #E0E6EF;
+    --accent: #1B5EAB; --accent-dark: #164C8C; --accent-soft: #E7EFF9;
+    --text: #1B2430; --muted: #5E6B7A; --radius: 10px;
+    --hero: linear-gradient(135deg, #1B5EAB 0%, #1A4D8D 40%, #153359 78%, #152945 100%);
   }
-  body { -webkit-font-smoothing: antialiased; }
-  .shell, main, .card { border: 0 !important; border-radius: 18px !important; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 12px 32px rgba(15,23,42,.10); overflow: hidden; }
-  .brand-side, .head { background: linear-gradient(160deg, #123F80 0%, #0C2D5E 100%) !important; }
-  .brand-mark, .mark { border-radius: 10px !important; color: #123F80 !important; }
+  body { -webkit-font-smoothing: antialiased; line-height: 1.45; }
+  .shell, main, .card { border: 1px solid var(--border) !important; border-radius: 16px !important; box-shadow: 0 10px 30px rgba(21,41,69,.10); overflow: hidden; }
+  .brand-side, .head { background: radial-gradient(circle at 85% -20%, rgba(255,255,255,.14), transparent 45%), var(--hero) !important; }
+  .brand-mark, .mark { border-radius: 10px !important; color: var(--accent) !important; }
   .field input, .field select, .field textarea, input[type=text], input[type=password], input[type=email], select, textarea {
-    border-radius: 8px !important; border-color: #CBD5E1; }
-  .field input:focus, input:focus, select:focus, textarea:focus { border-color: #123F80 !important; box-shadow: 0 0 0 3px rgba(18,63,128,.14); outline: none; }
-  .btn, .submit, button[type=submit] { border-radius: 8px !important; font-weight: 600 !important; }
+    border-radius: 8px !important; border-color: #7D8FA5; min-height: 44px; font-size: .95rem; }
+  .field input:focus, input:focus, select:focus, textarea:focus { border-color: var(--accent) !important; outline: 0; box-shadow: 0 0 0 3px rgba(27,94,171,.2); }
+  :where(a, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn, .submit, button[type=submit] { border-radius: 8px !important; font-weight: 700 !important; min-height: 46px; box-shadow: 0 2px 6px rgba(27,94,171,.25); }
   .rules, .lead-box { border-radius: 10px !important; }
-  @media (max-width: 640px) { .shell, main, .card { border-radius: 0 !important; box-shadow: none; } }
+  .errors { border-radius: 10px !important; }
+  @media (max-width: 640px) { .shell, main, .card { box-shadow: 0 6px 18px rgba(21,41,69,.08); } }
 </style>
 </head>
 <body>
@@ -118,22 +133,27 @@
     <div class="brand-side">
       <div class="brand-lockup">
         <div class="brand-mark">ET</div>
-        <div><strong>EduTrack</strong><small>Academic Information System</small></div>
+        <div><strong>EduTrack</strong><small>Blue Pharma Institute of Science and Technology</small></div>
       </div>
+      <!-- The panel in order (said 10 November 2026): what this is, in bold;
+           one line; what it covers, as a list; the motto at the foot. -->
       <div class="brand-body">
-        <p>Sign in to view your records for the active academic year.</p>
-        <div class="brand-points">
-          <div><i class="bi bi-calendar-check"></i><span>Track attendance by module and semester</span></div>
-          <div><i class="bi bi-file-earmark-text"></i><span>Check CA marks and published results</span></div>
-          <div><i class="bi bi-person-check"></i><span>Confirm your exam eligibility status</span></div>
-        </div>
+        <h1 class="brand-head">College management system</h1>
+        <p class="brand-lead">Every office's work for the college, in one place.</p>
+        <ul class="brand-points">
+          <li><i class="bi bi-door-open" aria-hidden="true"></i><span>Admissions and student records</span></li>
+          <li><i class="bi bi-wallet2" aria-hidden="true"></i><span>Fees, payments and invoices</span></li>
+          <li><i class="bi bi-calendar-check" aria-hidden="true"></i><span>Attendance, results and exam eligibility</span></li>
+          <li><i class="bi bi-journal-check" aria-hidden="true"></i><span>Teaching plans and the college calendar</span></li>
+          <li><i class="bi bi-megaphone" aria-hidden="true"></i><span>Notices, requests and evaluation forms</span></li>
+        </ul>
       </div>
-      <div class="brand-foot">Staff and students use the same sign-in.</div>
+      <div class="brand-foot">Self-Control, Conscientiousness and Excellence</div>
     </div>
 
     <div class="form-side">
       <h2>Sign in</h2>
-      <p class="lead">Enter your credentials to continue.</p>
+      <p class="lead">Staff and students use the same page.</p>
 
       {% if error %}
         <div class="errors">{{ error }}</div>
@@ -142,22 +162,23 @@
       <form method="post" action="{% url 'login' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}">
         {% csrf_token %}
         <div class="field">
-          <label for="id-identifier">Username or Registration Number</label>
+          <label for="id-identifier">Username or registration number</label>
           <input id="id-identifier" type="text" name="identifier" value="{{ identifier|default:'' }}" required
-                 autocomplete="username" placeholder="Username or NACTVET reg. no." />
+                 autocomplete="username" placeholder="e.g. NS0900/0001/2023" />
         </div>
         <div class="field">
           <label for="id-secret">Password</label>
           <input id="id-secret" type="password" name="secret" required
-                 autocomplete="current-password" placeholder="Password" />
+                 autocomplete="current-password" />
         </div>
-        <button type="submit" class="btn">Sign In</button>
+        <button type="submit" class="btn">Sign in</button>
       </form>
 
-      <div class="helper">
-        Students sign in with their NACTVET registration number and portal password.
-        Forgotten your password? Contact the administrator.
-      </div>
+      <ul class="helper">
+        <li><i class="bi bi-person-badge" aria-hidden="true"></i><span><b>Staff:</b> your username and password.</span></li>
+        <li><i class="bi bi-mortarboard" aria-hidden="true"></i><span><b>Students:</b> your NACTVET registration number and portal password.</span></li>
+        <li><i class="bi bi-key" aria-hidden="true"></i><span><b>Forgotten your password?</b> Visit the office for assistance.</span></li>
+      </ul>
     </div>
   </div>
 

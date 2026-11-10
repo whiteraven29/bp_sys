@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EduTrack — Attendance Management</title>
 <link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet">
+<link href="{% static 'vendor/lato/lato.css' %}" rel="stylesheet">
 <script src="{% static 'vendor/xlsx.full.min.js' %}"></script>
 <script src="{% static 'vendor/chart.umd.min.js' %}"></script>
 <style>
@@ -542,15 +543,108 @@
   #page-lab [data-lab-section] { display: none; }
   #page-tplans [data-tp-section] { display: none; }
   #page-tplans [data-tp-section].sec-on { display: block; }
-  .tp-chip { padding: 4px 10px; border-radius: 999px; font-size: .78rem; border: 1px solid var(--border); }
-  .tp-due-open td { background: var(--yellow-soft); }
-  .tp-stat { display: inline-flex; flex-direction: column; padding: 6px 12px; border: 1px solid var(--border);
-    border-radius: var(--radius-sm, 6px); min-width: 92px; }
-  .tp-stat b { font-size: 1.1rem; }
-  .tp-stat span { font-size: .72rem; color: var(--muted); }
-  .tp-tasks { columns: 2 280px; font-size: .8rem; }
-  .tp-tasks label { display: block; break-inside: avoid; margin: 2px 0; }
-  #tp-plan table input, #tp-plan table select { font-size: .78rem; padding: 3px 5px; }
+  #page-tplans [hidden] { display: none !important; }
+  /* Teaching plans (said 10 November 2026): the semester strip is the one
+     bold thing on these screens; everything around it stays quiet. */
+  .tp-sub { font-size: .8rem; color: var(--muted); }
+  .tp-ok { color: var(--green); } .tp-warn { color: var(--yellow); } .tp-bad { color: var(--red); } .tp-quiet { color: var(--muted); }
+  .tp-chip { padding: 4px 10px; font-size: .85rem; border: 1px solid var(--border); background: var(--surface); }
+  .tp-head .tp-status { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  .tp-head .tp-status .btn { margin-left: auto; }
+  /* The strip: a column per week, a cell per class. */
+  .tp-strip { overflow-x: auto; padding: 4px 2px 6px; -webkit-overflow-scrolling: touch; }
+  .tp-strip-row { display: flex; gap: 6px; align-items: flex-end; min-width: max-content; }
+  .tp-wk { display: flex; flex-direction: column; gap: 4px; min-width: 44px; flex: 0 0 auto; }
+  .tp-wk-n { font-size: .8rem; color: var(--muted); text-align: center; }
+  .tp-wk.is-now .tp-wk-n { color: var(--accent); font-weight: 700; }
+  .tp-wk-cells { display: grid; gap: 3px; padding: 2px; }
+  .tp-wk.is-now .tp-wk-cells { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .tp-wk-mark { min-height: 2.6em; font-size: .74rem; line-height: 1.2; font-weight: 700; color: var(--ink); text-align: center;
+    border-top: 2px solid transparent; padding-top: 3px; }
+  .tp-wk-mark.has { border-top-color: var(--ink); }
+  .tp-wk-mark span { display: block; white-space: nowrap; }
+  .tp-gap { width: 24px; align-self: stretch; margin-bottom: calc(2.6em + 7px); display: grid; place-items: center;
+    background: repeating-linear-gradient(135deg, var(--border) 0 2px, transparent 2px 6px); }
+  .tp-gap span { writing-mode: vertical-rl; font-size: .72rem; color: var(--muted); background: var(--surface); padding: 4px 0; }
+  .tp-c { display: block; height: 13px; border: 1px solid var(--border-strong); background: var(--surface); }
+  .tp-c-done { background: var(--accent-fill); border-color: var(--accent-fill); }
+  .tp-c-partial { background: linear-gradient(90deg, var(--accent-fill) 50%, var(--surface) 50%); border-color: var(--accent-fill); }
+  .tp-c-due { background: var(--yellow-soft); border-color: var(--yellow); }
+  .tp-c-missed { background: repeating-linear-gradient(135deg, var(--red) 0 2px, var(--surface) 2px 5px); border-color: var(--red); }
+  .tp-c-planned { background: var(--surface); }
+  .tp-c-exam { background: var(--ink); border-color: var(--ink); height: 52px; }
+  .tp-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; color: var(--muted); margin: 6px 0 2px; }
+  .tp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .tp-legend .tp-c { width: 18px; height: 11px; }
+  .tp-figures { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: baseline; margin: 12px 0 0; }
+  .tp-figures b { font-size: 1.3rem; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .tp-figures span { color: var(--muted); } .tp-figures span b { margin-right: 3px; }
+  /* The strip in miniature, in the lists: a cell per week. */
+  .tp-mini { display: inline-flex; gap: 2px; vertical-align: middle; }
+  .tp-mini i { display: block; width: 7px; height: 16px; border: 1px solid var(--border-strong); background: var(--surface); }
+  .tp-mini i.tp-c-done { background: var(--accent-fill); border-color: var(--accent-fill); }
+  .tp-mini i.tp-c-partial { background: linear-gradient(0deg, var(--accent-fill) 50%, var(--surface) 50%); border-color: var(--accent-fill); }
+  .tp-mini i.tp-c-due { background: var(--yellow-soft); border-color: var(--yellow); }
+  .tp-mini i.is-now { outline: 1.5px solid var(--ink); outline-offset: 1px; }
+  .tp-mini i.tp-mini-gap { width: 5px; border: 0; background: repeating-linear-gradient(135deg, var(--border) 0 2px, transparent 2px 4px); }
+  /* Two columns on a laptop, one on a phone. */
+  .tp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 0 24px; align-items: start; }
+  .tp-block { margin: 0 0 18px; } .tp-block:last-child { margin-bottom: 0; }
+  .tp-block h3 { font-size: 1rem; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
+  .tp-block > summary, .tp-fold > summary { cursor: pointer; font-weight: 600; min-height: 40px; display: flex; align-items: center; }
+  .tp-week-group h4 { font-size: .9rem; font-weight: 700; margin: 14px 0 0; padding-bottom: 6px; border-bottom: 1.5px solid var(--ink); }
+  .tp-week-group:first-child h4 { margin-top: 0; }
+  .tp-fold { border-top: 1px solid var(--border); margin-top: 10px; }
+  /* A class as a row: when, what, what became of it. */
+  .tp-row { display: grid; grid-template-columns: 108px minmax(0, 1fr) auto; gap: 6px 14px; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .tp-row-when b { display: block; font-weight: 700; } .tp-row-when span { font-size: .82rem; color: var(--muted); }
+  .tp-row-what { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+  .tp-row-what select { max-width: 92px; }
+  .tp-row-what select, .tp-topic { font: inherit; font-size: .88rem; padding: 6px 8px; min-height: 36px; border: 1px solid var(--border-strong);
+    border-radius: var(--radius); background: var(--surface); color: var(--text); }
+  .tp-topic { flex: 1 1 180px; min-width: 0; }
+  .tp-row-state { flex-basis: 100%; font-size: .82rem; }
+  .tp-row-act { display: flex; align-items: center; gap: 8px; }
+  .tp-seg { display: inline-flex; border: 1px solid var(--border-strong); }
+  .tp-seg button { font: inherit; font-size: .84rem; min-height: 38px; padding: 0 11px; border: 0; background: var(--surface); color: var(--ink); cursor: pointer; }
+  .tp-seg button + button { border-left: 1px solid var(--border-strong); }
+  .tp-seg button[aria-pressed="true"] { background: var(--accent-fill); color: #fff; font-weight: 700; }
+  .tp-seg button:disabled { color: var(--muted); cursor: not-allowed; background: var(--surface2); }
+  .tp-seg button:not(:disabled):not([aria-pressed="true"]):hover { background: var(--row-hover); }
+  .tp-link { font: inherit; font-size: .88rem; background: none; border: 0; padding: 8px 2px; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+  .tp-inline { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; padding: 10px 12px;
+    background: var(--surface2); border: 1px solid var(--border); margin-top: 4px; }
+  .tp-inline label, .tp-inline-field { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; font-weight: 600; color: var(--ink); }
+  .tp-inline input, .tp-inline select, .tp-inline-field input { font: inherit; font-size: .9rem; padding: 7px 9px; min-height: 38px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+  .tp-grow { flex: 1 1 220px; } .tp-grow input { width: 100%; }
+  .tp-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 12px; }
+  .tp-pattern-row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .tp-pattern-row select, .tp-pattern-row input { font: inherit; padding: 7px 9px; min-height: 40px; border: 1px solid var(--border-strong);
+    border-radius: var(--radius); background: var(--surface); color: var(--text); }
+  .tp-hours { display: inline-flex; align-items: center; gap: 6px; } .tp-hours input { width: 76px; }
+  .tp-sum { font-size: .88rem; color: var(--muted); margin: 10px 0 0; }
+  /* An assessment as a row, its setting plan folded under it. */
+  .tp-arow { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .tp-arow-main { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+  .tp-arow-main > div:first-child { flex: 1 1 160px; }
+  .tp-weight { font-variant-numeric: tabular-nums; color: var(--muted); margin-left: 6px; }
+  .tp-arow-when { display: flex; gap: 8px; flex-wrap: wrap; font-size: .88rem; }
+  .tp-arow-when label { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); }
+  .tp-arow-when input { font: inherit; font-size: .85rem; padding: 5px 7px; min-height: 36px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+  .tp-setting > summary { cursor: pointer; color: var(--accent); font-size: .88rem; padding: 6px 0; }
+  .tp-tasks { max-height: 340px; overflow: auto; border: 1px solid var(--border); padding: 4px 12px; background: var(--surface); }
+  .tp-seo { border: 0; border-bottom: 1px solid var(--border); padding: 8px 0; margin: 0; }
+  .tp-seo legend { font-weight: 700; font-size: .86rem; padding: 0; margin-bottom: 4px; }
+  .tp-seo label { display: flex; gap: 8px; align-items: flex-start; font-size: .86rem; padding: 3px 0; }
+  .tp-cov { margin: 4px 0; max-width: 78ch; }
+  .tp-note { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  @media (max-width: 640px) {
+    .tp-row { grid-template-columns: minmax(0, 1fr); }
+    .tp-row-act { justify-content: space-between; }
+    .tp-head .tp-status .btn { margin-left: 0; }
+  }
   #page-progression [data-review-section] { display: none; }
   #page-progression [data-review-section].sec-on { display: block; }
   #page-lab [data-lab-section].sec-on { display: block; }
@@ -728,209 +822,343 @@
 
   /* ── PRINT STYLES ── */
   /* ════════════════════════════════════════════════════════════════════════
-     DESIGN SYSTEM (said 21 October 2026)
-     Primary blue  #123F80 — sidebar, main actions, active navigation
-     Light blue    #EFF6FF — selected rows, filters, subtle highlights
-     White         #FFFFFF — main workspace and table surfaces
-     Cool grey     #F1F5F9 — page background, borders, secondary sections
-     A light workspace on a blue sidebar: white cards with soft shadows and
-     rounded corners, quiet tables, pills for status, tiles for counts. The
-     rules above stay as the structure; this layer is the look, and it comes
+     SOFT CARDS, ROYAL BLUE (said 10 November 2026; replaces "the ledger" of
+     the same morning). Proposal B on the identity canvas, in the colours of
+     the reference the college chose: royal blue #1B5EAB running into navy
+     #152945. Blue is the base: what you can press, where you are, the
+     welcome panel. Green, amber and red mark status and nothing else.
+     White cards with soft corners and a faint shadow on a cool grey ground;
+     the menu grouped under plain headings; the top bar floats over the page.
+     The typeface is Lato (static/vendor/lato, SIL OFL), chosen for the whole
+     system on 10 November 2026. Every pair of colours below was measured:
+     text at 4.5:1 or more, field edges at 3:1 or more.
+     The rules above stay as the structure; this layer is the look, and it comes
      before @media print so printouts keep their own plain style.
      ════════════════════════════════════════════════════════════════════════ */
   :root {
-    --bg: #F1F5F9; --surface: #FFFFFF; --surface2: #F8FAFC; --border: #E2E8F0; --border-strong: #CBD5E1;
-    --accent: #123F80; --accent-dark: #0C2D5E; --accent2: #1E5BB8;
-    --accent-soft: #EFF6FF; --row-hover: #EFF6FF;
-    --text: #1E293B; --muted: #64748B;
-    --green: #15803D; --red: #DC2626; --yellow: #B45309; --orange: #C2410C;
-    --green-soft: #ECFDF3; --yellow-soft: #FFF7ED; --red-soft: #FEF2F2;
-    --accent-fill: #123F80; --accent2-fill: #1E5BB8; --green-fill: #15803D;
-    --red-fill: #C62828; --yellow-fill: #B45309; --orange-fill: #C2410C; --grey-fill: #64748B;
+    --font-sans: 'Lato', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    --bg: #F2F5FA; --surface: #FFFFFF; --surface2: #F4F7FB; --border: #E0E6EF; --border-strong: #7D8FA5;
+    --rule: #E8EDF4; --edge: #E0E6EF;
+    --ink: #1B2430; --text: #1B2430; --muted: #5E6B7A;
+    --accent: #1B5EAB; --accent-dark: #164C8C; --accent2: #2A6CC4;
+    --accent-soft: #E7EFF9; --row-hover: #F5F8FD; --accent-line: #C3D5EE;
+    --navy: #153359; --navy-deep: #152945;
+    --hero: linear-gradient(115deg, #1B5EAB 0%, #1A4D8D 42%, #153359 78%, #152945 100%);
+    --hero-ink: #FFFFFF; --hero-muted: #DCE8F8;
+    --nav-on: linear-gradient(90deg, #1B5EAB 0%, #2A6CC4 100%);
+    --green: #187A38; --red: #B42318; --yellow: #8F5400; --orange: #A84300;
+    --green-soft: #E6F4EA; --yellow-soft: #FDF1DC; --red-soft: #FDECEA;
+    --green-line: #BFE3C8; --yellow-line: #F1D7A6; --red-line: #F3C4BE;
+    --accent-fill: #1B5EAB; --accent2-fill: #2A6CC4; --green-fill: #187A38;
+    --red-fill: #B42318; --yellow-fill: #8F5400; --orange-fill: #A84300; --grey-fill: #5E6B7A;
     --radius: 10px; --radius-sm: 8px; --header-h: 60px;
-    --side-bg: #123F80; --side-deep: #0E3470; --side-ink: rgba(255,255,255,.80);
-    --side-dim: rgba(255,255,255,.58); --side-hover: rgba(255,255,255,.08); --side-active: rgba(255,255,255,.16);
-    --shadow-1: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06);
-    --shadow-2: 0 10px 30px rgba(15,23,42,.12);
-    --toast-bg: #0F172A; --toast-ink: #ffffff;
+    --shadow-1: 0 1px 2px rgba(21,41,69,.05), 0 2px 8px rgba(21,41,69,.05);
+    --shadow-2: 0 16px 40px rgba(21,41,69,.20);
+    --toast-bg: #152945; --toast-ink: #FFFFFF;
   }
+  /* The evening: the reference's own navy for the ground. */
   html[data-theme="dark"] {
-    --bg: #0B1220; --surface: #111A2C; --surface2: #162138; --border: #22314D; --border-strong: #2E4166;
-    --accent: #7CB0FF; --accent-dark: #A4C8FF; --accent2: #8FB7FF;
-    --accent-soft: #15284A; --row-hover: #15284A;
-    --text: #E2E8F0; --muted: #94A3B8;
-    --green: #4ADE80; --red: #F87171; --yellow: #FBBF24; --orange: #FB923C;
-    --green-soft: #10291C; --yellow-soft: #2E2410; --red-soft: #321A1A;
-    --accent-fill: #2B5BA8; --accent2-fill: #3466B8;
-    --side-bg: #0A1A36; --side-deep: #071329;
-    --shadow-1: 0 1px 2px rgba(0,0,0,.4); --shadow-2: 0 14px 40px rgba(0,0,0,.55);
-    --toast-bg: #E2E8F0; --toast-ink: #0B1220;
+    --bg: #0D1626; --surface: #142036; --surface2: #1A2842; --border: #26354F; --border-strong: #6A7FA3;
+    --rule: #22314A; --edge: #26354F;
+    --ink: #E6ECF5; --text: #E6ECF5; --muted: #9FB0C8;
+    --accent: #7FB0F0; --accent-dark: #A9CBF6; --accent2: #7FB0F0;
+    --accent-soft: #1A2D4D; --row-hover: #18263F; --accent-line: #2E4C7A;
+    --hero-muted: #DCE8F8;
+    --green: #5CC27F; --red: #FF8A80; --yellow: #F0B35A; --orange: #F59E5B;
+    --green-soft: #12301E; --yellow-soft: #33270F; --red-soft: #3A1C1A;
+    --green-line: #1F5733; --yellow-line: #5C4519; --red-line: #6B2A26;
+    --accent-fill: #2A6CC4; --accent2-fill: #2A6CC4; --green-fill: #1E7A3D;
+    --red-fill: #C0392B; --yellow-fill: #9A5B00; --orange-fill: #B4470F; --grey-fill: #56657A;
+    --shadow-1: 0 1px 2px rgba(0,0,0,.35);
+    --shadow-2: 0 16px 40px rgba(0,0,0,.6);
+    --toast-bg: #E6ECF5; --toast-ink: #0D1626;
   }
-  body { -webkit-font-smoothing: antialiased; }
+  /* 17 px to the rem: every size written in rem above grows by a sixteenth,
+     so the smallest text the app sets comes to about 13 px and body text to
+     15, without touching each rule. */
+  html { font-size: 106.25%; }
+  body { -webkit-font-smoothing: antialiased; line-height: 1.45; }
+  /* Tabular figures where numbers line up in columns; prose, dates and badges
+     keep Lato's ordinary figures. */
+  td.num, th.num, .money { font-variant-numeric: tabular-nums; }
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  /* Top bar: white, the brand is the sidebar. */
-  header { background: var(--surface); border-bottom: 1px solid var(--border); box-shadow: var(--shadow-1); }
-  .logo { color: var(--accent); font-weight: 800; letter-spacing: -.01em; font-size: 1.12rem; }
-  .logo span { color: var(--text); font-weight: 600; }
-  .hamburger:hover { background: var(--accent-soft); }
-  .hamburger span { background: var(--text); }
-  .sem-badge { background: var(--accent-soft); color: var(--accent); border: 0; border-radius: 999px; padding: 4px 11px; font-weight: 600; }
-  .sem-badge.active { background: var(--accent-soft); color: var(--accent); border: 0; }
-  .icon-btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: var(--radius); width: 38px; height: 38px; }
-  .icon-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
-  .user-chip { border: 1px solid var(--border); color: var(--text); background: var(--surface); border-radius: 999px; padding: 4px 12px 4px 4px; }
-  .user-chip:hover { border-color: var(--border-strong); background: var(--surface2); }
-  .user-avatar { width: 30px; height: 30px; background: var(--accent-fill); color: #fff; }
-  .role-badge, .role-badge.admin, .role-badge.tutor { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 2px 9px; }
-  .logout-btn { border: 1px solid var(--border); color: var(--text); background: var(--surface); border-radius: 999px; padding: 6px 13px; }
-  .logout-btn:hover { background: var(--red-soft); color: var(--red); border-color: transparent; }
-  .scope-switch { border-color: var(--border); background: var(--surface2); }
+  /* The menu: full height, the name at its head, grouped under plain headings
+     (groupSidebar() places them), the page you are on filled in blue. */
+  aside { top: 0; background: var(--surface); border-right: 1px solid var(--edge); padding: 0 0 24px; }
+  aside::-webkit-scrollbar { width: 6px; } aside::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .aside-brand { order: -100; position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 11px;
+                 min-height: 76px; padding: 14px 20px; background: var(--surface); flex-shrink: 0; }
+  .brand-mark { width: 38px; height: 38px; border-radius: 10px; background: var(--hero); color: #fff; flex: none;
+                display: grid; place-items: center; font-weight: 800; font-size: 1.12rem; box-shadow: 0 3px 8px rgba(27,94,171,.3); }
+  .brand-name { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+  .brand-name b { font-size: 1.14rem; font-weight: 800; letter-spacing: -.01em; color: var(--ink); }
+  .brand-name small { font-size: .78rem; color: var(--muted); }
+  .aside-label, .sidebar-level { color: var(--muted); text-transform: none; letter-spacing: 0; font-size: .8rem; font-weight: 500;
+                                 padding: 16px 24px 6px; }
+  .nav-btn { width: auto; margin: 1px 12px; padding: 0 12px; min-height: 42px; gap: 12px; border: 0; border-radius: var(--radius-sm);
+             color: var(--ink); font-size: .9rem; }
+  .nav-btn .icon { color: var(--muted); font-size: 1.05rem; }
+  .nav-btn:hover { background: var(--surface2); color: var(--ink); }
+  .nav-btn:hover .icon { color: var(--ink); }
+  .nav-btn.active { background: var(--nav-on); color: #fff; font-weight: 700; box-shadow: 0 3px 8px rgba(27,94,171,.28); }
+  .nav-btn.active .icon, .nav-btn.active .nav-caret { color: #fff; }
+  /* An open menu whose item is chosen: the heading tinted, the item filled. */
+  .nav-group > .nav-btn.active { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
+  .nav-group > .nav-btn.active .icon, .nav-group > .nav-btn.active .nav-caret { color: var(--accent); }
+  .nav-caret { color: var(--muted); }
+  .nav-submenu { background: transparent; border: 0; margin: 2px 0 6px; padding: 0; }
+  .nav-sub-btn { margin: 1px 12px; padding: 0 12px 0 44px; min-height: 38px; border-radius: var(--radius-sm); position: relative;
+                 color: var(--muted); font-size: .86rem; }
+  .nav-sub-btn::before { content: ''; position: absolute; left: 21px; top: 50%; width: 6px; height: 6px; margin-top: -3px;
+                         border-radius: 50%; border: 1.5px solid currentColor; }
+  .nav-sub-btn:hover { color: var(--ink); background: var(--surface2); }
+  .nav-sub-btn.active { background: var(--nav-on); color: #fff; font-weight: 700; box-shadow: 0 3px 8px rgba(27,94,171,.25); }
+  .nav-sub-btn.active::before { background: #fff; border-color: #fff; }
+  .sidebar-module { margin: 0 12px; color: var(--ink); font-size: .84rem; padding: 8px 12px; border-radius: var(--radius-sm); }
+  .sidebar-module:hover { background: var(--surface2); color: var(--accent); }
+  body.sidebar-collapsed aside { padding-left: 0; padding-right: 0; }
+  body.sidebar-collapsed .aside-brand { justify-content: center; padding: 14px 0; }
+  body.sidebar-collapsed .brand-name { display: none; }
+  body.sidebar-collapsed aside .nav-btn { margin: 2px 10px; padding: 0; min-height: 44px; }
+  body.sidebar-collapsed aside .nav-btn.active { padding-left: 0; }
+  @media (min-width: 769px) { body.sidebar-collapsed aside .sidebar-level, body.sidebar-collapsed aside .sidebar-module { display: none; } }
+
+  /* The top bar floats over the page, beside the menu; the semester once, in it. */
+  header { top: 12px; left: calc(var(--sidebar-w) + 24px); right: 24px; height: var(--header-h); padding: 0 10px 0 12px;
+           background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; box-shadow: var(--shadow-1); }
+  body.sidebar-collapsed header { left: calc(64px + 24px); }
+  .app { padding-top: calc(var(--header-h) + 30px); }
+  .app::before { content: ''; position: fixed; z-index: 150; top: 0; left: var(--sidebar-w); right: 0; height: calc(var(--header-h) + 18px);
+                 background: linear-gradient(180deg, var(--bg) 62%, transparent); pointer-events: none; }
+  body.sidebar-collapsed .app::before { left: 64px; }
+  .logo { display: none; color: var(--ink); font-weight: 800; letter-spacing: -.01em; font-size: 1.08rem; }
+  .logo span { color: var(--ink); font-weight: 800; }
+  .hamburger { border-radius: var(--radius-sm); width: 42px; height: 42px; padding: 11px; }
+  .hamburger:hover { background: var(--surface2); }
+  .hamburger span { background: var(--ink); }
+  .sem-badge, .sem-badge.active { background: var(--accent-soft); color: var(--accent); border: 0; border-radius: 999px;
+                                  padding: 5px 13px; font-weight: 700; font-size: .78rem; }
+  .icon-btn { border: 0; background: transparent; color: var(--ink); border-radius: var(--radius-sm); width: 42px; height: 42px; font-size: 1.1rem; }
+  .icon-btn:hover { background: var(--surface2); color: var(--accent); }
+  .bell-count { top: 3px; right: 2px; }
+  .user-wrap { position: relative; }
+  .user-chip { border: 0; color: var(--ink); background: transparent; border-radius: var(--radius-sm); padding: 4px 8px 4px 4px;
+               min-height: 44px; font: inherit; font-size: .86rem; gap: 10px; text-align: left; }
+  .user-chip:hover, .user-chip[aria-expanded="true"] { background: var(--surface2); }
+  .user-avatar { width: 36px; height: 36px; background: var(--hero); color: #fff; font-size: .8rem; flex: none; }
+  .user-who { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+  .user-chip .uname { font-weight: 700; white-space: nowrap; }
+  .role-badge, .role-badge.admin, .role-badge.tutor { background: transparent; color: var(--muted); border-radius: 0; padding: 0;
+                                                      font-weight: 400; font-size: .78rem; white-space: nowrap; }
+  .user-chip .bi-chevron-down { color: var(--muted); font-size: .8rem; }
+  .user-menu { display: none; position: absolute; right: 0; top: calc(100% + 8px); z-index: 60; min-width: 250px; padding: 8px;
+               background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; box-shadow: var(--shadow-2); }
+  .user-menu.open { display: block; }
+  .user-menu-head { padding: 8px 10px 10px; border-bottom: 1px solid var(--rule); margin-bottom: 6px; }
+  .user-menu-head b { display: block; color: var(--ink); }
+  .user-menu-head small { color: var(--muted); font-size: .8rem; }
+  .user-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 0 10px; border: 0;
+                    border-radius: var(--radius-sm); background: transparent; color: var(--ink); font: inherit; font-size: .88rem;
+                    text-decoration: none; cursor: pointer; text-align: left; }
+  .user-menu-item:hover { background: var(--surface2); }
+  .user-menu-item.out { color: var(--red); }
+  .user-menu-item.out:hover { background: var(--red-soft); }
+  .scope-switch { border-color: var(--edge); background: var(--surface2); border-radius: var(--radius-sm); }
   .scope-switch span { color: var(--muted); }
-  .crumb-bar { background: transparent; border-bottom: 0; padding: 14px 28px 0; }
+  /* The breadcrumb repeated the page's title, and the year the badge above. */
+  .crumb-bar { display: none; }
 
-  /* Sidebar: primary blue, rounded rows, white for where you are. */
-  aside { background: var(--side-bg); border-right: 0; padding: 10px 10px 20px; }
-  aside::-webkit-scrollbar { width: 6px; } aside::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }
-  .aside-label, .sidebar-level { color: var(--side-dim); text-transform: uppercase; letter-spacing: .08em; font-size: .64rem; }
-  .nav-btn { border: 0; border-radius: var(--radius-sm); color: var(--side-ink); padding: 10px 12px; margin: 1px 0; font-size: .85rem; }
-  .nav-btn .icon { color: var(--side-dim); }
-  .nav-btn:hover { background: var(--side-hover); color: #fff; }
-  .nav-btn:hover .icon { color: #fff; }
-  .nav-btn.active { background: var(--side-active); color: #fff; border-left: 0; font-weight: 600; box-shadow: inset 3px 0 0 #fff; }
-  .nav-btn.active .icon { color: #fff; }
-  .nav-caret { color: var(--side-dim); }
-  .nav-submenu { background: var(--side-deep); border: 0; border-radius: var(--radius-sm); margin: 2px 0 6px; padding: 4px 0; }
-  .nav-sub-btn { color: var(--side-dim); padding: 7px 12px 7px 44px; position: relative; border-radius: var(--radius-sm); }
-  .nav-sub-btn:hover { color: #fff; background: var(--side-hover); }
-  .nav-sub-btn.active { color: #fff; font-weight: 600; }
-  .nav-sub-btn.active::before { content: ''; position: absolute; left: 26px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: #fff; }
-  .sidebar-module { color: var(--side-ink); }
-  .sidebar-module:hover { background: var(--side-hover); color: #fff; }
-  body.sidebar-collapsed aside .nav-btn.active { padding-left: 6px; }
+  /* The page: a title, a sentence under it, cards below. */
+  .main-inner { padding: 6px 28px 56px; max-width: 1480px; }
+  .page-title { font-size: 1.6rem; font-weight: 800; letter-spacing: -.01em; color: var(--ink); line-height: 1.2; }
+  .page-sub { font-size: .92rem; color: var(--muted); margin-bottom: 22px; max-width: 72ch; }
 
-  /* Workspace */
-  .main-inner { padding: 18px 28px 48px; }
-  .page-title { font-size: 1.45rem; font-weight: 700; letter-spacing: -.01em; color: var(--text); }
-  .page-sub { font-size: .86rem; margin-bottom: 20px; }
-
-  /* Cards */
-  .card { border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-1); padding: 20px; margin-bottom: 18px; }
-  .card-title { margin: -20px -20px 18px; padding: 15px 20px; font-size: .98rem; font-weight: 650; border-bottom: 1px solid var(--border); }
+  /* A card: white, soft corners, a faint shadow. A card inside a card is flat. */
+  .card { background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; box-shadow: var(--shadow-1);
+          padding: 20px 22px 22px; margin-bottom: 22px; }
+  .card .card { box-shadow: none; border-color: var(--rule); background: var(--surface); }
+  .card-title { margin: 0 0 14px; padding: 0; border: 0; font-size: 1.08rem; font-weight: 700; color: var(--ink); }
   .card-title > span[style*="muted"] { font-weight: 400; }
 
-  /* Count tiles: the dashboard strip and every desk's counters. */
-  .stats-grid { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
-  .stat-card { border-radius: 14px; box-shadow: var(--shadow-1); padding: 18px 18px 16px; border-color: var(--border); }
-  .stat-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c, var(--accent)); opacity: .9; }
-  .stat-card .label { text-transform: uppercase; letter-spacing: .06em; font-size: .66rem; font-weight: 600; }
-  .stat-card .value { font-size: clamp(1.15rem, 1.6vw, 1.55rem); font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
-  .quick-facts { border: 0; background: transparent; gap: 12px; overflow: visible; }
-  .qf-item { flex: 1 1 140px; background: var(--surface); border: 1px solid var(--border); border-right: 1px solid var(--border);
-             border-radius: 12px; padding: 13px 15px; box-shadow: var(--shadow-1); position: relative; }
-  .qf-item:last-child { border-right: 1px solid var(--border); }
-  .qf-item span { text-transform: uppercase; letter-spacing: .05em; font-size: .62rem; font-weight: 600; line-height: 1.35; min-height: 2.7em; }
-  .qf-item strong { font-size: 1.55rem; font-weight: 700; color: var(--accent); }
-  .qf-item.qf-zero strong { color: var(--muted); font-weight: 600; }
+  /* Counts: each its own small card, with a tinted tile for its sign. */
+  .stats-grid { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-bottom: 22px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; box-shadow: var(--shadow-1); padding: 16px 18px; }
+  .stat-card::before { content: none; }
+  .stat-card .label { text-transform: none; letter-spacing: 0; font-size: .84rem; font-weight: 500; color: var(--muted); }
+  .stat-card .value { font-size: 1.6rem; font-weight: 800; letter-spacing: -.01em; color: var(--ink); overflow-wrap: anywhere; }
+  .card .stats-grid .stat-card { box-shadow: none; background: var(--surface2); border-color: var(--rule); }
+  .quick-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; border: 0; background: transparent;
+                 overflow: visible; border-radius: 0; margin-bottom: 22px; }
+  .qf-item { background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; box-shadow: var(--shadow-1);
+             padding: 16px 18px; position: relative; min-width: 0; }
+  .qf-item:last-child { border-right: 1px solid var(--edge); }
+  .qf-item:has(.qf-icon) { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; align-items: center; }
+  .qf-icon { grid-row: span 3; width: 46px; height: 46px; border-radius: 10px; background: var(--accent-soft); color: var(--accent);
+             display: grid; place-items: center; font-size: 1.25rem; }
+  .qf-item span { text-transform: none; letter-spacing: 0; font-size: .84rem; font-weight: 500; line-height: 1.35; min-height: 0; color: var(--muted); }
+  .qf-item strong { font-size: 1.5rem; font-weight: 800; color: var(--ink); }
+  .qf-item.qf-zero strong { color: var(--muted); font-weight: 500; }
+  .card .quick-facts .qf-item { box-shadow: none; background: var(--surface2); border-color: var(--rule); }
 
-  /* Tables: no grid, light header, roomy rows, light blue on hover. */
-  .table-wrap { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
-  table { font-size: .84rem; }
+  /* Tables: a tinted head in plain words, fine rules between rows. */
+  .table-wrap { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); }
+  table { font-size: .9rem; }
   thead tr { background: var(--surface2); }
-  th { border: 0; border-bottom: 1px solid var(--border); padding: 11px 14px; font-size: .68rem; font-weight: 650;
-       text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-  td { border: 0; border-bottom: 1px solid #EEF2F7; padding: 11px 14px; }
-  html[data-theme="dark"] td { border-bottom-color: var(--border); }
+  thead th, th { border: 0; border-bottom: 1px solid var(--edge); padding: 11px 14px; font-size: .82rem; font-weight: 700;
+                 text-transform: none; letter-spacing: 0; color: var(--muted); background: var(--surface2); }
+  td { border: 0; border-bottom: 1px solid var(--rule); padding: 12px 14px; }
   tbody tr:last-child td { border-bottom: 0; }
+  html[data-theme="dark"] td { border-bottom-color: var(--rule); }
   tbody tr:hover td { background: var(--row-hover); }
   .table-wrap > table { min-width: 520px; }
   .table-wrap .empty { padding: 30px 20px; }
 
-  /* Buttons */
-  .btn { border-radius: var(--radius-sm); padding: 8px 15px; font-weight: 600; font-size: .83rem; }
-  .btn-sm { padding: 5px 11px; font-size: .77rem; border-radius: 7px; }
-  .btn-primary { box-shadow: 0 1px 2px rgba(18,63,128,.25); }
+  /* Buttons: soft corners; the blue fill for the one main action. */
+  .btn { border-radius: var(--radius-sm); padding: 9px 16px; font-weight: 700; font-size: .88rem; min-height: 40px; }
+  .btn-sm { padding: 6px 13px; font-size: .82rem; border-radius: var(--radius-sm); min-height: 36px; }
+  .btn-primary { background: var(--accent-fill); border-color: var(--accent-fill); box-shadow: 0 2px 6px rgba(27,94,171,.25); }
   .btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
-  .btn-secondary { border-color: var(--border-strong); }
-  .btn-secondary:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-  .btn-ghost { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
-  .btn-ghost:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .btn-danger, .btn-green, .btn-warning { border-color: var(--border-strong); }
+  html[data-theme="dark"] .btn-primary:hover { background: #3A7AD0; border-color: #3A7AD0; }
+  .btn-secondary { background: var(--surface); border-color: var(--border-strong); color: var(--ink); }
+  .btn-secondary:hover { background: var(--surface2); border-color: var(--ink); color: var(--ink); }
+  .btn-ghost { color: var(--accent); background: var(--surface); border-color: var(--accent-line); }
+  .btn-ghost:hover { background: var(--accent-soft); color: var(--accent-dark); border-color: var(--accent); }
+  /* Status actions: the colour's own pale ground, filled on hover. */
+  .btn-danger { background: var(--red-soft); border-color: var(--red-line); }
+  .btn-green { background: var(--green-soft); border-color: var(--green-line); }
+  .btn-warning { background: var(--yellow-soft); border-color: var(--yellow-line); }
 
-  /* Status pills */
-  .badge { border-radius: 999px; padding: 3px 10px; font-size: .7rem; font-weight: 650; letter-spacing: .01em; }
+  /* Status: a word in its colour on a pale, rounded ground. */
+  .badge { border-radius: 999px; padding: 2px 10px; font-size: .76rem; font-weight: 700; letter-spacing: 0; border: 1px solid transparent; }
   .badge-green { background: var(--green-soft); color: var(--green); }
   .badge-red { background: var(--red-soft); color: var(--red); }
   .badge-yellow { background: var(--yellow-soft); color: var(--yellow); }
   .badge-orange { background: var(--yellow-soft); color: var(--orange); }
-  .badge-blue { background: var(--accent-soft); color: var(--accent); }
-  .badge-purple { background: #F3E8FF; color: #6D28D9; }
-  html[data-theme="dark"] .badge-purple { background: #2A1D47; color: #C4B5FD; }
-  .badge-gen, .badge-cat1, .badge-cat2 { border-radius: 999px; }
+  .badge-blue, .badge-cat2 { background: var(--accent-soft); color: var(--accent); }
+  .badge-cat1 { background: var(--green-soft); color: var(--green); }
+  .badge-purple, .badge-gen { background: var(--surface2); color: var(--ink); border-color: var(--edge); }
+  html[data-theme="dark"] .badge-purple { background: var(--surface2); color: var(--ink); }
 
   /* Fields */
-  .field label { font-size: .78rem; font-weight: 600; color: var(--text); }
+  .field label { font-size: .84rem; font-weight: 700; color: var(--ink); }
   .field input, .field select, .field textarea, .inventory-filter-control {
-    border-radius: var(--radius-sm); border-color: var(--border-strong); background: var(--surface); padding: 9px 12px; }
+    border-radius: var(--radius-sm); border-color: var(--border-strong); background: var(--surface); padding: 9px 12px; font-size: .94rem; }
+  .field input:not([type=checkbox]):not([type=radio]), .field select { min-height: 42px; }
   .field input:focus, .field select:focus, .field textarea:focus, .inventory-filter-control:focus {
-    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(18,63,128,.14); outline: none; }
+    border-color: var(--accent); outline: 0; box-shadow: 0 0 0 3px rgba(27,94,171,.2); }
 
-  /* Explanations: a quiet callout, not a paragraph. */
-  .help-note { background: var(--accent-soft); border-radius: var(--radius-sm); padding: 9px 12px 9px 34px; position: relative;
-               color: var(--text); font-size: .78rem; line-height: 1.5; }
-  .help-note::before { content: 'i'; position: absolute; left: 11px; top: 9px; width: 16px; height: 16px; border-radius: 50%;
-               background: var(--accent); color: #fff; font: 700 .66rem/16px var(--font-sans); text-align: center; }
+  /* An explanation is a sentence. A warning is a tinted box. */
+  .help-note { background: transparent; border-radius: 0; padding: 0; color: var(--muted); font-size: .88rem; line-height: 1.55; max-width: 78ch; }
+  .help-note::before { content: none; }
   .help-note:empty { display: none; }
-  .missing-note { border-radius: var(--radius-sm); border-left-width: 4px; }
+  .missing-note { border-radius: var(--radius); border: 1px solid var(--yellow-line); background: var(--yellow-soft); }
+  .success-note { border-radius: var(--radius); border: 1px solid var(--green-line); background: var(--green-soft); }
+  .tutor-notice { background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--radius); padding: 12px 16px; }
+  .tutor-notice > .bi { color: var(--accent); font-size: 1.15rem; line-height: 1.3; }
+  .hod-notice { background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--radius); }
   .tip { border-radius: 50%; }
   .tip::after { border-radius: var(--radius-sm); box-shadow: var(--shadow-2); }
 
-  /* Modals */
-  .modal-overlay { background: rgba(15,23,42,.45); backdrop-filter: blur(3px); }
-  .modal { border-radius: 16px; border: 0; box-shadow: var(--shadow-2); padding: 0 24px 24px; }
-  .modal-title { margin: 0 -24px 20px; padding: 16px 24px; font-size: 1.02rem; font-weight: 700; }
-  .modal-close { border-radius: 50%; width: 32px; height: 32px; }
-  .facts { gap: 7px 18px; font-size: .84rem; }
-  .facts dt { font-size: .8rem; }
-  .block-title { font-size: .72rem !important; text-transform: uppercase; letter-spacing: .07em; color: var(--muted) !important; font-weight: 700 !important; }
+  /* Dialogs */
+  .modal-overlay { background: rgba(13,22,38,.55); backdrop-filter: blur(2px); }
+  .modal { border-radius: 14px; border: 0; box-shadow: var(--shadow-2); padding: 0 24px 24px; }
+  .modal-title { margin: 0 -24px 20px; padding: 18px 24px; font-size: 1.14rem; font-weight: 800; border-bottom: 1px solid var(--rule); }
+  .modal-close { border-radius: var(--radius-sm); width: 38px; height: 38px; }
+  .facts { gap: 7px 18px; font-size: .88rem; }
+  .facts dt { font-size: .84rem; }
+  .block-title { font-size: .94rem !important; text-transform: none; letter-spacing: 0; color: var(--ink) !important; font-weight: 700 !important; }
 
   /* People and money in rows */
   .who-cell { display: flex; align-items: center; gap: 11px; min-width: 190px; }
-  .who-avatar { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center;
-                background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: .74rem; }
-  .who-cell strong { display: block; font-weight: 600; color: var(--text); }
-  .who-cell small { display: block; color: var(--muted); font-size: .72rem; margin-top: 1px; }
+  .who-avatar { width: 36px; height: 36px; flex: none; border-radius: 50%; display: grid; place-items: center;
+                background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: .76rem; }
+  .who-cell strong { display: block; font-weight: 700; color: var(--text); }
+  .who-cell small { display: block; color: var(--muted); font-size: .78rem; margin-top: 1px; }
   td.num, th.num { text-align: right; white-space: nowrap; }
   td.act { text-align: right; white-space: nowrap; width: 1%; }
-  .money { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .money { font-weight: 700; }
   .money.owe { color: var(--red); } .money.nil { color: var(--muted); font-weight: 400; }
-  .qf-item:has(.qf-icon) { padding-left: 56px; }
-  .qf-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border-radius: 9px;
-             display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: .95rem; }
-  .qf-item.qf-zero .qf-icon { background: var(--surface2); color: var(--muted); }
-  .qf-item span { min-height: 0; }
 
+  /* The dashboard: a welcome panel in the college blue, then cards. */
+  .dash-hero { display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch; margin-bottom: 22px; padding: 26px 28px;
+               border-radius: 16px; color: var(--hero-ink); box-shadow: 0 10px 28px rgba(21,51,89,.22);
+               background: radial-gradient(circle at 88% -30%, rgba(255,255,255,.13), transparent 45%), var(--hero); }
+  .hero-main { flex: 999 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .dash-hero .page-title { color: #fff; font-weight: 400; font-size: 1.75rem; margin: 0; }
+  .dash-hero .page-title b { font-weight: 800; }
+  .dash-hero .page-sub { color: var(--hero-muted); margin: 0; font-size: .95rem; }
+  .hero-stats { display: flex; flex-wrap: wrap; gap: 14px 30px; margin-top: 16px; }
+  .hero-stat { display: flex; align-items: center; gap: 12px; }
+  .hero-tile { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 1.3rem; color: #fff;
+               background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.24); flex: none; }
+  .hero-stat div > span { display: block; color: var(--hero-muted); font-size: .86rem; }
+  .hero-stat strong { display: block; color: #fff; font-size: 1.5rem; font-weight: 800; line-height: 1.15; }
+  .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .btn-hero { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 18px; border-radius: 999px;
+              border: 1.5px solid rgba(255,255,255,.75); background: transparent; color: #fff; font: inherit; font-size: .9rem;
+              font-weight: 700; cursor: pointer; }
+  .btn-hero:hover { background: #fff; color: var(--navy); }
+  .hero-side { flex: 1 1 320px; display: flex; align-items: center; justify-content: space-between; gap: 18px;
+               border-left: 1px solid rgba(255,255,255,.22); padding-left: 26px; }
+  .hero-side h2 { font-size: 1.12rem; font-weight: 700; color: #fff; }
+  .hero-side p { color: var(--hero-muted); font-size: .88rem; margin-top: 2px; max-width: 28ch; }
+  .hero-ring { flex: none; }
+  @media (max-width: 640px) {
+    .dash-hero { padding: 22px 18px; }
+    .hero-side { border-left: 0; padding-left: 0; border-top: 1px solid rgba(255,255,255,.22); padding-top: 18px; }
+  }
+  .dash-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 22px; align-items: start; }
+  .dash-row > .card { margin-bottom: 22px; }
+  @media (max-width: 1000px) { .dash-row { grid-template-columns: minmax(0, 1fr); } }
+  .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .card-head .card-title { margin: 0; }
+  .card-head p { color: var(--muted); font-size: .86rem; margin-top: 2px; }
+  .count-pill[hidden] { display: none; }
+  .count-pill { display: inline-flex; align-items: center; min-height: 28px; padding: 0 12px; border-radius: 999px;
+                background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: .8rem; white-space: nowrap; }
+  .for-you-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--rule); }
+  .for-you-row:first-child { border-top: 0; padding-top: 0; }
+  .for-you-tile { width: 40px; height: 40px; border-radius: 10px; flex: none; display: grid; place-items: center;
+                  background: var(--accent-soft); color: var(--accent); font-size: 1.1rem; }
+  .for-you-text { flex: 1 1 auto; min-width: 0; }
+  .for-you-text b { display: block; font-weight: 700; }
+  .for-you-text div { font-size: .88rem; }
+  .for-you-text small { display: block; color: var(--muted); font-size: .8rem; }
+  .for-you-row .btn { white-space: nowrap; flex: none; }
+  .level-bar { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; }
+  .level-bar-top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .level-bar-top b { font-weight: 700; }
+  .level-bar-top small { color: var(--muted); font-size: .8rem; }
+  .bar-track { height: 10px; border-radius: 999px; background: var(--surface2); overflow: hidden; border: 1px solid var(--rule); }
+  .bar-fill { height: 100%; border-radius: 999px; background: var(--green-fill); }
+  .bar-fill.mid { background: #D08A1E; } .bar-fill.low { background: var(--red-fill); } .bar-fill.none { background: transparent; }
+  .sess-module strong { display: block; }
+  .sess-module small { display: block; color: var(--muted); font-size: .8rem; max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  @media (max-width: 768px) {
+    /* Phones: the bar spans the width; the menu slides over everything. */
+    header { left: 8px; right: 8px; top: 8px; }
+    body.sidebar-collapsed header { left: 8px; }
+    .app::before, body.sidebar-collapsed .app::before { left: 0; }
+    .app { padding-top: calc(var(--header-h) + 22px); }
+    .logo { display: block; }
+    aside { z-index: 260; }
+    .sidebar-overlay { z-index: 250; }
+    /* The year, which the hidden badge carries on a wider screen. */
+    .crumb-bar { display: flex; background: transparent; border: 0; padding: 0 16px 4px; }
+    .crumb-bar > div:first-child { display: none; }
+  }
   @media (max-width: 580px) {
-    .qf-item { flex: 1 1 calc(50% - 6px); }
-    .user-chip .role-badge, .user-chip .uname, .logout-btn span { display: none; }
+    .user-chip .user-who, .user-chip .bi-chevron-down { display: none; }
     .user-chip { padding: 3px; }
-    .logo { font-size: 1rem; }
-    .main-inner { padding: 14px 14px 40px; }
-    .crumb-bar { padding: 12px 14px 0; }
+    .main-inner { padding: 6px 14px 40px; }
+    .card { padding: 16px 16px 18px; }
+    .quick-facts { grid-template-columns: 1fr 1fr; gap: 10px; }
   }
 
-  /* The accountant's sidebar, most used first (said 22 October 2026):
-     admissions, payments, student accounts, then the rest. */
-  body.accountant-desk aside > * { order: 20; }
-  body.accountant-desk aside > .aside-label:first-child { order: 0; }
-  body.accountant-desk #admissions-nav-group { order: 1; }
-  body.accountant-desk #finance-payments-nav-group { order: 2; }
-  body.accountant-desk #finance-students-nav-group { order: 3; }
-  body.accountant-desk aside > .nav-btn[data-finance-section="overview"] { order: 4; }
-  body.accountant-desk #finance-setup-nav-group { order: 5; }
-  body.accountant-desk #finance-expenses-nav-group { order: 6; }
-  body.accountant-desk #status-nav-group { order: 7; }
-  body.accountant-desk #exec-nav-group { order: 8; }
-  body.accountant-desk aside > .nav-btn[data-finance-section="audit"] { order: 9; }
+  /* The accountant's menu, most used first (said 22 October 2026): their desk
+     at admissions, then the money; groupSidebar() orders it. */
 
   /* While the page settles who is signed in: a loader, not every office's screens. */
   body.booting aside, body.booting main, body.booting .crumb-bar { visibility: hidden; }
@@ -938,12 +1166,36 @@
                         border: 3px solid var(--accent-soft); border-top-color: var(--accent); border-radius: 50%;
                         animation: boot-spin .7s linear infinite; z-index: 300; }
   @keyframes boot-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { body.booting::after { animation-duration: 2.4s; } }
 
   /* Empty states, menus, toasts */
-  .empty .ei { width: 48px; height: 48px; margin: 0 auto 10px; border-radius: 50%; display: grid; place-items: center;
+  .empty .ei { width: 52px; height: 52px; margin: 0 auto 10px; border-radius: 50%; display: grid; place-items: center;
                background: var(--accent-soft); color: var(--accent); opacity: 1; font-size: 1.3rem; }
-  .bell-panel { border-radius: 14px; box-shadow: var(--shadow-2); }
-  #toast { border-radius: 12px; box-shadow: var(--shadow-2); }
+  .bell-panel { border-radius: 12px; border: 1px solid var(--edge); box-shadow: var(--shadow-2); }
+  #toast { border-radius: var(--radius); box-shadow: var(--shadow-2); }
+
+  /* Teaching plans in the same soft cards: rounded cells, the week you are in
+     ringed in blue, and a class's topic on a line of its own so it is never
+     cut short; the buttons sit under it. */
+  .tp-c { border-radius: 3px; }
+  .tp-c-exam { background: var(--hero); border-color: transparent; border-radius: 6px; }
+  .tp-wk.is-now .tp-wk-cells { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+  .tp-wk-mark.has { border-top-color: var(--border-strong); }
+  .tp-mini i { border-radius: 2px; }
+  .tp-mini i.is-now { outline: 1.5px solid var(--accent); }
+  .tp-gap { border-radius: 6px; }
+  .tp-week-group h4 { border-bottom: 1px solid var(--rule); color: var(--muted); }
+  .tp-row { grid-template-columns: 108px minmax(0, 1fr); }
+  .tp-row-act { grid-column: 2; flex-wrap: wrap; }
+  .tp-row-what select { border-radius: var(--radius-sm); }
+  .tp-topic { flex: 1 1 100%; border-radius: var(--radius-sm); }
+  .tp-seg { border-radius: var(--radius-sm); overflow: hidden; }
+  .tp-inline { border-radius: var(--radius); }
+  .tp-inline input, .tp-inline select, .tp-inline-field input, .tp-pattern-row select, .tp-pattern-row input,
+  .tp-arow-when input { border-radius: var(--radius-sm); }
+  .tp-tasks { border-radius: var(--radius-sm); }
+  .tp-figures b { color: var(--accent); }
+  @media (max-width: 640px) { .tp-row-act { grid-column: 1; } }
 
   @media print {
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -1078,20 +1330,30 @@
         <option value="mine">My modules only</option>
       </select>
     </label>
-    <div class="user-chip" onclick="openProfileModal()" title="My profile and password">
-      <div class="user-avatar" id="user-avatar"><i class="bi bi-person"></i></div>
-      <span class="uname" id="user-name">Me</span>
-      <span class="role-badge" id="role-badge">—</span>
+    <!-- One menu for the person: their profile and password, and signing out
+         (said 10 November 2026; signing out was a separate button). -->
+    <div class="user-wrap">
+      <button type="button" class="user-chip" id="user-chip" onclick="toggleUserMenu(event)" aria-haspopup="true" aria-expanded="false" aria-controls="user-menu">
+        <span class="user-avatar" id="user-avatar"><i class="bi bi-person"></i></span>
+        <span class="user-who"><span class="uname" id="user-name">Me</span><span class="role-badge" id="role-badge">—</span></span>
+        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+      </button>
+      <div class="user-menu" id="user-menu" role="menu">
+        <div class="user-menu-head"><b id="user-menu-name">Me</b><small id="user-menu-role"></small></div>
+        <button type="button" class="user-menu-item" role="menuitem" onclick="closeUserMenu(); openProfileModal()"><i class="bi bi-person-gear"></i> My profile and password</button>
+        <a href="{% url 'logout' %}" class="user-menu-item out" role="menuitem"><i class="bi bi-box-arrow-right"></i> Sign out</a>
+      </div>
     </div>
-    <a href="{% url 'logout' %}" class="logout-btn"><span>Sign out</span> ↩</a>
   </div>
 </header>
 
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
 <div class="app">
-  <aside id="sidebar">
-    <div class="aside-label non-estate-only">Navigation</div>
+  <aside id="sidebar" aria-label="Main menu">
+    <div class="aside-brand"><span class="brand-mark" aria-hidden="true">E</span><span class="brand-name"><b>EduTrack</b><small>BPHIST</small></span></div>
+    <!-- Headings (Academic, Students, Money, College) are placed by groupSidebar(),
+         which hides any heading none of whose items this person sees. -->
     <button class="nav-btn active academic-only" data-page="dashboard" onclick="showPage('dashboard',this)"><span class="icon"><i class="bi bi-speedometer2"></i></span> Dashboard</button>
     <button class="nav-btn" data-page="accounts" data-roles="runs accounts" onclick="showPage('accounts',this); loadStaffAccounts()"><span class="icon"><i class="bi bi-people"></i></span> User Accounts</button>
     <a class="nav-btn" href="/admin/" target="_blank" rel="noopener" data-roles="ict" style="text-decoration:none;"><span class="icon"><i class="bi bi-hdd-stack"></i></span> Django Admin <i class="bi bi-box-arrow-up-right" style="font-size:.7rem;margin-left:auto;"></i></a>
@@ -1189,6 +1451,7 @@
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-review-section="review" onclick="showReviewSection('review', this)">Review &amp; advance</button>
         <button class="nav-sub-btn" data-review-section="provisional" onclick="showReviewSection('provisional', this)">Provisional places</button>
+        <button class="nav-sub-btn" data-review-section="period" onclick="showReviewSection('period', this)">Academic period</button>
       </div>
     </div>
     <div class="aside-label estate-only">Inventory</div>
@@ -1332,75 +1595,73 @@
       <button class="btn btn-ghost btn-sm" onclick="openProfileModal()">Change it now</button>
     </div>
 
-    <!-- DASHBOARD -->
+    <!-- DASHBOARD (said 10 November 2026: Proposal B). A welcome panel in the
+         college blue with the counts; what is new for this person; attendance
+         by level; recent registers; announcements. The cut-off dates moved to
+         Semester Review > Academic period: settings are not a dashboard. -->
     <div class="page active" id="page-dashboard">
-      <div class="page-title">Dashboard</div>
-      <div class="page-sub" id="dash-sub">Overview of your attendance activity</div>
+      <section class="dash-hero" aria-labelledby="dash-greeting">
+        <div class="hero-main">
+          <h1 class="page-title" id="dash-greeting">Welcome</h1>
+          <p class="page-sub" id="dash-sub">Overview of your attendance activity</p>
+          <div class="hero-stats">
+            <div class="hero-stat"><span class="hero-tile"><i class="bi bi-journal-bookmark" aria-hidden="true"></i></span>
+              <div><span>My modules</span><strong id="stat-modules">—</strong></div></div>
+            <div class="hero-stat"><span class="hero-tile"><i class="bi bi-people" aria-hidden="true"></i></span>
+              <div><span>Students</span><strong id="stat-students">—</strong></div></div>
+            <div class="hero-stat"><span class="hero-tile"><i class="bi bi-calendar2-check" aria-hidden="true"></i></span>
+              <div><span>Registers taken today</span><strong id="stat-sessions">—</strong></div></div>
+          </div>
+          <div class="hero-actions">
+            <button type="button" class="btn-hero" onclick="showAttendanceSection('take', document.querySelector('[data-attendance-section=&quot;take&quot;].nav-sub-btn'))"><i class="bi bi-check2-square" aria-hidden="true"></i> Take attendance</button>
+          </div>
+        </div>
+        <div class="hero-side">
+          <div>
+            <h2>Attendance</h2>
+            <p>Present or sick, in your modules this semester.</p>
+          </div>
+          <div class="hero-ring" id="stat-avg-ring" title="Counts Present + all Sick marks. This is not the stricter exam-eligibility figure, which only counts Sick days with a submitted certificate — see the Eligibility page for that."></div>
+          <span id="stat-avg" hidden>—</span>
+        </div>
+      </section>
 
       <!-- Tutor-only notice -->
       <div class="tutor-notice">
-        <span style="font-size:1.2rem;flex-shrink:0;">ℹ️</span>
+        <i class="bi bi-info-circle" aria-hidden="true"></i>
         <div>
-          <strong style="color:var(--text);">Tutor access</strong> — You can take attendance for your assigned modules and view attendance reports.
+          <strong style="color:var(--text);">Tutor access.</strong> You can take attendance for your assigned modules and view attendance reports.
           Your Head of Department gives you your modules; DPARC or the Principal can too. Enrolling students and eligibility lists are theirs as well.
         </div>
       </div>
 
-      <div class="quick-facts">
-        <div class="qf-item"><i class="bi bi-journal-bookmark qf-icon"></i><span>My Modules</span><strong id="stat-modules">—</strong></div>
-        <div class="qf-item"><i class="bi bi-people qf-icon"></i><span>Total Students</span><strong id="stat-students">—</strong></div>
-        <div class="qf-item"><i class="bi bi-calendar2-check qf-icon"></i><span>Sessions Today</span><strong id="stat-sessions">—</strong></div>
-        <div class="qf-item"><i class="bi bi-graph-up qf-icon"></i><span>Avg Attendance</span><strong id="stat-avg" title="Counts Present + all Sick marks. This is not the stricter exam-eligibility figure, which only counts Sick days with a submitted certificate — see the Eligibility page for that.">—</strong></div>
-      </div>
-      <div class="quick-facts" id="level-stats"></div>
-
-      <!-- Staff: cutoff dates + semester advance share one card — two separate
-           admin controls that only need occasional attention, not two cards. -->
-      <div class="card staff-only" id="cutoff-card">
-        <div class="card-title">Academic Period
-          <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px;">— cutoff dates and semester progression</span>
-        </div>
-        <div class="form-grid-3" style="margin-bottom:12px;">
-          <div class="field">
-            <label>CAT 1 Cutoff</label>
-            <input type="date" id="cutoff-cat1">
-            <span id="cutoff-cat1-status" style="font-size:.72rem;margin-top:3px;"></span>
+      <div class="dash-row">
+        <section class="card" id="dash-for-you">
+          <div class="card-head">
+            <div><h2 class="card-title">New for you</h2><p>Requests, decisions and notices sent to you. Open one to go where it is dealt with.</p></div>
+            <span class="count-pill" id="dash-for-you-count" hidden></span>
           </div>
-          <div class="field">
-            <label>CAT 2 Cutoff</label>
-            <input type="date" id="cutoff-cat2">
-            <span id="cutoff-cat2-status" style="font-size:.72rem;margin-top:3px;"></span>
-          </div>
-          <div class="field">
-            <label>End of Semester Cutoff</label>
-            <input type="date" id="cutoff-end">
-            <span id="cutoff-end-status" style="font-size:.72rem;margin-top:3px;"></span>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--border);">
-          <button class="btn btn-primary btn-sm exam-office-only" onclick="saveCutoffDates()"><i class="bi bi-save"></i> Save Cutoff Dates</button>
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-            <div id="advance-sem-info" style="font-size:.82rem;color:var(--muted);">—</div>
-            <button class="btn btn-warning btn-sm" id="advance-sem-btn" onclick="advanceSemester()">Advance Semester →</button>
-          </div>
-        </div>
+          <div id="dash-for-you-list"><div class="empty"><div class="ei"><i class="bi bi-inbox"></i></div>Nothing new</div></div>
+        </section>
+        <section class="card" id="dash-levels">
+          <div class="card-head"><div><h2 class="card-title">Attendance by level</h2><p>Your modules this semester. Green from 85%, amber from 80%.</p></div></div>
+          <div id="level-stats"><div class="empty">No modules yet</div></div>
+        </section>
       </div>
 
-      <!-- Recent Sessions (main content) + Announcements side by side, instead
-           of two more full-width cards stacked underneath everything else. -->
-      <div class="dash-grid">
-        <div class="card">
-          <div class="card-title">Recent Sessions</div>
+      <div class="dash-row">
+        <section class="card">
+          <div class="card-head"><div><h2 class="card-title">Recent registers</h2><p>The last eight classes marked in your modules.</p></div></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Module</th><th>Type</th><th>Topic</th><th>Level</th><th>Sem</th><th>Date</th><th>P</th><th>S</th><th>A</th><th>Rate</th></tr></thead>
-              <tbody id="recent-sessions-tbody"><tr><td colspan="10"><div class="empty"><div class="ei"><i class="bi bi-calendar-week"></i></div>No sessions yet</div></td></tr></tbody>
+              <thead><tr><th>Module</th><th>Type</th><th>Date</th><th class="num">Present</th><th>Rate</th></tr></thead>
+              <tbody id="recent-sessions-tbody"><tr><td colspan="5"><div class="empty"><div class="ei"><i class="bi bi-calendar-week"></i></div>No sessions yet</div></td></tr></tbody>
             </table>
           </div>
           <div id="elig-performance-summary" style="display:none;margin-top:22px;"></div>
-        </div>
-        <div class="card" id="dash-announcements">
-          <div class="card-title">Announcements</div>
+        </section>
+        <section class="card" id="dash-announcements">
+          <h2 class="card-title">Announcements</h2>
           <details class="admin-only ann-post" id="ann-post">
             <summary><i class="bi bi-plus-lg"></i> Post an announcement</summary>
             <div class="ann-post-form">
@@ -1411,7 +1672,7 @@
             </div>
           </details>
           <div id="announcements-list"></div>
-        </div>
+        </section>
       </div>
     </div>
 
@@ -1592,7 +1853,7 @@
         <div class="card-title">My modules this semester</div>
         <p class="help-note">Start a plan, give the days you teach, and the plan is laid out from the curriculum and the teaching calendar. After each class, mark it done.</p>
         <div class="table-wrap"><table>
-          <thead><tr><th>Module</th><th>Level</th><th>Plan</th><th>On schedule</th><th>Done</th><th></th></tr></thead>
+          <thead><tr><th>Module</th><th>Plan</th><th>Week by week</th><th>On schedule</th><th></th></tr></thead>
           <tbody id="tp-mine-tbody"></tbody>
         </table></div>
       </div>
@@ -1601,7 +1862,7 @@
         <div class="card-title">Plans you approve</div>
         <p class="help-note">Your department's modules (DPARC: modules with no Head of Department, and any plan a Head of Department teaches). Tests sent for moderation are approved inside each plan.</p>
         <div class="table-wrap"><table>
-          <thead><tr><th>Module</th><th>Tutors</th><th>Plan</th><th>Tests to moderate</th><th>On schedule</th><th></th></tr></thead>
+          <thead><tr><th>Module</th><th>Tutors</th><th>Plan</th><th>Week by week</th><th>Tests</th><th></th></tr></thead>
           <tbody id="tp-approve-tbody"></tbody>
         </table></div>
       </div>
@@ -1616,7 +1877,7 @@
         <p class="help-note">Each tutor is measured against their own plan: classes done of those due by the day chosen. 90% or more is on track, 70–89% behind, below 70% far behind. A CQI supervision date shows the plans as they stood that day.</p>
         <div id="tp-progress-counts" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Module</th><th>Tutors</th><th>Plan</th><th>On schedule</th><th>Done</th><th>Hours</th><th>Behind</th><th>No register</th><th>Tests late</th><th></th></tr></thead>
+          <thead><tr><th>Module</th><th>Tutors</th><th>Plan</th><th>Week by week</th><th>On schedule</th><th>Needs a look</th><th></th></tr></thead>
           <tbody id="tp-progress-tbody"></tbody>
         </table></div>
       </div>
@@ -2461,6 +2722,36 @@
     <div class="page" id="page-progression">
       <div class="page-title" id="review-page-title">Semester Review</div>
       <div class="page-sub" id="review-page-sub">What each student's results mean for next semester.</div>
+
+      <!-- Moved here from the dashboard (said 10 November 2026). Cutoff dates + semester advance share one card — two separate
+           admin controls that only need occasional attention, not two cards. -->
+      <div class="card staff-only" id="cutoff-card" data-review-section="period">
+        <div class="card-title">Cut-off dates and the semester</div>
+        <div class="form-grid-3" style="margin-bottom:12px;">
+          <div class="field">
+            <label>CAT 1 Cutoff</label>
+            <input type="date" id="cutoff-cat1">
+            <span id="cutoff-cat1-status" style="font-size:.72rem;margin-top:3px;"></span>
+          </div>
+          <div class="field">
+            <label>CAT 2 Cutoff</label>
+            <input type="date" id="cutoff-cat2">
+            <span id="cutoff-cat2-status" style="font-size:.72rem;margin-top:3px;"></span>
+          </div>
+          <div class="field">
+            <label>End of Semester Cutoff</label>
+            <input type="date" id="cutoff-end">
+            <span id="cutoff-end-status" style="font-size:.72rem;margin-top:3px;"></span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--border);">
+          <button class="btn btn-primary btn-sm exam-office-only" onclick="saveCutoffDates()"><i class="bi bi-save"></i> Save Cutoff Dates</button>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div id="advance-sem-info" style="font-size:.82rem;color:var(--muted);">—</div>
+            <button class="btn btn-warning btn-sm" id="advance-sem-btn" onclick="advanceSemester()">Advance Semester →</button>
+          </div>
+        </div>
+      </div>
 
       <div class="card" data-review-section="review">
         <div class="card-title">The semester being closed <span class="tip" tabindex="0" role="note" aria-label="Help: Waiting on a supplementary? Confirm as “continues while results are awaited”, then decide when the marks arrive. Overrides need a reason." data-tip="Waiting on a supplementary? Confirm as “continues while results are awaited”, then decide when the marks arrive. Overrides need a reason.">?</span></div>
@@ -5058,7 +5349,203 @@ function toggleInventoryAssetsMenu(event) {
 // Nothing of the dashboard shows until this account's menus and landing page
 // are settled (said 22 October 2026: a tutor saw every office's screens for a
 // second first). A failure or a slow answer never leaves the screen blank.
-function uncloak() { document.body.classList.remove('booting'); }
+
+// ── The dashboard, Proposal B (said 10 November 2026) ──
+function plural(n, word, many) { return `${n} ${n === 1 ? word : (many || word + 's')}`; }
+
+// "Daniel B. Mwangela" is greeted as Daniel; "Dr. Neema Mushi" as Dr. Mushi.
+function firstName(full) {
+  const parts = String(full || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '';
+  return /\.$/.test(parts[0]) && parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1]}` : parts[0];
+}
+
+function attendanceRing(pct) {
+  const r = 46, c = 2 * Math.PI * r;
+  const v = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+  const arc = v > 0
+    ? `<circle cx="62" cy="62" r="${r}" fill="none" stroke="#fff" stroke-width="13" stroke-linecap="round"
+         stroke-dasharray="${(v / 100 * c).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 62 62)"/>` : '';
+  return `<svg width="124" height="124" viewBox="0 0 124 124" role="img"
+      aria-label="${pct == null ? 'Attendance not yet counted' : 'Attendance ' + pct + ' percent'}">
+    <circle cx="62" cy="62" r="${r}" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="13"/>${arc}
+    <text x="62" y="70" text-anchor="middle" fill="#fff" font-size="${pct == null ? 15 : 24}" font-weight="800"
+      font-family="Lato, system-ui, sans-serif">${pct == null ? 'None yet' : pct + '%'}</text></svg>`;
+}
+
+function renderDashHero(dash) {
+  const hour = new Date().getHours();
+  const part = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const name = firstName(dash.full_name);
+  document.getElementById('dash-greeting').innerHTML = name ? `${part}, <b>${safeText(name)}</b>` : part;
+  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const n = dash.sessions_today || 0;
+  document.getElementById('dash-sub').textContent =
+    `${today}. ${n ? plural(n, 'register') + ' taken today.' : 'No register taken yet today.'}`;
+  document.getElementById('stat-modules').textContent = dash.modules;
+  document.getElementById('stat-students').textContent = dash.students;
+  document.getElementById('stat-sessions').textContent = n;
+  document.getElementById('stat-avg').textContent = dash.avg_attendance != null ? dash.avg_attendance + '%' : '—';
+  document.getElementById('stat-avg-ring').innerHTML = attendanceRing(dash.avg_attendance);
+}
+
+function renderLevelBars(levels) {
+  const box = document.getElementById('level-stats');
+  if (!box) return;
+  if (!levels || !levels.length) {
+    box.innerHTML = '<div class="empty"><div class="ei"><i class="bi bi-bar-chart"></i></div>No modules this semester yet</div>';
+    return;
+  }
+  box.innerHTML = levels.map(l => {
+    const pct = l.avg_pct;
+    const tone = pct == null ? 'none' : pct >= 85 ? '' : pct >= 80 ? 'mid' : 'low';
+    return `<div class="level-bar">
+      <div class="level-bar-top"><b>${safeText(l.name)}</b><b>${pct != null ? pct + '%' : '<span style="color:var(--muted);font-weight:400">No registers yet</span>'}</b></div>
+      <div class="bar-track"><div class="bar-fill ${tone}" style="width:${pct || 0}%"></div></div>
+      <div class="level-bar-top"><small>${plural(l.students, 'student')}, ${plural(l.modules, 'module')}</small></div>
+    </div>`;
+  }).join('');
+}
+
+function renderRecentSessions(rows) {
+  const tbody = document.getElementById('recent-sessions-tbody');
+  if (!rows || !rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="ei"><i class="bi bi-calendar-week"></i></div>No registers taken yet</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(s => {
+    const total = s.present + s.sick + s.absent;
+    const when = new Date(s.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const others = [s.sick ? `${s.sick} sick` : '', s.absent ? `${s.absent} absent` : ''].filter(Boolean).join(', ');
+    return `<tr>
+      <td class="sess-module"><strong>${safeText(s.module)}</strong><small>${safeText(s.class_level)}${s.topic ? ', ' + safeText(s.topic) : ''}</small></td>
+      <td>${typeBadge(s.session_type)}</td>
+      <td style="white-space:nowrap">${when}</td>
+      <td class="num">${s.present} of ${total}${others ? `<small style="display:block;color:var(--muted);font-size:.78rem">${others}</small>` : ''}</td>
+      <td>${pctBadge(s.pct)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// What is new for this person, on the dashboard: the unread notifications,
+// each opening where it is dealt with (the bell's own links).
+function renderForYou(unread) {
+  const box = document.getElementById('dash-for-you-list');
+  if (!box) return;
+  const rows = (state.notifications || []).filter(n => !n.is_read);
+  const pill = document.getElementById('dash-for-you-count');
+  pill.hidden = !unread;
+  pill.textContent = `${unread > 99 ? '99+' : unread} new`;
+  if (!rows.length) {
+    box.innerHTML = '<div class="empty"><div class="ei"><i class="bi bi-inbox"></i></div>Nothing new. Requests and decisions sent to you appear here.</div>';
+    return;
+  }
+  box.innerHTML = rows.slice(0, 6).map(n => {
+    const goes = !!NOTIFICATION_LINKS[n.link];
+    const when = new Date(n.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return `<div class="for-you-row">
+      <span class="for-you-tile"><i class="bi ${goes ? 'bi-arrow-right-circle' : 'bi-envelope'}" aria-hidden="true"></i></span>
+      <div class="for-you-text"><b>${safeText(n.title)}</b>${n.body ? `<div>${safeText(n.body)}</div>` : ''}<small>${when}</small></div>
+      <button type="button" class="btn btn-sm ${goes ? 'btn-primary' : 'btn-ghost'}" onclick="openNotification(${n.id})">${goes ? 'Open' : 'Mark read'}</button>
+    </div>`;
+  }).join('') + (rows.length > 6
+    ? `<div class="for-you-row"><span class="for-you-text" style="color:var(--muted)">${plural(rows.length - 6, 'more')} in the bell above.</span></div>` : '');
+}
+
+// The menu under plain headings (said 10 November 2026). Each top-level item
+// takes its section's place; a heading shows only when this person sees one
+// of its items, so no office meets an empty heading. Run again whenever the
+// page learns more about who is signed in: it only reorders and hides headings.
+const NAV_SECTIONS = [
+  ['', ['[data-page="dashboard"]']],
+  ['Academic', ['#modules-nav-group', '#attendance-nav-group', '#results-nav-group', '#tp-nav-group',
+                '[data-page="performance"]', '#eligibility-nav-group', '#declarations-nav-group',
+                '[data-page="catnumbers"]', '[data-page="returning"]', '#review-nav-group']],
+  ['Students', ['#admissions-nav-group', '#veta-nav-group', '#students-nav-group', '#transfers-nav-group',
+                '#status-nav-group', '[data-page="sick"]']],
+  ['Money', ['[data-finance-section="overview"]', '#finance-payments-nav-group', '#finance-students-nav-group',
+             '#finance-setup-nav-group', '#finance-expenses-nav-group', '#exec-nav-group', '#exec-inv-nav-group',
+             '[data-finance-section="audit"]']],
+  ['Stores', ['#lab-nav-group']],
+  ['College', ['[data-page="accounts"]', 'a.nav-btn[href="/admin/"]', '[data-page="departments"]', '#services-nav-group']],
+];
+function groupSidebar() {
+  const aside = document.getElementById('sidebar');
+  if (!aside) return;
+  let sections = NAV_SECTIONS.map(([title, sels]) => [title, sels.slice()]);
+  // The accountant's day starts at the finance desk of admissions, then the
+  // money (said 22 October 2026).
+  if (document.body.classList.contains('accountant-desk')) {
+    sections = sections.map(([t, sels]) => [t, sels.filter(x => x !== '#admissions-nav-group')]);
+    sections[0][1].push('#admissions-nav-group');
+    const money = sections.findIndex(([t]) => t === 'Money');
+    sections.splice(1, 0, sections.splice(money, 1)[0]);
+  }
+  const placed = new Set();
+  let order = 0;
+  for (const [title, sels] of sections) {
+    const items = sels.map(sel => aside.querySelector(':scope > ' + sel)).filter(Boolean);
+    let head = null;
+    if (title) {
+      head = aside.querySelector(`:scope > [data-nav-heading="${title}"]`);
+      if (!head) {
+        head = document.createElement('div');
+        head.className = 'aside-label nav-heading';
+        head.dataset.navHeading = title;
+        head.textContent = title;
+        aside.appendChild(head);
+      }
+      head.style.order = order++;
+      placed.add(head);
+    }
+    let seen = false;
+    for (const el of items) {
+      el.style.order = order++;
+      placed.add(el);
+      if (getComputedStyle(el).display !== 'none') seen = true;
+    }
+    if (head) head.hidden = !seen;
+  }
+  [...aside.children].forEach((el, i) => {
+    if (!placed.has(el) && !el.classList.contains('aside-brand')) el.style.order = 500 + i;
+  });
+}
+
+function syncUserMenu() {
+  const name = state.fullName || document.getElementById('user-name').textContent;
+  document.getElementById('user-menu-name').textContent = name;
+  document.getElementById('user-menu-role').textContent = document.getElementById('role-badge').textContent;
+}
+function toggleUserMenu(event) {
+  event.stopPropagation();
+  const menu = document.getElementById('user-menu');
+  const open = !menu.classList.contains('open');
+  menu.classList.toggle('open', open);
+  document.getElementById('user-chip').setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) {
+    syncUserMenu();
+    document.getElementById('bell-panel')?.classList.remove('open');
+    menu.querySelector('.user-menu-item')?.focus();
+  }
+}
+function closeUserMenu() {
+  const menu = document.getElementById('user-menu');
+  if (!menu || !menu.classList.contains('open')) return;
+  menu.classList.remove('open');
+  document.getElementById('user-chip').setAttribute('aria-expanded', 'false');
+}
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.getElementById('user-menu')?.classList.contains('open')) {
+    closeUserMenu();
+    document.getElementById('user-chip').focus();
+  }
+});
+
+function uncloak() {
+  groupSidebar();
+  syncUserMenu();
+  document.body.classList.remove('booting');
+}
 
 async function boot() {
   setTimeout(uncloak, 6000);
@@ -5183,43 +5670,12 @@ async function boot() {
     // decision is not discovered tomorrow.
     setInterval(loadNotifications, 60000);
 
-    // Dashboard stats
-    document.getElementById('stat-modules').textContent = dash.modules;
-    document.getElementById('stat-students').textContent = dash.students;
-    document.getElementById('stat-sessions').textContent = dash.sessions_today;
-    document.getElementById('stat-avg').textContent = dash.avg_attendance != null ? dash.avg_attendance + '%' : '—';
-    document.getElementById('dash-sub').textContent =
-      state.activeSem ? `${state.activeSem.label} — attendance overview` : 'Overview of your attendance activity';
-
-    // Level stats — same slim strip as the main stats, one row per level.
-    document.getElementById('level-stats').innerHTML = dash.levels.map(l =>
-      `<div class="qf-item">
-        <span>${safeText(l.name)}</span>
-        <strong>${l.avg_pct != null ? l.avg_pct + '%' : '—'}</strong>
-        <div class="qf-sub">${l.students} students · ${l.modules} modules</div>
-       </div>`
-    ).join('');
-
-    // Recent sessions
-    const tbody = document.getElementById('recent-sessions-tbody');
-    if (!dash.recent_sessions.length) {
-      tbody.innerHTML = '<tr><td colspan="10"><div class="empty"><div class="ei">🗓️</div>No sessions yet</div></td></tr>';
-    } else {
-      tbody.innerHTML = dash.recent_sessions.map(s =>
-        `<tr>
-          <td><strong>${safeText(s.module)}</strong></td>
-          <td>${typeBadge(s.session_type)}</td>
-          <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.topic ? safeText(s.topic) : '<span style="color:var(--muted)">—</span>'}</td>
-          <td>${safeText(s.class_level)}</td>
-          <td style="font-size:.75rem;color:var(--muted)">${s.semester}</td>
-          <td>${s.date}</td>
-          <td><span class="badge badge-green">${s.present}</span></td>
-          <td><span class="badge badge-orange">${s.sick}</span></td>
-          <td><span class="badge badge-red">${s.absent}</span></td>
-          <td>${pctBadge(s.pct)}</td>
-        </tr>`
-      ).join('');
-    }
+    // The dashboard (said 10 November 2026): the welcome panel, the levels, the registers.
+    state.fullName = dash.full_name || '';
+    syncUserMenu();
+    renderDashHero(dash);
+    renderLevelBars(dash.levels);
+    renderRecentSessions(dash.recent_sessions);
 
     populateAllSelects();
     await refreshModuleDropdowns('', '', 'stu-flt-module');
@@ -9297,6 +9753,7 @@ async function loadNotifications() {
     badge.textContent = data.unread > 99 ? '99+' : data.unread;
     badge.style.display = data.unread ? '' : 'none';
     renderNotifications();
+    renderForYou(data.unread || 0);
   } catch (e) { /* the bell is never worth an error message */ }
 }
 
@@ -9316,6 +9773,7 @@ function renderNotifications() {
 
 function toggleNotifications(event) {
   event.stopPropagation();
+  closeUserMenu();
   const panel = document.getElementById('bell-panel');
   panel.classList.toggle('open');
   if (panel.classList.contains('open')) loadNotifications();
@@ -11302,12 +11760,12 @@ async function loadTpMine() {
   try {
     const data = await api('GET', '/teaching-plans/?scope=mine');
     body.innerHTML = data.rows.length ? data.rows.map(r => `<tr>
-        <td><strong>${safeText(r.code)}</strong> ${safeText(r.name)}</td><td>${safeText(r.level)}</td>
-        <td>${tpStatus(r)}</td><td>${r.plan_id ? `${tpPct(r.progress.on_schedule)} ${tpBand(r.progress)}` : '—'}</td>
-        <td>${r.plan_id ? `${r.progress.done} of ${r.progress.sessions}` : '—'}</td>
-        <td>${r.plan_id ? `<button class="btn btn-ghost btn-sm" onclick="openTpPlan(${r.plan_id})">Open</button>`
+        <td><b>${safeText(r.code)}</b> ${safeText(r.name)}<div class="tp-sub">${safeText(r.level)}</div></td>
+        <td>${tpStatus(r)}</td><td>${tpMiniStrip(r.strip) || '—'}</td>
+        <td>${r.plan_id ? `${tpPct(r.progress.on_schedule)} ${tpBand(r.progress)}` : '—'}</td>
+        <td class="act">${r.plan_id ? `<button class="btn btn-secondary btn-sm" onclick="openTpPlan(${r.plan_id})">Open</button>`
           : `<button class="btn btn-primary btn-sm" onclick="startTpPlan(event, ${r.module_id})">Start the plan</button>`}</td></tr>`).join('')
-      : `<tr><td colspan="6"><div class="empty">You teach no module in ${safeText(data.semester)}.</div></td></tr>`;
+      : `<tr><td colspan="5"><div class="empty">You teach no module in ${safeText(data.semester)}. Your Head of Department gives you your modules.</div></td></tr>`;
   } catch (e) { body.innerHTML = ''; toast(apiErrorText(e, 'Could not load your plans'), 'var(--red)'); }
 }
 
@@ -11326,12 +11784,12 @@ async function loadTpApprove() {
     const data = await api('GET', '/teaching-plans/?scope=approve');
     const rows = data.rows.filter(r => r.plan_id);
     body.innerHTML = rows.length ? rows.map(r => `<tr>
-        <td><strong>${safeText(r.code)}</strong> ${safeText(r.name)}<div style="font-size:.72rem;color:var(--muted)">${safeText(r.level)}</div></td>
-        <td style="font-size:.8rem">${safeText(r.tutors.join(', ') || '—')}</td><td>${tpStatus(r)}</td>
+        <td><b>${safeText(r.code)}</b> ${safeText(r.name)}<div class="tp-sub">${safeText(r.level)}</div></td>
+        <td>${safeText(r.tutors.join(', ') || '—')}</td><td>${tpStatus(r)}</td>
+        <td>${tpMiniStrip(r.strip) || '—'} <span class="tp-sub">${tpPct(r.progress.on_schedule)}</span></td>
         <td>${r.assessments ? `${r.assessments.moderated} of ${r.assessments.total} moderated` : '—'}</td>
-        <td>${tpPct(r.progress.on_schedule)} ${tpBand(r.progress)}</td>
-        <td><button class="btn btn-ghost btn-sm" onclick="openTpPlan(${r.plan_id})">Open</button></td></tr>`).join('')
-      : '<tr><td colspan="6"><div class="empty">No plan has been started for the modules you approve.</div></td></tr>';
+        <td class="act"><button class="btn btn-secondary btn-sm" onclick="openTpPlan(${r.plan_id})">Open</button></td></tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty">No tutor has started a plan for the modules you approve yet.</div></td></tr>';
   } catch (e) { body.innerHTML = ''; toast(apiErrorText(e, 'Could not load the plans'), 'var(--red)'); }
 }
 
@@ -11347,20 +11805,23 @@ async function loadTpProgress() {
       `<option value="${c.on}">${safeText(c.title)} (${tpDate(c.on)})</option>`).join('') + '<option value="custom">Another day…</option>';
     select.value = kept || 'today';
     document.getElementById('tp-progress-counts').innerHTML = Object.entries(TP_BANDS).map(([band, [label, cls]]) =>
-      `<span class="tp-chip"><span class="badge ${cls}">${label}</span> ${data.counts[band] || 0}</span>`).join('');
+      `<span class="tp-chip"><b>${data.counts[band] || 0}</b> ${label.toLowerCase()}</span>`).join('');
     document.getElementById('tp-progress-tbody').innerHTML = data.rows.length ? data.rows.map(r => {
       const p = r.progress || {};
+      const looks = !r.plan_id ? [] : [
+        p.weeks_behind ? `${p.weeks_behind} week${p.weeks_behind === 1 ? '' : 's'} behind` : '',
+        p.without_register ? `${p.without_register} done with no register` : '',
+        r.assessments?.late ? `${r.assessments.late} test${r.assessments.late === 1 ? '' : 's'} late` : '',
+        r.status === 'submitted' ? 'waiting for approval' : ''].filter(Boolean);
       return `<tr>
-        <td><strong>${safeText(r.code)}</strong> ${safeText(r.name)}<div style="font-size:.72rem;color:var(--muted)">${safeText(r.level)}${r.department ? ' · ' + safeText(r.department) : ''}</div></td>
-        <td style="font-size:.8rem">${safeText(r.tutors.join(', ') || '—')}</td><td>${tpStatus(r)}${r.has_document ? ' <i class="bi bi-paperclip" title="Document attached"></i>' : ''}</td>
+        <td><b>${safeText(r.code)}</b> ${safeText(r.name)}<div class="tp-sub">${safeText(r.level)}${r.department ? `, ${safeText(r.department)}` : ''}</div></td>
+        <td>${safeText(r.tutors.join(', ') || '—')}</td>
+        <td>${tpStatus(r)}${r.has_document ? '<div class="tp-sub">own plan attached</div>' : ''}</td>
+        <td>${tpMiniStrip(r.strip) || '—'}</td>
         <td>${r.plan_id ? `${tpPct(p.on_schedule)} ${tpBand(p)}` : tpBand(p)}</td>
-        <td>${r.plan_id ? `${p.completion}%` : '—'}</td>
-        <td style="font-size:.8rem">${r.plan_id ? `${Number(p.hours_done)} / ${Number(p.hours_planned)}` : '—'}</td>
-        <td>${r.plan_id && p.weeks_behind ? `${p.weeks_behind} wk` : '—'}</td>
-        <td>${r.plan_id && p.without_register ? `<span class="badge badge-yellow">${p.without_register}</span>` : '—'}</td>
-        <td>${r.assessments?.late ? `<span class="badge badge-red">${r.assessments.late}</span>` : '—'}</td>
-        <td>${r.plan_id ? `<button class="btn btn-ghost btn-sm" onclick="openTpPlan(${r.plan_id})">Open</button>` : ''}</td></tr>`;
-    }).join('') : '<tr><td colspan="10"><div class="empty">No module in this semester.</div></td></tr>';
+        <td>${looks.length ? `<span class="tp-warn">${safeText(looks.join('; '))}</span>` : '—'}</td>
+        <td class="act">${r.plan_id ? `<button class="btn btn-secondary btn-sm" onclick="openTpPlan(${r.plan_id})">Open</button>` : ''}</td></tr>`;
+    }).join('') : '<tr><td colspan="7"><div class="empty">No module is registered for this semester yet.</div></td></tr>';
   } catch (e) { toast(apiErrorText(e, 'Could not load the plans'), 'var(--red)'); }
 }
 
@@ -11469,138 +11930,274 @@ async function openTpPlan(id) {
   catch (e) { toast(apiErrorText(e, 'Could not open the plan'), 'var(--red)'); }
 }
 
-function tpStat(value, label) { return `<div class="tp-stat"><b>${value}</b><span>${label}</span></div>`; }
+// ── The semester strip (said 10 November 2026) ──
+// The plan drawn as the semester: a column per teaching week, a cell per
+// class, filled as classes are done. The recess is hatched; CAT weeks, the
+// day assignment results are due and the examinations are marked beneath.
+// The same strip, a cell per week, stands beside each plan in the lists.
+const TP_CELL_WORDS = { done: 'done', partial: 'partly done', missed: 'missed', due: 'not marked yet', planned: 'to come' };
 
+function tpShortEvent(e) {
+  if (e.kind === 'deadline') return /assignment/i.test(e.title) ? 'Results due' : 'Deadline';
+  if (e.kind === 'exam') return 'Exams';
+  if (e.kind === 'special_cat') return 'Special CAT';
+  if (e.kind === 'cqi') return 'CQI';
+  return e.title.split(',')[0].trim();
+}
+
+function tpWeekState(week) {
+  const c = week.classes;
+  if (c.every(x => x === 'done')) return 'done';
+  if (c.some(x => x === 'due' || x === 'missed')) return 'due';
+  if (c.some(x => x === 'done' || x === 'partial')) return 'partial';
+  return 'planned';
+}
+
+function tpMiniStrip(strip) {
+  if (!strip || !strip.length) return '';
+  const weeks = strip.filter(w => !w.gap);
+  const due = weeks.filter(w => tpWeekState(w) === 'due').length;
+  return `<span class="tp-mini" role="img" aria-label="${weeks.length} weeks${due ? `, ${due} with classes not marked` : ''}">${strip.map(w => w.gap
+    ? '<i class="tp-mini-gap"></i>'
+    : `<i class="tp-c-${tpWeekState(w)}${w.current ? ' is-now' : ''}"></i>`).join('')}</span>`;
+}
+
+function tpStripHtml(plan) {
+  const strip = plan.strip || [];
+  if (!strip.length) return '';
+  const dayOf = v => new Date(v + 'T00:00:00');
+  const marksFor = monday => {
+    const from = dayOf(monday), to = new Date(from); to.setDate(to.getDate() + 6);
+    return plan.events.filter(e => e.kind !== 'recess' && e.kind !== 'cqi' && dayOf(e.starts_on) >= from && dayOf(e.starts_on) <= to)
+      .map(tpShortEvent);
+  };
+  const weeks = strip.filter(w => !w.gap);
+  const last = weeks[weeks.length - 1];
+  const exam = plan.events.find(e => e.kind === 'exam' && last && dayOf(e.starts_on) > dayOf(last.monday));
+  const cols = strip.map(w => {
+    if (w.gap) return `<div class="tp-gap" title="No teaching ${tpDate(w.from)} to ${tpDate(w.to)}"><span>break</span></div>`;
+    const marks = marksFor(w.monday);
+    return `<div class="tp-wk${w.current ? ' is-now' : ''}">
+      <div class="tp-wk-n">${w.week}</div>
+      <div class="tp-wk-cells">${w.classes.map(c => `<i class="tp-c tp-c-${c}"></i>`).join('')}</div>
+      <div class="tp-wk-mark${marks.length ? ' has' : ''}">${marks.map(m => `<span>${safeText(m)}</span>`).join('')}</div></div>`;
+  }).join('') + (exam ? `<div class="tp-wk tp-wk-exam"><div class="tp-wk-n">&nbsp;</div><div class="tp-wk-cells"><i class="tp-c tp-c-exam"></i></div><div class="tp-wk-mark has">Exams</div></div>` : '');
+  const counts = {};
+  weeks.forEach(w => w.classes.forEach(c => { counts[c] = (counts[c] || 0) + 1; }));
+  const label = `${weeks.length} teaching weeks; ${['done', 'partial', 'missed', 'due'].filter(k => counts[k]).map(k => `${counts[k]} ${TP_CELL_WORDS[k]}`).join(', ') || 'nothing taught yet'}`;
+  return `<div class="tp-strip" role="img" aria-label="${safeText(label)}"><div class="tp-strip-row">${cols}</div></div>
+    <div class="tp-legend" aria-hidden="true">
+      <span><i class="tp-c tp-c-done"></i>Done</span><span><i class="tp-c tp-c-partial"></i>Partly done</span>
+      <span><i class="tp-c tp-c-due"></i>Not marked yet</span><span><i class="tp-c tp-c-missed"></i>Missed</span>
+      <span><i class="tp-c tp-c-planned"></i>To come</span></div>`;
+}
+
+// ── One class, as a row ──
+function tpWeekday(v) { return new Date(v + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }); }
+
+function tpSessionRow(s, plan, pre = '') {
+  const can = plan.can;
+  const outcomes = plan.outcomes;
+  const state = {
+    done: ['Done', 'tp-ok'], partial: ['Partly done', 'tp-warn'], missed: ['Missed', 'tp-bad'],
+  }[s.status] || (s.due ? ['Not marked yet', 'tp-warn'] : ['To come', 'tp-quiet']);
+  const evidence = ['done', 'partial'].includes(s.status) ? (s.register ? ' · register taken' : ' · no register that day') : '';
+  const seg = can.follow ? `<div class="tp-seg" role="group" aria-label="What became of this class">
+      ${[['done', 'Done'], ['partial', 'Part'], ['missed', 'Missed']].map(([v, l]) =>
+        `<button type="button" aria-pressed="${s.status === v}" ${!s.due && v !== 'missed' ? 'disabled title="Mark it once it has been taught"' : ''}
+          onclick="markTpSession(event, ${s.id}, '${v}', '${pre}')">${l}</button>`).join('')}</div>` : '';
+  const seo = can.follow && outcomes.length
+    ? `<select aria-label="Outcome this class covers" onchange="editTpSession(${s.id}, {outcome_id: this.value})">${'<option value="">No SEO</option>' + outcomes.map(o =>
+        `<option value="${o.id}" ${o.id === s.outcome_id ? 'selected' : ''}>${safeText(o.code)}</option>`).join('')}</select>`
+    : (s.outcome ? `<span title="${safeText(s.outcome_text)}">${safeText(s.outcome)}</span>` : '');
+  const topic = can.follow
+    ? `<input class="tp-topic" value="${safeText(s.topic)}" maxlength="300" placeholder="${safeText(s.outcome_text || 'What it covers')}" aria-label="Topic" onchange="editTpSession(${s.id}, {topic: this.value})" />`
+    : `<span>${safeText(s.topic || s.outcome_text || '')}</span>`;
+  const forms = can.follow ? `
+      <form class="tp-inline" id="tp-move-${pre}${s.id}" hidden onsubmit="moveTpSession(event, ${s.id})">
+        <label>Move to <input type="date" name="day" value="${s.planned_on}" required /></label>
+        ${plan.status === 'draft' ? '' : '<label class="tp-grow">Why <input name="reason" maxlength="300" required placeholder="e.g. College Baraza that afternoon" /></label>'}
+        <button class="btn btn-primary btn-sm" type="submit">Move the class</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="tpToggle('tp-move-${pre}${s.id}')">Cancel</button>
+      </form>
+      <form class="tp-inline" id="tp-miss-${pre}${s.id}" hidden onsubmit="missTpSession(event, ${s.id})">
+        <label class="tp-grow">Why was it not held? <input name="note" maxlength="300" placeholder="It stays due until you add a make-up class" /></label>
+        <button class="btn btn-primary btn-sm" type="submit">Mark missed</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="tpToggle('tp-miss-${pre}${s.id}')">Cancel</button>
+      </form>` : '';
+  return `<div class="tp-row" id="tp-s-${pre}${s.id}">
+      <div class="tp-row-when"><b>${tpWeekday(s.planned_on)}</b><span>${safeText(s.kind_display)}, ${Number(s.hours)} h</span></div>
+      <div class="tp-row-what">${seo}${topic}
+        <div class="tp-row-state ${state[1]}">${state[0]}${evidence}${s.moved_from ? ` · moved from ${tpDate(s.moved_from)}${s.move_reason ? ` (${safeText(s.move_reason)})` : ''}` : ''}${s.note && s.status !== 'planned' ? ` · ${safeText(s.note)}` : ''}${s.note && s.status === 'planned' && /Falls on|Moved from/.test(s.note) ? ` · ${safeText(s.note)}` : ''}</div></div>
+      <div class="tp-row-act">${seg}${can.follow && s.status === 'planned' ? `<button type="button" class="tp-link" onclick="tpToggle('tp-move-${pre}${s.id}')">Move</button>` : ''}</div>
+      ${forms}
+    </div>`;
+}
+
+function tpToggle(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.hidden = !el.hidden;
+  if (!el.hidden) el.querySelector('input:not([type=hidden])')?.focus();
+}
+
+function tpWeekGroup(rows, plan, title, pre = '') {
+  return `<div class="tp-week-group"><h4>${title}</h4>${rows.map(s => tpSessionRow(s, plan, pre)).join('')}</div>`;
+}
+
+// ── The plan ──
 function renderTpPlan(plan) {
   state.tpPlan = plan;
   const can = plan.can, p = plan.progress, cm = plan.curriculum;
   document.getElementById('tp-page-title').textContent = `${plan.module.code} ${plan.module.name}`;
-  document.getElementById('tp-page-sub').textContent = `${plan.module.level} · ${plan.module.semester} · ${plan.module.tutors.join(', ') || 'no tutor assigned'}`;
+  document.getElementById('tp-page-sub').textContent = cm
+    ? `${plan.module.level}, ${cm.credits} credits: ${cm.hours.L + cm.hours.T + cm.hours.P + cm.hours.A} hours a week over ${plan.weeks || cm.weeks_of_study} weeks, as the 2022 curriculum sets. Taught by ${plan.module.tutors.join(', ') || 'no tutor yet'}.`
+    : `${plan.module.level}. No loaded curriculum describes this module, so its topics are typed in and its assessments are those results use today. Taught by ${plan.module.tutors.join(', ') || 'no tutor yet'}.`;
   const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = 'Teaching plan';
-  const outcomeOptions = id => '<option value="">—</option>' + plan.outcomes.map(o =>
-    `<option value="${o.id}" ${o.id === id ? 'selected' : ''}>${safeText(o.code)}</option>`).join('');
-  const kinds = plan.kinds.map(([v, l]) => [v, l]);
-  const pattern = (plan.pattern || []).map((c, i) => `<div class="form-grid-3" data-tp-pattern="${i}" style="align-items:end">
-      <div class="field"><label>Day</label><select class="tp-p-day" ${can.edit ? '' : 'disabled'}>${plan.weekdays.map((d, n) => `<option value="${n}" ${n === c.weekday ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
-      <div class="field"><label>Class</label><select class="tp-p-kind" ${can.edit ? '' : 'disabled'}>${kinds.map(([v, l]) => `<option value="${v}" ${v === c.kind ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-      <div class="field"><label>Hours</label><input class="tp-p-hours" type="number" min="0.5" max="12" step="0.5" value="${c.hours}" ${can.edit ? '' : 'disabled'} /></div>
+
+  // Which classes go where: the week of today (or the next week that has
+  // classes), the earlier ones still to mark, and the rest folded away.
+  const byWeek = {};
+  plan.sessions.forEach(s => { (byWeek[s.week] = byWeek[s.week] || []).push(s); });
+  const weeks = Object.keys(byWeek).map(Number).sort((a, b) => a - b);
+  const now = (plan.strip || []).find(w => w.current && !w.gap);
+  const thisWeek = now ? now.week : weeks.find(w => byWeek[w].some(s => !s.due));
+  const unmarked = plan.sessions.filter(s => s.due && s.status === 'planned' && s.week !== thisWeek);
+  const earlier = weeks.filter(w => thisWeek === undefined ? true : w < thisWeek);
+  const later = weeks.filter(w => thisWeek !== undefined && w > thisWeek);
+  const range = w => { const rows = byWeek[w]; return `${tpDate(rows[0].planned_on)}${rows.length > 1 ? ` to ${tpDate(rows[rows.length - 1].planned_on)}` : ''}`; };
+
+  const figures = plan.sessions.length ? `<p class="tp-figures">
+      <span><b>${tpPct(p.on_schedule)}</b> on schedule</span>
+      <span><b>${p.done_due}</b> of ${p.due} classes due done</span>
+      <span><b>${Number(p.hours_done)}</b> of ${Number(p.hours_planned)} hours</span>
+      <span><b>${p.weeks_behind}</b> week${p.weeks_behind === 1 ? '' : 's'} behind</span>
+      ${p.without_register ? `<span class="tp-warn">${p.without_register} class${p.without_register === 1 ? '' : 'es'} done with no register that day</span>` : ''}
+    </p>` : '';
+
+  const statusLine = `<div class="tp-status">${tpStatus(plan)}
+      ${plan.status === 'approved' && plan.decision.by ? `<span>approved by ${safeText(plan.decision.by)}</span>` : ''}
+      ${plan.status === 'returned' ? `<span class="tp-bad">${safeText(plan.decision.note)}</span>` : ''}
+      ${plan.document ? `<a href="/api/teaching-plans/${plan.id}/document/">The tutor's own plan (${safeText(plan.document.name)})</a>` : ''}
+      <button class="btn btn-secondary btn-sm" onclick="showTpSection(state.tpSection || defaultTpSection())">Back to the list</button></div>`;
+
+  const kinds = plan.kinds;
+  const patternRows = (plan.pattern || []).map((c, i) => `<div class="tp-pattern-row" data-tp-pattern="${i}">
+      <select class="tp-p-day" aria-label="Day" ${can.edit ? '' : 'disabled'}>${plan.weekdays.map((d, n) => `<option value="${n}" ${n === c.weekday ? 'selected' : ''}>${d}</option>`).join('')}</select>
+      <select class="tp-p-kind" aria-label="Kind of class" ${can.edit ? '' : 'disabled'}>${kinds.map(([v, l]) => `<option value="${v}" ${v === c.kind ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <label class="tp-hours"><input class="tp-p-hours" type="number" min="0.5" max="12" step="0.5" value="${c.hours}" aria-label="Hours" ${can.edit ? '' : 'disabled'} /> h</label>
+      ${can.edit ? `<button type="button" class="tp-link" onclick="removeTpPatternRow(${i})" aria-label="Take this class out of the week">Take out</button>` : ''}
     </div>`).join('');
-  const sessions = plan.sessions.map(s => {
-    const open = s.due && s.status === 'planned';
-    const actions = can.follow ? (s.status === 'planned'
-      ? `<button class="btn btn-ghost btn-sm" title="Taught as planned" onclick="markTpSession(event, ${s.id}, 'done')">Done</button>
-         <button class="btn btn-ghost btn-sm" title="Partly taught" onclick="markTpSession(event, ${s.id}, 'partial')">Part</button>
-         <button class="btn btn-ghost btn-sm" title="Not held" onclick="markTpSession(event, ${s.id}, 'missed')">Missed</button>
-         <button class="btn btn-ghost btn-sm" title="Move to another day" onclick="moveTpSession(${s.id})"><i class="bi bi-calendar-event"></i></button>`
-      : `<button class="btn btn-ghost btn-sm" onclick="markTpSession(event, ${s.id}, 'planned')">Undo</button>`) : '';
-    return `<tr class="${open ? 'tp-due-open' : ''}">
-      <td>${s.week}</td><td style="white-space:nowrap">${tpDate(s.planned_on)}${s.moved_from ? `<div style="font-size:.7rem;color:var(--muted)" title="${safeText(s.move_reason)}">from ${tpDate(s.moved_from)}</div>` : ''}</td>
-      <td>${safeText(s.kind_display)} · ${Number(s.hours)} h</td>
-      <td>${can.follow && plan.outcomes.length ? `<select onchange="editTpSession(${s.id}, {outcome_id: this.value})" title="${safeText(s.outcome_text)}">${outcomeOptions(s.outcome_id)}</select>` : `<span title="${safeText(s.outcome_text)}">${safeText(s.outcome || '—')}</span>`}</td>
-      <td>${can.follow ? `<input value="${safeText(s.topic)}" maxlength="300" placeholder="Topic" onchange="editTpSession(${s.id}, {topic: this.value})" style="min-width:150px" />` : safeText(s.topic || '—')}</td>
-      <td><span class="badge ${ ({ done: 'badge-green', partial: 'badge-yellow', missed: 'badge-red' })[s.status] || 'badge-gen'}">${safeText(s.status_display)}</span>
-        ${s.delivered_on && s.delivered_on !== s.planned_on ? `<div style="font-size:.7rem">on ${tpDate(s.delivered_on)}</div>` : ''}
-        ${['done', 'partial'].includes(s.status) && !s.register ? '<div style="font-size:.7rem;color:var(--orange)">No register that day</div>' : ''}
-        ${s.note ? `<div style="font-size:.7rem;color:var(--muted)">${safeText(s.note)}</div>` : ''}</td>
-      <td style="white-space:nowrap">${actions}</td></tr>`;
-  }).join('');
-  const taskBoxes = (a) => plan.outcomes.map(o => o.tasks.map(t =>
-    `<label><input type="checkbox" value="${t.id}" ${a.task_ids.includes(t.id) ? 'checked' : ''} ${can.follow && !['submitted', 'approved'].includes(a.moderation) ? '' : 'disabled'}/> ${safeText(o.code)} ${t.letter}) ${safeText(t.text)}</label>`).join('')).join('');
-  const assessments = plan.assessments.map(a => `<tr>
-      <td><strong>${safeText(a.title)}</strong><div style="font-size:.72rem;color:var(--muted)">${a.stage === 'se' ? 'Semester exam' : a.stage === 'field' ? 'Field' : 'CA'}</div></td>
-      <td>${a.weight !== null ? Number(a.weight) + '%' : '—'}</td>
-      <td>${can.follow && a.stage !== 'se' ? `<input type="date" value="${a.planned_on || ''}" onchange="editTpAssessment(${a.id}, {planned_on: this.value})" />` : tpDate(a.planned_on)}</td>
-      <td>${can.follow && a.stage !== 'se' ? `<input type="date" value="${a.held_on || ''}" onchange="editTpAssessment(${a.id}, {held_on: this.value})" />` : tpDate(a.held_on)}</td>
-      <td style="font-size:.78rem">${a.stage === 'se' ? '—' : `<details><summary style="cursor:pointer">${a.task_ids.length} task${a.task_ids.length === 1 ? '' : 's'}</summary>
-        ${plan.outcomes.length ? `<div class="tp-tasks" id="tp-a-${a.id}">${taskBoxes(a)}</div>
-        ${can.follow && !['submitted', 'approved'].includes(a.moderation) ? `<button class="btn btn-ghost btn-sm" onclick="saveTpTasks(event, ${a.id})">Save the setting plan</button>` : ''}` : '<em>No outcomes loaded for this module.</em>'}</details>`}</td>
-      <td style="font-size:.78rem">${a.stage === 'se' ? '—' : `<span class="badge ${ ({ approved: 'badge-green', submitted: 'badge-yellow', returned: 'badge-red' })[a.moderation] || 'badge-gen'}">${safeText(a.moderation_display)}</span>
-        ${a.moderation_note ? `<div>${safeText(a.moderation_note)}</div>` : ''}
-        ${can.follow && ['draft', 'returned'].includes(a.moderation) ? `<button class="btn btn-ghost btn-sm" onclick="moderateTp(event, ${a.id}, 'submit')">Send for moderation</button>` : ''}
-        ${can.moderate && a.moderation === 'submitted' ? `<button class="btn btn-primary btn-sm" onclick="moderateTp(event, ${a.id}, 'approve')">Approve</button>
-          <button class="btn btn-ghost btn-sm" onclick="moderateTp(event, ${a.id}, 'return')">Return</button>` : ''}`}</td></tr>`).join('');
-  const cov = plan.coverage;
-  const coverage = (cov.components.length || cov.tested_before_taught.length) ? `
-    <div class="card"><div class="card-title">What the assessment plan requires</div>
-      <p class="help-note">Each kind of assessment must be drawn from the SEOs and tasks the assessment plan names. Tick them on each test's setting plan; what no test covers yet is listed.</p>
-      ${cov.components.map(c => `<div style="margin:6px 0"><strong>${safeText(c.component)}</strong>: ${c.covered} of ${c.required} required tasks covered
-        ${c.missing.length ? `<div style="font-size:.78rem;color:var(--orange)">Not covered yet: ${safeText(c.missing.join(', '))}</div>` : ' <span class="badge badge-green">All covered</span>'}</div>`).join('')}
-      ${cov.tested_before_taught.length ? `<div class="missing-note" style="margin-top:8px"><strong>Tested before it is taught:</strong>
-        ${cov.tested_before_taught.map(e => `${safeText(e.assessment)} — ${safeText(e.task)} (${e.taught ? 'taught ' + tpDate(e.taught) : 'not in the plan'})`).join('; ')}</div>` : ''}
-    </div>` : '';
-  document.getElementById('tp-plan').innerHTML = `
-    <div class="card">
-      <div class="card-title"><button class="btn btn-ghost btn-sm" onclick="showTpSection(state.tpSection || defaultTpSection())">← Back</button>
-        <span style="margin-left:8px">${tpStatus(plan)}</span>
-        ${plan.status === 'approved' && plan.decision.by ? `<span style="font-size:.78rem;color:var(--muted);margin-left:8px">approved by ${safeText(plan.decision.by)}</span>` : ''}
-        ${plan.status === 'returned' ? `<span style="font-size:.78rem;color:var(--red);margin-left:8px">${safeText(plan.decision.note)}</span>` : ''}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${tpStat(tpPct(p.on_schedule), 'on schedule')}${tpStat(`${p.done} / ${p.sessions}`, 'classes done')}
-        ${tpStat(`${Number(p.hours_done)} / ${Number(p.hours_planned)}`, 'hours')}${tpStat(p.weeks_behind ? p.weeks_behind + ' wk' : '—', 'behind')}
-        ${tpStat(p.without_register || '—', 'done, no register')}${tpStat(`${plan.assessment_progress.held} / ${plan.assessment_progress.due}`, 'tests held / due')}
-        <div class="tp-stat" style="justify-content:center">${tpBand(p)}</div>
+  const weekCard = `
+      <p class="help-note">${plan.calendar ? `Teaching runs ${tpDate(plan.calendar.teaching_starts)} to ${tpDate(plan.calendar.teaching_ends)}. ` : ''}Put each class on the day you teach it. Laying the plan out puts them on those days every week, around holidays and the recess, with the outcomes in curriculum order and the tests in the CAT weeks.</p>
+      ${plan.calendar ? '' : '<div class="missing-note">The teaching calendar for this semester is not set yet. DPARC sets it before plans can be laid out.</div>'}
+      <div id="tp-pattern">${patternRows || '<p class="help-note">No class in the week yet.</p>'}</div>
+      <p class="tp-sum">${Number(plan.weekly_hours)} hours a week${cm ? `; the curriculum sets ${cm.hours.L + cm.hours.T + cm.hours.P + cm.hours.A}` : ''}.</p>
+      ${can.edit ? `<div class="tp-actions">
+        <button class="btn btn-secondary btn-sm" onclick="addTpPatternRow()">Add a class to the week</button>
+        <label class="tp-inline-field">Weeks <input id="tp-weeks" type="number" min="1" max="30" value="${plan.weeks || ''}" placeholder="${cm ? cm.weeks_of_study : 15}" /></label>
+        <label class="tp-inline-field">Starts, if late <input id="tp-starts" type="date" value="${plan.starts_on || ''}" /></label>
+        <button class="btn btn-primary btn-sm" onclick="layOutTp(event)">${plan.sessions.length ? 'Lay the plan out again' : 'Lay the plan out'}</button></div>` : ''}`;
+
+  const taskBoxes = a => {
+    return plan.outcomes.map(o => `<fieldset class="tp-seo"><legend>${safeText(o.code)} ${safeText(o.text)}</legend>${o.tasks.map(t =>
+      `<label><input type="checkbox" value="${t.id}" ${a.task_ids.includes(t.id) ? 'checked' : ''} ${can.follow && !['submitted', 'approved'].includes(a.moderation) ? '' : 'disabled'}/> ${t.letter}) ${safeText(t.text)}</label>`).join('')}</fieldset>`).join('');
+  };
+  const modState = a => ({ approved: ['Moderated', 'tp-ok'], submitted: ['With the Head of Department', 'tp-warn'], returned: ['Returned to you', 'tp-bad'] }[a.moderation] || ['Not sent yet', 'tp-quiet']);
+  const assessments = plan.assessments.map(a => {
+    const [word, cls] = a.stage === 'se' ? ['Examination office', 'tp-quiet'] : modState(a);
+    return `<div class="tp-arow">
+      <div class="tp-arow-main">
+        <div><b>${safeText(a.title)}</b>${a.weight !== null ? ` <span class="tp-weight">${Number(a.weight)}%</span>` : ''}</div>
+        <div class="tp-arow-when">${can.follow && a.stage !== 'se'
+          ? `<label>Planned <input type="date" value="${a.planned_on || ''}" onchange="editTpAssessment(${a.id}, {planned_on: this.value})" /></label>
+             <label>Held <input type="date" value="${a.held_on || ''}" onchange="editTpAssessment(${a.id}, {held_on: this.value})" /></label>`
+          : `${a.stage === 'se' ? 'From ' : ''}${tpDate(a.planned_on)}${a.held_on ? `, held ${tpDate(a.held_on)}` : ''}`}</div>
+        <div class="tp-row-state ${cls}">${word}${a.moderation_note ? `: ${safeText(a.moderation_note)}` : ''}${a.stage !== 'se' ? ` · covers ${a.task_ids.length} task${a.task_ids.length === 1 ? '' : 's'}` : ''}</div>
       </div>
-      <p class="help-note" style="margin-top:8px">${cm ? `Follows ${safeText(cm.curriculum)}: ${safeText(cm.code)} ${safeText(cm.name)} — ${cm.credits} credits, a week ${cm.hours.L} h lecture, ${cm.hours.T} h tutorial, ${cm.hours.P} h practical, ${cm.hours.A} h assignment, ${cm.weeks_of_study} weeks.`
-        : 'No loaded curriculum describes this module (the old curriculum is not loaded): give the topics yourself; the assessments shown are the ones results use today.'}
-        Weights come from the ${safeText(plan.scheme_source)}.</p>
-      ${cm && cm.checks.length ? `<div class="missing-note"><strong>Where the national documents disagree:</strong> ${safeText(cm.checks.join(' · '))}</div>` : ''}
-    </div>
-
-    <div class="card"><div class="card-title">The week</div>
-      ${plan.calendar ? `<p class="help-note">Teaching runs ${tpDate(plan.calendar.teaching_starts)} to ${tpDate(plan.calendar.teaching_ends)}. ${can.edit ? 'Put each class on the day you teach it, then lay the plan out: classes go on those days every week, around the holidays and the recess, with the outcomes in curriculum order and the tests in the CAT weeks. Laying out again replaces the classes and the tests not yet sent for moderation.' : ''}</p>`
-        : '<div class="missing-note">The teaching calendar for this semester is not set: DPARC sets it before plans can be laid out.</div>'}
-      <div id="tp-pattern">${pattern || '<div class="empty">No class yet</div>'}</div>
-      <p style="font-size:.8rem">${Number(plan.weekly_hours)} hours a week${cm ? ` (the curriculum: ${cm.hours.L + cm.hours.T + cm.hours.P + cm.hours.A})` : ''}.</p>
-      ${can.edit ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
-        <button class="btn btn-ghost btn-sm" onclick="addTpPatternRow()">+ A class</button>
-        <div class="field" style="margin:0"><label>Weeks</label><input id="tp-weeks" type="number" min="1" max="30" value="${plan.weeks || ''}" placeholder="${cm ? cm.weeks_of_study : 15}" style="max-width:90px" /></div>
-        <div class="field" style="margin:0"><label>Starts (if late)</label><input id="tp-starts" type="date" value="${plan.starts_on || ''}" /></div>
-        <button class="btn btn-primary btn-sm" onclick="layOutTp(event)">Lay the plan out</button></div>` : ''}
-    </div>
-
-    <div class="card"><div class="card-title">Classes</div>
-      ${can.follow ? '<p class="help-note">After each class, mark it (taught on another day? move it to that day first). The attendance register of that day is linked as the evidence; a class marked done with no register that day is shown to your Head of Department.</p>' : ''}
-      <div class="table-wrap"><table><thead><tr><th>Wk</th><th>Date</th><th>Class</th><th>SEO</th><th>Topic</th><th>State</th><th></th></tr></thead>
-        <tbody>${sessions || '<tr><td colspan="7"><div class="empty">Not laid out yet</div></td></tr>'}</tbody></table></div>
-      ${can.follow && plan.sessions.length ? `<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addTpSession()">+ A make-up class</button>` : ''}
-    </div>
-
-    <div class="card"><div class="card-title">Assessments</div>
-      ${tpSchemeTable(plan.scheme, false)}
-      <div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Assessment</th><th>Weight</th><th>Planned</th><th>Held</th><th>Setting plan</th><th>Moderation</th></tr></thead>
-        <tbody>${assessments || '<tr><td colspan="6"><div class="empty">Laid out with the plan</div></td></tr>'}</tbody></table></div>
-    </div>
-    ${coverage}
-
-    <div class="card"><div class="card-title">Approval</div>
-      ${can.edit ? `<p class="help-note">When the plan is ready, send it to your Head of Department (DPARC where there is none).</p>
-        <button class="btn btn-primary btn-sm" onclick="submitTp(event)" ${plan.sessions.length ? '' : 'disabled'}>Send for approval</button>` : ''}
-      ${can.approve ? `<div class="field"><label>Note (needed to return it)</label><input id="tp-decision-note" maxlength="500" /></div>
-        <button class="btn btn-primary btn-sm" onclick="decideTp(event, true)">Approve</button>
-        <button class="btn btn-ghost btn-sm" onclick="decideTp(event, false)">Return for changes</button>` : ''}
-      ${!can.edit && !can.approve ? `<p class="help-note">${safeText(plan.status_display)}.${plan.decision.note ? ' ' + safeText(plan.decision.note) : ''}</p>` : ''}
-    </div>
-
-    <div class="card"><div class="card-title">The tutor's own document</div>
-      ${plan.document ? `<a class="btn btn-ghost btn-sm" href="/api/teaching-plans/${plan.id}/document/">⬇ ${safeText(plan.document.name)}</a>` : '<p class="help-note">None attached.</p>'}
-      ${can.follow ? `<div style="margin-top:8px"><input type="file" id="tp-doc" accept=".pdf,.docx,.doc" /> <button class="btn btn-ghost btn-sm" onclick="uploadTpDocument(event)">Attach (PDF or Word)</button></div>` : ''}
-    </div>
-
-    <div class="card"><div class="card-title">Review notes</div>
-      ${plan.notes.map(n => `<div style="border-left:3px solid var(--border);padding:4px 10px;margin:6px 0">
-        <div style="font-size:.74rem;color:var(--muted)">${safeText(n.author)} · ${new Date(n.at).toLocaleString()}${n.checkpoint ? ' · ' + safeText(n.checkpoint) : ''}</div>${safeText(n.text)}</div>`).join('') || '<p class="help-note">No notes yet.</p>'}
-      ${can.note ? `<div class="field"><label>A note</label><textarea id="tp-note" rows="2" maxlength="4000"></textarea></div>
-        <div style="display:flex;gap:8px;align-items:end"><div class="field" style="margin:0"><label>Made at</label><input id="tp-note-checkpoint" maxlength="120" placeholder="e.g. Second CQI supervision" /></div>
-        <button class="btn btn-ghost btn-sm" onclick="addTpNote(event)">Add the note</button></div>` : ''}
-    </div>
-
-    <div class="card"><div class="card-title">History</div>
-      <details><summary style="cursor:pointer">${plan.history.length} entries</summary>
-      <div class="table-wrap"><table><tbody>${plan.history.map(h => `<tr><td style="font-size:.74rem;white-space:nowrap">${new Date(h.at).toLocaleString()}</td>
-        <td style="font-size:.8rem">${safeText(h.by)}</td><td style="font-size:.8rem">${safeText(h.action)}${h.detail ? ' — ' + safeText(h.detail) : ''}</td></tr>`).join('')}</tbody></table></div></details>
-      ${tpOutcomesHtml(plan.outcomes)}
+      ${a.stage === 'se' ? '' : `<details class="tp-setting"><summary>Setting plan</summary>
+        ${plan.outcomes.length ? `<div class="tp-tasks" id="tp-a-${a.id}">${taskBoxes(a)}</div>` : '<p class="help-note">No outcomes are loaded for this module.</p>'}
+        <div class="tp-actions">
+          ${can.follow && plan.outcomes.length && !['submitted', 'approved'].includes(a.moderation) ? `<button class="btn btn-secondary btn-sm" onclick="saveTpTasks(event, ${a.id})">Save the setting plan</button>` : ''}
+          ${can.follow && ['draft', 'returned'].includes(a.moderation) ? `<button class="btn btn-primary btn-sm" onclick="moderateTp(event, ${a.id}, 'submit')">Send to the Head of Department</button>` : ''}
+          ${can.moderate && a.moderation === 'submitted' ? `<button class="btn btn-primary btn-sm" onclick="moderateTp(event, ${a.id}, 'approve')">Approve the test</button>
+            <button class="btn btn-secondary btn-sm" onclick="tpToggle('tp-ret-${a.id}')">Return it</button>` : ''}
+        </div>
+        ${can.moderate && a.moderation === 'submitted' ? `<form class="tp-inline" id="tp-ret-${a.id}" hidden onsubmit="returnTpTest(event, ${a.id})">
+          <label class="tp-grow">What should the setter change? <input name="note" maxlength="500" required /></label>
+          <button class="btn btn-primary btn-sm" type="submit">Return the test</button></form>` : ''}
+      </details>`}
     </div>`;
+  }).join('');
+
+  const cov = plan.coverage;
+  const gaps = cov.components.filter(c => c.missing.length);
+  const coverage = cov.components.length || cov.tested_before_taught.length ? `<section class="tp-block">
+      <h3>What the assessment plan requires</h3>
+      ${cov.components.map(c => `<p class="tp-cov"><b>${safeText(c.component)}</b>: ${c.covered} of ${c.required} required tasks covered${c.missing.length ? `. Not yet: ${safeText(c.missing.join(', '))}.` : '.'}</p>`).join('')}
+      ${cov.tested_before_taught.length ? `<div class="missing-note"><b>Tested before it is taught:</b> ${cov.tested_before_taught.map(e =>
+        `${safeText(e.assessment)}, ${safeText(e.task)} (${e.taught ? 'taught ' + tpDate(e.taught) : 'not in the plan'})`).join('; ')}.</div>` : ''}
+      ${!gaps.length && !cov.tested_before_taught.length ? '<p class="tp-ok">Every required task is covered, each after it is taught.</p>' : ''}
+    </section>` : '';
+
+  const approval = `<section class="tp-block"><h3>Approval</h3>
+      ${can.edit ? `<p class="help-note">When the plan is right, send it to your Head of Department (DPARC where there is none).</p>
+        <button class="btn btn-primary btn-sm" onclick="submitTp(event)" ${plan.sessions.length ? '' : 'disabled'}>Send for approval</button>` : ''}
+      ${can.approve ? `<div class="field"><label for="tp-decision-note">Note, needed to return it</label><input id="tp-decision-note" maxlength="500" /></div>
+        <div class="tp-actions"><button class="btn btn-primary btn-sm" onclick="decideTp(event, true)">Approve the plan</button>
+        <button class="btn btn-secondary btn-sm" onclick="decideTp(event, false)">Return it for changes</button></div>` : ''}
+      ${!can.edit && !can.approve ? `<p>${safeText(plan.status_display)}.${plan.decision.note ? ' ' + safeText(plan.decision.note) : ''}</p>` : ''}
+    </section>`;
+
+  const document_ = `<section class="tp-block"><h3>The tutor's own plan</h3>
+      ${plan.document ? `<p><a href="/api/teaching-plans/${plan.id}/document/">Download ${safeText(plan.document.name)}</a></p>` : '<p class="help-note">None attached.</p>'}
+      ${can.follow ? `<div class="tp-actions"><input type="file" id="tp-doc" accept=".pdf,.docx,.doc" aria-label="Word or PDF plan" /><button class="btn btn-secondary btn-sm" onclick="uploadTpDocument(event)">Attach it</button></div>` : ''}
+    </section>`;
+
+  const notes = `<section class="tp-block"><h3>Review notes</h3>
+      ${plan.notes.map(n => `<div class="tp-note"><div class="tp-row-state tp-quiet">${safeText(n.author)}, ${new Date(n.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}${n.checkpoint ? `, at the ${safeText(n.checkpoint)}` : ''}</div>${safeText(n.text)}</div>`).join('') || '<p class="help-note">No notes yet.</p>'}
+      ${can.note ? `<div class="field"><label for="tp-note">A note</label><textarea id="tp-note" rows="2" maxlength="4000"></textarea></div>
+        <div class="tp-actions"><label class="tp-inline-field">Made at <input id="tp-note-checkpoint" maxlength="120" placeholder="e.g. second CQI supervision" /></label>
+        <button class="btn btn-secondary btn-sm" onclick="addTpNote(event)">Add the note</button></div>` : ''}
+    </section>`;
+
+  const history = `<details class="tp-block"><summary>History, ${plan.history.length} entries</summary>
+      <table class="compact"><tbody>${plan.history.map(h => `<tr><td>${new Date(h.at).toLocaleString()}</td><td>${safeText(h.by)}</td><td>${safeText(h.action)}${h.detail ? ': ' + safeText(h.detail) : ''}</td></tr>`).join('')}</tbody></table>
+      ${tpOutcomesHtml(plan.outcomes)}</details>`;
+
+  const classes = !plan.sessions.length ? '' : `<section class="tp-block tp-classes">
+      ${unmarked.length && can.follow ? tpWeekGroup(unmarked, plan, `Not marked yet from earlier weeks: ${unmarked.length}`, 'u') : ''}
+      ${thisWeek !== undefined ? tpWeekGroup(byWeek[thisWeek], plan, `${now ? 'This week' : 'Next'}, week ${thisWeek}: ${range(thisWeek)}`) : ''}
+      ${earlier.length ? `<details class="tp-fold"><summary>Earlier weeks, 1 to ${earlier[earlier.length - 1]}</summary>${earlier.map(w => tpWeekGroup(byWeek[w], plan, `Week ${w}: ${range(w)}`)).join('')}</details>` : ''}
+      ${later.length ? `<details class="tp-fold"><summary>Weeks to come, ${later[0]} to ${later[later.length - 1]}</summary>${later.map(w => tpWeekGroup(byWeek[w], plan, `Week ${w}: ${range(w)}`)).join('')}</details>` : ''}
+      ${can.follow ? `<button type="button" class="tp-link" onclick="tpToggle('tp-makeup')">Add a make-up class</button>
+        <form class="tp-inline" id="tp-makeup" hidden onsubmit="addTpSession(event)">
+          <label>On <input type="date" name="day" required /></label>
+          <label>Class <select name="kind">${kinds.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
+          <label>Hours <input type="number" name="hours" min="0.5" max="12" step="0.5" value="1" /></label>
+          <label class="tp-grow">What it covers <input name="topic" maxlength="300" /></label>
+          <button class="btn btn-primary btn-sm" type="submit">Add the class</button></form>` : ''}
+    </section>`;
+
+  document.getElementById('tp-plan').innerHTML = `
+    <div class="card tp-head">${statusLine}
+      ${cm && cm.checks.length ? `<p class="help-note">Where the national documents disagree for this module: ${safeText(cm.checks.join(' '))}</p>` : ''}
+      ${tpStripHtml(plan)}${figures}
+    </div>
+    ${!plan.sessions.length ? `<div class="card"><div class="card-title">${can.edit ? 'Give the days you teach' : 'Not laid out yet'}</div>${can.edit ? weekCard : '<p class="help-note">The tutor has not laid the plan out yet.</p>'}</div>` : ''}
+    ${plan.sessions.length ? `<div class="tp-cols">
+      <div class="card"><div class="card-title">Classes</div>${classes}</div>
+      <div class="card"><div class="card-title">Assessments</div>
+        <p class="help-note">Weights from the ${safeText(plan.scheme_source)}${plan.scheme_source === 'assessment plan' ? '; CA 40, examination 60' : ''}.</p>
+        ${assessments || '<p class="help-note">Laid out with the plan.</p>'}</div>
+    </div>` : ''}
+    ${coverage || plan.sessions.length ? `<div class="card">${coverage}${approval}</div>` : ''}
+    ${plan.sessions.length && can.edit ? `<div class="card"><details class="tp-fold"><summary>Change the week (lays the plan out again)</summary>${weekCard}</details></div>` : ''}
+    <div class="tp-cols"><div class="card">${document_}</div><div class="card">${notes}</div></div>
+    <div class="card">${history}</div>`;
   showTpSection('plan');
+  // Bring this week into view on a narrow screen.
+  document.querySelector('#tp-plan .tp-wk.is-now')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
 function tpPatternFromForm() {
@@ -11612,6 +12209,12 @@ function tpPatternFromForm() {
 function addTpPatternRow() {
   const plan = state.tpPlan;
   plan.pattern = [...tpPatternFromForm(), { weekday: 0, kind: 'lecture', hours: 1 }];
+  renderTpPlan(plan);
+}
+
+function removeTpPatternRow(index) {
+  const plan = state.tpPlan;
+  plan.pattern = tpPatternFromForm().filter((_, i) => i !== index);
   renderTpPlan(plan);
 }
 
@@ -11627,41 +12230,48 @@ async function tpCall(event, label, method, path, body, okMessage) {
 
 function layOutTp(event) {
   const plan = state.tpPlan;
-  if (plan.sessions.length && !confirm('Lay the plan out again? The classes and the tests not yet sent for moderation are replaced.')) return;
+  if (plan.sessions.length && !confirm('Lay the plan out again? Its classes, and the tests not yet sent to the Head of Department, are replaced.')) return;
   tpCall(event, 'Laying out…', 'POST', `/teaching-plans/${plan.id}/lay-out/`, { pattern: tpPatternFromForm(),
-    weeks: document.getElementById('tp-weeks').value || null, starts_on: document.getElementById('tp-starts').value || null }, 'Laid out');
+    weeks: document.getElementById('tp-weeks').value || null, starts_on: document.getElementById('tp-starts').value || null }, 'Plan laid out');
 }
 
-function markTpSession(event, id, status) {
+// Done and Part record the day planned (a class taught on another day is
+// moved first). Missed asks why, inline. Pressing the state a class already
+// has takes it back to planned.
+function markTpSession(event, id, status, pre = '') {
   const plan = state.tpPlan;
   const session = plan.sessions.find(s => s.id === id);
-  // Taught on the day planned; a class taught on another day is moved first.
-  let delivered = null, note = '';
-  if (['done', 'partial'].includes(status)) {
-    if (!session.due) { toast('Mark it once it has been taught — or move it to the day it was.', 'var(--red)'); return; }
-    delivered = session.planned_on;
+  if (session.status === status) {
+    tpCall(event, '…', 'POST', `/teaching-plans/${plan.id}/sessions/${id}/mark/`, { status: 'planned' }, 'Back to planned');
+    return;
   }
-  if (status === 'missed') { note = prompt('Why was it not held? (it stays due until you add a make-up class)', '') || ''; }
-  tpCall(event, '…', 'POST', `/teaching-plans/${plan.id}/sessions/${id}/mark/`, { status, delivered_on: delivered, note });
+  if (status === 'missed') { tpToggle(`tp-miss-${pre}${id}`); return; }
+  if (!session.due) { toast('Mark it once it has been taught, or move it to the day it was.', 'var(--red)'); return; }
+  tpCall(event, '…', 'POST', `/teaching-plans/${plan.id}/sessions/${id}/mark/`,
+    { status, delivered_on: session.planned_on }, status === 'done' ? 'Marked done' : 'Marked partly done');
 }
 
-function moveTpSession(id) {
-  const plan = state.tpPlan;
-  const session = plan.sessions.find(s => s.id === id);
-  const day = prompt('Move the class to (YYYY-MM-DD):', session.planned_on);
-  if (!day || day === session.planned_on) return;
-  const reason = plan.status === 'draft' ? '' : prompt('Why does it move?', '');
-  if (plan.status !== 'draft' && !reason) return;
-  tpCall(null, '', 'PATCH', `/teaching-plans/${plan.id}/sessions/${id}/`, { planned_on: day, reason });
+function missTpSession(event, id) {
+  event.preventDefault();
+  const note = event.target.elements.note.value;
+  tpCall(event.submitter ? { currentTarget: event.submitter } : null, '…', 'POST',
+    `/teaching-plans/${state.tpPlan.id}/sessions/${id}/mark/`, { status: 'missed', note }, 'Marked missed');
+}
+
+function moveTpSession(event, id) {
+  event.preventDefault();
+  const form = event.target.elements;
+  tpCall(event.submitter ? { currentTarget: event.submitter } : null, 'Moving…', 'PATCH',
+    `/teaching-plans/${state.tpPlan.id}/sessions/${id}/`, { planned_on: form.day.value, reason: form.reason ? form.reason.value : '' }, 'Class moved');
 }
 
 function editTpSession(id, change) { tpCall(null, '', 'PATCH', `/teaching-plans/${state.tpPlan.id}/sessions/${id}/`, change); }
 
-function addTpSession() {
-  const day = prompt('The date of the make-up class (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
-  if (!day) return;
-  const topic = prompt('What it covers:', '') || '';
-  tpCall(null, '', 'POST', `/teaching-plans/${state.tpPlan.id}/sessions/`, { planned_on: day, topic, kind: 'lecture', hours: 1 });
+function addTpSession(event) {
+  event.preventDefault();
+  const f = event.target.elements;
+  tpCall(event.submitter ? { currentTarget: event.submitter } : null, 'Adding…', 'POST', `/teaching-plans/${state.tpPlan.id}/sessions/`,
+    { planned_on: f.day.value, kind: f.kind.value, hours: f.hours.value || 1, topic: f.topic.value }, 'Make-up class added');
 }
 
 function editTpAssessment(id, change) { tpCall(null, '', 'PATCH', `/teaching-plans/${state.tpPlan.id}/assessments/${id}/`, change); }
@@ -11672,29 +12282,34 @@ function saveTpTasks(event, id) {
 }
 
 function moderateTp(event, id, action) {
-  const note = action === 'return' ? prompt('What should the setter change?', '') : '';
-  if (action === 'return' && !note) return;
-  tpCall(event, '…', 'POST', `/teaching-plans/${state.tpPlan.id}/assessments/${id}/moderate/`, { action, note });
+  const words = { submit: 'Sent to the Head of Department', approve: 'Test approved' };
+  tpCall(event, '…', 'POST', `/teaching-plans/${state.tpPlan.id}/assessments/${id}/moderate/`, { action, note: '' }, words[action]);
+}
+
+function returnTpTest(event, id) {
+  event.preventDefault();
+  tpCall(event.submitter ? { currentTarget: event.submitter } : null, '…', 'POST',
+    `/teaching-plans/${state.tpPlan.id}/assessments/${id}/moderate/`, { action: 'return', note: event.target.elements.note.value }, 'Test returned');
 }
 
 function submitTp(event) { tpCall(event, 'Sending…', 'POST', `/teaching-plans/${state.tpPlan.id}/submit/`, {}, 'Sent for approval'); }
 
 function decideTp(event, approve) {
   tpCall(event, '…', 'POST', `/teaching-plans/${state.tpPlan.id}/decide/`,
-    { approve, note: document.getElementById('tp-decision-note').value }, approve ? 'Approved' : 'Returned');
+    { approve, note: document.getElementById('tp-decision-note').value }, approve ? 'Plan approved' : 'Plan returned');
 }
 
 function addTpNote(event) {
   tpCall(event, 'Adding…', 'POST', `/teaching-plans/${state.tpPlan.id}/notes/`,
-    { text: document.getElementById('tp-note').value, checkpoint: document.getElementById('tp-note-checkpoint').value });
+    { text: document.getElementById('tp-note').value, checkpoint: document.getElementById('tp-note-checkpoint').value }, 'Note added');
 }
 
 async function uploadTpDocument(event) {
   const file = document.getElementById('tp-doc').files[0];
-  if (!file) { toast('Choose the file', 'var(--red)'); return; }
+  if (!file) { toast('Choose the Word or PDF file first', 'var(--red)'); return; }
   const body = new FormData();
   body.append('file', file);
-  tpCall(event, 'Uploading…', 'POST', `/teaching-plans/${state.tpPlan.id}/document/`, body, 'Attached');
+  tpCall(event, 'Attaching…', 'POST', `/teaching-plans/${state.tpPlan.id}/document/`, body, 'Plan attached');
 }
 
 // ── THE LABORATORY ────────────────────────────────────────────────────────────
@@ -13998,6 +14613,7 @@ function outcomeBadge(outcome) {
 const REVIEW_SECTIONS = {
   review: ['Semester Review', "What each student's results mean for next semester."],
   provisional: ['Provisional places', 'Students placed while their results were out — settle them once the grades are in.'],
+  period: ['Academic period', 'The CAT and end-of-semester cut-off dates, and moving the college to the next semester.'],
 };
 
 function toggleReviewMenu(event) {
@@ -14019,6 +14635,7 @@ async function showReviewSection(section, btn) {
   document.getElementById('review-page-sub').textContent = sub;
   const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = title;
   if (section === 'review') return loadProgression();
+  if (section === 'period') return;
   return loadProvisional();
 }
 
@@ -16509,6 +17126,7 @@ document.addEventListener('click', event => {
   if (panel && panel.classList.contains('open') && !event.target.closest('.bell-wrap')) {
     panel.classList.remove('open');
   }
+  if (!event.target.closest('.user-wrap')) closeUserMenu();
 });
 
 document.getElementById('att-date').value = new Date().toISOString().split('T')[0];

@@ -611,6 +611,31 @@ def progress(plan, day=None, sessions=None):
     }
 
 
+def week_strip(sessions, day=None):
+    """The plan week by week, for the strip the screens draw (said 10 November
+    2026): each teaching week's Monday, its classes in order with what became
+    of each, and whether it is the week of `day`. A gap of more than a week
+    between two weeks is the recess, or a break the calendar made."""
+    day = day or date.today()
+    weeks = {}
+    for s in sorted(sessions, key=lambda s: (s.planned_on, s.order)):
+        monday = s.planned_on - timedelta(days=s.planned_on.weekday())
+        entry = weeks.setdefault(s.week, {'week': s.week, 'monday': monday, 'classes': []})
+        entry['monday'] = min(entry['monday'], monday)
+        state = s.status if _credit(s, day) or s.status == PlanSession.MISSED else (
+            'due' if s.planned_on <= day else 'planned')
+        entry['classes'].append(state)
+    rows = sorted(weeks.values(), key=lambda w: w['monday'])
+    out, before = [], None
+    for w in rows:
+        if before is not None and (w['monday'] - before).days > 7:
+            out.append({'gap': True, 'from': before + timedelta(days=7), 'to': w['monday'] - timedelta(days=1)})
+        w['current'] = w['monday'] <= day < w['monday'] + timedelta(days=7)
+        out.append(w)
+        before = w['monday']
+    return out
+
+
 def assessments_progress(plan, day=None):
     day = day or date.today()
     rows = list(plan.assessments.all())
@@ -697,9 +722,11 @@ def plan_summary(module, plan, day):
     if plan is None:
         return {**row, 'plan_id': None, 'status': 'none', 'status_display': 'No plan yet',
                 'progress': {'band': 'no_plan'}}
+    sessions = list(plan.sessions.all())
     return {**row, 'plan_id': plan.id, 'status': plan.status, 'status_display': plan.get_status_display(),
             'curriculum': plan.curriculum_module.curriculum.code if plan.curriculum_module_id else '',
-            'has_document': bool(plan.document), 'progress': progress(plan, day),
+            'has_document': bool(plan.document), 'progress': progress(plan, day, sessions),
+            'strip': week_strip(sessions, day),
             'assessments': assessments_progress(plan, day), 'updated_at': plan.updated_at}
 
 
@@ -763,6 +790,12 @@ def _plan_detail(plan, user, day=None):
                        if cm else None),
         'calendar': ({'teaching_starts': calendar.teaching_starts, 'teaching_ends': calendar.teaching_ends}
                      if calendar else None),
+        'today': day,
+        'strip': week_strip(sessions, day),
+        'events': [{'kind': e.kind, 'title': e.title, 'starts_on': e.starts_on, 'ends_on': e.ends_on}
+                   for e in events_of(module.semester, CalendarEvent.CAT, CalendarEvent.SPECIAL_CAT,
+                                      CalendarEvent.EXAM, CalendarEvent.DEADLINE, CalendarEvent.RECESS,
+                                      CalendarEvent.CQI)],
         'pattern': plan.pattern, 'weeks': plan.weeks, 'starts_on': plan.starts_on,
         'weekly_hours': pattern_hours(plan.pattern or []),
         'outcomes': outcome_rows(cm),
