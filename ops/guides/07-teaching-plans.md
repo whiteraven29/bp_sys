@@ -41,7 +41,24 @@ or money.
 Menu: **Teaching plans** ▸ My plans (tutors) · To approve (HOD, DPARC) · Plan progress (HOD, DPARC,
 Principal, QA) · Teaching calendar · Curriculum.
 
-**Tests on the branch:** `Ran 1352 tests … OK` (9 November 2026; 1330 on master).
+**When a tutor sees their plans (checked 11 November 2026).** Nobody approves a tutor before they see
+the menu; two things decide what they find in it:
+
+1. **The Tutor office** on their account (given under User Accounts). It puts *Teaching plans* in their
+   menu, with My plans, Teaching calendar and Curriculum.
+2. **Being one of a module's tutors** in the semester that is open (the Head of Department gives
+   modules under Modules). My plans lists only those modules. The first time, a module shows
+   **Start the plan**; any of its tutors may start it, and every tutor of the module works on the
+   same plan. A tutor sees no other tutor's plans, and none from another semester.
+
+A tutor given no module yet sees "You teach no module in … Your Head of Department gives you your
+modules." Until 11 November the server refused them instead (an error message), because it let in
+only accounts that had a module; it now lets in the Tutor office as well. A plan needs no approval
+to be seen or worked on: approval by the Head of Department (or DPARC) is what makes it the
+approved plan. On the laptop's database no module of 2026/27 Semester 1 has a tutor yet, so
+nobody would see a plan there; the server has its own assignments.
+
+**Tests on the branch:** `Ran 1355 tests … OK` (11 November 2026; 1330 on master).
 
 ## A. Opening the branch (once, now)
 
@@ -207,6 +224,18 @@ navy). Proposal B replaced the ledger in every page; nothing of the ledger's loo
   Bold Italic and Black). It replaced Atkinson Hyperlegible Next the same day. Lato's zero is not
   slashed and its capital I and small l are alike, so take care reading registration numbers aloud.
   Text is a sixteenth larger than before.
+- **Charts (11 November 2026):** all 16 charts (Finance summary, Spending, Inventory and college
+  property, Performance, form results) now match the cards: Lato, a tooltip shaped like a small card,
+  round markers in the legends, faint lines along the values only, thin lines and soft bar ends, a
+  thin white gap between slices and between the parts of a stacked bar, the chart titles with their
+  sign in a pale blue square. Colours by role: blue first, orange second, red only for what is owed,
+  failed or over budget, grey for a budget or what was waived, rating scales in shades of one blue
+  (light for the first answer, dark for the last), the condition of property from blue (new)
+  through grey (fair) to red (unserviceable). **Paid is now blue, not green:** green beside red is
+  the pair colour-blind readers cannot tell apart (checked with a colour-blindness validator; blue
+  beside red and blue beside orange pass). In dark mode the charts use their own darker shades, and
+  switching light/dark repaints charts already on screen. The location map of property got the
+  same cards and status colours.
 - **Contrast:** every text colour reaches 4.5:1 on its ground and every input edge 3:1, in both themes,
   including the pale text on the blue panels (checked by calculation).
 - **The teaching plan screen:** the semester as a strip (a column per teaching week, a cell per class,

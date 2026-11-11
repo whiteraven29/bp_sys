@@ -99,6 +99,8 @@ Every power is defined once, in `attendance/roles.py`.
      ▼
   TUTORS: attendance, and CA for the modules they teach (so does any office
   holder who teaches). End-of-semester marks and approvals: exam officer only.
+  Teaching plans: the Tutor office opens the menu; My plans lists the open
+  semester's modules the account is a tutor of (Module.teachers).
 
   Reporting to DPFPA, though not on the chart: records officer, ICT officer, secretary.
   ICT OFFICER → staff accounts, passwords, the open roles (tutor, secretary);
@@ -469,7 +471,7 @@ are dropped once the production row counts are checked.
 | `load_curriculum [path] [--dry-run]` | the curriculum and assessment plans (default: 2022 PST, NTA 4–6); updates in place |
 | `load_teaching_calendar [path] [--dry-run]` | the almanac's teaching weeks, holidays, CAT weeks, exams, CQI dates (default 2026/27) |
 
-Tests: 1352 on the branch `feature/teaching-plans` (1330 on master), run as described in `ops/guides/06-release-2026-27.md`.
+Tests: 1355 on the branch `feature/teaching-plans` (1330 on master), run as described in `ops/guides/06-release-2026-27.md`.
 
 ## 7. The look (said 10 November 2026)
 
@@ -493,6 +495,13 @@ The staff frame:
   `GET /api/dashboard/` (which now carries `full_name`); `renderForYou` from the notifications, called by
   `loadNotifications()` every minute.
 - **Academic period**: the cut-off card lives in `#page-progression` as review section `period`.
+- **Charts** (11 November 2026): every chart is made by `newChart(canvas, config)`. A dataset names its colours
+  by role in `tone` (`'blue'`, `'orange'`, `'bad'`, `'neutral'`, `'cond-1'`…`'cond-5'`, or `'seq:i/n'` for step i of n
+  of the blue ramp; one value or one per bar/slice). `chartLook(config)` turns roles into the `--chart-*` tokens
+  (defined in the Proposal B layer, with a dark set) and sets legend, tooltip, tick and rule colours from the page
+  tokens; `setChartDefaults()` (at init) sets font, markers, radii and interaction once. `applyTheme()` →
+  `retintCharts()` re-runs `chartLook` on every chart and calls `update()` (not `'none'`, which keeps shared
+  dataset colours). A new chart must use `newChart` and `tone`, never a hex colour.
 
 The student portal (`student_dashboard.html`): the last layer, "PHONES, SECOND PASS", sets the phone rules. The menu
 stays a strip on the left under 820 px (`--rail: 64px`). The top bar carries `#top-title` (set by `showView`) and the

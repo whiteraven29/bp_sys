@@ -518,6 +518,15 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      inline forms; the strip in miniature in My plans, To approve and Plan progress
    - [x] Sign-in: the blue panel led by **College management system** in bold, five bullets of what it covers, the motto;
      the help under the form as three bullets (staff, students, forgotten password → ICT officer or Principal)
+   - [x] Charts (11 Nov, your request "adjust all graphs"): the 16 charts on shared tokens (`--chart-*`, light and
+     dark) through `newChart()` / `chartLook()` / `setChartDefaults()`: Lato, card-like tooltips, round legend
+     markers, value lines only, soft bar ends, surface gaps; paid blue / owed red (green beside red failed the
+     colour-blind check), rating scales in shades of one blue, property condition blue → grey → red. Light ↔ dark
+     repaints every chart (checked in headless Chrome both ways). Location map on the same tokens
+   - [ ] Look at the charts with real data on your laptop (Finance summary, Spending, Inventory, Performance, a
+     form's results)
+   - [x] A tutor given no module yet is let into Teaching plans (the empty "Your Head of Department gives you
+     your modules" instead of an error); anyone without the Tutor office or a module is still refused (test)
    - [x] Checked in the browser: DPARC, accountant, tutor (dashboard and a plan), the Academic period page, the
      user menu, the student portal (desktop, 390 px phone, dark), sign-in, the staff phone menu, dark mode;
      no script errors, no sideways scrolling on a phone

@@ -1092,3 +1092,19 @@ the student portal reworked for phones, keeping the menu on the left (your decis
 **Still yours:** to look at it on your own laptop and phone before merging. **Not built:** a "Waiting on you" list made
 of more than notifications (plans to approve, tests to moderate, corrections — it needs a server list of its own); the
 printouts (invoices, passes, registers), which keep their plain style.
+
+### Q79. Charts in the new look, and when a tutor sees teaching plans ●
+
+**Asked (11 November 2026):** "adjust all graphs design to match the new frontend design, also where a tutor see the
+teaching plans or there is a criteria before they see?"
+
+**Charts — built (on the branch, uncommitted):** all 16 charts in the soft cards look and the college blue, with their
+own dark-mode shades; paid is blue and owed red, because green beside red fails for colour-blind readers. Guide 07,
+"Also on this branch". **Still yours:** to look at them with real data on your laptop.
+
+**When a tutor sees plans — answered from the code:** no approval is needed first. The Tutor office puts *Teaching
+plans* in the menu; *My plans* lists the modules of the open semester the Head of Department has given them. Each module
+shows *Start the plan* until one of its tutors starts it. **Fixed:** a tutor with no module yet got an error; they now get
+the screen's own explanation. **Observed:** on the laptop's database no module of 2026/27 Semester 1 has a tutor, so
+nobody would see a plan there; on the server it depends on the Heads of Department giving modules.
+

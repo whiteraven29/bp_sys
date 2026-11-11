@@ -13,8 +13,8 @@ from rest_framework.response import Response
 
 from . import teaching_plans as tp
 from .models import (
-    CalendarEvent, Curriculum, CurriculumModule, Module, PlanAssessment, PlanSession, Semester, TeachingCalendar,
-    TeachingPlan,
+    CalendarEvent, Curriculum, CurriculumModule, Module, PlanAssessment, PlanSession, Semester, TeacherProfile,
+    TeachingCalendar, TeachingPlan,
 )
 from .roles import is_break_glass, is_dparc, is_head_of_department
 from .views import _a_date, active_semester, pk_or_none
@@ -28,9 +28,13 @@ def _bad(message):
 
 
 def _staff(user):
-    """Anyone who has a part in teaching plans."""
+    """Anyone who has a part in teaching plans: a tutor (the menu shows them
+    My plans as soon as they hold the office, so one given no module yet is
+    told so, not refused), anyone given a module, a Head of Department, and
+    the offices that follow every plan."""
     return bool(user and user.is_authenticated and (
-        user.modules_taught.exists() or tp.sees_every_plan(user) or is_head_of_department(user)))
+        TeacherProfile.objects.filter(user=user).exists() or user.modules_taught.exists()
+        or tp.sees_every_plan(user) or is_head_of_department(user)))
 
 
 def _semester(params):

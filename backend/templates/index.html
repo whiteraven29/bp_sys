@@ -981,6 +981,47 @@
   .card-title { margin: 0 0 14px; padding: 0; border: 0; font-size: 1.08rem; font-weight: 700; color: var(--ink); }
   .card-title > span[style*="muted"] { font-weight: 400; }
 
+  /* Charts (said 11 November 2026): drawn from these tokens, by role, so they
+     sit in the cards rather than on them. Blue first and orange second; red
+     only for what is owed, failed or over budget; grey for a reference such
+     as a budget; rating scales and amounts in shades of the one blue; the
+     condition of property from blue (new) through grey (fair) to red. Every
+     set was run through the colour-blind check (dataviz validator: blue and
+     red, blue and orange pass; green beside red does not, so the money
+     charts no longer use it). The evening has its own steps, not the day's. */
+  :root {
+    --chart-blue: #1B5EAB; --chart-orange: #E0662A; --chart-bad: #D2462F; --chart-neutral: #A3ACB8;
+    --chart-area: rgba(27,94,171,.10);
+    --chart-seq-1: #86B5EC; --chart-seq-2: #5E98E0; --chart-seq-3: #3577C8; --chart-seq-4: #1B5EAB; --chart-seq-5: #153F75;
+    --chart-cond-1: #164C8C; --chart-cond-2: #5E98E0; --chart-cond-3: #B3BAC4; --chart-cond-4: #EC9384; --chart-cond-5: #C93A26;
+  }
+  html[data-theme="dark"] {
+    --chart-blue: #3F86DB; --chart-orange: #D9692E; --chart-bad: #E0584A; --chart-neutral: #5E6B80;
+    --chart-area: rgba(63,134,219,.16);
+    --chart-seq-1: #2459A6; --chart-seq-2: #3473C9; --chart-seq-3: #5590DD; --chart-seq-4: #7EAEEB; --chart-seq-5: #AFCDF4;
+    --chart-cond-1: #9CC2F3; --chart-cond-2: #3F7FD2; --chart-cond-3: #6A7689; --chart-cond-4: #C04A3A; --chart-cond-5: #F59A8A;
+  }
+  .inventory-chart-card .card-title { display: flex; align-items: center; gap: 10px; }
+  .inventory-chart-card .card-title > .bi { width: 34px; height: 34px; border-radius: 8px; flex: none; display: grid; place-items: center;
+                                            background: var(--accent-soft); color: var(--accent); font-size: 1rem; }
+  .inventory-chart-wrap { height: 280px; }
+  /* The location map in the same cards: white boxes with soft corners on the
+     dotted ground, the condition in the status colours, text in the ink. */
+  .asset-map-canvas { border-color: var(--edge); border-radius: 12px;
+                      background: radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) var(--surface2); background-size: 22px 22px; }
+  .asset-map-line { stroke: var(--border-strong); stroke-width: 1.5; }
+  .asset-map-line.attention { stroke: var(--red); }
+  .asset-map-node rect { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; }
+  .asset-map-node:hover rect, .asset-map-node:focus rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2.5; filter: none; }
+  .asset-map-node.asset rect { stroke: var(--border-strong); }
+  .asset-map-node.asset.good rect { stroke: var(--green); }
+  .asset-map-node.asset.fair rect { stroke: var(--yellow); }
+  .asset-map-node.asset.attention rect { stroke: var(--red); }
+  .asset-map-node text { fill: var(--ink); }
+  .asset-map-node text.sub { fill: var(--muted); font-size: 11px; }
+  .asset-map-side { border-color: var(--edge); border-radius: 12px; background: var(--surface2); }
+  .asset-map-legend { font-size: .8rem; }
+
   /* Counts: each its own small card, with a tinted tile for its sign. */
   .stats-grid { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-bottom: 22px; }
   .stat-card { background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; box-shadow: var(--shadow-1); padding: 16px 18px; }
@@ -4388,7 +4429,7 @@
         <div class="card inventory-chart-card"><div class="card-title"><i class="bi bi-bar-chart"></i> Quantity by Location</div><div class="inventory-chart-wrap"><canvas id="inventory-location-chart"></canvas></div></div>
       </div>
       <div class="card">
-        <div class="card-title"><i class="bi bi-diagram-3"></i> Location Asset Map <small style="font-weight:400;color:var(--muted)">Explore offices, floors, corridors and common areas</small><div class="asset-map-legend"><span style="--c:#16a34a">Good</span><span style="--c:#b45309">Fair</span><span style="--c:#dc2626">Needs attention</span></div></div>
+        <div class="card-title"><i class="bi bi-diagram-3"></i> Location Asset Map <small style="font-weight:400;color:var(--muted)">Explore offices, floors, corridors and common areas</small><div class="asset-map-legend"><span style="--c:var(--green)">Good</span><span style="--c:var(--yellow)">Fair</span><span style="--c:var(--red)">Needs attention</span></div></div>
         <div class="asset-map-layout">
           <div class="asset-map-canvas" id="asset-map-canvas"></div>
           <div class="asset-map-side" id="asset-map-details"><h4>College inventory</h4><p style="font-size:.76rem;color:var(--muted);line-height:1.5">Select any location node to display its assigned assets.</p></div>
@@ -9640,8 +9681,6 @@ async function toggleChargeActive(id, active) {
 // the only thing anyone saw. Holding the questions as data means the counts,
 // the averages, the free text and the spreadsheet all fall out of the answers.
 
-const FM_CHART_COLOURS = ['#1E2D78', '#2563EB', '#0891B2', '#16A34A', '#CA8A04',
-                          '#DC2626', '#7C3AED', '#DB2777'];
 let fmCharts = [];
 
 async function loadForms() {
@@ -9683,27 +9722,107 @@ function applyTheme(theme) {
   retintCharts();
 }
 
-// A chart draws its text on a canvas, where the page's colours never reach.
-// These read the current theme, and retintCharts repaints any chart already
-// on screen when the theme is switched.
+// A chart draws on a canvas, where the page's colours never reach. chartInk()
+// reads the current theme; a dataset names its colours by role with `tone`
+// (one role, or one per bar or slice: 'blue', 'orange', 'bad', 'neutral',
+// 'cond-1'…'cond-5', or 'seq:i/n' for step i of n shades of blue), and
+// chartLook() turns the roles into the theme's colours (the --chart-* tokens),
+// both when a chart is made (newChart) and when the theme is switched
+// (retintCharts), so the evening gets its own steps.
 function chartInk() {
   const css = getComputedStyle(document.documentElement);
   const read = (name, fallback) => (css.getPropertyValue(name) || '').trim() || fallback;
-  return { text: read('--text', '#2b3440'), muted: read('--muted', '#71808f'),
-           grid: read('--border', '#ccd4dc') };
+  return { text: read('--text', '#1B2430'), muted: read('--muted', '#5E6B7A'), grid: read('--rule', '#E8EDF4'),
+           surface: read('--surface', '#FFFFFF'), edge: read('--edge', '#E0E6EF'),
+           tone: name => read(`--chart-${name}`, '#1B5EAB') };
+}
+
+function chartMix(a, b, t) {
+  const n = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  const [x, y] = [n(a), n(b)];
+  return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+
+function chartTone(name, ink) {
+  const step = /^seq:(\d+)\/(\d+)$/.exec(name);
+  if (!step) return ink.tone(name);
+  // Step i of n along the five shades: light for the first option of a scale,
+  // dark for the last.
+  const [i, n] = [Number(step[1]), Number(step[2])];
+  const at = n <= 1 ? 3 : (i / (n - 1)) * 4;
+  const low = Math.floor(at), high = Math.min(4, low + 1);
+  return chartMix(ink.tone(`seq-${low + 1}`), ink.tone(`seq-${high + 1}`), at - low);
+}
+
+function chartLook(config, ink = chartInk()) {
+  const type = config.type;
+  (config.data?.datasets || []).forEach(ds => {
+    if (!ds.tone) return;
+    const colour = Array.isArray(ds.tone) ? ds.tone.map(t => chartTone(t, ink)) : chartTone(ds.tone, ink);
+    if ((ds.type || type) === 'line') {
+      ds.borderColor = colour; ds.pointBackgroundColor = colour; ds.pointBorderColor = ink.surface;
+      ds.backgroundColor = ds.fill ? ink.tone('area') : colour;
+    } else {
+      ds.backgroundColor = colour; ds.hoverBackgroundColor = colour;
+      // The surface between slices and between the parts of a stacked bar.
+      ds.borderColor = ink.surface;
+    }
+  });
+  const o = config.options || (config.options = {});
+  o.plugins = o.plugins || {};
+  const legend = o.plugins.legend = o.plugins.legend || {};
+  legend.labels = { ...(legend.labels || {}), color: ink.text };
+  o.plugins.tooltip = { ...(o.plugins.tooltip || {}), backgroundColor: ink.surface, titleColor: ink.text,
+                        bodyColor: ink.text, footerColor: ink.muted, borderColor: ink.edge };
+  if (type === 'bar' || type === 'line') {
+    o.scales = o.scales || {};
+    const across = o.indexAxis === 'y' ? 'y' : 'x';
+    ['x', 'y'].forEach(axis => {
+      const scale = o.scales[axis] = o.scales[axis] || {};
+      scale.ticks = { ...(scale.ticks || {}), color: ink.muted };
+      // Lines only along the values; the categories need none.
+      scale.grid = { ...(scale.grid || {}), color: ink.grid, display: axis !== across };
+      scale.border = { ...(scale.border || {}), display: false };
+    });
+  }
+  return config;
+}
+
+function newChart(canvas, config) {
+  return new Chart(canvas, chartLook(config));
+}
+
+// Once, before the first chart: Lato, round markers in the legends, a tooltip
+// like a small card, thin lines and soft bar ends.
+function setChartDefaults() {
+  if (typeof Chart === 'undefined') return;
+  const d = Chart.defaults;
+  d.font.family = getComputedStyle(document.documentElement).getPropertyValue('--font-sans').trim() || 'Lato, sans-serif';
+  d.font.size = 13;
+  d.maintainAspectRatio = false;
+  d.interaction.mode = 'index';
+  d.interaction.intersect = false;
+  d.plugins.legend.position = 'bottom';
+  Object.assign(d.plugins.legend.labels, { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8, padding: 16 });
+  Object.assign(d.plugins.tooltip, { borderWidth: 1, cornerRadius: 8, padding: 10, boxPadding: 4, caretSize: 6,
+                                     usePointStyle: true, titleFont: { weight: '700' } });
+  Object.assign(d.elements.bar, { borderRadius: 4, borderSkipped: 'start', borderWidth: 0 });
+  Object.assign(d.elements.line, { borderWidth: 2, tension: 0.3 });
+  Object.assign(d.elements.point, { radius: 4, hoverRadius: 6, borderWidth: 2, hitRadius: 10 });
+  d.elements.arc.borderWidth = 2;
+  d.scale.ticks.padding = 6;
+  // A slice answers where the pointer is, not the nearest slice anywhere.
+  Chart.overrides.doughnut.interaction = { mode: 'nearest', intersect: true };
 }
 
 function retintCharts() {
   if (typeof Chart === 'undefined' || !Chart.instances) return;
   const ink = chartInk();
   Object.values(Chart.instances).forEach(chart => {
-    const opts = chart.options || {};
-    if (opts.plugins?.legend?.labels) opts.plugins.legend.labels.color = ink.text;
-    Object.values(opts.scales || {}).forEach(scale => {
-      if (scale.ticks) scale.ticks.color = ink.muted;
-      if (scale.grid) scale.grid.color = ink.grid;
-    });
-    chart.update('none');
+    chartLook(chart.config, ink);
+    // Not update('none'): that keeps the colour a whole dataset shares (a
+    // single-colour bar series) from before the switch. Checked in Chrome.
+    chart.update();
   });
 }
 
@@ -10108,58 +10227,50 @@ function renderPerformance(data) {
     : '<tr><td colspan="8"><div class="empty"><div class="ei">📊</div>No marks have been recorded for this selection yet</div></td></tr>';
 
   destroyPerformanceCharts();
-  const ink = chartInk();
-  const grid = { color: ink.grid };
-  const axis = { color: ink.muted };
-  const base = { responsive: true, maintainAspectRatio: false,
-                 plugins: { legend: { display: false } } };
+  const base = { responsive: true, plugins: { legend: { display: false } } };
 
   const trend = document.getElementById('pf-trend-chart');
   if (trend) {
-    pfCharts.push(new Chart(trend, {
+    pfCharts.push(newChart(trend, {
       type: 'line',
       data: {
         labels: data.trend.map(p => p.label),
         datasets: [
-          { label: `Mean ${data.assessment_label}`, data: data.trend.map(p => p.mean),
-            borderColor: '#1E5BB8', backgroundColor: 'rgba(30,91,184,.12)',
-            fill: true, tension: .3, pointRadius: 4 },
-          { label: 'Pass rate', data: data.trend.map(p => p.pass_rate),
-            borderColor: '#16a34a', borderDash: [5, 4], fill: false, tension: .3, pointRadius: 3 },
+          { label: `Mean ${data.assessment_label}`, data: data.trend.map(p => p.mean), tone: 'blue', fill: true },
+          // Dashed as well as orange, so the two lines differ without colour.
+          { label: 'Pass rate', data: data.trend.map(p => p.pass_rate), tone: 'orange', borderDash: [6, 4], fill: false },
         ],
       },
-      options: { ...base, plugins: { legend: { display: true, labels: { color: ink.text } } },
-                 scales: { x: { ticks: axis, grid }, y: { beginAtZero: true, max: 100, ticks: axis, grid } } },
+      options: { ...base, plugins: { legend: { display: true },
+                                     tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.formattedValue}%` } } },
+                 scales: { y: { beginAtZero: true, max: 100 } } },
     }));
   }
 
   const grades = document.getElementById('pf-grade-chart');
   if (grades) {
-    pfCharts.push(new Chart(grades, {
+    pfCharts.push(newChart(grades, {
       type: 'bar',
       data: {
         labels: data.distribution.map(d => d.grade),
         datasets: [{ label: 'Students', data: data.distribution.map(d => d.count),
-                     backgroundColor: data.distribution.map(d => d.grade === 'F' ? '#dc2626' : '#1E5BB8'),
-                     borderRadius: 6 }],
+                     tone: data.distribution.map(d => d.grade === 'F' ? 'bad' : 'blue'), maxBarThickness: 56 }],
       },
-      options: { ...base, scales: { x: { ticks: axis, grid }, y: { beginAtZero: true, ticks: { ...axis, precision: 0 }, grid } } },
+      options: { ...base, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
     }));
   }
 
   const modules = document.getElementById('pf-module-chart');
   if (modules) {
     const rows = data.by_module.slice(0, 15);
-    pfCharts.push(new Chart(modules, {
+    pfCharts.push(newChart(modules, {
       type: 'bar',
       data: {
         labels: rows.map(r => r.code),
         datasets: [{ label: 'Mean %', data: rows.map(r => r.mean),
-                     backgroundColor: rows.map(r => r.mean < data.pass_mark ? '#dc2626' : '#1E5BB8'),
-                     borderRadius: 6 }],
+                     tone: rows.map(r => r.mean < data.pass_mark ? 'bad' : 'blue'), maxBarThickness: 22 }],
       },
-      options: { ...base, indexAxis: 'y',
-                 scales: { x: { beginAtZero: true, max: 100, ticks: axis, grid }, y: { ticks: axis, grid } } },
+      options: { ...base, indexAxis: 'y', scales: { x: { beginAtZero: true, max: 100 } } },
     }));
   }
 }
@@ -10844,42 +10955,40 @@ async function showFormResults(id) {
     const canvas = document.getElementById(`fm-chart-${i}`);
     if (!canvas) return;
     if (q.kind === 'choice') {
-      fmCharts.push(new Chart(canvas, {
+      fmCharts.push(newChart(canvas, {
         type: 'bar',
         data: {
           labels: q.counts.map(c => c.option),
-          datasets: [{ label: 'Responses', data: q.counts.map(c => c.count),
-                       backgroundColor: FM_CHART_COLOURS[0] }],
+          datasets: [{ label: 'Responses', data: q.counts.map(c => c.count), tone: 'blue', maxBarThickness: 56 }],
         },
-        options: { responsive: true, maintainAspectRatio: false,
-                   plugins: { legend: { display: false } },
+        options: { responsive: true, plugins: { legend: { display: false } },
                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
       }));
     } else if (q.kind === 'matrix') {
       // Averages per row where the scale is numeric; otherwise the spread.
       const hasMeans = q.rows.some(r => r.mean !== null);
-      fmCharts.push(new Chart(canvas, hasMeans ? {
+      fmCharts.push(newChart(canvas, hasMeans ? {
         type: 'bar',
         data: {
           labels: q.rows.map(r => r.row),
-          datasets: [{ label: 'Average rating', data: q.rows.map(r => r.mean),
-                       backgroundColor: FM_CHART_COLOURS[1] }],
+          datasets: [{ label: 'Average rating', data: q.rows.map(r => r.mean), tone: 'blue', maxBarThickness: 22 }],
         },
-        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-                   plugins: { legend: { display: false } },
+        options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } },
                    scales: { x: { beginAtZero: true, suggestedMax: Number(q.options.at(-1)) || 5 } } },
       } : {
+        // The options of a rating scale are in order, so they are shades of
+        // one blue, light to dark, never a colour each.
         type: 'bar',
         data: {
           labels: q.rows.map(r => r.row),
           datasets: q.options.map((option, index) => ({
             label: option,
             data: q.rows.map(r => r.counts.find(c => c.option === option)?.count || 0),
-            backgroundColor: FM_CHART_COLOURS[index % FM_CHART_COLOURS.length],
+            tone: `seq:${index}/${q.options.length}`, borderWidth: { right: 2 }, borderRadius: 0, maxBarThickness: 22,
           })),
         },
-        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-                   scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } } },
+        options: { indexAxis: 'y', responsive: true,
+                   scales: { x: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }, y: { stacked: true } } },
       }));
     }
   });
@@ -15310,6 +15419,11 @@ function selectAssetMapAsset(assetId) {
   document.getElementById('asset-map-details').innerHTML = `<h4>${safeText(asset.asset_tag)}</h4><dl><dt>Asset</dt><dd>${safeText(asset.name)}</dd><dt>Category</dt><dd>${safeText(asset.category_name)}</dd><dt>Quantity</dt><dd>${asset.quantity}</dd><dt>Condition</dt><dd>${safeText(asset.condition_display)}</dd><dt>Office</dt><dd>${safeText(asset.location_name)}</dd><dt>Responsible</dt><dd>${safeText(asset.responsible_office)}</dd></dl><button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="editAsset(${asset.id})"><i class="bi bi-pencil"></i> Edit asset</button>`;
 }
 
+// The condition of property, in order: blue for new, grey for fair, red for
+// unserviceable.
+const CONDITION_TONES = ['cond-1', 'cond-2', 'cond-3', 'cond-4', 'cond-5'];
+const CONDITION_TONE = { New: 'cond-1', Good: 'cond-2', Fair: 'cond-3', Poor: 'cond-4', Unserviceable: 'cond-5' };
+
 function renderInventoryCharts() {
   if (typeof Chart === 'undefined') return;
   const conditionLabels = ['New','Good','Fair','Poor','Unserviceable'];
@@ -15317,10 +15431,14 @@ function renderInventoryCharts() {
   const locationTotals = {};
   state.inventoryAssets.forEach(a => locationTotals[a.location_name] = (locationTotals[a.location_name] || 0) + Number(a.quantity));
   inventoryConditionChart?.destroy(); inventoryLocationChart?.destroy();
-  const ink = chartInk();
-  const common = {responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:ink.text}}},scales:{x:{ticks:{color:ink.muted},grid:{color:ink.grid}},y:{ticks:{color:ink.muted,precision:0},grid:{color:ink.grid}}}};
-  inventoryConditionChart = new Chart(document.getElementById('inventory-condition-chart'), {type:'doughnut',data:{labels:conditionLabels,datasets:[{data:conditionValues,backgroundColor:['#1E5BB8','#16a34a','#b45309','#c2410c','#dc2626'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:ink.text}}}}});
-  inventoryLocationChart = new Chart(document.getElementById('inventory-location-chart'), {type:'bar',data:{labels:Object.keys(locationTotals),datasets:[{label:'Items',data:Object.values(locationTotals),backgroundColor:'#1E5BB8',borderRadius:6}]},options:common});
+  inventoryConditionChart = newChart(document.getElementById('inventory-condition-chart'), {
+    type: 'doughnut',
+    data: { labels: conditionLabels, datasets: [{ label: 'Items', data: conditionValues, tone: CONDITION_TONES }] },
+    options: { responsive: true, cutout: '62%' } });
+  inventoryLocationChart = newChart(document.getElementById('inventory-location-chart'), {
+    type: 'bar',
+    data: { labels: Object.keys(locationTotals), datasets: [{ label: 'Items', data: Object.values(locationTotals), tone: 'blue', maxBarThickness: 56 }] },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } });
 }
 
 const ASSET_VALUE_FIELDS = { purchase_date: 'inv-purchase', unit_cost: 'inv-cost', supplier: 'inv-supplier',
@@ -16388,34 +16506,29 @@ function compactMoney(value) {
 function renderExecutiveCharts(data) {
   execCharts.forEach(chart => chart.destroy());
   execCharts = [];
-  const ink = chartInk();
-  const grid = { color: ink.grid };
-  const axis = { color: ink.muted };
-  const PAID = '#16a34a', OWED = '#dc2626', WAIVED = '#b45309', BLUE = '#1E5BB8';
+  // Paid in blue and owed in red: green beside red is the pair colour-blind
+  // readers lose. Waived is neither, so it is grey.
   const tip = { callbacks: { label: c => `${c.dataset.label || c.label}: ${money(c.raw)}` } };
-  const moneyAxis = { beginAtZero: true, ticks: { ...axis, callback: compactMoney }, grid };
+  const moneyAxis = { beginAtZero: true, ticks: { callback: compactMoney } };
   const stacked = (labels, rows) => ({
     type: 'bar',
     data: { labels, datasets: [
-      { label: 'Paid', data: rows.map(r => Number(r.paid)), backgroundColor: PAID, borderRadius: 4, stack: 's' },
-      { label: 'Owed', data: rows.map(r => Number(r.outstanding)), backgroundColor: OWED, borderRadius: 4, stack: 's' },
+      { label: 'Paid', data: rows.map(r => Number(r.paid)), tone: 'blue', stack: 's', borderWidth: { top: 2 }, maxBarThickness: 56 },
+      { label: 'Owed', data: rows.map(r => Number(r.outstanding)), tone: 'bad', stack: 's', maxBarThickness: 56 },
     ] },
-    options: { responsive: true, maintainAspectRatio: false,
-               plugins: { legend: { position: 'bottom', labels: { color: ink.text } }, tooltip: tip },
-               scales: { x: { stacked: true, ticks: axis, grid }, y: { ...moneyAxis, stacked: true } } },
+    options: { responsive: true, plugins: { tooltip: tip },
+               scales: { x: { stacked: true }, y: { ...moneyAxis, stacked: true } } },
   });
 
   const t = data.totals;
   const position = document.getElementById('exec-position-chart');
   if (position) {
-    execCharts.push(new Chart(position, {
+    execCharts.push(newChart(position, {
       type: 'doughnut',
       data: { labels: ['Paid', 'Owed', 'Waived'],
-              datasets: [{ data: [Number(t.paid), Number(t.outstanding), Number(t.waived)],
-                           backgroundColor: [PAID, OWED, WAIVED], borderWidth: 0 }] },
-      options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
-                 plugins: { legend: { position: 'bottom', labels: { color: ink.text } },
-                            tooltip: { callbacks: { label: c => `${c.label}: ${money(c.raw)}` } } } },
+              datasets: [{ data: [Number(t.paid), Number(t.outstanding), Number(t.waived)], tone: ['blue', 'bad', 'neutral'] }] },
+      options: { responsive: true, cutout: '62%',
+                 plugins: { tooltip: { callbacks: { label: c => `${c.label}: ${money(c.raw)}` } } } },
     }));
   }
 
@@ -16423,28 +16536,24 @@ function renderExecutiveCharts(data) {
   if (month) {
     let running = 0;
     const cumulative = data.by_month.map(r => (running += Number(r.paid)));
-    execCharts.push(new Chart(month, {
+    execCharts.push(newChart(month, {
       type: 'bar',
       data: { labels: data.by_month.map(r => r.month), datasets: [
-        { type: 'bar', label: 'Received', data: data.by_month.map(r => Number(r.paid)),
-          backgroundColor: BLUE, borderRadius: 6, yAxisID: 'y' },
-        { type: 'line', label: 'Received so far', data: cumulative, borderColor: PAID,
-          backgroundColor: PAID, tension: .3, pointRadius: 3, yAxisID: 'y' },
+        { type: 'line', label: 'Received so far', data: cumulative, tone: 'orange', fill: false, yAxisID: 'y' },
+        { type: 'bar', label: 'Received', data: data.by_month.map(r => Number(r.paid)), tone: 'blue', maxBarThickness: 40, yAxisID: 'y' },
       ] },
-      options: { responsive: true, maintainAspectRatio: false,
-                 plugins: { legend: { position: 'bottom', labels: { color: ink.text } }, tooltip: tip },
-                 scales: { x: { ticks: axis, grid }, y: moneyAxis } },
+      options: { responsive: true, plugins: { tooltip: tip }, scales: { y: moneyAxis } },
     }));
   }
 
   const programme = document.getElementById('exec-programme-chart');
   if (programme) {
-    execCharts.push(new Chart(programme, stacked(
+    execCharts.push(newChart(programme, stacked(
       data.by_programme.map(r => `${r.programme} · ${r.class_level}`), data.by_programme)));
   }
   const family = document.getElementById('exec-family-chart');
   if (family) {
-    execCharts.push(new Chart(family, stacked(data.by_family.map(r => r.family), data.by_family)));
+    execCharts.push(newChart(family, stacked(data.by_family.map(r => r.family), data.by_family)));
   }
 }
 
@@ -16889,33 +16998,29 @@ async function loadExecutiveSpending() {
 
     spendingCharts.forEach(chart => chart.destroy());
     spendingCharts = [];
-    const ink = chartInk();
-    const grid = { color: ink.grid };
-    const axis = { color: ink.muted };
     const tip = { callbacks: { label: c => `${c.dataset.label || c.label}: ${money(c.raw)}` } };
-    const moneyAxis = { beginAtZero: true, ticks: { ...axis, callback: compactMoney }, grid };
+    const moneyAxis = { beginAtZero: true, ticks: { callback: compactMoney } };
     const budget = document.getElementById('sp-budget-chart');
     if (budget && sp.rows.length) {
-      spendingCharts.push(new Chart(budget, {
+      // The budget is the yardstick, so grey; what is committed is blue, red
+      // where it has gone over.
+      spendingCharts.push(newChart(budget, {
         type: 'bar',
         data: { labels: sp.rows.map(r => r.category), datasets: [
-          { label: 'Budget', data: sp.rows.map(r => Number(r.budget || 0)), backgroundColor: '#94a3b8', borderRadius: 4 },
+          { label: 'Budget', data: sp.rows.map(r => Number(r.budget || 0)), tone: 'neutral', maxBarThickness: 36 },
           { label: 'Committed', data: sp.rows.map(r => Number(r.committed)),
-            backgroundColor: sp.rows.map(r => r.over_budget ? '#dc2626' : '#1E5BB8'), borderRadius: 4 },
+            tone: sp.rows.map(r => r.over_budget ? 'bad' : 'blue'), maxBarThickness: 36 },
         ] },
-        options: { responsive: true, maintainAspectRatio: false,
-                   plugins: { legend: { position: 'bottom', labels: { color: ink.text } }, tooltip: tip },
-                   scales: { x: { ticks: axis, grid }, y: moneyAxis } },
+        options: { responsive: true, plugins: { tooltip: tip }, scales: { y: moneyAxis } },
       }));
     }
     const flow = document.getElementById('sp-flow-chart');
     if (flow) {
-      spendingCharts.push(new Chart(flow, {
+      spendingCharts.push(newChart(flow, {
         type: 'bar',
         data: { labels: ['Received', 'Paid out'], datasets: [{ label: 'Amount',
-          data: [Number(sp.received), Number(sp.paid_out)], backgroundColor: ['#16a34a', '#b45309'], borderRadius: 6 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tip },
-                   scales: { x: { ticks: axis, grid }, y: moneyAxis } },
+          data: [Number(sp.received), Number(sp.paid_out)], tone: ['blue', 'orange'], maxBarThickness: 72 }] },
+        options: { responsive: true, plugins: { legend: { display: false }, tooltip: tip }, scales: { y: moneyAxis } },
       }));
     }
   } catch (e) { toast(apiErrorText(e, 'Could not load the spending'), 'var(--red)'); }
@@ -16985,30 +17090,24 @@ async function loadExecutiveInventory() {
 
     propertyCharts.forEach(chart => chart.destroy());
     propertyCharts = [];
-    const ink = chartInk();
     const condition = document.getElementById('exec-condition-chart');
     if (condition && p.by_condition.length) {
-      const shade = { New: '#1E5BB8', Good: '#16a34a', Fair: '#b45309', Poor: '#c2410c', Unserviceable: '#dc2626' };
-      propertyCharts.push(new Chart(condition, {
+      propertyCharts.push(newChart(condition, {
         type: 'doughnut',
         data: { labels: p.by_condition.map(r => r.name),
-                datasets: [{ data: p.by_condition.map(r => r.items),
-                             backgroundColor: p.by_condition.map(r => shade[r.name] || '#64748b'), borderWidth: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
-                   plugins: { legend: { position: 'bottom', labels: { color: ink.text } } } },
+                datasets: [{ label: 'Items', data: p.by_condition.map(r => r.items),
+                             tone: p.by_condition.map(r => CONDITION_TONE[r.name] || 'neutral') }] },
+        options: { responsive: true, cutout: '62%' },
       }));
     }
     const location = document.getElementById('exec-location-chart');
     if (location && p.by_location.length) {
-      const grid = { color: ink.grid };
-      const axis = { color: ink.muted };
-      propertyCharts.push(new Chart(location, {
+      propertyCharts.push(newChart(location, {
         type: 'bar',
         data: { labels: p.by_location.map(r => r.name),
-                datasets: [{ label: 'Items', data: p.by_location.map(r => r.items),
-                             backgroundColor: '#1E5BB8', borderRadius: 6 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-                   scales: { x: { ticks: axis, grid }, y: { beginAtZero: true, ticks: { ...axis, precision: 0 }, grid } } },
+                datasets: [{ label: 'Items', data: p.by_location.map(r => r.items), tone: 'blue', maxBarThickness: 56 }] },
+        options: { responsive: true, plugins: { legend: { display: false } },
+                   scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
       }));
     }
   } catch (e) { toast(apiErrorText(e, 'Could not load college property'), 'var(--red)'); }
@@ -17016,6 +17115,7 @@ async function loadExecutiveInventory() {
 
 // ── INIT ───────────────────────────────────────────────────────────────────────
 installWebIconReplacements();
+setChartDefaults();
 // Inject user info from Django template context immediately (no API round-trip needed)
 (function initUser() {
   const username = '{{ request.user.username|escapejs }}';

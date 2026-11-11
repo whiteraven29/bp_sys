@@ -311,12 +311,16 @@ class ApiTests(PlanBase):
         self.laid_out()
         for user, sees in ((self.qa, True), (self.dparc, True), (self.hod, True), (self.tutor, True),
                            (self.other, False)):
-            rows = client_for(user).get('/api/teaching-plans/?scope=all').data['rows'] if user != self.other else \
-                client_for(user).get('/api/teaching-plans/?scope=all')
-            if user == self.other:
-                self.assertEqual(rows.status_code, 403)          # teaches nothing
-            else:
-                self.assertEqual(bool([r for r in rows if r['code'] == 'PST04104']), sees, user.username)
+            rows = client_for(user).get('/api/teaching-plans/?scope=all').data['rows']
+            self.assertEqual(bool([r for r in rows if r['code'] == 'PST04104']), sees, user.username)
+        # A tutor given no module yet sees an empty list, which the screen
+        # explains ("Your Head of Department gives you your modules"), and
+        # the calendar and curricula; nobody else gets in.
+        self.assertEqual(client_for(self.other).get('/api/teaching-plans/?scope=mine').data['rows'], [])
+        self.assertEqual(client_for(self.other).get('/api/curricula/').status_code, 200)
+        accountant = person('accountant_user', ['accountant'])
+        self.assertEqual(client_for(accountant).get('/api/teaching-plans/?scope=mine').status_code, 403)
+        self.assertEqual(client_for(accountant).get('/api/curricula/').status_code, 403)
         waiting = client_for(self.hod).get('/api/teaching-plans/?scope=approve').data['rows']
         self.assertEqual([r['code'] for r in waiting], ['PST04104'])
         self.assertEqual(client_for(self.dparc).get('/api/teaching-plans/?scope=approve').data['rows'][0]['code'],
