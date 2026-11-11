@@ -523,6 +523,39 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      no script errors, no sideways scrolling on a phone
    - [ ] Look at the screens on your own laptop and phone before merging
 
+3n. **The new Level 5 and 6 curricula (PDF), the transition letter, the old curriculum — 11 Nov, on `feature/teaching-plans` (uncommitted).**
+   - [x] `NTA4|5|6CURRICULUM.pdf` (CURRICUM/, made 9 Nov by LibreOffice) read against the Word curricula already
+     loaded: the same documents. Every word differs only by line-end hyphens and the table heads each page repeats;
+     nothing to add to the 2022 data
+   - [x] The extractor run again on the documents: modules, outcomes, tasks and assessment schemes identical to
+     `pst_2022.json`; only the note changed
+   - [x] `barua_mtaala069.pdf` (scanned, read by OCR): Ministry of Health LB.74/262/01B/172 of 27 Oct 2026 passing on
+     NACTVET BC.220/244/65 of 26 Oct 2026 — the revised curricula for **new NTA Level 4 students from 2026/27**;
+     students already in Levels 5 and 6 **finish on the earlier curriculum**. Written into the curriculum's note
+     (shown on Teaching plans ▸ Curriculum after `load_curriculum`)
+   - [x] Old curriculum documents already on the laptop, in `~/Documents/BPHACOH/Guides/FG LEVEL 4|5|6/`: the
+     assessment plans (Level 4 December 2016, Levels 5–6 March 2019; .doc, and PDFs made 11 Nov) and the facilitator
+     guide for each module. The old curricula themselves (hours, credits, every outcome) are not there
+   - [x] The old curriculum for Levels 5–6 loaded beside the 2022 one, from the assessment plans you gave
+     (`Guides/oldAP/`, March 2019, "developed … from the curriculum of February 2015"): 23 modules, their SEOs and
+     584 related tasks, each part of CA and SE with the tasks it is drawn from (`curricula/extract_2015.py` →
+     `pst_2015.json`). Checked against the documents: every task letter the printed plans show agrees (584/584);
+     CA and SE add to 40 and 60 in every module; the instructions' tasks agree with the CA/SE ticks of table 2 in
+     483 of 535 cases (the rest are ticks the reader does not see, or the plans' own slips). Weekly hours and
+     credits are not in those plans: shown *not given*
+   - [x] A Level 5–6 plan keeps the weights results use (so it agrees with the mark sheet) and gains the outcomes
+     and what each CAT, assignment and examination must cover. On the laptop's database (rolled back) all 23
+     2026/27 Level 5–6 modules found their own; PST05101 of 2027/28 (new curriculum) finds the 2022 one
+   - [x] Where the old plans are wrong, noted on the module: PST05204 → PST05104 (module four of semester 1, its
+     facilitator guide); PST06212's report 40% in one place and 60% in another (loaded 60); PST05208 SEO 3.3.2
+     tasks d–f against a–c; PST06104's test names SEOs it lacks; PST06211's SEO 5.3.4 missing from table 1
+   - [ ] After the merge, on the server: `load_curriculum attendance/curricula/pst_2015.json` (guide 07, C1)
+   - [ ] Optional: the old curricula of February 2015 (Word), for the weekly hours and credits
+   - [ ] Your answer: PST05208 and PST05209 are not marked *Has practical component* in the laptop's database,
+     though their plans give practical tests and a practical examination — is that so on the server?
+   - [x] 2026/27 Level 4 modules: the live server has the 2022 curriculum's (your answer, 11 Nov); only the laptop's
+     copy of the database still has the old names
+
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
    - [ ] Migrations to 0085 applied by the deploy (release guide B1–B4); `Ran 1330 tests … OK` on the laptop first
    - [ ] Students ▸ Supplementary consent: check the amounts in Sehemu B (copied from the 2025 form), then Open

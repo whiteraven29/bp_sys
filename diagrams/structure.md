@@ -215,7 +215,11 @@ sign in.
                          (set by the number of months), restores (old waivers
                          put back on the bill when DPFPA agrees)
   Curriculum             a national curriculum as loaded (code, weeks of study);
-                         2022 PST: NTA 4–6 (load_curriculum, curricula/pst_2022.json)
+                         2022 PST: NTA 4–6 (load_curriculum, curricula/pst_2022.json);
+                         note: new Level 4 from 2026/27 only (MoH LB.74/262/01B/172);
+                         2015 PST: NTA 5–6 from its assessment plans (load_curriculum
+                         curricula/pst_2015.json; extract_2015.py); its plans keep the
+                         results' weights (RESULTS_SCHEME_CURRICULA in teaching_plans.py)
   CurriculumModule       code + name + NTA level, semester, credits, weekly
                          L/T/P/A hours, checks (where the documents disagree)
   LearningOutcome        an SEO (5.1.1), its enabling outcome and criteria

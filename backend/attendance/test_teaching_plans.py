@@ -107,6 +107,65 @@ class CurriculumTests(PlanBase):
         self.assertEqual(tp.curriculum_module_for(self.module).name, 'Computer Application in Pharmacy Practice')
 
 
+class OldCurriculumTests(PlanBase):
+    """The old curriculum for Levels 5 and 6 (said 11 November 2026), read from
+    its assessment plans of March 2019 (curricula/pst_2015.json), beside the
+    2022 one. Its plans keep the weights results use; it adds the outcomes."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        load_curriculum(json.loads((DATA / 'pst_2015.json').read_text()))
+        cls.level5 = ClassLevel.objects.create(name='NTA Level 5', order=5)
+
+    def level5_module(self, code, name, semester=None, **extra):
+        module = Module.objects.create(name=name, code=code, teacher='x', class_level=self.level5,
+                                       semester=semester or self.sem1, programme=self.programme, **extra)
+        module.teachers.add(self.tutor)
+        return module
+
+    def test_the_old_module_reads_as_its_assessment_plan_says(self):
+        cm = CurriculumModule.objects.get(curriculum__code='PST-2015', code='PST05101')
+        self.assertEqual(cm.name, 'Medicines and Medical Supplies Management')
+        self.assertEqual([o.code for o in cm.outcomes.all()], ['1.1.1', '1.1.2', '1.1.3', '1.2.3', '5.3.1'])
+        self.assertEqual(sum(o.tasks.count() for o in cm.outcomes.all()), 33)
+        self.assertEqual([(c.stage, c.method, c.min_count, c.weight) for c in cm.components.order_by('order')],
+                         [('ca', 'written_test', 2, Decimal('30')), ('ca', 'assignment', 2, Decimal('10')),
+                          ('se', 'written_exam', 1, Decimal('60'))])
+        self.assertEqual((cm.credits, cm.hours_per_week), (0, 0))      # the plans give neither
+        # The plan heads Pharmacology and Therapeutics PST05204; it is PST05104.
+        fixed = CurriculumModule.objects.get(curriculum__code='PST-2015', code='PST05104')
+        self.assertTrue(any('PST05204' in check for check in fixed.checks))
+
+    def test_each_level_5_module_finds_its_own_curriculum(self):
+        old = self.level5_module('PST05101', 'Medicines and Medical Supplies Management')
+        next_year = AcademicYear.objects.create(name='2027/2028')     # the new curriculum reaches Level 5
+        new = self.level5_module('PST05101', 'Purchasing and Selling of Health Commodities',
+                                 semester=Semester.objects.create(academic_year=next_year, number=1))
+        self.assertEqual(tp.curriculum_module_for(old).curriculum.code, 'PST-2015')
+        self.assertEqual(tp.curriculum_module_for(new).curriculum.code, 'PST-2022')
+
+    def test_its_plan_keeps_the_weights_results_use_and_gains_the_outcomes(self):
+        # The plan says written tests 18% and practical tests 18%; results use 16 and 20.
+        module = self.level5_module('PST05209', 'Health Information Management', has_practical=True)
+        plan = tp.start_plan(module, self.tutor)
+        self.assertEqual(plan.curriculum_module.curriculum.code, 'PST-2015')
+        self.assertTrue(plan.pattern)                                   # no hours given: the usual guess
+        tp.lay_out(plan, plan.pattern, actor=self.tutor)
+        weights = sorted((a.method, a.weight) for a in plan.assessments.all())
+        self.assertIn(('written_test', Decimal('8.00')), weights)
+        self.assertIn(('practical_test', Decimal('10.00')), weights)
+        self.assertIn(('written_exam', Decimal('30.00')), weights)
+        self.assertTrue(plan.sessions.exclude(outcome=None).exists())
+        # Each CAT is tied to the plan's written tests, so what they must cover is followed.
+        test = plan.assessments.get(method='written_test', number=1)
+        self.assertEqual(test.component.module_id, plan.curriculum_module_id)
+        gaps = {g['component']: g for g in tp.coverage(plan)['components']}
+        self.assertEqual(gaps['Written tests']['required'], 11)    # test one 6 tasks, test two 5
+        detail = client_for(self.tutor).get(f'/api/teaching-plans/{plan.id}/').json()
+        self.assertTrue(detail['scheme_source'].startswith('results today'))
+
+
 class LayOutTests(PlanBase):
     def test_the_pattern_comes_from_the_scheme_of_study(self):
         plan = self.plan()

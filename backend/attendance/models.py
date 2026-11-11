@@ -4691,7 +4691,8 @@ class Curriculum(models.Model):
     """A national curriculum and its assessment plans, as loaded from the
     documents (curricula/extract.py, manage.py load_curriculum). The new one
     (2022) runs at NTA Level 4 from 2026/27 and moves up a level a year; the
-    old one is not loaded."""
+    old one (2015, Levels 5–6, curricula/extract_2015.py → pst_2015.json) is
+    read from its assessment plans and kept until its last students finish."""
     code = models.CharField(max_length=40, unique=True)
     name = models.CharField(max_length=200)
     programme = models.ForeignKey('Programme', on_delete=models.SET_NULL, null=True, blank=True,

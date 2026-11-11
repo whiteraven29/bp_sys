@@ -11887,8 +11887,8 @@ async function loadTpCurricula() {
     box.innerHTML = rows.length ? rows.map(c => `
       <h4 style="margin:8px 0 4px">${safeText(c.name)}</h4><p class="help-note">${safeText(c.note)}</p>
       <div class="table-wrap"><table><thead><tr><th>Code</th><th>Module</th><th>Level · Sem</th><th>Credits</th><th>Hours a week (L/T/P/A)</th><th>SEOs</th><th>Notes</th><th></th></tr></thead>
-      <tbody>${c.modules.map(m => `<tr><td>${safeText(m.code)}</td><td>${safeText(m.name)}</td><td>${m.level} · ${m.semester}</td><td>${m.credits}</td>
-        <td>${m.hours.L}/${m.hours.T}/${m.hours.P}/${m.hours.A}</td><td>${m.outcomes}</td>
+      <tbody>${c.modules.map(m => `<tr><td>${safeText(m.code)}</td><td>${safeText(m.name)}</td><td>${m.level} · ${m.semester}</td><td>${m.credits || '<span style="color:var(--muted)">not given</span>'}</td>
+        <td>${tpHasHours(m.hours) ? `${m.hours.L}/${m.hours.T}/${m.hours.P}/${m.hours.A}` : '<span style="color:var(--muted)">not given</span>'}</td><td>${m.outcomes}</td>
         <td>${m.checks.length ? `<span class="badge badge-yellow" title="${safeText(m.checks.join(' · '))}">${m.checks.length}</span>` : '—'}</td>
         <td><button class="btn btn-ghost btn-sm" onclick="openTpCurriculumModule(${m.id})">Open</button></td></tr>`).join('')}</tbody></table></div>`).join('')
       : '<div class="empty">No curriculum loaded yet (python manage.py load_curriculum).</div>';
@@ -11901,13 +11901,15 @@ async function openTpCurriculumModule(id) {
     document.getElementById('tp-cm-card').style.display = 'block';
     document.getElementById('tp-cm-detail').innerHTML = `
       <div class="card-title">${safeText(m.code)} ${safeText(m.name)}</div>
-      <p class="help-note">NTA Level ${m.level}, semester ${m.semester} · ${m.credits} credits · a week: ${m.hours.L} h lecture, ${m.hours.T} h tutorial, ${m.hours.P} h practical, ${m.hours.A} h assignment.</p>
+      <p class="help-note">NTA Level ${m.level}, semester ${m.semester} · ${m.credits ? `${m.credits} credits` : 'credits not given'} · ${tpHasHours(m.hours) ? `a week: ${m.hours.L} h lecture, ${m.hours.T} h tutorial, ${m.hours.P} h practical, ${m.hours.A} h assignment` : 'weekly hours not given'}.</p>
       ${m.checks.length ? `<div class="missing-note"><strong>Where the national documents disagree:</strong><ul style="margin:4px 0 0 18px">${m.checks.map(c => `<li>${safeText(c)}</li>`).join('')}</ul></div>` : ''}
       ${tpSchemeTable(m.scheme.map(c => ({ ...c, label: c.label })), true)}
       ${tpOutcomesHtml(m.outcomes)}`;
     document.getElementById('tp-cm-card').scrollIntoView({ behavior: 'smooth' });
   } catch (e) { toast(apiErrorText(e, 'Could not open it'), 'var(--red)'); }
 }
+
+function tpHasHours(h) { return !!(h && (h.L || h.T || h.P || h.A)); }
 
 function tpSchemeTable(parts, withRequired) {
   const stage = { ca: 'CA', se: 'Semester exam', field: 'Field' };

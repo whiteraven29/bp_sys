@@ -2,6 +2,7 @@
 attendance/curricula/extract.py made from the national documents.
 
     python manage.py load_curriculum                       # the 2022 PST curriculum
+    python manage.py load_curriculum attendance/curricula/pst_2015.json   # the old one, Levels 5–6
     python manage.py load_curriculum path/to/other.json --dry-run
 
 Run again whenever the file changes: modules, outcomes, tasks and the parts of

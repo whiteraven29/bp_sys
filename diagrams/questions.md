@@ -1060,6 +1060,20 @@ are now loaded and compared on the Curriculum screen. **Still needed:** the deci
 CAT 1 (18 January 2027); the old curriculum's documents for Levels 5–6; any NACTVET / MoH transition circular for
 repeaters; the MoH examination guidelines (CA eligibility with oral tests and case studies).
 
+**11 November 2026:** the transition letter is on file — Ministry of Health LB.74/262/01B/172 of 27 October 2026,
+passing on NACTVET BC.220/244/65 of 26 October: the revised curricula for **new** NTA Level 4 students from 2026/27;
+students already in Levels 5 and 6 finish on the earlier curriculum. It does not mention repeaters (a Level 4
+repeater of 2025/26 sitting an old module this year), so that part stays open. The new Level 5 and 6 PDFs are the
+Word curricula already loaded, unchanged. The old assessment plans (2016, 2019) and facilitator guides are on the
+laptop (`Guides/FG LEVEL 4|5|6/`). The live server's 2026/27 Level 4 modules are the 2022 curriculum's (your
+answer); only the laptop's copy of the database has the old names.
+
+**Same day, the old curriculum:** you gave the old assessment plans (`Guides/oldAP/`, March 2019) as the old
+documents. Loaded from them: the old curriculum for Levels 5–6 (23 modules, SEOs, tasks, what each assessment covers);
+its plans keep the weights results use, so plans and mark sheets agree. Not in those plans: weekly hours and credits
+(the February 2015 curricula would give them). **Open:** PST05208 and PST05209 are not marked *Has practical
+component* in the laptop's database though their plans have practical tests and examinations — and on the server?
+
 ### Q78. A new visual identity ●
 
 **Asked (10 November 2026):** read `.claude/skill.md` (frontend design) and redesign as an experienced UX/UI engineer.

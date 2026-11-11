@@ -471,7 +471,10 @@ def main():
     result = {'code': 'PST-2022', 'programme': 'PST',
               'name': 'Pharmaceutical Sciences, NTA Levels 4–6 (curriculum of 2022)',
               'note': ('Curricula approved January 2022 (edited March 2022, Dodoma); assessment plans of August 2022. '
-                       'Each semester: 15 weeks of study and 2 weeks of assessment.'),
+                       'Each semester: 15 weeks of study and 2 weeks of assessment. '
+                       'In use from 2026/27 for new NTA Level 4 students only; students already in NTA Levels 5 and 6 '
+                       'finish on the earlier curriculum (NACTVET BC.220/244/65 of 26 October 2026, passed on by the '
+                       'Ministry of Health, LB.74/262/01B/172 of 27 October 2026).'),
               'weeks_of_study': 15, 'weeks_of_assessment': 2,
               'enabling': {}, 'modules': []}
     for level in (4, 5, 6):

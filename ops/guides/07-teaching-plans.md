@@ -26,6 +26,12 @@ or money.
   and assessment plans (PDF). Where those documents disagree with each other, it is noted on the
   module. CA is 40% and SE 60% everywhere (your note: the curriculum's 60/40 is the authority's
   typing error).
+- **The old curriculum, Levels 5–6 (11 November 2026).** 23 modules read from the old assessment
+  plans of March 2019 (the old curricula of February 2015 are not on hand): their SEOs and related
+  tasks, and each part of CA and SE with the tasks it is drawn from. Weekly hours and credits are
+  not in those plans, so they show *not given*, and a plan starts from the usual guess of a week.
+  A Level 5–6 plan keeps the weights results use today, so it agrees with the mark sheet; the
+  assessment plan adds which tasks each CAT, assignment and examination must cover.
 - **The teaching calendar.** From the almanac, kept by DPARC. Semester 1 teaching started on
   2 November 2026 (the almanac's "12 May 2027" is a misprint).
 - **Quality Assurance.** A new office, given by the Principal. QA follows every teaching plan and
@@ -83,6 +89,7 @@ cd backend
 PSYCOPG_IMPL=python PYTHONPATH=venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py migrate
 PSYCOPG_IMPL=python PYTHONPATH=venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py load_curriculum --dry-run
 PSYCOPG_IMPL=python PYTHONPATH=venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py load_curriculum
+PSYCOPG_IMPL=python PYTHONPATH=venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py load_curriculum attendance/curricula/pst_2015.json
 PSYCOPG_IMPL=python PYTHONPATH=venv/lib/python3.13/site-packages /usr/bin/python3.13 manage.py load_teaching_calendar
 ```
 
@@ -107,13 +114,16 @@ git push
 
 Then deploy as in guide 03 (it applies migration 0086). After the deploy, on the server:
 
-1. Load the curriculum — read the dry run first:
+1. Load both curricula — read each dry run first:
    ```bash
    sudo -u bphacoh venv/bin/python manage.py load_curriculum --dry-run
    sudo -u bphacoh venv/bin/python manage.py load_curriculum
+   sudo -u bphacoh venv/bin/python manage.py load_curriculum attendance/curricula/pst_2015.json --dry-run
+   sudo -u bphacoh venv/bin/python manage.py load_curriculum attendance/curricula/pst_2015.json
    ```
-   It lists the 33 modules, their SEOs, tasks and assessment parts, and how many notes each has
-   on where the national documents disagree.
+   The first lists the 2022 curriculum's 33 modules, the second the old curriculum's 23 (Levels 5
+   and 6), with their SEOs, tasks and assessment parts and how many notes each has on where the
+   documents disagree.
 2. Load the almanac's dates:
    ```bash
    sudo -u bphacoh venv/bin/python manage.py load_teaching_calendar --dry-run
@@ -125,16 +135,27 @@ Then deploy as in guide 03 (it applies migration 0086). After the deploy, on the
    CAT 1 (3–8 May)**, which the almanac puts before Semester 2 begins.
 4. **The Principal**, User accounts ▸ the person ▸ Roles: tick **Quality Assurance**.
 5. Open Teaching plans ▸ Curriculum, then a Level 4 module's plan: it should say *Follows …
-   (curriculum of 2022)*. Modules are matched by code, NTA level and name together, so a Level 5
-   or 6 module of the old curriculum finds nothing, as it should.
+   (curriculum of 2022)*; a Level 5 or 6 module's, *(curriculum of 2015)*. Modules are matched by
+   code, NTA level and name together (PST05101 is a different module in each curriculum). On the
+   laptop's copy of the database every 2026/27 Level 5–6 module found its own.
 
 ## What does not change, and what waits
 
 - **Results are untouched.** The plan shows the assessment plan's weights; results still use
   today's (A1/A2/CAT1/CAT2, practicals). The scheme for the new curriculum is decided with the exam
   officer once every assessment plan has been compared (needed before Level 4 CAT 1, 18 January 2027).
-- **The old curriculum is not loaded.** Levels 5 and 6 (old curriculum, this year and next) make
-  plans without outcomes; their assessments show the weights results use today.
+- **The old curriculum, from its assessment plans only.** Levels 5 and 6 (old curriculum, this year
+  and next) now get their outcomes and tasks; their assessments keep the weights results use today,
+  where three plans differ (PST05209 18% written and 18% practical tests where results use 16 and 20;
+  PST06104 and PST06105 one written test of 30% where results hold two CATs). The old Level 4
+  (December 2016, in `Guides/FG LEVEL 4/`) is not loaded: only repeaters would need it. The Ministry of
+  Health's letter LB.74/262/01B/172 of 27 October 2026 (passing on NACTVET's BC.220/244/65 of
+  26 October) says so: the revised curricula for new NTA Level 4 students from 2026/27, while
+  students already in Levels 5 and 6 finish on the earlier one. The 2022 curriculum's note on
+  Teaching plans ▸ Curriculum now cites it. The PDFs `NTA4|5|6CURRICULUM.pdf` (11 November) were
+  checked against the Word curricula already loaded: the same documents, nothing new to load. The old
+  assessment plans (`Guides/oldAP/`, the same files as in `Guides/FG LEVEL 5|6/`) are read by
+  `curricula/extract_2015.py`; the old curricula themselves would add the hours and credits.
 - **The attendance screen is unchanged.** A class marked done finds the register taken that day
   by itself; picking the plan's class while taking attendance is not built.
 - **No notifications yet.** The Head of Department sees plans waiting under *To approve*.
@@ -214,6 +235,13 @@ III called PST06212 in the assessment plan). Some plans name tasks the curriculu
 (e.g. PST04104 practical tests "5.3.1 f"), and Basic Microbiology's lists name tasks without their
 SEO. PST04106's semester examination is printed as 40% of a 60% total; it is loaded as 60%.
 
+In the old assessment plans: Pharmacology and Therapeutics is headed PST05204, though it is module
+four of semester 1 and its facilitator guide is PST 05104 — loaded as PST05104. PST06212 says
+checklist 40% and report 60% in its introduction but 40% and 40% in its instructions — loaded
+40/60. PST05208 prints SEO 3.3.2's tasks as d–f while its instructions name 3.3.2 a–c; PST06104's
+test names SEOs 2.2.1 and 2.2.2, which the module does not have; PST06211's table of tasks has an
+SEO 5.3.4 its list of outcomes lacks. Each is noted on the module.
+
 ## Files
 
 ```text
@@ -231,6 +259,8 @@ backend/attendance/views.py                     the QA role in the role editor; 
 backend/attendance/admin.py                     the QA office in Django admin
 backend/attendance/curricula/extract.py         reads the national documents into the JSON (laptop only)
 backend/attendance/curricula/pst_2022.json      the 2022 PST curriculum and assessment plans
+backend/attendance/curricula/extract_2015.py    reads the old assessment plans (.doc, via LibreOffice) into the JSON
+backend/attendance/curricula/pst_2015.json      the old curriculum, NTA 5–6, from its assessment plans of 2019
 backend/attendance/curricula/almanac_2026_2027.json
 backend/attendance/management/commands/load_curriculum.py
 backend/attendance/management/commands/load_teaching_calendar.py

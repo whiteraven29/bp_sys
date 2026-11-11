@@ -115,8 +115,9 @@ def _words(text):
 def curriculum_module_for(module):
     """The curriculum's description of this module: same code, same NTA level
     and a like name. The code alone is not enough — the old and new curricula
-    give PST04104 to different modules — so a module of the old curriculum
-    finds nothing, and its plan is made without outcomes."""
+    give PST05101 to different modules — so each module finds its own; one of
+    a curriculum not loaded (the old Level 4) finds nothing, and its plan is
+    made without outcomes."""
     candidates = CurriculumModule.objects.filter(code__iexact=module.code.replace(' ', ''))
     level = level_of(module)
     if level:
@@ -198,11 +199,12 @@ def default_pattern(cm, module):
     tutor will likely change: lecture and tutorial on Monday, practical and
     assignment on Thursday. PST04104 (L2 T1 P4 A1) is exactly the plan its
     tutor wrote by hand."""
-    if cm is not None:
+    if cm is not None and cm.hours_per_week:
         hours = {'lecture': cm.lecture_hours, 'tutorial': cm.tutorial_hours,
                  'practical': cm.practical_hours, 'assignment': cm.assignment_hours}
     else:
-        # The old curriculum is not loaded: a guess, to be put right.
+        # No scheme of study (the old curriculum came from its assessment
+        # plans, which give no hours): a guess, to be put right.
         hours = {'lecture': 2, 'tutorial': 1, 'practical': 2 if module.has_practical else 0, 'assignment': 1}
     second = 3 if hours['practical'] else 2
     days = {'lecture': 0, 'tutorial': 0, 'practical': second, 'assignment': second}
@@ -256,14 +258,31 @@ def results_scheme(module):
             {'stage': 'se', 'method': 'written_exam', 'label': 'End of semester', 'count': 1, 'weight': Decimal(60)}]
 
 
+# The curricula results are calculated on today (said 11 November 2026): a
+# plan keeps the results' parts and weights, so it agrees with the mark sheet,
+# and the assessment plan only adds what each part is drawn from.
+RESULTS_SCHEME_CURRICULA = {'PST-2015'}
+
+
+def follows_results(cm):
+    return cm is not None and cm.curriculum.code in RESULTS_SCHEME_CURRICULA
+
+
 def scheme_for(plan):
     """[{'stage','method','label','count','weight','component'}] — the
-    assessment plan's parts, or the old scheme."""
+    assessment plan's parts, or the old scheme (with the assessment plan's
+    part of the same kind, for what it is drawn from, when one is loaded)."""
     cm = plan.curriculum_module
-    if cm is not None and cm.components.exists():
+    components = list(cm.components.order_by('order')) if cm is not None else []
+    if components and not follows_results(cm):
         return [{'stage': c.stage, 'method': c.method, 'label': c.label, 'count': c.min_count,
-                 'weight': c.weight, 'component': c} for c in cm.components.order_by('order')]
-    return results_scheme(plan.module)
+                 'weight': c.weight, 'component': c} for c in components]
+    parts = results_scheme(plan.module)
+    for part in parts:
+        if part['stage'] in ('ca', 'se'):
+            part['component'] = next((c for c in components
+                                      if c.stage == part['stage'] and c.method == part['method']), None)
+    return parts
 
 
 def _singular(label):
@@ -818,7 +837,8 @@ def _plan_detail(plan, user, day=None):
         'scheme': [{'stage': p['stage'], 'label': p['label'], 'count': p['count'], 'weight': p['weight'],
                     'tool': getattr(p.get('component'), 'tool', ''),
                     'component_id': getattr(p.get('component'), 'id', None)} for p in scheme_for(plan)],
-        'scheme_source': 'assessment plan' if cm is not None and cm.components.exists() else 'results today',
+        'scheme_source': ('results today; what each part is drawn from, the assessment plan' if follows_results(cm)
+                          else 'assessment plan' if cm is not None and cm.components.exists() else 'results today'),
         'progress': progress(plan, day, sessions), 'assessment_progress': assessments_progress(plan, day),
         'coverage': coverage(plan),
         'document': ({'name': plan.document_name or plan.document.name.rsplit('/', 1)[-1]} if plan.document else None),
