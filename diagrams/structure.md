@@ -209,7 +209,9 @@ sign in.
                          refused — DPFPA decides; since 6 Nov 2026 it gives
                          time: pay_by, first_pay_by, times_extended, the bill
                          unchanged (approved before: came off the bill);
-                         replaced — taken over by a monthly plan
+                         replaced — taken over by a monthly plan; paid from
+                         the list (time_to_pay.pay_waiver, 16 Nov 2026): its
+                         instalment first, an old write-off put back as paid
   MonthlyPlan            tuition by the month, as DPFPA agreed: monthly_amount,
                          first_due, total, paid_before, pending | active |
                          completed | lapsed | refused | cancelled — laid over
@@ -241,7 +243,16 @@ sign in.
   PlanAssessment         Written test 1 …: weight, planned_on, held_on, setting
                          plan tasks, moderation (HOD; DPARC without one)
   PlanNote / PlanEvent   review notes (QA, HOD, DPARC) / the plan's history
-  teaching_plans.py      lay_out, progress (done of due), coverage, approval
+  teaching_plans.py      lay_out, progress (done of due), coverage, approval;
+                         edit_session (logs what a class covers once sent),
+                         taught_early (move to the day taught + mark;
+                         POST …/sessions/<id>/taught-early/);
+                         finish_later (…/finished-later/), registers_outside,
+                         class_from_register (…/registers/<id>/class/)
+  PlanSession.extra      added after the plan was sent: not measured on, hours count
+  PlanSession.finished_in  a missed/partial class finished in a later class (0087)
+  teaching_kpis.py       KPIS (10 measures, targets), tutor_kpis; GET /api/teaching-plans/kpis/
+                         (QA, Principal, DPARC; HOD own department)
   StudentPass            a pass issued: random code, valid_until, basis,
                          source (office / portal), issued_by
   semester_pass.py       the pass: coverage (windows paid), status, issue, verify by code
@@ -471,7 +482,7 @@ are dropped once the production row counts are checked.
 | `load_curriculum [path] [--dry-run]` | the curriculum and assessment plans (default: 2022 PST, NTA 4–6); updates in place |
 | `load_teaching_calendar [path] [--dry-run]` | the almanac's teaching weeks, holidays, CAT weeks, exams, CQI dates (default 2026/27) |
 
-Tests: 1355 on the branch `feature/teaching-plans` (1330 on master), run as described in `ops/guides/06-release-2026-27.md`.
+Tests: 1373 on the branch `feature/teaching-plans` (1330 on master), run as described in `ops/guides/06-release-2026-27.md`.
 
 ## 7. The look (said 10 November 2026)
 

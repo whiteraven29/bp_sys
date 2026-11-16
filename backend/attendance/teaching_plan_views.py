@@ -11,10 +11,11 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
+from . import teaching_kpis as tk
 from . import teaching_plans as tp
 from .models import (
-    CalendarEvent, Curriculum, CurriculumModule, Module, PlanAssessment, PlanSession, Semester, TeacherProfile,
-    TeachingCalendar, TeachingPlan,
+    CalendarEvent, Curriculum, CurriculumModule, Module, PlanAssessment, PlanSession, Semester, Session,
+    TeacherProfile, TeachingCalendar, TeachingPlan,
 )
 from .roles import is_break_glass, is_dparc, is_head_of_department
 from .views import _a_date, active_semester, pk_or_none
@@ -83,6 +84,20 @@ def plans(request):
     return Response({**tp.overview(user, semester, day, scope=scope), 'semester': str(semester),
                      'semester_id': semester.id,
                      'can': {'calendar': is_dparc(user) or is_break_glass(user)}})
+
+
+@api_view(['GET'])
+def kpis(request):
+    """The tutor KPIs against the teaching plan and the assessment plan, on a
+    day (?as_of=, default today): QA, the Principal and DPARC for every
+    module; a Head of Department for their department's."""
+    if not tk.may_see(request.user):
+        raise PermissionDenied('Tutor KPIs are for QA, the Principal, DPARC and the Heads of Department.')
+    semester = _semester(request.query_params)
+    if semester is None:
+        return _bad('No semester is open.')
+    day = _a_date(request.query_params.get('as_of')) or date.today()
+    return Response(tk.tutor_kpis(request.user, semester, day))
 
 
 @api_view(['GET', 'PATCH'])
@@ -181,6 +196,50 @@ def mark_session(request, pk, session_id):
     try:
         tp.mark(item, str(request.data.get('status') or ''), delivered_on=_a_date(request.data.get('delivered_on')),
                 note=request.data.get('note', ''), actor=request.user)
+    except tp.PlanError as exc:
+        return _bad(exc)
+    return _detail(found, request.user)
+
+
+@api_view(['POST'])
+def finished_later(request, pk, session_id):
+    """A class missed or partly taught, made up or finished in a later class
+    (in_session_id), or that link taken away (in_session_id null)."""
+    found = _plan(request.user, pk)
+    _tutor(found, request.user)
+    item = get_object_or_404(PlanSession, pk=session_id, plan=found)
+    later_id = request.data.get('in_session_id')
+    later = get_object_or_404(PlanSession, pk=pk_or_none(later_id), plan=found) if later_id not in (None, '') else None
+    try:
+        tp.finish_later(item, later, actor=request.user)
+    except tp.PlanError as exc:
+        return _bad(exc)
+    return _detail(found, request.user)
+
+
+@api_view(['POST'])
+def class_from_register(request, pk, register_id):
+    """A register the plan has no class for, entered as an extra class."""
+    found = _plan(request.user, pk)
+    _tutor(found, request.user)
+    register = get_object_or_404(Session, pk=register_id, module=found.module)
+    try:
+        tp.class_from_register(found, register, dict(request.data), actor=request.user)
+    except (tp.PlanError, ValueError, ArithmeticError) as exc:
+        return _bad(exc)
+    return _detail(found, request.user)
+
+
+@api_view(['POST'])
+def taught_early(request, pk, session_id):
+    """A class taught before its day: moved to that day and marked at once."""
+    found = _plan(request.user, pk)
+    _tutor(found, request.user)
+    item = get_object_or_404(PlanSession, pk=session_id, plan=found)
+    try:
+        tp.taught_early(item, _a_date(request.data.get('delivered_on')),
+                        status=str(request.data.get('status') or PlanSession.DONE),
+                        reason=request.data.get('reason', ''), actor=request.user)
     except tp.PlanError as exc:
         return _bad(exc)
     return _detail(found, request.user)

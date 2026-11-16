@@ -33,7 +33,7 @@ from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from .models import (
@@ -429,29 +429,77 @@ def _check_tasks(plan, task_ids):
     return tasks
 
 
+def _week_for(plan, day, exclude=None):
+    """The plan's week a day falls in: that of another class in the same
+    calendar week, else counted on from the first class (as a make-up class
+    is). Without it a class moved to another week kept its old week number,
+    and the strip drew it in the wrong column."""
+    monday = day - timedelta(days=day.weekday())
+    others = plan.sessions.all()
+    if exclude is not None:
+        others = others.exclude(pk=exclude.pk)
+    same = others.filter(planned_on__gte=monday, planned_on__lt=monday + timedelta(days=7)).first()
+    if same is not None:
+        return same.week
+    first = others.order_by('planned_on').first()
+    if first is None:
+        return 1
+    first_monday = first.planned_on - timedelta(days=first.planned_on.weekday())
+    return max(1, (monday - first_monday).days // 7 + first.week)
+
+
+def _short(text, size=60):
+    text = str(text or '').strip()
+    return f'"{text[:size]}…"' if len(text) > size else (f'"{text}"' if text else 'none')
+
+
+def _move(session, day, reason, actor, action='moved a class'):
+    plan = session.plan
+    if session.moved_from is None:
+        session.moved_from = session.planned_on
+    log(plan, actor, action, f'{session.get_kind_display()} of {session.planned_on:%d %b} to '
+        f'{day:%d %b}' + (f': {reason}' if reason else ''))
+    session.planned_on, session.move_reason, session.note = day, reason[:300], ''
+    session.week = _week_for(plan, day, exclude=session)
+
+
 @transaction.atomic
 def edit_session(session, data, *, actor):
     """Change what a class covers, or move it. Once the plan is sent for
-    approval a move needs a reason, and the first date is kept."""
+    approval a move needs a reason, the first date is kept, and a change to
+    what a class covers goes into the plan's history (said 16 November 2026:
+    a tutor who teaches 9 December's topic on 30 November swaps the two
+    classes' SEOs and topics, and the Head of Department sees that it was
+    done)."""
     plan = session.plan
-    changed = []
+    recorded = plan.status != TeachingPlan.DRAFT
+    was = {'outcome': session.outcome.code if session.outcome_id else 'none', 'topic': session.topic,
+           'kind': session.get_kind_display(), 'hours': session.hours,
+           'tasks': sorted(f'{t.outcome.code} {t.letter}' for t in session.tasks.select_related('outcome'))}
+    when = f'{session.get_kind_display()} of {session.planned_on:%a %d %b}'
+    changes = []
     if 'outcome_id' in data:
         session.outcome = _check_outcome(plan, data.get('outcome_id'))
-        changed.append('outcome')
+        now = session.outcome.code if session.outcome_id else 'none'
+        if now != was['outcome']:
+            changes.append(f'SEO {was["outcome"]} → {now}')
     if 'topic' in data:
         session.topic = str(data.get('topic') or '')[:300]
-        changed.append('topic')
+        if session.topic != was['topic']:
+            changes.append(f'topic {_short(was["topic"])} → {_short(session.topic)}')
     if 'kind' in data:
         if data['kind'] not in KINDS:
             raise PlanError('Not a kind of class.')
         session.kind = data['kind']
-        changed.append('kind')
+        if session.get_kind_display() != was['kind']:
+            changes.append(f'{was["kind"]} → {session.get_kind_display()}')
     if 'hours' in data:
         hours = Decimal(str(data['hours']))
         if not Decimal('0.5') <= hours <= 12:
             raise PlanError('A class is between half an hour and 12 hours.')
         session.hours = hours
-        changed.append('hours')
+        if hours != was['hours']:
+            changes.append(f'{was["hours"]} h → {hours} h')
     if data.get('planned_on'):
         day = data['planned_on']
         if day != session.planned_on:
@@ -460,35 +508,155 @@ def edit_session(session, data, *, actor):
                 raise PlanError('Say why the class moves: the plan has been sent for approval.')
             if session.status != PlanSession.PLANNED:
                 raise PlanError('A class already marked is not moved; add a make-up class instead.')
-            if session.moved_from is None:
-                session.moved_from = session.planned_on
-            log(plan, actor, 'moved a class', f'{session.get_kind_display()} of {session.planned_on:%d %b} to '
-                f'{day:%d %b}' + (f': {reason}' if reason else ''))
-            session.planned_on, session.move_reason, session.note = day, reason[:300], ''
-            changed.append('date')
+            _move(session, day, reason, actor)
     session.save()
     if 'task_ids' in data:
-        session.tasks.set(_check_tasks(plan, data.get('task_ids')))
+        tasks = _check_tasks(plan, data.get('task_ids'))
+        session.tasks.set(tasks)
+        now = sorted(f'{t.outcome.code} {t.letter}' for t in tasks)
+        if now != was['tasks']:
+            changes.append(f'tasks {", ".join(was["tasks"]) or "none"} → {", ".join(now) or "none"}')
+    if recorded and changes:
+        log(plan, actor, 'changed a class', f'{when}: ' + '; '.join(changes))
     return session
 
 
 @transaction.atomic
+def taught_early(session, delivered_on, *, status=PlanSession.DONE, reason='', actor, today=None):
+    """A class taught before its day (said 16 November 2026): moved to the day
+    it was taught and marked, in one step, so it counts where it happened and
+    the register of that day is its evidence. The first date stays on the
+    class and in the history."""
+    today = today or date.today()
+    if session.status != PlanSession.PLANNED:
+        raise PlanError('This class is already marked.')
+    if status not in (PlanSession.DONE, PlanSession.PARTIAL):
+        raise PlanError('A class taught early is done or partly done.')
+    if delivered_on is None:
+        raise PlanError('Give the day it was taught.')
+    if delivered_on > today:
+        raise PlanError('A class is marked once it has been taught.')
+    if delivered_on >= session.planned_on:
+        raise PlanError('That is not before its day; mark it in its own week.')
+    reason = str(reason or '').strip() or 'Taught early'
+    _move(session, delivered_on, reason, actor, action='taught a class early')
+    session.save()
+    return mark(session, status, delivered_on=delivered_on, actor=actor, today=today)
+
+
+@transaction.atomic
 def add_session(plan, data, *, actor):
-    """A class the layout did not have — a make-up class, an extra practical."""
+    """A class the layout did not have. Added while the plan is being
+    prepared, it is one of the plan's classes. Added after the plan is sent
+    (a make-up class, an extra practical, a class from a register), it is an
+    extra class: not measured against, its hours counted as taught; with
+    `finishes_id` it makes up or finishes a missed or partly taught class."""
     day = data.get('planned_on')
     if not day:
         raise PlanError('Give the date of the class.')
     kind = data.get('kind') or PlanSession.LECTURE
     if kind not in KINDS:
         raise PlanError('Not a kind of class.')
-    first = plan.sessions.order_by('planned_on').first()
-    week = ((day - first.planned_on).days // 7 + first.week) if first else 1
+    finishes = None
+    if data.get('finishes_id'):
+        finishes = plan.sessions.filter(pk=pk_int(data.get('finishes_id'))).first()
+        if finishes is None:
+            raise PlanError('That class is not one of this plan\'s.')
+    extra = plan.status in (TeachingPlan.SUBMITTED, TeachingPlan.APPROVED)
     session = PlanSession.objects.create(
-        plan=plan, order=plan.sessions.count(), week=max(week, 1), planned_on=day, kind=kind,
+        plan=plan, order=plan.sessions.count(), week=_week_for(plan, day), planned_on=day, kind=kind,
         hours=Decimal(str(data.get('hours') or 1)), outcome=_check_outcome(plan, data.get('outcome_id')),
         topic=str(data.get('topic') or '')[:300], tutor=actor if teaches(plan.module, actor) else None,
-        note=str(data.get('note') or 'Added to the plan')[:300])
+        note=str(data.get('note') or ('Extra class' if extra else 'Added to the plan'))[:300], extra=extra)
     log(plan, actor, 'added a class', f'{session.get_kind_display()} on {day:%d %b}')
+    if finishes is not None:
+        finish_later(finishes, session, actor=actor)
+    return session
+
+
+def pk_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _label(session):
+    return f'{session.get_kind_display()} of {session.planned_on:%a %d %b}'
+
+
+@transaction.atomic
+def finish_later(session, later, *, actor):
+    """A class missed or partly taught, made up or finished in a later class
+    (said 16 November 2026): a make-up class, or the tutor's next class, which
+    keeps its own topic and its own mark. From the day that class is taught
+    the earlier one counts as done. `later=None` takes the link away."""
+    plan = session.plan
+    if later is None:
+        if session.finished_in_id:
+            log(plan, actor, 'took back a finish', f'{_label(session)} no longer finished in {_label(session.finished_in)}')
+        session.finished_in = None
+        session.save(update_fields=['finished_in'])
+        return session
+    if session.status not in (PlanSession.MISSED, PlanSession.PARTIAL):
+        raise PlanError('Only a class missed or partly taught is finished later.')
+    if later.plan_id != plan.id or later.pk == session.pk:
+        raise PlanError('Choose another class of this plan.')
+    if later.status == PlanSession.MISSED:
+        raise PlanError('That class was missed itself.')
+    since = session.delivered_on or session.planned_on
+    if later.planned_on < since:
+        raise PlanError('Choose a class on or after this one.')
+    session.finished_in = later
+    session.save(update_fields=['finished_in'])
+    log(plan, actor, 'finished a class later', f'{_label(session)} ({session.get_status_display().lower()}) '
+        f'in {_label(later)}')
+    return session
+
+
+def registers_outside(plan, day=None, sessions=None):
+    """The module's attendance registers on days the plan has no class marked
+    taught: a class taught off the plan, or one not yet marked. Read only;
+    the register itself and the students' attendance are never changed."""
+    day = day or date.today()
+    sessions = list(plan.sessions.all()) if sessions is None else sessions
+    taught = {s.delivered_on for s in sessions
+              if s.status in (PlanSession.DONE, PlanSession.PARTIAL) and s.delivered_on}
+    rows = (Session.objects.filter(module=plan.module, date__lte=day).exclude(date__in=taught)
+            .annotate(total=Count('records'), present=Count('records', filter=Q(records__status='P')))
+            .order_by('date', 'created_at'))
+    return [{'id': r.id, 'date': r.date, 'label': r.label, 'topic': r.topic, 'type': r.get_session_type_display(),
+             'practical': r.session_type == Session.PRACTICAL, 'present': r.present, 'total': r.total,
+             'planned': [{'id': s.id, 'kind': s.get_kind_display(), 'status': s.status} for s in sessions
+                         if s.planned_on == r.date and not s.extra and s.status != PlanSession.DONE]}
+            for r in rows]
+
+
+@transaction.atomic
+def class_from_register(plan, register, data, *, actor, today=None):
+    """A register the plan has no class for, entered as an extra class of
+    that day, marked taught with the register as its evidence."""
+    if register.module_id != plan.module_id:
+        raise PlanError('That register is not for this module.')
+    if plan.status not in (TeachingPlan.SUBMITTED, TeachingPlan.APPROVED):
+        raise PlanError('While the plan is being prepared, add the class to the plan itself.')
+    kind = data.get('kind') or (PlanSession.PRACTICAL if register.session_type == Session.PRACTICAL
+                                else PlanSession.LECTURE)
+    session = add_session(plan, {'planned_on': register.date, 'kind': kind, 'hours': data.get('hours') or 1,
+                                 'topic': data.get('topic') or register.topic or register.label,
+                                 'outcome_id': data.get('outcome_id'), 'note': 'From the register'},
+                          actor=actor)
+    status = data.get('status') or PlanSession.DONE
+    if status not in (PlanSession.DONE, PlanSession.PARTIAL):
+        raise PlanError('A class with a register was taught, all or part.')
+    mark(session, status, delivered_on=register.date, actor=actor, today=today)
+    session.register = register
+    session.save(update_fields=['register'])
+    if data.get('finishes_id'):
+        finishes = plan.sessions.filter(pk=pk_int(data.get('finishes_id'))).first()
+        if finishes is None:
+            raise PlanError('That class is not one of this plan\'s.')
+        finish_later(finishes, session, actor=actor)
     return session
 
 
@@ -508,6 +676,8 @@ def mark(session, status, *, delivered_on=None, note='', actor, today=None):
     else:
         delivered_on, session.register = None, None
     session.status, session.delivered_on = status, delivered_on
+    if status in (PlanSession.PLANNED, PlanSession.DONE):
+        session.finished_in = None          # taught in full itself, or back to planned
     session.note = str(note or session.note or '')[:300] if status != PlanSession.PLANNED else ''
     if actor is not None and teaches(session.plan.module, actor):
         session.tutor = actor
@@ -592,24 +762,49 @@ def add_note(plan, text, *, checkpoint='', actor):
 
 # ── how far it has got ────────────────────────────────────────────────────────
 
-def _credit(session, day):
+def _own_credit(session, day):
+    """What the class itself was: done 1, partly done 0.5, else 0."""
     if session.delivered_on is None or session.delivered_on > day:
         return 0
     return {PlanSession.DONE: 1, PlanSession.PARTIAL: 0.5}.get(session.status, 0)
 
 
+def _finished(session, day, by_id):
+    """Made up or finished, by the day, in the later class named on it."""
+    later = by_id.get(session.finished_in_id) if session.finished_in_id else None
+    return bool(later is not None and later.delivered_on is not None and later.delivered_on <= day
+                and later.status in (PlanSession.DONE, PlanSession.PARTIAL))
+
+
+def _credit(session, day, by_id=None):
+    """How much of a plan class counts as taught by the day: its own mark, or
+    the whole of it once the class it was finished in has been taught."""
+    own = _own_credit(session, day)
+    if own < 1 and by_id and _finished(session, day, by_id):
+        return 1
+    return own
+
+
 def progress(plan, day=None, sessions=None):
-    """Against the plan itself, on a day (today, or a CQI checkpoint)."""
+    """Against the plan itself, on a day (today, or a CQI checkpoint). The
+    classes measured are the plan's own; an extra class (a make-up, one added
+    from a register) is not one of them, but its hours count as taught, and a
+    class it finishes counts as done from its day."""
     day = day or date.today()
     sessions = list(plan.sessions.all()) if sessions is None else sessions
-    due = [s for s in sessions if s.planned_on <= day]
-    done_due = sum(_credit(s, day) for s in due)
-    done_all = sum(_credit(s, day) for s in sessions)
-    hours_planned = sum((s.hours for s in sessions), Decimal(0))
-    hours_done = sum((s.hours * Decimal(str(_credit(s, day))) for s in sessions), Decimal(0))
-    behind = [s.planned_on for s in due if _credit(s, day) == 0]
+    by_id = {s.id: s for s in sessions}
+    planned = [s for s in sessions if not s.extra]
+    extras = [s for s in sessions if s.extra]
+    due = [s for s in planned if s.planned_on <= day]
+    done_due = sum(_credit(s, day, by_id) for s in due)
+    done_all = sum(_credit(s, day, by_id) for s in planned)
+    hours_planned = sum((s.hours for s in planned), Decimal(0))
+    hours_due = sum((s.hours for s in due), Decimal(0))
+    # Hours actually taught: each class's own mark, extra classes included.
+    hours_done = sum((s.hours * Decimal(str(_own_credit(s, day))) for s in sessions), Decimal(0))
+    behind = [s.planned_on for s in due if _credit(s, day, by_id) == 0]
     on_schedule = round(100 * done_due / len(due)) if due else None
-    if not sessions:
+    if not planned:
         band = 'no_plan'
     elif not due:
         band = 'not_started'
@@ -620,12 +815,15 @@ def progress(plan, day=None, sessions=None):
     else:
         band = 'far_behind'
     return {
-        'as_of': day, 'sessions': len(sessions), 'due': len(due), 'done': done_all, 'done_due': done_due,
-        'on_schedule': on_schedule, 'completion': round(100 * done_all / len(sessions)) if sessions else 0,
-        'hours_planned': hours_planned, 'hours_done': hours_done,
+        'as_of': day, 'sessions': len(planned), 'due': len(due), 'done': done_all, 'done_due': done_due,
+        'on_schedule': on_schedule, 'completion': round(100 * done_all / len(planned)) if planned else 0,
+        'hours_planned': hours_planned, 'hours_due': hours_due, 'hours_done': hours_done,
         'weeks_behind': ((day - min(behind)).days // 7) if behind else 0,
-        'missed': sum(1 for s in sessions if s.status == PlanSession.MISSED and s.planned_on <= day),
-        'without_register': sum(1 for s in sessions if _credit(s, day) and s.register_id is None),
+        'missed': sum(1 for s in due if s.status == PlanSession.MISSED and not _finished(s, day, by_id)),
+        'made_up': sum(1 for s in due if _own_credit(s, day) < 1 and _finished(s, day, by_id)),
+        'extra': sum(1 for s in extras if _own_credit(s, day)),
+        'taught': sum(1 for s in sessions if _own_credit(s, day)),
+        'without_register': sum(1 for s in sessions if _own_credit(s, day) and s.register_id is None),
         'band': band,
     }
 
@@ -636,13 +834,14 @@ def week_strip(sessions, day=None):
     of each, and whether it is the week of `day`. A gap of more than a week
     between two weeks is the recess, or a break the calendar made."""
     day = day or date.today()
+    by_id = {s.id: s for s in sessions}
     weeks = {}
     for s in sorted(sessions, key=lambda s: (s.planned_on, s.order)):
         monday = s.planned_on - timedelta(days=s.planned_on.weekday())
         entry = weeks.setdefault(s.week, {'week': s.week, 'monday': monday, 'classes': []})
         entry['monday'] = min(entry['monday'], monday)
-        state = s.status if _credit(s, day) or s.status == PlanSession.MISSED else (
-            'due' if s.planned_on <= day else 'planned')
+        state = ('done' if _credit(s, day, by_id) == 1 else s.status) if _credit(s, day, by_id) or (
+            s.status == PlanSession.MISSED) else ('due' if s.planned_on <= day else 'planned')
         entry['classes'].append(state)
     rows = sorted(weeks.values(), key=lambda w: w['monday'])
     out, before = [], None
@@ -664,10 +863,11 @@ def assessments_progress(plan, day=None):
             'moderated': sum(1 for a in rows if a.moderation == PlanAssessment.APPROVED)}
 
 
-def coverage(plan):
+def coverage(plan, day=None):
     """What the assessment plan says each kind of assessment must be drawn
     from, against what this plan's assessments cover; and any task tested
-    before the class that teaches it."""
+    before the class that teaches it (with `day`, only assessments due by
+    then: the tutor KPIs)."""
     gaps = []
     cm = plan.curriculum_module
     assessments = list(plan.assessments.prefetch_related('tasks__outcome'))
@@ -695,7 +895,7 @@ def coverage(plan):
     early = []
     for a in assessments:
         when = a.held_on or a.planned_on
-        if when is None or a.stage == 'se':
+        if when is None or a.stage == 'se' or (day is not None and when > day):
             continue
         for task in a.tasks.all():
             taught = first_taught.get(('task', task.id)) or first_taught.get(('outcome', task.outcome_id))
@@ -796,6 +996,11 @@ def _plan_detail(plan, user, day=None):
     cm = plan.curriculum_module
     calendar = calendar_for(module.semester)
     sessions = list(plan.sessions.select_related('outcome', 'tutor').prefetch_related('tasks'))
+    by_id = {s.id: s for s in sessions}
+    finishes = {}
+    for s in sessions:
+        if s.finished_in_id:
+            finishes.setdefault(s.finished_in_id, []).append(_label(s))
     mine = teaches(module, user)
     return {
         'id': plan.id, 'status': plan.status, 'status_display': plan.get_status_display(),
@@ -826,7 +1031,12 @@ def _plan_detail(plan, user, day=None):
                       'tutor': _name(s.tutor) if s.tutor_id else '', 'status': s.status,
                       'status_display': s.get_status_display(), 'delivered_on': s.delivered_on,
                       'register': bool(s.register_id), 'note': s.note, 'moved_from': s.moved_from,
-                      'move_reason': s.move_reason, 'due': s.planned_on <= day} for s in sessions],
+                      'move_reason': s.move_reason, 'due': s.planned_on <= day, 'extra': s.extra,
+                      'finished_in': s.finished_in_id,
+                      'finished_in_label': _label(by_id[s.finished_in_id]) if s.finished_in_id in by_id else '',
+                      'made_up': _own_credit(s, day) < 1 and _finished(s, day, by_id),
+                      'finishes': finishes.get(s.id, [])} for s in sessions],
+        'registers_outside': registers_outside(plan, day, sessions),
         'assessments': [{'id': a.id, 'stage': a.stage, 'method': a.method, 'method_display': a.get_method_display(),
                          'number': a.number, 'title': a.title, 'weight': a.weight, 'planned_on': a.planned_on,
                          'held_on': a.held_on, 'task_ids': [t.id for t in a.tasks.all()],

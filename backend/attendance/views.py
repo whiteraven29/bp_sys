@@ -10374,6 +10374,10 @@ def _waiver_row(waiver, names=None):
         'requested_at': waiver.requested_at,
         'decided_by': name(waiver.decided_by) if waiver.decided_by_id else '',
         'decided_at': waiver.decided_at, 'decision_note': waiver.decision_note,
+        # What is left to pay of an approved waiver, for its "Record payment"
+        # (said 16 November 2026); written off: approved before waivers had dates.
+        'to_pay': str(time_to_pay.still_to_pay(waiver)) if waiver.status == WaiverRequest.APPROVED else '',
+        'written_off': waiver.status == WaiverRequest.APPROVED and waiver.pay_by is None,
     }
 
 

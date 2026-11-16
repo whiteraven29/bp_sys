@@ -503,3 +503,102 @@ class TimeframeAndPutBackTests(MonthlyPlanBase):
             'first_month': f'{date.today():%Y-%m}', 'reason': 'Salary', 'restore': [old.id]}, format='json')
         self.assertEqual(asked.status_code, 201, asked.data)
         self.assertEqual((asked.data['plan']['total'], asked.data['plan']['months_set']), ('1000000.00', 4))
+
+
+class PayFromTheWaiverTests(MonthlyPlanBase):
+    """Said 16 November 2026: the slip for what a waiver covers is recorded from
+    the list of waivers. A waiver is not meant to write the bill off: money
+    written off before waivers had dates goes back on the bill as it is paid."""
+
+    def setUp(self):
+        super().setUp()
+        self.pay('450000', 'P1')                                       # instalment 1 is 50,000 short
+        self.invoice = finance.issue_invoice(self.profile, self.tuition_charges(), self.year)
+
+    def old_waiver(self, amount='50000'):
+        charge = self.tuition_charges()[0]
+        finance.waive_charge(charge, Decimal(amount), 'Sponsor pays — approved by Dpf', actor=self.accountant)
+        return WaiverRequest.objects.create(profile=self.profile, academic_year=self.year, family=ChargeType.FEE,
+                                            installment_number=1, amount=Decimal(amount), reason='Sponsor pays',
+                                            status=WaiverRequest.APPROVED)
+
+    def record(self, waiver, amount, reference, client=None, **extra):
+        return (client or self.accounts).post(f'/api/waiver-requests/{waiver.id}/pay/', {
+            'amount': amount, 'payment_date': date.today().isoformat(), 'bank_reference': reference, **extra},
+            format='json')
+
+    def placed_on(self, payment_id):
+        return {a.charge.installment_number: a.amount for a in
+                Payment.objects.get(pk=payment_id).allocations.select_related('charge')}
+
+    def test_a_dated_waiver_paid_from_the_list(self):
+        waiver = self.waiver('50000', date.today() + timedelta(days=5))
+        done = self.record(waiver, '50000', 'W1')
+        self.assertEqual(done.status_code, 201, done.data)
+        self.assertEqual((done.data['on_waiver'], done.data['still_to_pay'], done.data['put_back']),
+                         ('50000.00', '0.00', '0.00'))
+        self.assertEqual(time_to_pay.waiver_state(waiver), 'paid')
+        payment = Payment.objects.get(pk=done.data['payment_id'])
+        self.assertEqual(payment.invoice, self.invoice)
+        self.assertIn('Paid on the waiver: Tuition fee, instalment 1', payment.note)
+        self.assertTrue(FinanceAuditLog.objects.filter(action='waiver.pay', entity_id=waiver.id).exists())
+        self.assertEqual(self.record(waiver, '1000', 'W2').status_code, 400)   # nothing left on it
+
+    def test_it_pays_the_waivers_instalment_before_an_older_one(self):
+        waiver = self.waiver('500000', date.today() + timedelta(days=5), instalment=2)
+        done = self.record(waiver, '500000', 'W3')
+        self.assertEqual(self.placed_on(done.data['payment_id']), {2: Decimal('500000.00')})
+        self.assertEqual(self.owed(), Decimal('50000.00'))                      # instalment 1 still short
+
+    def test_more_than_the_waiver_pays_the_rest_of_the_invoice_then_stays_on_account(self):
+        waiver = self.waiver('50000', date.today() + timedelta(days=5))
+        done = self.record(waiver, '600000', 'W4')
+        self.assertEqual((done.data['on_waiver'], done.data['elsewhere'], done.data['on_account']),
+                         ('50000.00', '500000.00', '50000.00'))
+        self.assertEqual(finance.on_account_total(self.profile), Decimal('50000.00'))
+
+    def test_an_old_waiver_goes_back_on_the_bill_as_it_is_paid(self):
+        old = self.old_waiver()
+        self.assertEqual(self.owed(), Decimal('0.00') + Decimal('500000.00'))     # instalment 2 only
+        done = self.record(old, '30000', 'W5')
+        self.assertEqual(done.status_code, 201, done.data)
+        self.assertEqual((done.data['put_back'], done.data['on_waiver'], done.data['still_to_pay'],
+                          done.data['on_account']), ('30000.00', '30000.00', '20000.00', '0.00'))
+        charge = self.tuition_charges()[0]
+        self.assertEqual((charge.waived_amount, finance.charge_balance(finance.with_balances(
+            StudentCharge.objects.filter(pk=charge.pk))[0])), (Decimal('20000.00'), Decimal('0.00')))
+        self.assertEqual(done.data['waiver_request']['to_pay'], '20000.00')
+        self.record(old, '20000', 'W6')
+        charge.refresh_from_db()
+        self.assertEqual((charge.waived_amount, charge.waived_reason), (Decimal('0.00'), ''))
+        self.invoice.refresh_from_db()
+        self.assertEqual(finance.money(self.invoice.total), Decimal('1000000.00'))  # back on the invoice
+        self.assertEqual(self.record(old, '1000', 'W7').status_code, 400)
+
+    def test_a_slip_already_recorded_changes_nothing(self):
+        old = self.old_waiver()
+        same = self.record(old, '50000', 'P1')
+        self.assertEqual(same.status_code, 409)
+        self.assertEqual(self.tuition_charges()[0].waived_amount, Decimal('50000.00'))   # not put back
+
+    def test_who_and_which(self):
+        waiver = self.waiver('50000', date.today() + timedelta(days=5))
+        self.assertEqual(self.record(waiver, '50000', 'W8', client=self.dpfpa).status_code, 403)
+        self.assertEqual(self.record(waiver, '0', 'W8').status_code, 400)
+        self.assertEqual(self.record(waiver, '50000', 'W8',
+                                     payment_date=(date.today() + timedelta(days=1)).isoformat()).status_code, 400)
+        WaiverRequest.objects.filter(pk=waiver.pk).update(status=WaiverRequest.PENDING)
+        self.assertEqual(self.record(waiver, '50000', 'W8').status_code, 400)
+
+    def test_an_old_tuition_waiver_under_a_monthly_plan_is_paid_at_the_desk(self):
+        old = self.old_waiver()
+        time_to_pay.propose_plan(self.profile, self.year, Decimal('250000'), date(2026, 11, 15), 'Salary',
+                                 actor=self.accountant, today=NOV)
+        self.assertEqual(self.record(old, '50000', 'W9').status_code, 400)
+
+    def test_the_lists_say_what_is_left_and_who_records(self):
+        self.old_waiver()
+        rows = self.accounts.get('/api/waiver-requests/').data
+        self.assertEqual((rows[0]['to_pay'], rows[0]['written_off']), ('50000.00', True))
+        self.assertTrue(self.accounts.get('/api/time-to-pay/').data['can_record'])
+        self.assertFalse(self.dpfpa.get('/api/time-to-pay/').data['can_record'])

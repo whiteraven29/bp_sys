@@ -13,8 +13,51 @@ or money.
   days they teach; the plan is laid out from that (outcomes in curriculum order, tests in the CAT
   weeks, around holidays and the recess), and the tutor adjusts it. After each class the tutor
   marks it done; the attendance register of that day is the evidence.
-- **Measured against itself.** Classes done of those due by today: 90% or more on track, 70–89%
-  behind, below 70% far behind. A 4-credit and a 20-credit module are judged alike.
+- **A class taught early (16 November 2026).** A topic planned for 9 December and taught on
+  30 November: the tutor presses **Taught early** on the 9 December class, gives the day and
+  whether all or part was taught. It moves to 30 November and is marked in one step, counts as
+  done that day, takes that day's register as evidence, and keeps "moved from 9 Dec" with the
+  reason (Taught early unless they write one). A day after today, or not before the class's own
+  day, is refused. When the topic was taught **instead of** 30 November's class, the tutor swaps
+  the two classes' SEO and topic and marks 30 November done. Once the plan is sent for
+  approval, every change to a class's SEO, topic, tasks, kind or hours goes into the plan's
+  History ("Lecture of Mon 30 Nov: SEO 5.1.1 → 5.2.1; topic … → …"), so the Head of
+  Department and QA see the swap. A moved class now takes the week of its new date, so the strip
+  draws it where it was taught (before, it kept its old week number).
+- **Classes off the plan (16 November 2026).**
+  - *A register with no class of the plan that day* (a class taught off the plan, or one not
+    marked): the students' attendance counts exactly as before — attendance, eligibility and results
+    never read a plan. On the plan it is listed under **Registers not in the plan**. Where the plan
+    has a class that day, the tutor marks it done; where it has none, **Add as a class** enters it as
+    an *extra class* of that day, marked taught, with the register as its evidence. Until then it
+    lowers no figure of the plan, but it shows on the plan, in Plan progress and in the KPI
+    *Registers not in the plan*.
+  - *An extra class* (added after the plan is sent: a make-up, an extra practical, one from a
+    register) is not one of the classes the plan is measured on, so it neither raises nor lowers
+    *on schedule*; its hours count as taught. A class added while the plan is being prepared is one of
+    the plan's.
+  - *A make-up class that finishes nothing* (revision, an extra practical) stays an extra class.
+  - *Finished later.* A class missed or partly taught is finished in a later class: a new make-up
+    class, or the tutor's **next class**, which keeps its own topic and its own mark (Done or Part, as
+    it went). From the day that class is taught, the earlier one counts as done. The earlier class
+    says "in the Practical of Thu 05 Nov", the later one "also finished the Tutorial of Mon 02 Nov",
+    and the history keeps both. Marking the earlier class Done itself, or back to planned, takes the
+    link away; so does **Not finished there**.
+  - The missed-class box used to say "It stays due until you add a make-up class", which was not so
+    (a make-up class was never linked); it now says it counts as not taught until made up.
+- **Tutor KPIs (16 November 2026).** Teaching plans ▸ **Tutor KPIs**, for QA, the Principal, DPARC
+  and the Heads of Department (their own department): ten measures per tutor, six against the
+  teaching plan (plans approved, classes on schedule, hours taught, taught with a register, missed not
+  made up, registers not in the plan) and four against the assessment plan (assessments held,
+  moderated before given, assessment plan covered, tested before taught), each **met**, **near** or
+  **below** its target, on today or a CQI date. Two tables, three charts (on schedule by tutor;
+  assessments held and moderated by tutor; on schedule week by week, for all or one tutor), a
+  module-by-module table per tutor and the definitions. A plan shared by two tutors counts for both;
+  counts are added before dividing. The targets are fixed in `teaching_kpis.py` (said on the screen);
+  QA cannot change them yet.
+- **Measured against itself.** Classes done of those due by today (partly done counts a half; a
+  class made up or finished later, a whole): 90% or more on track, 70–89% behind, below 70% far
+  behind. A 4-credit and a 20-credit module are judged alike.
 - **Approval and moderation.** The Head of Department approves the plan and moderates each test's
   setting plan before it is given (assessment plan, Part IV). DPARC does it for a module with no
   Head of Department, or one the Head of Department teaches. Nobody approves their own.
@@ -58,7 +101,7 @@ to be seen or worked on: approval by the Head of Department (or DPARC) is what m
 approved plan. On the laptop's database no module of 2026/27 Semester 1 has a tutor yet, so
 nobody would see a plan there; the server has its own assignments.
 
-**Tests on the branch:** `Ran 1355 tests … OK` (11 November 2026; 1330 on master).
+**Tests on the branch:** `Ran 1365 tests … OK` (16 November 2026; 1330 on master).
 
 ## A. Opening the branch (once, now)
 
@@ -129,7 +172,9 @@ git merge --no-ff feature/teaching-plans
 git push
 ```
 
-Then deploy as in guide 03 (it applies migration 0086). After the deploy, on the server:
+Then deploy as in guide 03 (it applies migrations 0086 and 0087; 0087 marks classes already added
+after their plan was sent as extra classes, read from each plan's history, and changes nothing else).
+After the deploy, on the server:
 
 1. Load both curricula — read each dry run first:
    ```bash
@@ -279,7 +324,9 @@ backend/attendance/models.py                    QualityAssuranceProfile; Curricu
                                                 TeachingCalendar, CalendarEvent; TeachingPlan, PlanSession,
                                                 PlanAssessment, PlanNote, PlanEvent
 backend/attendance/migrations/0086_teaching_plans.py
+backend/attendance/migrations/0087_plan_session_follow_up.py   extra classes; finished later
 backend/attendance/teaching_plans.py            the rules
+backend/attendance/teaching_kpis.py             the tutor KPIs: definitions, targets, figures
 backend/attendance/teaching_plan_views.py       the API
 backend/attendance/urls.py                      /api/teaching-plans/…, /api/teaching-calendar/…, /api/curricula/…
 backend/attendance/roles.py                     is_quality_assurance; the office in OFFICE_MODELS

@@ -1108,3 +1108,44 @@ shows *Start the plan* until one of its tutors starts it. **Fixed:** a tutor wit
 the screen's own explanation. **Observed:** on the laptop's database no module of 2026/27 Semester 1 has a tutor, so
 nobody would see a plan there; on the server it depends on the Heads of Department giving modules.
 
+### Q80. A class taught before its day ●
+
+**Asked (16 November 2026):** "how do we handle a situation where a tutor opt to teach a topic that was planed like on
+9th dec, and taught it 30th nov?" Two ways were proposed (record changes to what a class covers; a Taught early
+button); **your answer:** "yes build both".
+
+**Built (on the branch, uncommitted):** **Taught early** on a class still to come moves it to the day it was taught and
+marks it in one step, keeping "moved from 9 Dec". When the topic replaced that day's class, the tutor swaps the two
+classes' SEO and topic; once the plan is sent, that swap is written to the plan's History. A moved class now sits in the
+week of its new date on the strip. Guide 07, "What it is".
+
+### Q81. Partly taught classes, classes off the plan, and tutor KPIs ●
+
+**Asked (16 November 2026):** what happens to classes taught in part or outside the plan (their attendance is still
+needed); then "implement all": a register outside the plan, make-up classes that finish nothing, a class completed in the
+tutor's next class "when that day counts for something else", and KPIs for QA "as per teaching plan and assessment plan"
+with tables and graphs.
+
+**Built (on the branch, uncommitted; migration 0087):** extra classes; Finished later (in a make-up or the next class,
+which keeps its own mark); Registers not in the plan (attendance untouched; Add as a class); Tutor KPIs with ten
+measures, two tables, three charts and the definitions. Guide 07, "What it is".
+
+**Still yours:** whether QA should be able to change the KPI targets (fixed in the code now: on schedule 90/70, hours
+90/70, register 100/90, held 100/80, moderated 100/80, covered 100/80, missed 0/2, registers 0/3, tested early 0/0), and
+whether tutors should see their own KPIs.
+
+### Q82. A student paying what was waived ●
+
+**Asked (16 November 2026):** "what happens when a student comes to pay what was waived?", then "if a student had been
+waived 200k and they come to pay now, we record it with their invoice number, what happens?", then: "at list of waivers
+lets have a button to record the amount paid from there … because a waiver is not meant to write a bill off, it is meant
+to just pass the student until some time when they come to pay".
+
+**Built (on the branch, uncommitted; no migration):** Record payment on each approved waiver with money still to pay
+(Shortfall waivers and Time to pay; the accountant). It pays the waiver's own instalment first. A waiver approved before
+6 November 2026 is put back on the bill as it is paid. Release guide 06, "Waivers give time".
+
+**Still yours:** waivers approved before 6 November stay written off until the student pays (only what is paid goes back).
+Should they all go back on the bill now, each with a date DPFPA sets? That would hold those students again until they
+pay or are given a date. And the payment desk itself still pays the oldest instalment first: say if it should also offer
+"Pays which instalment".

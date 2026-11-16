@@ -453,6 +453,12 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      invoice and audits it; refused, nothing moves
    - [x] 1330 tests; the whole flow checked in the browser (asked, approved, more time, both summaries, phone portal;
      a plan replacing a waiver; an old waiver put back, 5 months)
+   - [x] Record payment from the list of waivers (16 Nov, on `feature/teaching-plans`, no migration; your rule: "a
+     waiver is not meant to write a bill off"): Shortfall waivers and Time to pay, accountant only. The slip pays the
+     waiver's instalment first (not the oldest), then the rest of its invoice; over that, on account. An old
+     written-off waiver: what is paid goes back on the bill first, the rest stays off; invoice refreshed; a slip
+     already recorded changes nothing (`time_to_pay.pay_waiver`, `POST /api/waiver-requests/<id>/pay/`). 8 tests
+   - [ ] Record one waiver payment on the laptop (one dated, one written off before) and read the statement
 3l. **Teaching plans, the curricula and the teaching calendar; the QA office — 8–9 Nov, on the branch
    `feature/teaching-plans` (not merged; migration 0086). Guide `ops/guides/07-teaching-plans.md`.**
    - [x] The 2022 PST curriculum loaded from the national documents (NTA 4–6 curricula, Word; assessment plans,
@@ -527,6 +533,20 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      form's results)
    - [x] A tutor given no module yet is let into Teaching plans (the empty "Your Head of Department gives you
      your modules" instead of an error); anyone without the Tutor office or a module is still refused (test)
+   - [x] Taught early (16 Nov): a button on a class still to come moves it to the day it was taught and marks it
+     done or part in one step (`taught_early`, `POST …/taught-early/`); refuses a future day or one not before
+     the class's own day; keeps "moved from" and the reason. A moved class takes the week of its new date
+   - [x] After a plan is sent, changes to a class's SEO, topic, tasks, kind or hours go into its History (so a
+     swap of two classes' topics is seen); not while it is a draft. Tests 1358 OK
+   - [ ] Try Taught early and a swap on one plan on your laptop
+   - [x] Classes off the plan (16 Nov): extra classes (added after sending: not measured on, hours counted);
+     Finished later (a missed or partly taught class finished in a later class: a make-up or the next class,
+     which keeps its own mark); Registers not in the plan (listed; mark the day's class or Add as a class;
+     attendance untouched). Migration 0087 (`extra`, `finished_in`; backfills extras from plan history)
+   - [x] Tutor KPIs for QA, Principal, DPARC, HOD: 10 measures (6 teaching plan, 4 assessment plan), met/near/below,
+     two tables, three charts, module breakdown, definitions (`teaching_kpis.py`). Tests 1365 OK (7 new)
+   - [ ] Run `python manage.py migrate` on the laptop before opening the plans (0087)
+   - [ ] Decide: should QA be able to change the KPI targets, and should tutors see their own KPIs?
    - [x] Checked in the browser: DPARC, accountant, tutor (dashboard and a plan), the Academic period page, the
      user menu, the student portal (desktop, 390 px phone, dark), sign-in, the staff phone menu, dark mode;
      no script errors, no sideways scrolling on a phone

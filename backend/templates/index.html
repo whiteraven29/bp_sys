@@ -1543,6 +1543,7 @@
         <button class="nav-sub-btn" data-tp-nav="mine" data-roles="tutor" onclick="showTpSection('mine', this)">My plans</button>
         <button class="nav-sub-btn" data-tp-nav="approve" data-roles="hod dparc" onclick="showTpSection('approve', this)">To approve</button>
         <button class="nav-sub-btn" data-tp-nav="progress" data-roles="hod dparc principal qa" onclick="showTpSection('progress', this)">Plan progress</button>
+        <button class="nav-sub-btn" data-tp-nav="kpis" data-roles="hod dparc principal qa" onclick="showTpSection('kpis', this)">Tutor KPIs</button>
         <button class="nav-sub-btn" data-tp-nav="calendar" onclick="showTpSection('calendar', this)">Teaching calendar</button>
         <button class="nav-sub-btn" data-tp-nav="curriculum" onclick="showTpSection('curriculum', this)">Curriculum</button>
       </div>
@@ -1921,6 +1922,58 @@
           <thead><tr><th>Module</th><th>Tutors</th><th>Plan</th><th>Week by week</th><th>On schedule</th><th>Needs a look</th><th></th></tr></thead>
           <tbody id="tp-progress-tbody"></tbody>
         </table></div>
+      </div>
+
+      <!-- Tutor KPIs (said 16 November 2026): each tutor against their teaching
+           plans and assessment plans; definitions in teaching_kpis.py. -->
+      <div data-tp-section="kpis">
+        <div class="card">
+          <div class="card-title">Tutors against their plans
+            <span style="margin-left:auto;display:flex;gap:6px;align-items:center;font-weight:400;font-size:.8rem">
+              <span style="white-space:nowrap">As at</span> <select id="tp-kpi-asof" onchange="loadTpKpis()" style="max-width:260px"></select>
+              <input type="date" id="tp-kpi-asof-date" onchange="document.getElementById('tp-kpi-asof').value='custom'; loadTpKpis()" style="max-width:150px" />
+            </span>
+          </div>
+          <p class="help-note">Each tutor is measured on the plans of the modules they teach this semester, as they stood on the day chosen. A plan shared by two tutors counts for both. Figures are added up before they are divided, so a big module weighs more than a small one. Each KPI is <b>met</b>, <b>near</b> or <b>below</b> its target; what each one measures is at the foot of the page.</p>
+          <div class="quick-facts" id="tp-kpi-facts"></div>
+        </div>
+        <div class="inventory-charts-grid">
+          <div class="card inventory-chart-card"><div class="card-title"><i class="bi bi-bar-chart"></i> Classes on schedule, by tutor</div>
+            <div class="inventory-chart-wrap" id="tp-kpi-schedule-wrap"><canvas id="tp-kpi-schedule-chart"></canvas></div></div>
+          <div class="card inventory-chart-card"><div class="card-title"><i class="bi bi-bar-chart-steps"></i> Assessments held and moderated, by tutor</div>
+            <div class="inventory-chart-wrap" id="tp-kpi-assess-wrap"><canvas id="tp-kpi-assess-chart"></canvas></div></div>
+        </div>
+        <div class="card inventory-chart-card"><div class="card-title"><i class="bi bi-graph-up"></i> Classes on schedule, week by week
+            <select id="tp-kpi-trend-who" onchange="renderTpKpiTrend()" style="margin-left:auto;max-width:260px" aria-label="Whose weeks"></select></div>
+          <div class="inventory-chart-wrap"><canvas id="tp-kpi-trend-chart"></canvas></div></div>
+        <div class="card">
+          <div class="card-title">Against the teaching plan</div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Tutor</th><th>Plans approved</th><th>Classes on schedule</th><th>Hours taught</th><th>Taught with a register</th><th>Missed, not made up</th><th>Registers not in the plan</th><th>KPIs met</th><th></th></tr></thead>
+            <tbody id="tp-kpi-teach-tbody"></tbody>
+          </table></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Against the assessment plan</div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Tutor</th><th>Assessments held</th><th>Moderated before given</th><th>Assessment plan covered</th><th>Tested before taught</th></tr></thead>
+            <tbody id="tp-kpi-assess-tbody"></tbody>
+          </table></div>
+        </div>
+        <div class="card" id="tp-kpi-modules-card" hidden>
+          <div class="card-title" id="tp-kpi-modules-title">Modules</div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Module</th><th>Plan</th><th>On schedule</th><th>Hours</th><th>Register</th><th>Missed</th><th>Not in plan</th><th>Held</th><th>Moderated</th><th>Covered</th><th>Tested early</th><th></th></tr></thead>
+            <tbody id="tp-kpi-modules-tbody"></tbody>
+          </table></div>
+        </div>
+        <div class="card">
+          <div class="card-title">What each KPI measures</div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>KPI</th><th>What is measured</th><th>Met</th><th>Below</th><th>From</th></tr></thead>
+            <tbody id="tp-kpi-defs-tbody"></tbody>
+          </table></div>
+        </div>
       </div>
 
       <div class="card" data-tp-section="calendar">
@@ -4065,9 +4118,9 @@
         </div>
 
         <div class="card finance-only">
-          <div class="card-title">Shortfall waivers <span class="tip" tabindex="0" role="note" aria-label="Help: shortfall waivers" data-tip="Asked at the finance desk, on tuition or direct costs. DPFPA approves or refuses each. An approved one gives time until its date; the money stays owed. Follow them under Time to pay.">?</span></div>
+          <div class="card-title">Shortfall waivers <span class="tip" tabindex="0" role="note" aria-label="Help: shortfall waivers" data-tip="Asked at the finance desk, on tuition or direct costs. DPFPA approves or refuses each. An approved one gives time until its date; the money stays owed. Follow them under Time to pay. When the student comes to pay, Record payment puts the slip on that instalment first.">?</span></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Student</th><th>Instalment</th><th class="num">Short</th><th>To pay by</th><th>Reason</th><th>Status</th><th>DPFPA's note</th></tr></thead>
+            <thead><tr><th>Student</th><th>Instalment</th><th class="num">Short</th><th>To pay by</th><th>Reason · DPFPA's note</th><th>Status</th><th class="num">Still to pay</th></tr></thead>
             <tbody id="fin-waivers-tbody"></tbody>
           </table></div>
         </div>
@@ -11548,9 +11601,10 @@ async function loadOverrides() {
     document.getElementById('fin-waivers-tbody').innerHTML = rows.length ? rows.map(w => `<tr>
       <td>${personCell(w.name, w.college_id || w.reg_no)}</td>
       <td>${safeText(w.charge)}${w.charge_id ? ` · instalment ${w.installment}` : ''}</td>
-      <td class="num">${money(w.shortfall)}</td><td style="white-space:nowrap">${w.pay_by ? safeText(ttpDate(w.pay_by)) : '—'}</td><td>${safeText(w.reason)}</td>
+      <td class="num">${money(w.shortfall)}</td><td style="white-space:nowrap">${w.pay_by ? safeText(ttpDate(w.pay_by)) : '—'}</td><td>${safeText(w.reason)}${w.decision_note ? `<div style="font-size:.72rem;color:var(--muted)">DPFPA: ${safeText(w.decision_note)}</div>` : ''}</td>
       <td><span class="badge ${w.status === 'approved' ? 'badge-green' : w.status === 'refused' ? 'badge-red' : w.status === 'replaced' ? 'badge-gen' : 'badge-yellow'}">${safeText(w.status_display)}</span></td>
-      <td>${safeText(w.decision_note || '—')}</td></tr>`).join('')
+      <td class="num">${w.status === 'approved' ? (Number(w.to_pay) > 0 ? `<strong>${money(w.to_pay)}</strong>${w.written_off ? '<div style="font-size:.72rem;color:var(--orange)">written off before</div>' : ''}` : '<span class="badge badge-green">Paid</span>') : '—'}${w.status === 'approved' && Number(w.to_pay) > 0 ? `<div style="margin-top:6px">${waiverPayButton('fwv', w.id)}</div>` : ''}</td></tr>
+      ${w.status === 'approved' && Number(w.to_pay) > 0 ? waiverPayFormHtml('fwv', w, w.charge, 7) : ''}`).join('')
       : '<tr><td colspan="7"><div class="empty">No shortfall waivers asked for</div></td></tr>';
   }).catch(() => {});
   const data = await api('GET', '/finance-overrides/');
@@ -11802,6 +11856,7 @@ const TP_SECTIONS = {
   mine: ['My plans', 'The modules you teach this semester, and your plan for each.'],
   approve: ['Plans to approve', 'Plans and tests waiting on you.'],
   progress: ['Plan progress', 'How far each plan has got, against itself.'],
+  kpis: ['Tutor KPIs', 'Each tutor against their teaching plans and assessment plans.'],
   calendar: ['Teaching calendar', 'The weeks plans are laid out over: from the almanac, kept by DPARC.'],
   curriculum: ['Curriculum', 'Outcomes, tasks, weekly hours and how each module is assessed.'],
   plan: ['Teaching plan', ''],
@@ -11860,6 +11915,7 @@ async function showTpSection(section, btn) {
   if (section === 'mine') return loadTpMine();
   if (section === 'approve') return loadTpApprove();
   if (section === 'progress') return loadTpProgress();
+  if (section === 'kpis') return loadTpKpis();
   if (section === 'calendar') return loadTpCalendar();
   if (section === 'curriculum') return loadTpCurricula();
 }
@@ -11932,6 +11988,166 @@ async function loadTpProgress() {
         <td class="act">${r.plan_id ? `<button class="btn btn-secondary btn-sm" onclick="openTpPlan(${r.plan_id})">Open</button>` : ''}</td></tr>`;
     }).join('') : '<tr><td colspan="7"><div class="empty">No module is registered for this semester yet.</div></td></tr>';
   } catch (e) { toast(apiErrorText(e, 'Could not load the plans'), 'var(--red)'); }
+}
+
+// ── Tutor KPIs (said 16 November 2026) ──
+// Each tutor against the teaching plans and assessment plans of the modules
+// they teach; the measures and their targets are defined in teaching_kpis.py
+// and sent with the figures, so the screen and the definitions table never
+// disagree.
+let tpKpiCharts = [];
+const TP_KPI_BANDS = { met: ['met', 'badge-green'], near: ['near', 'badge-yellow'], below: ['below', 'badge-red'] };
+
+function tpKpiCell(row, key) {
+  const def = state.tpKpis.definitions.find(d => d.key === key);
+  const value = row.values[key];
+  if (value === null || value === undefined) return '<span class="tp-sub">not measured yet</span>';
+  const [word, cls] = TP_KPI_BANDS[row.bands[key]] || ['', 'badge-gen'];
+  const c = row.counts;
+  const of = {
+    plans_approved: `${c.approved} of ${c.modules}`, on_schedule: `${c.done_due} of ${c.due} classes`,
+    hours: `${c.hours_done} of ${c.hours_due} h`, evidence: `${c.taught_with_register} of ${c.taught}`,
+    held: `${c.ca_held} of ${c.ca_due}`, moderated: `${c.held_moderated} of ${c.held}`,
+    coverage: `${c.cov_covered} of ${c.cov_required} tasks`,
+  }[key];
+  return `<span class="badge ${cls}">${value}${def.unit === '%' ? '%' : ''} · ${word}</span>${of ? `<div class="tp-sub">${of}</div>` : ''}`;
+}
+
+async function loadTpKpis() {
+  const select = document.getElementById('tp-kpi-asof');
+  let asOf = '';
+  if (select.value === 'custom') asOf = document.getElementById('tp-kpi-asof-date').value;
+  else if (select.value && select.value !== 'today') asOf = select.value;
+  try {
+    const data = await api('GET', `/teaching-plans/kpis/${asOf ? `?as_of=${asOf}` : ''}`);
+    state.tpKpis = data;
+    const kept = select.value;
+    select.innerHTML = '<option value="today">Today</option>' + data.checkpoints.map(c =>
+      `<option value="${c.on}">${safeText(c.title)} (${tpDate(c.on)})</option>`).join('') + '<option value="custom">Another day…</option>';
+    select.value = kept || 'today';
+    renderTpKpis();
+  } catch (e) { toast(apiErrorText(e, 'Could not load the KPIs'), 'var(--red)'); }
+}
+
+function renderTpKpis() {
+  const data = state.tpKpis;
+  const rows = data.tutors;
+  const all = data.all;
+  const below = rows.filter(r => Object.values(r.bands).includes('below')).length;
+  document.getElementById('tp-kpi-facts').innerHTML = `
+    <div class="qf-item"><span>Tutors measured</span><strong>${rows.length}</strong></div>
+    <div class="qf-item"><span>Classes on schedule, all plans</span><strong>${all.values.on_schedule ?? '—'}${all.values.on_schedule === null ? '' : '%'}</strong></div>
+    <div class="qf-item"><span>Assessments held, all plans</span><strong>${all.values.held ?? '—'}${all.values.held === null ? '' : '%'}</strong></div>
+    <div class="qf-item"><span>Tutors below on a KPI</span><strong>${below}</strong></div>
+    ${data.unassigned.length ? `<div class="qf-item"><span>Modules with no tutor</span><strong>${data.unassigned.length}</strong></div>` : ''}`;
+
+  const empty = cols => `<tr><td colspan="${cols}"><div class="empty">No tutor teaches a module you follow this semester.</div></td></tr>`;
+  document.getElementById('tp-kpi-teach-tbody').innerHTML = rows.length ? rows.map((r, i) => `<tr>
+      <td><b>${safeText(r.name)}</b><div class="tp-sub">${r.modules.map(m => safeText(m.code)).join(', ')}</div></td>
+      ${['plans_approved', 'on_schedule', 'hours', 'evidence', 'missed_open', 'registers_outside'].map(k => `<td>${tpKpiCell(r, k)}</td>`).join('')}
+      <td>${r.met} of ${r.measured}</td>
+      <td class="act"><button class="btn btn-secondary btn-sm" onclick="showTpKpiModules(${i})">Modules</button></td></tr>`).join('') : empty(9);
+  document.getElementById('tp-kpi-assess-tbody').innerHTML = rows.length ? rows.map(r => `<tr>
+      <td><b>${safeText(r.name)}</b></td>
+      ${['held', 'moderated', 'coverage', 'tested_early'].map(k => `<td>${tpKpiCell(r, k)}</td>`).join('')}</tr>`).join('') : empty(5);
+
+  const unit = d => d.unit === '%' ? '%' : ` ${d.unit}`;
+  document.getElementById('tp-kpi-defs-tbody').innerHTML = data.definitions.map(d => `<tr>
+      <td><b>${safeText(d.name)}</b><div class="tp-sub">${d.group === 'teaching' ? 'Teaching plan' : 'Assessment plan'}</div></td>
+      <td>${safeText(d.measure)}</td>
+      <td>${d.better === 'higher' ? `${d.target}${unit(d)} or more` : `${d.target}${unit(d)}`}</td>
+      <td>${d.better === 'higher' ? `under ${d.floor}${unit(d)}` : `more than ${d.floor}${unit(d)}`}</td>
+      <td>${safeText(d.source)}</td></tr>`).join('');
+
+  const who = document.getElementById('tp-kpi-trend-who');
+  const keep = who.value;
+  who.innerHTML = '<option value="all">All tutors</option>' + rows.map(r => `<option value="${r.id}">${safeText(r.name)}</option>`).join('');
+  who.value = [...who.options].some(o => o.value === keep) ? keep : 'all';
+  document.getElementById('tp-kpi-modules-card').hidden = true;
+  renderTpKpiCharts();
+}
+
+function renderTpKpiCharts() {
+  tpKpiCharts.forEach(chart => chart.destroy());
+  tpKpiCharts = [];
+  const data = state.tpKpis;
+  const rows = data.tutors.filter(r => r.values.on_schedule !== null || r.values.held !== null);
+  const height = Math.max(280, rows.length * 38 + 90);
+  // A canvas per chart, put back each time: an empty chart says why instead.
+  const canvasIn = (wrap, id, has, why) => {
+    const box = document.getElementById(wrap);
+    box.style.height = has ? `${height}px` : '';
+    box.innerHTML = has ? `<canvas id="${id}"></canvas>` : `<div class="empty">${why}</div>`;
+  };
+  const pct = { x: { beginAtZero: true, max: 100, ticks: { callback: v => `${v}%` } } };
+  const scheduled = rows.filter(r => r.values.on_schedule !== null);
+  canvasIn('tp-kpi-schedule-wrap', 'tp-kpi-schedule-chart', scheduled.length, 'No class is due yet on this day.');
+  if (scheduled.length) {
+    tpKpiCharts.push(newChart(document.getElementById('tp-kpi-schedule-chart'), {
+      type: 'bar',
+      data: { labels: scheduled.map(r => r.name), datasets: [{ label: 'Classes on schedule',
+        data: scheduled.map(r => r.values.on_schedule),
+        tone: scheduled.map(r => r.bands.on_schedule === 'below' ? 'bad' : 'blue'), maxBarThickness: 22 }] },
+      options: { indexAxis: 'y', responsive: true, scales: pct, plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: c => { const r = scheduled[c.dataIndex];
+          return `${r.values.on_schedule}%: ${r.counts.done_due} of ${r.counts.due} classes due (${r.bands.on_schedule})`; } } } } },
+    }));
+  }
+  const assessed = rows.filter(r => r.values.held !== null || r.values.moderated !== null);
+  canvasIn('tp-kpi-assess-wrap', 'tp-kpi-assess-chart', assessed.length,
+           'No assessment is due yet on this day. The first are in the CAT weeks.');
+  if (assessed.length) {
+    tpKpiCharts.push(newChart(document.getElementById('tp-kpi-assess-chart'), {
+      type: 'bar',
+      data: { labels: assessed.map(r => r.name), datasets: [
+        { label: 'Held', data: assessed.map(r => r.values.held), tone: 'blue', maxBarThickness: 16 },
+        { label: 'Moderated before given', data: assessed.map(r => r.values.moderated), tone: 'orange', maxBarThickness: 16 },
+      ] },
+      options: { indexAxis: 'y', responsive: true, scales: pct,
+                 plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.raw === null ? 'not measured' : c.raw + '%'}` } } } },
+    }));
+  }
+  renderTpKpiTrend();
+}
+
+function renderTpKpiTrend() {
+  const data = state.tpKpis;
+  if (!data) return;
+  const old = tpKpiCharts.findIndex(chart => chart.canvas?.id === 'tp-kpi-trend-chart');
+  if (old >= 0) { tpKpiCharts[old].destroy(); tpKpiCharts.splice(old, 1); }
+  const who = document.getElementById('tp-kpi-trend-who').value;
+  const tutor = data.tutors.find(r => String(r.id) === who);
+  const series = tutor ? tutor.trend : data.trend.all;
+  const target = data.definitions.find(d => d.key === 'on_schedule').target;
+  if (!data.trend.weeks.length) return;
+  tpKpiCharts.push(newChart(document.getElementById('tp-kpi-trend-chart'), {
+    type: 'line',
+    data: { labels: data.trend.weeks.map(w => `Week ${w.n}`), datasets: [
+      { label: tutor ? tutor.name : 'All tutors', data: series, tone: 'blue', fill: true, spanGaps: true },
+      // The target as a dashed grey line, so the two differ without colour.
+      { label: `Target, ${target}%`, data: series.map(() => target), tone: 'neutral', borderDash: [6, 4], pointRadius: 0, fill: false },
+    ] },
+    options: { responsive: true, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => `${v}%` } } },
+               plugins: { tooltip: { callbacks: {
+                 title: items => { const w = data.trend.weeks[items[0].dataIndex]; return `Week ${w.n}, to ${tpDate(w.ends)}`; },
+                 label: c => `${c.dataset.label}: ${c.raw === null ? 'nothing due yet' : c.raw + '%'}` } } } },
+  }));
+}
+
+function showTpKpiModules(index) {
+  const r = state.tpKpis.tutors[index];
+  const card = document.getElementById('tp-kpi-modules-card');
+  document.getElementById('tp-kpi-modules-title').textContent = `${r.name}: module by module`;
+  const keys = ['on_schedule', 'hours', 'evidence', 'missed_open', 'registers_outside', 'held', 'moderated', 'coverage', 'tested_early'];
+  document.getElementById('tp-kpi-modules-tbody').innerHTML = r.modules.map(m => `<tr>
+      <td><b>${safeText(m.code)}</b> ${safeText(m.name)}<div class="tp-sub">${safeText(m.level)}</div></td>
+      <td>${safeText(m.status)}</td>
+      ${keys.map(k => `<td>${tpKpiCell(m, k)}</td>`).join('')}
+      <td class="act">${m.plan_id ? `<button class="btn btn-secondary btn-sm" onclick="openTpPlan(${m.plan_id})">Open</button>` : ''}</td></tr>`).join('');
+  card.hidden = false;
+  document.getElementById('tp-kpi-trend-who').value = String(r.id);
+  renderTpKpiTrend();
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ── the teaching calendar ──
@@ -12109,13 +12325,21 @@ function tpWeekday(v) { return new Date(v + 'T00:00:00').toLocaleDateString(unde
 function tpSessionRow(s, plan, pre = '') {
   const can = plan.can;
   const outcomes = plan.outcomes;
-  const state = {
+  const state = s.made_up ? [s.status === 'missed' ? 'Missed, made up' : 'Partly done, finished', 'tp-ok'] : ({
     done: ['Done', 'tp-ok'], partial: ['Partly done', 'tp-warn'], missed: ['Missed', 'tp-bad'],
-  }[s.status] || (s.due ? ['Not marked yet', 'tp-warn'] : ['To come', 'tp-quiet']);
+  }[s.status] || (s.due ? ['Not marked yet', 'tp-warn'] : ['To come', 'tp-quiet']));
+  // Where a missed or partly taught class was made up or finished, and what
+  // a class finished besides its own topic (said 16 November 2026).
+  const follow = [
+    s.finished_in ? `${s.made_up ? '' : 'to be finished '}in the ${safeText(s.finished_in_label)}` : '',
+    s.finishes.length ? `also finished the ${s.finishes.map(safeText).join(', the ')}` : '',
+  ].filter(Boolean).map(t => ` · ${t}`).join('');
+  const later = ['partial', 'missed'].includes(s.status) ? plan.sessions.filter(o => o.id !== s.id && o.status !== 'missed'
+    && o.planned_on >= (s.delivered_on || s.planned_on)) : [];
   const evidence = ['done', 'partial'].includes(s.status) ? (s.register ? ' · register taken' : ' · no register that day') : '';
   const seg = can.follow ? `<div class="tp-seg" role="group" aria-label="What became of this class">
       ${[['done', 'Done'], ['partial', 'Part'], ['missed', 'Missed']].map(([v, l]) =>
-        `<button type="button" aria-pressed="${s.status === v}" ${!s.due && v !== 'missed' ? 'disabled title="Mark it once it has been taught"' : ''}
+        `<button type="button" aria-pressed="${s.status === v}" ${!s.due && v !== 'missed' ? 'disabled title="Not its day yet. Taught it already? Use Taught early"' : ''}
           onclick="markTpSession(event, ${s.id}, '${v}', '${pre}')">${l}</button>`).join('')}</div>` : '';
   const seo = can.follow && outcomes.length
     ? `<select aria-label="Outcome this class covers" onchange="editTpSession(${s.id}, {outcome_id: this.value})">${'<option value="">No SEO</option>' + outcomes.map(o =>
@@ -12131,16 +12355,31 @@ function tpSessionRow(s, plan, pre = '') {
         <button class="btn btn-primary btn-sm" type="submit">Move the class</button>
         <button class="btn btn-secondary btn-sm" type="button" onclick="tpToggle('tp-move-${pre}${s.id}')">Cancel</button>
       </form>
+      <form class="tp-inline" id="tp-early-${pre}${s.id}" hidden onsubmit="earlyTpSession(event, ${s.id})">
+        <label>Taught on <input type="date" name="day" max="${tpToday()}" value="${tpToday() < s.planned_on ? tpToday() : ''}" required /></label>
+        <label>How much <select name="status"><option value="done">All of it</option><option value="partial">Part of it</option></select></label>
+        <label class="tp-grow">Why <input name="reason" maxlength="300" placeholder="Taught early" /></label>
+        <button class="btn btn-primary btn-sm" type="submit">Mark taught</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="tpToggle('tp-early-${pre}${s.id}')">Cancel</button>
+      </form>
+      ${later.length || ['partial', 'missed'].includes(s.status) ? `<form class="tp-inline" id="tp-fin-${pre}${s.id}" hidden onsubmit="finishTpSession(event, ${s.id})">
+        <label class="tp-grow">${s.status === 'missed' ? 'Made up in' : 'The rest was taught in'}
+          <select name="later">${later.map(o => `<option value="${o.id}">${tpDate(o.planned_on)}, ${safeText(o.kind_display)}${o.extra ? ' (extra)' : ''}${o.topic ? ': ' + safeText(o.topic.slice(0, 40)) : ''}</option>`).join('')}
+            <option value="new">A new make-up class…</option></select></label>
+        <button class="btn btn-primary btn-sm" type="submit">Save</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="tpToggle('tp-fin-${pre}${s.id}')">Cancel</button>
+        <p class="help-note tp-grow">Your next class can finish it and still count for its own topic: mark that class Done or Part as it went.</p>
+      </form>` : ''}
       <form class="tp-inline" id="tp-miss-${pre}${s.id}" hidden onsubmit="missTpSession(event, ${s.id})">
-        <label class="tp-grow">Why was it not held? <input name="note" maxlength="300" placeholder="It stays due until you add a make-up class" /></label>
+        <label class="tp-grow">Why was it not held? <input name="note" maxlength="300" placeholder="It counts as not taught until it is made up (Finished later)" /></label>
         <button class="btn btn-primary btn-sm" type="submit">Mark missed</button>
         <button class="btn btn-secondary btn-sm" type="button" onclick="tpToggle('tp-miss-${pre}${s.id}')">Cancel</button>
       </form>` : '';
   return `<div class="tp-row" id="tp-s-${pre}${s.id}">
-      <div class="tp-row-when"><b>${tpWeekday(s.planned_on)}</b><span>${safeText(s.kind_display)}, ${Number(s.hours)} h</span></div>
+      <div class="tp-row-when"><b>${tpWeekday(s.planned_on)}</b><span>${safeText(s.kind_display)}, ${Number(s.hours)} h</span>${s.extra ? '<span class="badge badge-blue">Extra class</span>' : ''}</div>
       <div class="tp-row-what">${seo}${topic}
-        <div class="tp-row-state ${state[1]}">${state[0]}${evidence}${s.moved_from ? ` · moved from ${tpDate(s.moved_from)}${s.move_reason ? ` (${safeText(s.move_reason)})` : ''}` : ''}${s.note && s.status !== 'planned' ? ` · ${safeText(s.note)}` : ''}${s.note && s.status === 'planned' && /Falls on|Moved from/.test(s.note) ? ` · ${safeText(s.note)}` : ''}</div></div>
-      <div class="tp-row-act">${seg}${can.follow && s.status === 'planned' ? `<button type="button" class="tp-link" onclick="tpToggle('tp-move-${pre}${s.id}')">Move</button>` : ''}</div>
+        <div class="tp-row-state ${state[1]}">${state[0]}${evidence}${s.moved_from ? ` · moved from ${tpDate(s.moved_from)}${s.move_reason ? ` (${safeText(s.move_reason)})` : ''}` : ''}${s.note && s.status !== 'planned' ? ` · ${safeText(s.note)}` : ''}${s.note && s.status === 'planned' && /Falls on|Moved from/.test(s.note) ? ` · ${safeText(s.note)}` : ''}${follow}</div></div>
+      <div class="tp-row-act">${seg}${can.follow && s.status === 'planned' ? `<button type="button" class="tp-link" onclick="tpToggle('tp-move-${pre}${s.id}')">Move</button>` : ''}${can.follow && s.status === 'planned' && !s.due ? `<button type="button" class="tp-link" onclick="tpToggle('tp-early-${pre}${s.id}')">Taught early</button>` : ''}${can.follow && ['partial', 'missed'].includes(s.status) && !s.finished_in ? `<button type="button" class="tp-link" onclick="tpToggle('tp-fin-${pre}${s.id}')">Finished later</button>` : ''}${can.follow && s.finished_in ? `<button type="button" class="tp-link" onclick="unfinishTpSession(event, ${s.id})">Not finished there</button>` : ''}</div>
       ${forms}
     </div>`;
 }
@@ -12183,8 +12422,43 @@ function renderTpPlan(plan) {
       <span><b>${p.done_due}</b> of ${p.due} classes due done</span>
       <span><b>${Number(p.hours_done)}</b> of ${Number(p.hours_planned)} hours</span>
       <span><b>${p.weeks_behind}</b> week${p.weeks_behind === 1 ? '' : 's'} behind</span>
+      ${p.missed ? `<span class="tp-bad">${p.missed} missed, not made up</span>` : ''}
+      ${p.made_up ? `<span>${p.made_up} made up or finished later</span>` : ''}
+      ${p.extra ? `<span>${p.extra} extra class${p.extra === 1 ? '' : 'es'}</span>` : ''}
       ${p.without_register ? `<span class="tp-warn">${p.without_register} class${p.without_register === 1 ? '' : 'es'} done with no register that day</span>` : ''}
+      ${plan.registers_outside.length ? `<span class="tp-warn">${plan.registers_outside.length} register${plan.registers_outside.length === 1 ? '' : 's'} not in the plan</span>` : ''}
     </p>` : '';
+
+  // Classes still to make up or finish: what a make-up class can be for.
+  const unfinished = plan.sessions.filter(s => ['partial', 'missed'].includes(s.status) && !s.finished_in);
+  const openOptions = `<option value="">${'Nothing: an extra class'}</option>` + unfinished.map(s =>
+    `<option value="${s.id}">${s.status === 'missed' ? 'Missed' : 'Partly done'}: ${tpDate(s.planned_on)}, ${safeText(s.kind_display)}${s.topic ? ' (' + safeText(s.topic.slice(0, 40)) + ')' : ''}</option>`).join('');
+  const sent = ['submitted', 'approved'].includes(plan.status);
+
+  // Registers the plan has no taught class for (said 16 November 2026). The
+  // students' attendance stands either way; this only keeps the plan true.
+  const regs = plan.registers_outside;
+  const registers = regs.length ? `<section class="tp-block">
+      <h3>Registers not in the plan: ${regs.length}</h3>
+      <p class="help-note">Attendance was taken on these days for this module, but no class of the plan is marked taught that day. The students' attendance counts as it is; the plan does not know the class happened until it is entered here.</p>
+      ${regs.map(r => `<div class="tp-row">
+        <div class="tp-row-when"><b>${tpWeekday(r.date)}</b><span>${safeText(r.type)}, ${r.present} of ${r.total} present</span></div>
+        <div class="tp-row-what"><span>${safeText(r.topic || r.label)}</span>
+          <div class="tp-row-state tp-warn">${r.planned.length ? `The plan has a class that day, not marked yet` : 'No class of the plan that day'}</div></div>
+        <div class="tp-row-act">${can.follow ? (r.planned.length
+          ? r.planned.filter(c => c.status === 'planned').map(c => `<button type="button" class="btn btn-secondary btn-sm" onclick="markTpSession(event, ${c.id}, 'done')">Mark the ${safeText(c.kind.toLowerCase())} done</button>`).join(' ')
+          : (sent ? `<button type="button" class="tp-link" onclick="tpToggle('tp-reg-${r.id}')">Add as a class</button>` : '<span class="tp-sub">Add the class to the plan with Add a class</span>')) : ''}</div>
+        ${can.follow && !r.planned.length && sent ? `<form class="tp-inline" id="tp-reg-${r.id}" hidden onsubmit="registerTpClass(event, ${r.id})">
+          <label>Class <select name="kind">${plan.kinds.map(([v, l]) => `<option value="${v}" ${v === (r.practical ? 'practical' : 'lecture') ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          <label>Hours <input type="number" name="hours" min="0.5" max="12" step="0.5" value="1" /></label>
+          <label>How much <select name="status"><option value="done">All of it</option><option value="partial">Part of it</option></select></label>
+          <label class="tp-grow">What it covered <input name="topic" maxlength="300" value="${safeText(r.topic || '')}" /></label>
+          <label class="tp-grow">It makes up <select name="finishes">${openOptions}</select></label>
+          <button class="btn btn-primary btn-sm" type="submit">Add the class</button>
+          <button class="btn btn-secondary btn-sm" type="button" onclick="tpToggle('tp-reg-${r.id}')">Cancel</button>
+        </form>` : ''}
+      </div>`).join('')}
+    </section>` : '';
 
   const statusLine = `<div class="tp-status">${tpStatus(plan)}
       ${plan.status === 'approved' && plan.decision.by ? `<span>approved by ${safeText(plan.decision.by)}</span>` : ''}
@@ -12276,18 +12550,20 @@ function renderTpPlan(plan) {
       <table class="compact"><tbody>${plan.history.map(h => `<tr><td>${new Date(h.at).toLocaleString()}</td><td>${safeText(h.by)}</td><td>${safeText(h.action)}${h.detail ? ': ' + safeText(h.detail) : ''}</td></tr>`).join('')}</tbody></table>
       ${tpOutcomesHtml(plan.outcomes)}</details>`;
 
-  const classes = !plan.sessions.length ? '' : `<section class="tp-block tp-classes">
+  const classes = !plan.sessions.length ? '' : `${registers}<section class="tp-block tp-classes">
       ${unmarked.length && can.follow ? tpWeekGroup(unmarked, plan, `Not marked yet from earlier weeks: ${unmarked.length}`, 'u') : ''}
       ${thisWeek !== undefined ? tpWeekGroup(byWeek[thisWeek], plan, `${now ? 'This week' : 'Next'}, week ${thisWeek}: ${range(thisWeek)}`) : ''}
       ${earlier.length ? `<details class="tp-fold"><summary>Earlier weeks, 1 to ${earlier[earlier.length - 1]}</summary>${earlier.map(w => tpWeekGroup(byWeek[w], plan, `Week ${w}: ${range(w)}`)).join('')}</details>` : ''}
       ${later.length ? `<details class="tp-fold"><summary>Weeks to come, ${later[0]} to ${later[later.length - 1]}</summary>${later.map(w => tpWeekGroup(byWeek[w], plan, `Week ${w}: ${range(w)}`)).join('')}</details>` : ''}
-      ${can.follow ? `<button type="button" class="tp-link" onclick="tpToggle('tp-makeup')">Add a make-up class</button>
+      ${can.follow ? `<button type="button" class="tp-link" onclick="tpToggle('tp-makeup')">${sent ? 'Add a make-up or extra class' : 'Add a class to the plan'}</button>
         <form class="tp-inline" id="tp-makeup" hidden onsubmit="addTpSession(event)">
           <label>On <input type="date" name="day" required /></label>
           <label>Class <select name="kind">${kinds.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
           <label>Hours <input type="number" name="hours" min="0.5" max="12" step="0.5" value="1" /></label>
           <label class="tp-grow">What it covers <input name="topic" maxlength="300" /></label>
-          <button class="btn btn-primary btn-sm" type="submit">Add the class</button></form>` : ''}
+          ${sent || unfinished.length ? `<label class="tp-grow">It makes up <select name="finishes">${openOptions}</select></label>` : ''}
+          <button class="btn btn-primary btn-sm" type="submit">Add the class</button>
+          ${sent ? '<p class="help-note tp-grow">An extra class is not one of the classes the plan is measured on; its hours count as taught. Linked to a missed or partly taught class, it makes that class count as done once it is taught.</p>' : ''}</form>` : ''}
     </section>`;
 
   document.getElementById('tp-plan').innerHTML = `
@@ -12357,9 +12633,58 @@ function markTpSession(event, id, status, pre = '') {
     return;
   }
   if (status === 'missed') { tpToggle(`tp-miss-${pre}${id}`); return; }
-  if (!session.due) { toast('Mark it once it has been taught, or move it to the day it was.', 'var(--red)'); return; }
+  if (!session.due) { tpToggle(`tp-early-${pre}${id}`); return; }
   tpCall(event, '…', 'POST', `/teaching-plans/${plan.id}/sessions/${id}/mark/`,
     { status, delivered_on: session.planned_on }, status === 'done' ? 'Marked done' : 'Marked partly done');
+}
+
+// The local date as yyyy-mm-dd: a date field's max, and the default day a
+// class taught early was taught.
+function tpToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// A class taught before its day: moved to the day it was taught and marked,
+// in one step (said 16 November 2026). The first date stays on the class.
+function earlyTpSession(event, id) {
+  event.preventDefault();
+  const form = event.target.elements;
+  tpCall(event.submitter ? { currentTarget: event.submitter } : null, 'Marking…', 'POST',
+    `/teaching-plans/${state.tpPlan.id}/sessions/${id}/taught-early/`,
+    { delivered_on: form.day.value, status: form.status.value, reason: form.reason.value }, 'Marked taught early');
+}
+
+// A missed or partly taught class made up or finished in a later class: the
+// tutor's next class, or a new make-up class (opens that form with it chosen).
+function finishTpSession(event, id) {
+  event.preventDefault();
+  const later = event.target.elements.later.value;
+  if (later === 'new') {
+    tpToggle(event.target.id);
+    const form = document.getElementById('tp-makeup');
+    form.hidden = false;
+    if (form.elements.finishes) form.elements.finishes.value = String(id);
+    form.elements.day.focus();
+    return;
+  }
+  tpCall(event.submitter ? { currentTarget: event.submitter } : null, 'Saving…', 'POST',
+    `/teaching-plans/${state.tpPlan.id}/sessions/${id}/finished-later/`, { in_session_id: Number(later) }, 'Saved');
+}
+
+function unfinishTpSession(event, id) {
+  tpCall(event, '…', 'POST', `/teaching-plans/${state.tpPlan.id}/sessions/${id}/finished-later/`, { in_session_id: null },
+    'Taken back');
+}
+
+// A register the plan has no class for, entered as an extra class of its day.
+function registerTpClass(event, registerId) {
+  event.preventDefault();
+  const f = event.target.elements;
+  tpCall(event.submitter ? { currentTarget: event.submitter } : null, 'Adding…', 'POST',
+    `/teaching-plans/${state.tpPlan.id}/registers/${registerId}/class/`,
+    { kind: f.kind.value, hours: f.hours.value || 1, topic: f.topic.value, status: f.status.value,
+      finishes_id: f.finishes.value || null }, 'Class added from the register');
 }
 
 function missTpSession(event, id) {
@@ -12382,7 +12707,8 @@ function addTpSession(event) {
   event.preventDefault();
   const f = event.target.elements;
   tpCall(event.submitter ? { currentTarget: event.submitter } : null, 'Adding…', 'POST', `/teaching-plans/${state.tpPlan.id}/sessions/`,
-    { planned_on: f.day.value, kind: f.kind.value, hours: f.hours.value || 1, topic: f.topic.value }, 'Make-up class added');
+    { planned_on: f.day.value, kind: f.kind.value, hours: f.hours.value || 1, topic: f.topic.value,
+      finishes_id: f.finishes ? (f.finishes.value || null) : null }, 'Class added');
 }
 
 function editTpAssessment(id, change) { tpCall(null, '', 'PATCH', `/teaching-plans/${state.tpPlan.id}/assessments/${id}/`, change); }
@@ -16729,7 +17055,8 @@ function renderTimeToPay(prefix) {
       <td class="num">${money(w.amount)}</td><td class="num"><strong>${money(w.outstanding)}</strong></td>
       <td style="white-space:nowrap">${safeText(ttpDate(w.pay_by))}${w.times_extended ? `<div style="font-size:.72rem;color:var(--muted)">first ${safeText(ttpDate(w.first_pay_by))}, moved ${w.times_extended}×</div>` : ''}</td>
       <td>${ttpBadge(w.state)}</td><td>${safeText(w.reason)}</td>
-      <td class="act">${data.can_extend && w.state !== 'paid' ? `<button class="btn btn-warning btn-sm" onclick="document.getElementById('${prefix}-ext-${w.id}').hidden = !document.getElementById('${prefix}-ext-${w.id}').hidden">More time</button>` : ''}</td></tr>
+      <td class="act">${data.can_record && w.state !== 'paid' ? waiverPayButton(prefix, w.id) : ''}${data.can_extend && w.state !== 'paid' ? `<button class="btn btn-warning btn-sm" onclick="document.getElementById('${prefix}-ext-${w.id}').hidden = !document.getElementById('${prefix}-ext-${w.id}').hidden">More time</button>` : ''}</td></tr>
+    ${data.can_record && w.state !== 'paid' ? waiverPayFormHtml(prefix, { ...w, to_pay: w.outstanding, written_off: false }, w.what, 8) : ''}
     ${data.can_extend && w.state !== 'paid' ? `<tr id="${prefix}-ext-${w.id}" hidden><td colspan="8"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
       <div class="field" style="margin:0;"><label>New date</label><input type="date" id="${prefix}-ext-date-${w.id}"></div>
       <div class="field" style="margin:0;flex:1 1 240px;"><label>Why</label><input id="${prefix}-ext-why-${w.id}" placeholder="e.g. sponsor's letter, pays in January"></div>
@@ -16747,6 +17074,62 @@ async function extendWaiver(id, prefix) {
     toast(`More time given, until ${ttpDate(payBy)}`, 'var(--green)');
     loadTimeToPay(prefix);
   } catch (e) { toast(apiErrorText(e, 'Could not give more time'), 'var(--red)'); }
+}
+
+// The slip for what a waiver covers, recorded from the list of waivers (said
+// 16 November 2026: a waiver passes the student until they pay; it does not
+// write the bill off). Same fields as the payment desk.
+function waiverPayButton(key, id) {
+  return `<button class="btn btn-green btn-sm" onclick="const r = document.getElementById('${key}-wpay-${id}'); r.hidden = !r.hidden">Record payment</button>`;
+}
+
+function waiverPayFormHtml(key, w, what, cols) {
+  const f = name => `${key}-wpay-${name}-${w.id}`;
+  const how = w.written_off
+    ? `This was written off before waivers had dates. What is paid now goes back on the bill first, so the slip pays ${safeText(what)}; what is not paid stays written off.`
+    : `The slip pays ${safeText(what)} first, then the rest of its invoice, oldest first; anything over stays on account.`;
+  return `<tr id="${key}-wpay-${w.id}" hidden><td colspan="${cols}" style="white-space:normal">
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px">${how} Record only what you hold proof of.</div>
+    <div class="form-grid-3">
+      <div class="field"><label>Amount received</label><input id="${f('amount')}" type="number" min="0.01" step="0.01" value="${Number(w.to_pay) || ''}"></div>
+      <div class="field"><label>Date on the slip</label><input id="${f('date')}" type="date" value="${tpToday()}" max="${tpToday()}"></div>
+      <div class="field"><label>Paid through</label><select id="${f('channel')}"><option value="crdb">CRDB bank deposit</option><option value="mobile">Mobile money</option><option value="cash">Cash at the office</option></select></div>
+      <div class="field"><label>Bank / transaction ref.</label><input id="${f('ref')}" placeholder="from the slip"></div>
+      <div class="field"><label>EFD receipt no.</label><input id="${f('efd')}" placeholder="from the machine"></div>
+      <div class="field"><label>Paid by</label><input id="${f('payer')}" placeholder="name on the slip"></div>
+      <div class="field"><label>Who they are</label><select id="${f('relation')}"><option value="self">The student</option><option value="parent">Parent</option><option value="guardian">Guardian</option><option value="sponsor">Sponsor</option><option value="employer">Employer</option></select></div>
+      <div class="field"><label>Note</label><input id="${f('note')}" placeholder="optional"></div>
+    </div>
+    <button class="btn btn-green btn-sm" onclick="payWaiver(${w.id}, '${key}')">Record payment</button></td></tr>`;
+}
+
+async function payWaiver(id, key) {
+  const v = name => document.getElementById(`${key}-wpay-${name}-${id}`).value.trim();
+  const payload = {
+    amount: v('amount'), payment_date: v('date'), channel: v('channel'), bank_reference: v('ref'),
+    efd_receipt_no: v('efd'), payer_name: v('payer'), payer_relation: v('relation'), note: v('note'),
+  };
+  if (!(Number(payload.amount) > 0) || !payload.payment_date) { toast('The amount and the date on the slip are required', 'var(--red)'); return; }
+  try {
+    let r;
+    try {
+      r = await api('POST', `/waiver-requests/${id}/pay/`, payload);
+    } catch (e) {
+      // The same slip already in the ledger: fine only if it pays for both.
+      if (!e?.same_reference || !confirm(`${e.detail}\n\nRecord it for this student as well?`)) throw e;
+      r = await api('POST', `/waiver-requests/${id}/pay/`, { ...payload, allow_same_reference: true });
+    }
+    const parts = [`${money(r.on_waiver)} on the waiver`];
+    if (Number(r.put_back) > 0) parts.push(`${money(r.put_back)} written off before, put back on the bill first`);
+    if (Number(r.elsewhere) > 0) parts.push(`${money(r.elsewhere)} on the rest of ${r.invoice ? `invoice ${r.invoice}` : 'the bill'}`);
+    if (Number(r.on_account) > 0) parts.push(`${money(r.on_account)} on account`);
+    toast(`Payment recorded: ${parts.join(' · ')}. Still to pay: ${money(r.still_to_pay)}`, 'var(--green)');
+    state.financeProfiles = null;
+    if (key === 'fwv') loadOverrides(); else loadTimeToPay(key);
+  } catch (e) {
+    toast(e?.detail || e?.efd_receipt_no?.[0] || e?.payment_date?.[0] || e?.amount?.[0]
+      || e?.non_field_errors?.[0] || 'Could not record the payment', 'var(--red)');
+  }
 }
 
 // The monthly plan, asked from the same place as a waiver. Set by the timeframe

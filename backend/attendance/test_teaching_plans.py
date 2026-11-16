@@ -6,15 +6,17 @@ PST04104 plan here is checked against the plan its tutor wrote by hand
 each, practical tests 12.5%, assignments 2.5%; examination 15 + 45)."""
 
 import json
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
+from . import teaching_kpis as tk
 from . import teaching_plans as tp
 from .management.commands.load_curriculum import load as load_curriculum
 from .management.commands.load_teaching_calendar import load_semester
@@ -267,6 +269,47 @@ class FollowingTests(PlanBase):
         session.refresh_from_db()
         self.assertEqual((session.moved_from, session.move_reason), (date(2026, 11, 2), 'Power cut'))
 
+    def test_a_class_taught_early_moves_to_its_day_and_counts_there(self):
+        plan = self.laid_out()
+        tp.submit(plan, actor=self.tutor)
+        tp.decide(plan, True, actor=self.hod)
+        register = Session.objects.create(module=self.module, date=date(2026, 11, 30), label='L5')
+        later = plan.sessions.filter(planned_on__gte=date(2026, 12, 7)).order_by('planned_on').first()
+        first_day = later.planned_on
+        monday_week = plan.sessions.filter(planned_on=date(2026, 11, 30)).first().week
+        today = date(2026, 11, 30)
+        with self.assertRaises(tp.PlanError):            # not yet taught
+            tp.taught_early(later, date(2026, 12, 1), actor=self.tutor, today=today)
+        with self.assertRaises(tp.PlanError):            # not before its day
+            tp.taught_early(later, first_day, actor=self.tutor, today=first_day)
+        tp.taught_early(later, date(2026, 11, 30), actor=self.tutor, today=today)
+        later.refresh_from_db()
+        self.assertEqual((later.planned_on, later.moved_from, later.move_reason, later.status),
+                         (date(2026, 11, 30), first_day, 'Taught early', PlanSession.DONE))
+        self.assertEqual(later.register, register)
+        self.assertEqual(later.week, monday_week)        # drawn in the week it was taught
+        self.assertIn(later.id, [s.id for s in plan.sessions.filter(planned_on__lte=today)])
+        self.assertEqual(tp.progress(plan, today)['done_due'], 1)
+        self.assertTrue(plan.history.filter(action='taught a class early').exists())
+        with self.assertRaises(tp.PlanError):            # already marked
+            tp.taught_early(later, date(2026, 11, 29), actor=self.tutor, today=today)
+
+    def test_what_a_class_covers_goes_into_the_history_once_the_plan_is_sent(self):
+        plan = self.laid_out()
+        first, second = plan.sessions.exclude(outcome=None).order_by('planned_on')[:2]
+        other = plan.curriculum_module.outcomes.exclude(pk=first.outcome_id).first()
+        was, heading = first.outcome.code, f'{first.get_kind_display()} of {first.planned_on:%a %d %b}'
+        tp.edit_session(first, {'topic': 'Draft wording'}, actor=self.tutor)
+        self.assertFalse(plan.history.filter(action='changed a class').exists())     # still a draft
+        tp.submit(plan, actor=self.tutor)
+        tp.edit_session(first, {'outcome_id': other.id, 'topic': 'Spreadsheets'}, actor=self.tutor)
+        tp.edit_session(second, {'topic': second.topic}, actor=self.tutor)           # no change, no entry
+        entries = list(plan.history.filter(action='changed a class').values_list('detail', flat=True))
+        self.assertEqual(len(entries), 1)
+        self.assertIn(f'SEO {was} → {other.code}', entries[0])
+        self.assertIn('topic "Draft wording" → "Spreadsheets"', entries[0])
+        self.assertTrue(entries[0].startswith(heading))
+
     def test_a_head_of_department_never_approves_their_own(self):
         self.module.teachers.add(self.hod)
         self.assertFalse(tp.may_approve(self.module, self.hod))
@@ -291,6 +334,170 @@ class FollowingTests(PlanBase):
             tp.moderate(test1, 'return', note='', actor=self.hod)
         tp.moderate(test1, 'approve', actor=self.hod)
         self.assertEqual(PlanAssessment.objects.get(pk=test1.pk).moderation, PlanAssessment.APPROVED)
+
+
+class FollowUpTests(PlanBase):
+    """Classes partly taught, missed, made up, finished in the next class,
+    and taught off the plan (said 16 November 2026)."""
+
+    def sent(self):
+        plan = self.laid_out()
+        tp.submit(plan, actor=self.tutor)
+        tp.decide(plan, True, actor=self.hod)
+        return plan
+
+    def day(self, plan, on, nth=0):
+        return list(plan.sessions.filter(planned_on=on, extra=False).order_by('order'))[nth]
+
+    def test_a_partly_taught_class_finished_in_the_next_class_counts_as_done_from_then(self):
+        plan = self.sent()
+        today = date(2026, 11, 12)
+        monday = self.day(plan, date(2026, 11, 2))
+        thursday = self.day(plan, date(2026, 11, 5))
+        tp.mark(monday, PlanSession.PARTIAL, delivered_on=monday.planned_on, actor=self.tutor, today=today)
+        tp.mark(thursday, PlanSession.DONE, delivered_on=thursday.planned_on, actor=self.tutor, today=today)
+        with self.assertRaises(tp.PlanError):          # a class taught in full is not finished later
+            tp.finish_later(thursday, monday, actor=self.tutor)
+        earlier = PlanSession.objects.create(plan=plan, week=1, planned_on=date(2026, 11, 1), kind='lecture',
+                                             hours=1, extra=True)
+        with self.assertRaises(tp.PlanError):          # nor in an earlier class
+            tp.finish_later(monday, earlier, actor=self.tutor)
+        earlier.delete()
+        tp.finish_later(monday, thursday, actor=self.tutor)
+        monday.refresh_from_db()
+        sessions = list(plan.sessions.all())
+        by_id = {s.id: s for s in sessions}
+        self.assertEqual(tp._credit(by_id[monday.id], date(2026, 11, 4), by_id), 0.5)   # before Thursday
+        self.assertEqual(tp._credit(by_id[monday.id], date(2026, 11, 5), by_id), 1)     # from Thursday
+        reading = tp.progress(plan, date(2026, 11, 5), sessions)
+        self.assertEqual(reading['made_up'], 1)
+        self.assertEqual(PlanSession.objects.get(pk=thursday.pk).status, PlanSession.DONE)   # its own mark kept
+        detail = tp.plan_detail(plan, self.tutor, today)
+        row = next(r for r in detail['sessions'] if r['id'] == thursday.id)
+        self.assertEqual(row['finishes'], [tp._label(monday)])
+        self.assertTrue(plan.history.filter(action='finished a class later').exists())
+        tp.finish_later(monday, None, actor=self.tutor)                  # taken back
+        monday.refresh_from_db()
+        self.assertIsNone(monday.finished_in)
+        tp.finish_later(monday, thursday, actor=self.tutor)
+        tp.mark(monday, PlanSession.DONE, delivered_on=monday.planned_on, actor=self.tutor, today=today)
+        monday.refresh_from_db()
+        self.assertIsNone(monday.finished_in)                            # taught in full itself
+
+    def test_a_make_up_class_is_extra_and_makes_up_a_missed_one(self):
+        plan = self.sent()
+        today = date(2026, 11, 12)
+        missed = self.day(plan, date(2026, 11, 2))
+        tp.mark(missed, PlanSession.MISSED, note='Power cut', actor=self.tutor, today=today)
+        before = tp.progress(plan, today)
+        self.assertEqual(before['missed'], 1)
+        makeup = tp.add_session(plan, {'planned_on': date(2026, 11, 7), 'kind': 'lecture', 'hours': 2,
+                                       'finishes_id': missed.id}, actor=self.tutor)
+        self.assertTrue(makeup.extra)
+        self.assertEqual(tp.progress(plan, today)['due'], before['due'])      # not one of the plan's classes
+        tp.mark(makeup, PlanSession.DONE, delivered_on=makeup.planned_on, actor=self.tutor, today=today)
+        after = tp.progress(plan, today)
+        self.assertEqual((after['missed'], after['made_up'], after['extra']), (0, 1, 1))
+        self.assertEqual(after['done_due'], before['done_due'] + 1)
+        self.assertEqual(after['hours_done'], before['hours_done'] + 2)
+        # An extra class that finishes nothing: hours taught rise, the schedule does not move.
+        revision = tp.add_session(plan, {'planned_on': date(2026, 11, 10), 'kind': 'revision', 'hours': 1},
+                                  actor=self.tutor)
+        tp.mark(revision, PlanSession.DONE, delivered_on=revision.planned_on, actor=self.tutor, today=today)
+        again = tp.progress(plan, today)
+        self.assertEqual((again['on_schedule'], again['hours_done']), (after['on_schedule'], after['hours_done'] + 1))
+
+    def test_a_class_added_while_preparing_is_one_of_the_plans(self):
+        plan = self.laid_out()
+        added = tp.add_session(plan, {'planned_on': date(2026, 11, 7), 'kind': 'practical', 'hours': 2},
+                               actor=self.tutor)
+        self.assertFalse(added.extra)
+        self.assertEqual(added.week, self.day(plan, date(2026, 11, 2)).week)
+
+    def test_registers_not_in_the_plan_and_entering_one(self):
+        plan = self.sent()
+        today = date(2026, 11, 12)
+        monday = self.day(plan, date(2026, 11, 2))
+        Session.objects.create(module=self.module, date=date(2026, 11, 2), label='L1', topic='Excel')
+        saturday = Session.objects.create(module=self.module, date=date(2026, 11, 7), label='P1',
+                                          session_type=Session.PRACTICAL, topic='Extra practical')
+        outside = tp.registers_outside(plan, today)
+        self.assertEqual([r['date'] for r in outside], [date(2026, 11, 2), date(2026, 11, 7)])
+        self.assertIn(monday.id, [c['id'] for c in outside[0]['planned']])   # the class to mark that day
+        self.assertEqual(outside[1]['planned'], [])
+        tp.mark(monday, PlanSession.DONE, delivered_on=monday.planned_on, actor=self.tutor, today=today)
+        self.assertEqual([r['date'] for r in tp.registers_outside(plan, today)], [date(2026, 11, 7)])
+        registers = Session.objects.count()
+        made = tp.class_from_register(plan, saturday, {'hours': 3}, actor=self.tutor, today=today)
+        self.assertEqual((made.extra, made.kind, made.status, made.register_id, made.topic),
+                         (True, 'practical', PlanSession.DONE, saturday.id, 'Extra practical'))
+        self.assertEqual(tp.registers_outside(plan, today), [])
+        self.assertEqual(Session.objects.count(), registers)                 # the registers are untouched
+        draft = tp.start_plan(Module.objects.create(
+            name='Other', code='PST04199', teacher='x', class_level=self.level4, semester=self.sem1,
+            programme=self.programme), self.tutor)
+        with self.assertRaises(tp.PlanError):
+            tp.class_from_register(draft, saturday, {}, actor=self.tutor)
+
+
+class ExtraBackfillTests(PlanBase):
+    def test_classes_added_after_sending_are_marked_extra_from_the_history(self):
+        import importlib
+        from django.apps import apps
+        migration = importlib.import_module('attendance.migrations.0087_plan_session_follow_up')
+        plan = self.laid_out()
+        before = tp.add_session(plan, {'planned_on': date(2026, 11, 7), 'kind': 'practical'}, actor=self.tutor)
+        tp.submit(plan, actor=self.tutor)
+        after = tp.add_session(plan, {'planned_on': date(2026, 11, 14), 'kind': 'lecture'}, actor=self.tutor)
+        tp.edit_session(after, {'planned_on': date(2026, 11, 13), 'reason': 'Moved'}, actor=self.tutor)
+        PlanSession.objects.filter(plan=plan).update(extra=False)          # as before migration 0087
+        migration.mark_extras(apps, None)
+        self.assertEqual(list(PlanSession.objects.filter(extra=True).values_list('id', flat=True)), [after.id])
+        self.assertFalse(PlanSession.objects.get(pk=before.pk).extra)
+
+
+class KpiTests(PlanBase):
+    def test_bands(self):
+        self.assertEqual([tk.band('on_schedule', v) for v in (95, 90, 80, 69, None)],
+                         ['met', 'met', 'near', 'below', 'not_measured'])
+        self.assertEqual([tk.band('missed_open', v) for v in (0, 2, 3)], ['met', 'near', 'below'])
+        self.assertEqual([tk.band('tested_early', v) for v in (0, 1)], ['met', 'below'])
+        self.assertEqual(len(tk.KPIS), 10)
+
+    def test_a_tutors_kpis_come_from_the_plans(self):
+        plan = self.laid_out()
+        tp.submit(plan, actor=self.tutor)
+        tp.decide(plan, True, actor=self.hod)
+        day = date(2026, 11, 12)
+        due = list(plan.sessions.filter(planned_on__lte=day).order_by('planned_on'))
+        Session.objects.create(module=self.module, date=due[0].planned_on, label='L1')
+        Session.objects.create(module=self.module, date=date(2026, 11, 7), label='Sat')     # not in the plan
+        for s in due[:6]:
+            tp.mark(s, PlanSession.DONE, delivered_on=s.planned_on, actor=self.tutor, today=day)
+        tp.mark(due[6], PlanSession.MISSED, actor=self.tutor, today=day)
+        test1 = plan.assessments.get(method='written_test', number=1)
+        moderated = timezone.make_aware(datetime(2026, 11, 10, 9, 0))
+        PlanAssessment.objects.filter(pk=test1.pk).update(
+            planned_on=date(2026, 11, 11), held_on=date(2026, 11, 11), moderation=PlanAssessment.APPROVED,
+            moderated_at=moderated)
+        data = tk.tutor_kpis(self.qa, self.sem1, day)
+        row = next(r for r in data['tutors'] if r['name'] == 'Daniel B. Mwangela')
+        v, b = row['values'], row['bands']
+        self.assertEqual(v['plans_approved'], 100)
+        self.assertEqual(v['on_schedule'], tp.progress(plan, day)['on_schedule'])     # 6 of 8: 75
+        self.assertEqual((v['on_schedule'], b['on_schedule']), (75, 'near'))
+        self.assertEqual(v['missed_open'], 1)
+        self.assertEqual(v['registers_outside'], 1)
+        self.assertEqual(v['evidence'], round(200 / 6))        # 2 Nov's lecture and tutorial share its register
+        self.assertEqual((v['held'], v['moderated']), (100, 100))
+        self.assertEqual(row['modules'][0]['code'], 'PST04104')
+        self.assertEqual(len(data['trend']['weeks']), 2)                               # 2–8 and 9–12 Nov
+        self.assertEqual(data['trend']['all'][-1], 75)
+        self.assertNotIn('Other', [r['name'] for r in data['tutors']])                 # teaches nothing
+        # Who may read them.
+        self.assertEqual(client_for(self.qa).get('/api/teaching-plans/kpis/').status_code, 200)
+        self.assertEqual(client_for(self.hod).get('/api/teaching-plans/kpis/').status_code, 200)
+        self.assertEqual(client_for(self.tutor).get('/api/teaching-plans/kpis/').status_code, 403)
 
 
 class ApiTests(PlanBase):
@@ -338,6 +545,20 @@ class ApiTests(PlanBase):
                                  {'status': 'done'}, format='json').status_code, 403)
         self.assertEqual(qa.post(f'/api/teaching-plans/{plan.id}/decide/', {'approve': True},
                                  format='json').status_code, 403)
+
+    def test_only_a_tutor_marks_a_class_taught_early(self):
+        plan = self.laid_out()
+        later = plan.sessions.order_by('-planned_on').first()
+        if later.planned_on <= date.today():
+            self.skipTest('The plan of 2026/27 has no class left to come.')
+        url = f'/api/teaching-plans/{plan.id}/sessions/{later.id}/taught-early/'
+        payload = {'delivered_on': date.today().isoformat(), 'status': 'partial', 'reason': 'Ahead of schedule'}
+        self.assertEqual(client_for(self.qa).post(url, payload, format='json').status_code, 403)
+        done = client_for(self.tutor).post(url, payload, format='json')
+        self.assertEqual(done.status_code, 200)
+        row = next(s for s in done.data['sessions'] if s['id'] == later.id)
+        self.assertEqual((row['status'], row['move_reason']), ('partial', 'Ahead of schedule'))
+        self.assertEqual(client_for(self.tutor).post(url, payload, format='json').status_code, 400)
 
     def test_the_tutors_own_document_is_kept(self):
         plan = self.plan()

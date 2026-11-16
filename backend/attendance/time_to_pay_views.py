@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from . import finance, time_to_pay
 from .models import AcademicYear, MonthlyPlan, StudentProfile, WaiverRequest
 from .roles import is_dpfpa, is_principal
+from .serializers import RecordPaymentSerializer
 from .views import _a_date, _waiver_row, active_academic_year, can_manage_finance, pk_or_none
 
 
@@ -36,7 +37,8 @@ def summary(request):
     year = _year(request.query_params)
     if year is None:
         return _bad('No academic year is active.')
-    return Response({**time_to_pay.summary(year), 'can_extend': is_dpfpa(request.user)})
+    return Response({**time_to_pay.summary(year), 'can_extend': is_dpfpa(request.user),
+                     'can_record': can_manage_finance(request.user)})
 
 
 @api_view(['POST'])
@@ -51,6 +53,35 @@ def extend_waiver(request, pk):
     except finance.WaiverError as exc:
         return _bad(exc)
     return Response(_waiver_row(done))
+
+
+@api_view(['POST'])
+def pay_waiver(request, pk):
+    """The slip for what a waiver covers, recorded from the list of waivers:
+    the accountant alone, holding the proof, as at the payment desk."""
+    if not can_manage_finance(request.user):
+        raise PermissionDenied('The accountant records payments.')
+    waiver = get_object_or_404(WaiverRequest, pk=pk)
+    payload = request.data.copy()
+    payload['profile'] = waiver.profile_id
+    payload.pop('invoice', None)                    # the waiver's own invoice is found for it
+    serializer = RecordPaymentSerializer(data=payload)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    try:
+        payment, placed = time_to_pay.pay_waiver(
+            waiver, data['amount'], data['payment_date'], recorded_by=request.user, note=data['note'],
+            request=request, channel=data['channel'], bank_reference=data['bank_reference'],
+            efd_receipt_no=data['efd_receipt_no'], payer_name=data['payer_name'],
+            payer_relation=data['payer_relation'], proof=data.get('proof'),
+            allow_same_reference=data.get('allow_same_reference', False))
+    except finance.SameSlipError as exc:
+        return Response({'detail': str(exc), 'same_reference': True}, status=status.HTTP_409_CONFLICT)
+    except finance.WaiverError as exc:
+        return _bad(exc)
+    waiver.refresh_from_db()
+    return Response({'payment_id': payment.id, **{k: str(v) for k, v in placed.items()},
+                     'waiver_request': _waiver_row(waiver)}, status=status.HTTP_201_CREATED)
 
 
 @api_view(['GET', 'POST'])

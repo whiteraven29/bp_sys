@@ -4933,6 +4933,16 @@ class PlanSession(models.Model):
     note = models.CharField(max_length=300, blank=True)
     moved_from = models.DateField(null=True, blank=True)
     move_reason = models.CharField(max_length=300, blank=True)
+    # A class added after the plan was sent: a make-up class, an extra one, or
+    # one entered from a register the plan did not have (said 16 November
+    # 2026). It is not one of the classes the plan is measured against; its
+    # hours count as taught, and it may finish a class (finished_in).
+    extra = models.BooleanField(default=False)
+    # For a class missed or partly taught: the later class in which it was
+    # made up or finished — a make-up class, or the tutor's next class, which
+    # also counts for its own topic. From that class's day it counts as done.
+    finished_in = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='finishes')
 
     class Meta:
         ordering = ['plan', 'planned_on', 'order']
