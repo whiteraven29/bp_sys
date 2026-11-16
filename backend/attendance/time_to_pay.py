@@ -240,6 +240,103 @@ def extend_waiver(waiver, pay_by, reason, *, actor=None):
     return waiver
 
 
+# ── paying what a waiver covers, from the list of waivers ─────────────────────
+
+def still_to_pay(waiver):
+    """What is left to pay on what an approved waiver covers: still owed on the
+    bill for one with a date; still written off for one approved before
+    waivers had dates."""
+    return restorable_amount(waiver) if waiver.pay_by is None else outstanding_on(waiver)
+
+
+def _is_tuition(waiver):
+    return (waiver.charge.charge_type.family if waiver.charge_id else waiver.family) == TUITION
+
+
+@transaction.atomic
+def pay_waiver(waiver, amount, payment_date, *, recorded_by, note='', request=None, **slip):
+    """The accountant records the slip from the list of waivers (said 16
+    November 2026: "a waiver is not meant to write a bill off, it is meant to
+    just pass the student until some time when they come to pay").
+
+    A waiver approved before waivers had dates took the money off the bill:
+    as much of it as is paid now goes back on first, so the payment lands on
+    the charge it pays instead of sitting on account; what is not paid stays
+    off until it is. The money pays the waiver's own instalment first, then
+    the rest of its invoice (or of its bank account), oldest first; anything
+    beyond stays on account, as at the payment desk. Returns (payment, how it
+    was placed)."""
+    from .models import BankAccount, Invoice
+    waiver = (WaiverRequest.objects.select_for_update(of=('self',))
+              .select_related('charge__charge_type', 'profile', 'academic_year').get(pk=waiver.pk))
+    if waiver.status != WaiverRequest.APPROVED:
+        raise finance.WaiverError('Only an approved waiver is paid from here. Record the slip at the payment desk.')
+    amount = finance.money(amount or 0)
+    if amount <= ZERO:
+        raise finance.WaiverError('Write how much was paid.')
+    profile, label = waiver.profile, finance.waiver_label(waiver)
+    year = waiver.academic_year or waiver.charge.academic_year
+    put_back = ZERO
+    if waiver.pay_by is None:
+        found = restorable(waiver)
+        if not found:
+            raise finance.WaiverError('Nothing of this waiver is written off any more. '
+                                      'Record any other slip at the payment desk.')
+        if _is_tuition(waiver) and open_plan(profile, year) is not None:
+            raise finance.WaiverError('Their tuition is on a monthly plan: record the slip at the payment desk.')
+        left = amount
+        for charge, written_off in found:
+            take = min(left, written_off)
+            if take <= ZERO:
+                break
+            rest = charge.waived_amount - take
+            finance.waive_charge(charge, rest, charge.waived_reason if rest > ZERO else '', actor=recorded_by)
+            put_back += take
+            left -= take
+        _refresh_invoices(profile, year)
+    elif outstanding_on(waiver) <= ZERO:
+        raise finance.WaiverError('This waiver is paid. Record any other slip at the payment desk.')
+
+    charges = list(finance.with_balances(StudentCharge.objects.filter(profile=profile, academic_year=year)
+                                         .select_related('charge_type')))
+    mine = _waiver_charges(waiver, charges)
+    invoice = (Invoice.objects.filter(profile=profile, academic_year=year, cancelled=False,
+                                      lines__charge__in=[c.id for c in mine]).distinct().first())
+    account = None
+    if invoice is not None:
+        on_invoice = set(invoice.lines.values_list('charge_id', flat=True))
+        others = [c for c in charges if c.id in on_invoice]
+    else:
+        account_id = mine[0].charge_type.bank_account_id if mine else None
+        account = BankAccount.objects.filter(pk=account_id).first() if account_id else None
+        others = [c for c in charges if account_id is None or c.charge_type.bank_account_id == account_id]
+    mine_ids = {c.id for c in mine}
+    others = sorted((c for c in others if c.id not in mine_ids), key=lambda c: (c.due_date, c.id))
+
+    plan, left, on_waiver = [], amount, ZERO
+    for charge in mine + others:
+        if left <= ZERO:
+            break
+        take = min(left, finance.charge_balance(charge))
+        if take > ZERO:
+            plan.append((charge, take))
+            left -= take
+            if charge.id in mine_ids:
+                on_waiver += take
+    text = f'Paid on the waiver: {label}' + (f'. {note.strip()}' if (note or '').strip() else '')
+    payment = finance.record_payment(profile, amount, payment_date, recorded_by=recorded_by, invoice=invoice,
+                                     bank_account=account, allocations=plan, note=text[:300], request=request,
+                                     **slip)
+    placed = {'put_back': put_back, 'on_waiver': on_waiver, 'elsewhere': amount - on_waiver - left,
+              'on_account': left, 'still_to_pay': still_to_pay(waiver),
+              'invoice': invoice.reference if invoice is not None else ''}
+    finance.audit('waiver.pay', 'WaiverRequest', actor=recorded_by, entity_id=waiver.id, profile=profile,
+                  summary=f'{label}: {amount:,.2f} paid on {payment_date:%d %b %Y}'
+                          + (f', {put_back:,.2f} written off before put back on the bill first' if put_back else '')
+                          + f'; {placed["still_to_pay"]:,.2f} still to pay.')
+    return payment, placed
+
+
 # ── a monthly plan ────────────────────────────────────────────────────────────
 
 def open_plan(profile, academic_year):

@@ -1028,3 +1028,124 @@ approved before this release (money already off the bill) must pay that amount a
 **Answer (8 November 2026):** yes, the old waiver goes back on the bill, into the plan, ticked on the plan request;
 a plan is one amount a month for each student, set by the amount or by the number of months. Built the same day.
 
+
+### Q76. Teaching plans: tracking, performance and monitoring ●
+
+**Asked (8 November 2026):** how to bring teaching plans (the PST04104 example) into the system so a tutor tracks what
+is done and not done and is measured against the plan, while the HOD, the Principal and DPARC follow how tutors finish
+theirs — plans differ in length with the module's weight; QA should see them too, uploaded plans included; and what
+should already be in the system so tutors only feed simple data.
+
+**Answers (8–9 November 2026):** CA weights left for now; the new curriculum is at Level 4 (its modules already on the
+live server), Levels 5 and 6 are the last on the old one; semester 1 teaching started on 2 November; implement what is
+possible now on a branch and merge to master when there are no doubts; CA is 40% and SE 60% even in the new curriculum
+(the curriculum's 60/40 is the authority's typing error); QA runs every student and staff evaluation form.
+
+**Built (on the branch):** the curriculum and assessment plans of NTA 4–6 loaded; the almanac as the teaching calendar;
+plans laid out from the days the tutor gives; progress against the plan; approval and test moderation; QA office.
+See `ops/guides/07-teaching-plans.md`.
+
+**Still yours:** DPARC to confirm the Christmas recess (21 Dec – 3 Jan) and Semester 2 CAT 1 (3–8 May); whether the
+Principal, DPARC and the Heads of Department should keep writing evaluation forms once QA has an account (kept for now).
+
+### Q77. The results scheme for the new curriculum ◐
+
+**Asked (8 November 2026), by the documents:** results hold A1, A2, CAT 1, CAT 2 (theory and practical) with fixed
+weights; the Level 4 assessment plans set different weights per module, oral tests and examinations, case studies,
+three tests or three assignments. The new curriculum reaches Level 5 in 2027/28 and Level 6 in 2028/29, so for two
+years one level runs both curricula; repeaters of old-curriculum modules need an old-to-new equivalence.
+
+**Answer (8 November 2026):** gather every assessment plan first, then decide. The NTA 4, 5 and 6 plans and curricula
+are now loaded and compared on the Curriculum screen. **Still needed:** the decision with the exam officer before Level 4
+CAT 1 (18 January 2027); the old curriculum's documents for Levels 5–6; any NACTVET / MoH transition circular for
+repeaters; the MoH examination guidelines (CA eligibility with oral tests and case studies).
+
+**11 November 2026:** the transition letter is on file — Ministry of Health LB.74/262/01B/172 of 27 October 2026,
+passing on NACTVET BC.220/244/65 of 26 October: the revised curricula for **new** NTA Level 4 students from 2026/27;
+students already in Levels 5 and 6 finish on the earlier curriculum. It does not mention repeaters (a Level 4
+repeater of 2025/26 sitting an old module this year), so that part stays open. The new Level 5 and 6 PDFs are the
+Word curricula already loaded, unchanged. The old assessment plans (2016, 2019) and facilitator guides are on the
+laptop (`Guides/FG LEVEL 4|5|6/`). The live server's 2026/27 Level 4 modules are the 2022 curriculum's (your
+answer); only the laptop's copy of the database has the old names.
+
+**Same day, the old curriculum:** you gave the old assessment plans (`Guides/oldAP/`, March 2019) as the old
+documents. Loaded from them: the old curriculum for Levels 5–6 (23 modules, SEOs, tasks, what each assessment covers);
+its plans keep the weights results use, so plans and mark sheets agree. Not in those plans: weekly hours and credits
+(the February 2015 curricula would give them). **Open:** PST05208 and PST05209 are not marked *Has practical
+component* in the laptop's database though their plans have practical tests and examinations — and on the server?
+
+### Q78. A new visual identity ●
+
+**Asked (10 November 2026):** read `.claude/skill.md` (frontend design) and redesign as an experienced UX/UI engineer.
+
+**Answers (same day):** the whole app with a new visual identity; on the teaching plan, the semester strip plus one line
+of figures. A first identity, "the ledger", was built; on review ("still more work to do", with a Vuexy admin template
+as an example) you approved **Proposal B** — rounded cards, grouped menu, the welcome panel — with the base colour still
+blue, in the colours of your second reference (royal blue into navy). **Built (on the branch, uncommitted):** Proposal B
+across the staff app, the student portal and the six small pages; the dashboard rebuilt; the cut-off dates moved to
+Semester Review ▸ Academic period; Sign out in the menu under the name. See guide 07 and the canvas
+https://claude.ai/artifact/BQNj7A8xiPh8Ghet4dStWa.
+
+**Later the same day:** Lato for the whole system; the sign-in page rearranged under a bold "College management system";
+the student portal reworked for phones, keeping the menu on the left (your decision, not a bottom bar).
+
+**Still yours:** to look at it on your own laptop and phone before merging. **Not built:** a "Waiting on you" list made
+of more than notifications (plans to approve, tests to moderate, corrections — it needs a server list of its own); the
+printouts (invoices, passes, registers), which keep their plain style.
+
+### Q79. Charts in the new look, and when a tutor sees teaching plans ●
+
+**Asked (11 November 2026):** "adjust all graphs design to match the new frontend design, also where a tutor see the
+teaching plans or there is a criteria before they see?"
+
+**Charts — built (on the branch, uncommitted):** all 16 charts in the soft cards look and the college blue, with their
+own dark-mode shades; paid is blue and owed red, because green beside red fails for colour-blind readers. Guide 07,
+"Also on this branch". **Still yours:** to look at them with real data on your laptop.
+
+**When a tutor sees plans — answered from the code:** no approval is needed first. The Tutor office puts *Teaching
+plans* in the menu; *My plans* lists the modules of the open semester the Head of Department has given them. Each module
+shows *Start the plan* until one of its tutors starts it. **Fixed:** a tutor with no module yet got an error; they now get
+the screen's own explanation. **Observed:** on the laptop's database no module of 2026/27 Semester 1 has a tutor, so
+nobody would see a plan there; on the server it depends on the Heads of Department giving modules.
+
+### Q80. A class taught before its day ●
+
+**Asked (16 November 2026):** "how do we handle a situation where a tutor opt to teach a topic that was planed like on
+9th dec, and taught it 30th nov?" Two ways were proposed (record changes to what a class covers; a Taught early
+button); **your answer:** "yes build both".
+
+**Built (on the branch, uncommitted):** **Taught early** on a class still to come moves it to the day it was taught and
+marks it in one step, keeping "moved from 9 Dec". When the topic replaced that day's class, the tutor swaps the two
+classes' SEO and topic; once the plan is sent, that swap is written to the plan's History. A moved class now sits in the
+week of its new date on the strip. Guide 07, "What it is".
+
+### Q81. Partly taught classes, classes off the plan, and tutor KPIs ●
+
+**Asked (16 November 2026):** what happens to classes taught in part or outside the plan (their attendance is still
+needed); then "implement all": a register outside the plan, make-up classes that finish nothing, a class completed in the
+tutor's next class "when that day counts for something else", and KPIs for QA "as per teaching plan and assessment plan"
+with tables and graphs.
+
+**Built (on the branch, uncommitted; migration 0087):** extra classes; Finished later (in a make-up or the next class,
+which keeps its own mark); Registers not in the plan (attendance untouched; Add as a class); Tutor KPIs with ten
+measures, two tables, three charts and the definitions. Guide 07, "What it is".
+
+**Still yours:** whether QA should be able to change the KPI targets (fixed in the code now: on schedule 90/70, hours
+90/70, register 100/90, held 100/80, moderated 100/80, covered 100/80, missed 0/2, registers 0/3, tested early 0/0), and
+whether tutors should see their own KPIs.
+
+### Q82. A student paying what was waived ●
+
+**Asked (16 November 2026):** "what happens when a student comes to pay what was waived?", then "if a student had been
+waived 200k and they come to pay now, we record it with their invoice number, what happens?", then: "at list of waivers
+lets have a button to record the amount paid from there … because a waiver is not meant to write a bill off, it is meant
+to just pass the student until some time when they come to pay".
+
+**Built (on the branch, uncommitted; no migration):** Record payment on each approved waiver with money still to pay
+(Shortfall waivers and Time to pay; the accountant). It pays the waiver's own instalment first. A waiver approved before
+6 November 2026 is put back on the bill as it is paid. Release guide 06, "Waivers give time".
+
+**Still yours:** waivers approved before 6 November stay written off until the student pays (only what is paid goes back).
+Should they all go back on the bill now, each with a date DPFPA sets? That would hold those students again until they
+pay or are given a date. And the payment desk itself still pays the oldest instalment first: say if it should also offer
+"Pays which instalment".

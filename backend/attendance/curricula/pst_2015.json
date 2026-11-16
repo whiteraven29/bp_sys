@@ -1,0 +1,6391 @@
+{
+ "code": "PST-2015",
+ "programme": "PST",
+ "name": "Pharmaceutical Sciences, NTA Levels 5–6 (curriculum of 2015)",
+ "note": "Read from the assessment plans of March 2019, developed from the curriculum of February 2015; the curriculum itself was not on hand, so weekly hours and credits are not given and the outcomes carry no assessment criteria. For students already in NTA Levels 5 and 6, who finish on it (NACTVET BC.220/244/65 of 26 October 2026; Ministry of Health LB.74/262/01B/172 of 27 October 2026). Each semester: 15 weeks of study and 2 weeks of assessment.",
+ "weeks_of_study": 15,
+ "weeks_of_assessment": 2,
+ "enabling": {
+  "1.1": "Apply basic principles of procurement of medicines and medical supplies in provision of pharmaceutical services.",
+  "1.2": "Apply legislations governing procurement and use of medicines and medical supplies",
+  "5.3": "Use Logistics Management Information System (LMIS) in the delivery of pharmaceutical services.",
+  "1.3": "Describe policy guidelines in relation to procurement and use of medicines and medical supplies",
+  "4.3": "Apply laws governing controlled and prescription medicines",
+  "3.1": "Describe microorganisms and their roles as disease causing agents.",
+  "3.2": "Describe methods of controlling and preventing microbial infections.",
+  "3.3": "Describe preservation of pharmaceutical products",
+  "3.4": "Describe principles of immunology and vaccination in relation to pharmaceutical care",
+  "4.1": "Describe pharmacology of essential medicines based on their therapeutic classes",
+  "4.2": "Apply guidelines in controlling irrational use of medicines",
+  "6.1": "Describe basic organic chemistry in relation to provision of pharmaceutical services",
+  "6.3": "Describe chemical structures of pharmaceutical products used in health care setting.",
+  "2.1": "Describe components of GMP in preparation of pharmaceutical products",
+  "2.3": "Apply principles of GMP in operation and maintenance of equipment and machines in a facility.",
+  "2.2": "Apply principles of GMP in the preparation of facility based pharmaceutical products",
+  "5.1": "Apply relevant computer packages in delivery of pharmaceutical services.",
+  "5.2": "Apply health management information system (HMIS) to capture, process and store health information",
+  "6.2": "Describe the importance of basic Pharmacognosy in production of pharmaceutical products."
+ },
+ "modules": [
+  {
+   "code": "PST05101",
+   "name": "Medicines and Medical Supplies Management",
+   "level": 5,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "1.1.1",
+     "text": "Describe the purpose of health supply chain management.",
+     "enabling": "1.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define supply chain in relation to management of medicines and medical supplies"
+      },
+      {
+       "letter": "b",
+       "text": "List the components of health supply chain management"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the components of health supply chain management"
+      },
+      {
+       "letter": "d",
+       "text": "Define selection in relation to medicines and medical supplies"
+      },
+      {
+       "letter": "e",
+       "text": "Explain importance of medicines and medical supplies selection"
+      },
+      {
+       "letter": "f",
+       "text": "Mention criteria for selection of medicines and medical supplies"
+      },
+      {
+       "letter": "g",
+       "text": "List problems facing selection of medicines and medical supplies"
+      }
+     ]
+    },
+    {
+     "code": "1.1.2",
+     "text": "Describe quantification methods and forecasting of medicines and medical supplies.",
+     "enabling": "1.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define terms quantification and forecasting as applied in medicines and medical supplies"
+      },
+      {
+       "letter": "b",
+       "text": "List objectives of quantification"
+      },
+      {
+       "letter": "c",
+       "text": "Explain methods of quantification"
+      },
+      {
+       "letter": "d",
+       "text": "Explain application of the quantification methods"
+      },
+      {
+       "letter": "e",
+       "text": "Describe issues to consider in quantification"
+      }
+     ]
+    },
+    {
+     "code": "1.1.3",
+     "text": "Describe procurement process of medicines and medical supplies.",
+     "enabling": "1.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define terms used in procurement of medicines and medical supplies"
+      },
+      {
+       "letter": "b",
+       "text": "List objectives of good procurement"
+      },
+      {
+       "letter": "c",
+       "text": "List operation principles for good procurement"
+      },
+      {
+       "letter": "d",
+       "text": "Mention good procurement practices for medicines and medical supplies"
+      },
+      {
+       "letter": "e",
+       "text": "List steps in the procurement cycle"
+      },
+      {
+       "letter": "f",
+       "text": "List methods for procurement of medicines and medical supplies"
+      },
+      {
+       "letter": "g",
+       "text": "Identify criteria for selecting a procurement methods"
+      },
+      {
+       "letter": "h",
+       "text": "List sources of medicines and medical supplies for procurement"
+      },
+      {
+       "letter": "i",
+       "text": "Explain the quality assurance in procurement of medicines and medical supplies"
+      },
+      {
+       "letter": "j",
+       "text": "Explain drug donation and list its associated benefits and problems"
+      }
+     ]
+    },
+    {
+     "code": "1.2.3",
+     "text": "Explain major procurement agencies for medicines and medical supplies",
+     "enabling": "1.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List major procurement agencies for medicines and medical supplies in Tanzania"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the structure and functions of Medical stores Department"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the Autonomous supply agencies for public and private procurement of medicines (MEMS, action Medeor etc.)"
+      },
+      {
+       "letter": "d",
+       "text": "Explain the prime vendor systems"
+      }
+     ]
+    },
+    {
+     "code": "5.3.1",
+     "text": "Describe the components of Integrated Logistics system",
+     "enabling": "5.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define Integrated Logistics System (ILS)"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the objectives and purpose of Logistics Management Information System (LMIS) in the context of Tanzania"
+      },
+      {
+       "letter": "c",
+       "text": "Differentiate between pull and push systems"
+      },
+      {
+       "letter": "d",
+       "text": "List key features of the ILS system"
+      },
+      {
+       "letter": "e",
+       "text": "List LMIS tools (e.g. R&R forms, etc.)"
+      },
+      {
+       "letter": "f",
+       "text": "Complete R and R forms"
+      },
+      {
+       "letter": "g",
+       "text": "Use Electronic Logistic Management Information system (eLMIS)"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written test",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "1.1.1",
+       "tasks": [
+        "b",
+        "e"
+       ]
+      },
+      {
+       "seo": "1.1.2",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "1.1.3",
+       "tasks": [
+        "b",
+        "c",
+        "e",
+        "i"
+       ]
+      },
+      {
+       "seo": "1.2.3",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "5.3.1",
+       "tasks": [
+        "c",
+        "f",
+        "g"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Individual assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": [
+      {
+       "seo": "1.1.2",
+       "tasks": [
+        "d"
+       ]
+      },
+      {
+       "seo": "5.3.1",
+       "tasks": [
+        "d"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "1.1.1",
+       "tasks": [
+        "a",
+        "c",
+        "d",
+        "f",
+        "g"
+       ]
+      },
+      {
+       "seo": "1.1.2",
+       "tasks": [
+        "a",
+        "b",
+        "e"
+       ]
+      },
+      {
+       "seo": "1.1.3",
+       "tasks": [
+        "a",
+        "d",
+        "f",
+        "g",
+        "h",
+        "j"
+       ]
+      },
+      {
+       "seo": "1.2.3",
+       "tasks": [
+        "b",
+        "d"
+       ]
+      },
+      {
+       "seo": "5.3.1",
+       "tasks": [
+        "a",
+        "b",
+        "e"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST05102",
+   "name": "Law and Policies in Pharmacy Practice",
+   "level": 5,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "1.2.1",
+     "text": "Explain legislations governing procurement of medicines and medical supplies in the public health facilities.",
+     "enabling": "1.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain sections of the Public Procurement Act, 2011 regulating procurement of medicines and medical supplies"
+      },
+      {
+       "letter": "b",
+       "text": "Describe sections of the Tanzania Food and Cosmetics Act, 2003 regulating procurement of medicines and medical supplies"
+      },
+      {
+       "letter": "c",
+       "text": "Describe sections of the Medical Stores Department Act, 1993 regulating procurement of medicines and medical supplies"
+      }
+     ]
+    },
+    {
+     "code": "1.2.2",
+     "text": "Explain legislations governing procurement of controlled substances",
+     "enabling": "1.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define controlled substances"
+      },
+      {
+       "letter": "b",
+       "text": "Classify controlled substances"
+      },
+      {
+       "letter": "c",
+       "text": "Describe sections of the Tanzania Food and Cosmetics Act, 2003 regulating procurement of medicines and medical supplies"
+      },
+      {
+       "letter": "d",
+       "text": "Explain sections of the Drugs and Prevention of Illicit Drugs Traffic Act, 1971 governing procurement of controlled substances"
+      },
+      {
+       "letter": "e",
+       "text": "Explain international conventions ratified in the United Republic of Tanzania regarding controlled drugs and psychotropic substances"
+      }
+     ]
+    },
+    {
+     "code": "1.3.1",
+     "text": "Explain national medicines policy in relation to pharmaceutical services",
+     "enabling": "1.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define national drug policy"
+      },
+      {
+       "letter": "b",
+       "text": "List goals of national drug policy"
+      },
+      {
+       "letter": "c",
+       "text": "Outline objectives of the national drug/medicine policy"
+      },
+      {
+       "letter": "d",
+       "text": "List components of drug/medicine policy"
+      },
+      {
+       "letter": "e",
+       "text": "Explain the importance of the Standard Treatment Guidelines"
+      }
+     ]
+    },
+    {
+     "code": "1.3.2",
+     "text": "Explain policies and guidelines governing procurement of medicines for HIV/AIDS, TB and Leprosy.",
+     "enabling": "1.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List the vertical programmes existing in Tanzania"
+      },
+      {
+       "letter": "b",
+       "text": "Explain procedure for procuring medicines for vertical programmes"
+      },
+      {
+       "letter": "c",
+       "text": "List objectives of NACP, Malaria and TB& Leprosy programmes"
+      }
+     ]
+    },
+    {
+     "code": "1.3.3",
+     "text": "Explain policies and guidelines governing procurement of medicines and medical supplies for vertical programmes.",
+     "enabling": "1.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List objectives of vertical programmes existing in Tanzania"
+      },
+      {
+       "letter": "b",
+       "text": "Explain procedure for procurement of medicines for vertical programmes"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the role of vertical programme in enhancing access to medicines"
+      }
+     ]
+    },
+    {
+     "code": "4.3.1",
+     "text": "Describe procedures for handling controlled medicines",
+     "enabling": "4.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define controlled substances and prescription only medicines"
+      },
+      {
+       "letter": "b",
+       "text": "List and classify controlled substances"
+      },
+      {
+       "letter": "c",
+       "text": "Explain requirements for storing controlled substances"
+      }
+     ]
+    },
+    {
+     "code": "4.3.2",
+     "text": "Explain policies governing the handling of prescription only medicines",
+     "enabling": "4.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define term prescription only medicines"
+      },
+      {
+       "letter": "b",
+       "text": "Explain sections of the Pharmacy Act, 2011 regulating the use and sale prescription only medicines"
+      },
+      {
+       "letter": "c",
+       "text": "Explain procedure for issuing prescription only medicines in emergency situations"
+      }
+     ]
+    },
+    {
+     "code": "4.3.3",
+     "text": "Explain legislation governing the handling of controlled medicines",
+     "enabling": "4.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Describe sections of the Tanzania Food and Cosmetics Act, 2003 regulating distribution and use of medicines and medical supplies"
+      },
+      {
+       "letter": "b",
+       "text": "Explain sections of the Drugs and Prevention of Illicit Drugs Traffic Act, 1971 governing distribution and use of controlled substances"
+      },
+      {
+       "letter": "c",
+       "text": "Explain sections of the drugs and prevention of illicit traffic in drugs Act, 1995 that explain the handling of controlled medicines"
+      },
+      {
+       "letter": "d",
+       "text": "Explain strategies of preventing misuse of controlled substances"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "1.2.2",
+       "tasks": [
+        "b",
+        "d"
+       ]
+      },
+      {
+       "seo": "1.3.1",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "1.3.2",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "4.3.1",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "4.3.2",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "4.3.3",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Individual assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": [
+      {
+       "seo": "4.3.1",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "1.3.3",
+       "tasks": [
+        "b"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "1.2.1",
+       "tasks": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "1.2.2",
+       "tasks": [
+        "a",
+        "c",
+        "e"
+       ]
+      },
+      {
+       "seo": "1.3.1",
+       "tasks": [
+        "a",
+        "d",
+        "e"
+       ]
+      },
+      {
+       "seo": "1.3.2",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "1.3.3",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "4.3.1",
+       "tasks": [
+        "a"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST05103",
+   "name": "Pharmaceutical Microbiology",
+   "level": 5,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "3.1.1",
+     "text": "Describe fundamentals principles, concepts and importance of microbiology in pharmacy practice",
+     "enabling": "3.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define terms used in microbiology"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the history and development of microbiology"
+      },
+      {
+       "letter": "c",
+       "text": "Differentiate between eukaryotic and prokaryotic cells"
+      },
+      {
+       "letter": "d",
+       "text": "Explain classification and nomenclature of microorganisms"
+      },
+      {
+       "letter": "e",
+       "text": "Explain the importance of microorganisms in pharmacy"
+      }
+     ]
+    },
+    {
+     "code": "3.1.2",
+     "text": "Describe bacteriology, virology, parasitology and mycology of medical and pharmaceutical importance",
+     "enabling": "3.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define terms used in bacteriology"
+      },
+      {
+       "letter": "b",
+       "text": "Describe bacterial occurrences and distributions"
+      },
+      {
+       "letter": "c",
+       "text": "Describe the structure of a bacterial cell"
+      },
+      {
+       "letter": "d",
+       "text": "List functions of different bacterial organelles/structures"
+      },
+      {
+       "letter": "e",
+       "text": "Describe various drug targets in the bacterial cell"
+      },
+      {
+       "letter": "f",
+       "text": "Classify bacterial according to staining properties, nutritional requirements and morphology"
+      },
+      {
+       "letter": "g",
+       "text": "Describe common bacterial diseases (causative agents, transmission, signs and symptoms)"
+      },
+      {
+       "letter": "h",
+       "text": "Define common terms used in virology"
+      },
+      {
+       "letter": "i",
+       "text": "Describe general structure and properties of viruses"
+      },
+      {
+       "letter": "j",
+       "text": "Classify viruses according to their genetic and morphological properties"
+      },
+      {
+       "letter": "k",
+       "text": "Describe viral-host-cell interaction and replication"
+      },
+      {
+       "letter": "l",
+       "text": "List various drug targets in virus"
+      },
+      {
+       "letter": "m",
+       "text": "Describe common viral diseases (causative agents, transmission, signs and symptoms)"
+      },
+      {
+       "letter": "n",
+       "text": "Define common terms used in mycology"
+      },
+      {
+       "letter": "o",
+       "text": "Describe occurrences and distributions of fungi"
+      },
+      {
+       "letter": "p",
+       "text": "Describe the structure of a fungal cell"
+      },
+      {
+       "letter": "q",
+       "text": "Classify fungi based on their sexual spores (zygomycota, Ascomycota, basidiomycotina, deuteromycota)"
+      },
+      {
+       "letter": "r",
+       "text": "Classify and describe common mycoses (causative agents, transmission, signs and symptoms)"
+      },
+      {
+       "letter": "s",
+       "text": "Define common terms used in parasitology"
+      },
+      {
+       "letter": "t",
+       "text": "Classify and list general characteristics of parasites"
+      },
+      {
+       "letter": "u",
+       "text": "Describe causative agents, transmission, life cycle, signs/symptoms of common diseases caused blood and tissue protozoa (Malaria, Toxoplamosis, Trypanosomiasis)"
+      },
+      {
+       "letter": "v",
+       "text": "Describe causative agents, transmission, life cycle, signs/symptoms of common diseases caused intestinal and urogenital protozoa (Giardiasis, Amoebiasis, Cryptosporidiosis, Trichomoniasis)"
+      },
+      {
+       "letter": "w",
+       "text": "Describe causative agents, transmission, life cycle, signs/symptoms of common diseases caused by helminths (Taenia, Schistosoma, pinworm, whipworm, hookworm, intestinal roundworm, filarial worm)"
+      }
+     ]
+    },
+    {
+     "code": "3.1.3",
+     "text": "Describe management of common bacterial, viral, fungal and parasitic diseases",
+     "enabling": "3.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Describe treatment, prevention and control of common bacterial diseases"
+      },
+      {
+       "letter": "b",
+       "text": "Describe treatment, prevention and control of common viral diseases"
+      },
+      {
+       "letter": "c",
+       "text": "Describe treatment, prevention and control of common fungal diseases"
+      },
+      {
+       "letter": "d",
+       "text": "Describe treatment, prevention and control of common protozoa diseases"
+      },
+      {
+       "letter": "e",
+       "text": "Describe treatment, prevention and control of common helminthic diseases"
+      }
+     ]
+    },
+    {
+     "code": "3.2.1",
+     "text": "Explain principles of antisepsis, disinfection and sterilisation",
+     "enabling": "3.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define sterilisation"
+      },
+      {
+       "letter": "b",
+       "text": "Distinguish between sterilisation, disinfection and, antisepsis"
+      },
+      {
+       "letter": "c",
+       "text": "Outline procedures for disinfection and sterilisation of pharmaceutical equipment"
+      },
+      {
+       "letter": "d",
+       "text": "List factors affecting sterilisation and disinfection"
+      }
+     ]
+    },
+    {
+     "code": "3.2.2",
+     "text": "Describe conditions requiring antisepsis and disinfection",
+     "enabling": "3.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List criteria for selection of antiseptics"
+      },
+      {
+       "letter": "b",
+       "text": "List criteria for selection of disinfectants"
+      },
+      {
+       "letter": "c",
+       "text": "Identify factors affecting action of antiseptics and disinfectants"
+      }
+     ]
+    },
+    {
+     "code": "3.2.3",
+     "text": "Describe methods and agents used in sterilisation",
+     "enabling": "3.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List methods used for sterilization"
+      },
+      {
+       "letter": "b",
+       "text": "Explain (dry and moist) heat sterilisation"
+      },
+      {
+       "letter": "c",
+       "text": "Explain gaseous sterilisation"
+      },
+      {
+       "letter": "d",
+       "text": "Explain radiation sterilisation"
+      },
+      {
+       "letter": "e",
+       "text": "Explain sterilization by filtration"
+      },
+      {
+       "letter": "f",
+       "text": "List the criteria for selecting sterilization method"
+      }
+     ]
+    },
+    {
+     "code": "3.3.1",
+     "text": "Explain concepts of preserving pharmaceutical products",
+     "enabling": "3.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List agents commonly used as antimicrobial preservative for pharmaceutical products"
+      },
+      {
+       "letter": "b",
+       "text": "List the criteria for selection of antimicrobial preservatives"
+      },
+      {
+       "letter": "c",
+       "text": "List the limitations for use of antimicrobial preservatives"
+      }
+     ]
+    },
+    {
+     "code": "3.4.1",
+     "text": "Describe concept of immunology and immunization",
+     "enabling": "3.4",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Describe terms used in immunology and immunization"
+      },
+      {
+       "letter": "b",
+       "text": "Explain types of immunity"
+      },
+      {
+       "letter": "c",
+       "text": "Differentiate between antigens and antibodies"
+      },
+      {
+       "letter": "d",
+       "text": "Explain sources of antibodies"
+      },
+      {
+       "letter": "e",
+       "text": "Classify antibodies"
+      },
+      {
+       "letter": "f",
+       "text": "Explain types and functions of lymphocytes"
+      },
+      {
+       "letter": "g",
+       "text": "Explain the concept of expanded programme on immunization"
+      },
+      {
+       "letter": "h",
+       "text": "List objectives of vaccination/ immunisation programme"
+      },
+      {
+       "letter": "i",
+       "text": "Explain schedules of immunization in Tanzania"
+      }
+     ]
+    },
+    {
+     "code": "3.4.2",
+     "text": "Describe immunological preparations",
+     "enabling": "3.4",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define vaccines and sera"
+      },
+      {
+       "letter": "b",
+       "text": "List immunological preparations"
+      },
+      {
+       "letter": "c",
+       "text": "Differentiate between vaccine and sera"
+      },
+      {
+       "letter": "d",
+       "text": "List characteristics of immunological preparations"
+      },
+      {
+       "letter": "e",
+       "text": "List components of vaccines and sera"
+      },
+      {
+       "letter": "f",
+       "text": "Classify vaccines and list their characteristics"
+      }
+     ]
+    },
+    {
+     "code": "3.4.3",
+     "text": "Describe procedures of handling immunological products",
+     "enabling": "3.4",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define cold chain"
+      },
+      {
+       "letter": "b",
+       "text": "List components of cold chain"
+      },
+      {
+       "letter": "c",
+       "text": "List equipment for cold chain"
+      },
+      {
+       "letter": "d",
+       "text": "Explain the procedure for arrangement of vaccines in the refrigerator"
+      },
+      {
+       "letter": "e",
+       "text": "List tools for monitoring cold chain"
+      },
+      {
+       "letter": "f",
+       "text": "List factors affecting quality of vaccines"
+      },
+      {
+       "letter": "g",
+       "text": "List indications and contraindications to vaccines"
+      },
+      {
+       "letter": "h",
+       "text": "Explain strategies for vaccine delivery"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "3.1.1",
+       "tasks": [
+        "a",
+        "b",
+        "d"
+       ]
+      },
+      {
+       "seo": "3.1.2",
+       "tasks": [
+        "b",
+        "c",
+        "h",
+        "i",
+        "k",
+        "n",
+        "q",
+        "s",
+        "w"
+       ]
+      },
+      {
+       "seo": "3.1.3",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "3.2.1",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "3.2.2",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "3.2.3",
+       "tasks": [
+        "c",
+        "f"
+       ]
+      },
+      {
+       "seo": "3.3.1",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "3.4.1",
+       "tasks": [
+        "a",
+        "c",
+        "d",
+        "f"
+       ]
+      },
+      {
+       "seo": "3.4.2",
+       "tasks": [
+        "b",
+        "e"
+       ]
+      },
+      {
+       "seo": "3.4.3",
+       "tasks": [
+        "b",
+        "e",
+        "h"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Individual assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": [
+      {
+       "seo": "3.1.1",
+       "tasks": [
+        "e"
+       ]
+      },
+      {
+       "seo": "3.4.3",
+       "tasks": [
+        "d"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "3.1.1",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "3.1.2",
+       "tasks": [
+        "a",
+        "d",
+        "e",
+        "f",
+        "g",
+        "j",
+        "l",
+        "m",
+        "o",
+        "p",
+        "r",
+        "t",
+        "u",
+        "v"
+       ]
+      },
+      {
+       "seo": "3.1.3",
+       "tasks": [
+        "a",
+        "d",
+        "e"
+       ]
+      },
+      {
+       "seo": "3.2.1",
+       "tasks": [
+        "a",
+        "b",
+        "d"
+       ]
+      },
+      {
+       "seo": "3.2.2",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "3.2.3",
+       "tasks": [
+        "a",
+        "b",
+        "d",
+        "e"
+       ]
+      },
+      {
+       "seo": "3.3.1",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "3.4.1",
+       "tasks": [
+        "b",
+        "e",
+        "g",
+        "h",
+        "i"
+       ]
+      },
+      {
+       "seo": "3.4.2",
+       "tasks": [
+        "a",
+        "c",
+        "d",
+        "f"
+       ]
+      },
+      {
+       "seo": "3.4.3",
+       "tasks": [
+        "a",
+        "c",
+        "f",
+        "g"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST05104",
+   "name": "Pharmacology and Therapeutics",
+   "level": 5,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "4.1.1",
+     "text": "Describe pharmacokinetics of essential medicines.",
+     "enabling": "4.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define common terms used in pharmacokinetics"
+      },
+      {
+       "letter": "b",
+       "text": "Explain drug absorption"
+      },
+      {
+       "letter": "c",
+       "text": "Explain drug distribution"
+      },
+      {
+       "letter": "d",
+       "text": "Explain drug metabolism"
+      },
+      {
+       "letter": "e",
+       "text": "Explain drug elimination"
+      }
+     ]
+    },
+    {
+     "code": "4.1.2",
+     "text": "Describe pharmacodynamics of essential medicines",
+     "enabling": "4.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define common terms used in pharmacodynamics"
+      },
+      {
+       "letter": "b",
+       "text": "Explain drug receptor interactions"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the concept of enzyme inhibitors and enzyme inducers"
+      },
+      {
+       "letter": "d",
+       "text": "Explain mechanism of action of drugs acting on the CNS"
+      },
+      {
+       "letter": "e",
+       "text": "Explain mechanism of action of drugs acting on the cardiovascular system"
+      },
+      {
+       "letter": "f",
+       "text": "Explain mechanism of action of drugs acting on the endocrine system"
+      },
+      {
+       "letter": "g",
+       "text": "Explain mechanism of action of drugs acting on respiratory system"
+      },
+      {
+       "letter": "h",
+       "text": "Explain mechanism of action of drugs acting on gastrointestinal system"
+      },
+      {
+       "letter": "i",
+       "text": "Explain mechanism of action of analgesics, antipyretics and anti-inflammatory drugs"
+      },
+      {
+       "letter": "j",
+       "text": "Explain mechanism of action of drugs acting locally on the skin"
+      },
+      {
+       "letter": "k",
+       "text": "Explain mechanism of action of drugs used in insect bites, venomous snakes and anaphylactic shock"
+      },
+      {
+       "letter": "l",
+       "text": "Explain mechanism of action of drugs that are anti-neoplastic and immunosuppressive"
+      },
+      {
+       "letter": "m",
+       "text": "Explain mechanism of action of anti-metabolites"
+      },
+      {
+       "letter": "n",
+       "text": "Explain mechanism of vitamins and minerals"
+      },
+      {
+       "letter": "o",
+       "text": "Explain mechanism of action of drugs acting on the genital-urinal system"
+      },
+      {
+       "letter": "p",
+       "text": "Explain mechanism of action for anti-infective agents (antiprotozoal, antihelminthics, antifungal, antibacterial, antiviral)"
+      }
+     ]
+    },
+    {
+     "code": "4.1.3",
+     "text": "Describe side effects, contraindications and adverse reactions of essential medicines",
+     "enabling": "4.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Differentiate between side effects, adverse drug reaction and contraindications of drugs"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the importance of effects, adverse drug reaction and contraindications in initiating therapy and choosing of appropriate medicines"
+      },
+      {
+       "letter": "c",
+       "text": "List side effects and adverse reactions of essential medicines"
+      },
+      {
+       "letter": "d",
+       "text": "Identify contraindications to essential drugs"
+      }
+     ]
+    },
+    {
+     "code": "4.1.4",
+     "text": "Describe concept of toxicology",
+     "enabling": "4.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define terms used in toxicology"
+      },
+      {
+       "letter": "b",
+       "text": "Differentiate between potency and efficacy"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the concept of graded drug response"
+      },
+      {
+       "letter": "d",
+       "text": "Explain maximum effective concentration, minimum effective concentration and therapeutic window"
+      },
+      {
+       "letter": "e",
+       "text": "Explain the concept of effective dose concentration"
+      },
+      {
+       "letter": "f",
+       "text": "Explain the concept of minimum lethal dose concentrations"
+      },
+      {
+       "letter": "g",
+       "text": "Classify types of poisons"
+      },
+      {
+       "letter": "h",
+       "text": "List commonly used drugs that are susceptible to poisoning and their antidotes"
+      },
+      {
+       "letter": "i",
+       "text": "Explain management of acute poisoning"
+      }
+     ]
+    }
+   ],
+   "checks": [
+    "The assessment plan heads it PST05204, but it is module four of semester 1 (semester 2 starts at PST05207) and its facilitator guide is \"PST 05104 PHARMACOLOGY AND THERAPEUTICS\": loaded as PST05104."
+   ],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "4.1.1",
+       "tasks": [
+        "a",
+        "b",
+        "d"
+       ]
+      },
+      {
+       "seo": "4.1.2",
+       "tasks": [
+        "a",
+        "c",
+        "g",
+        "i"
+       ]
+      },
+      {
+       "seo": "4.1.3",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "4.1.4",
+       "tasks": [
+        "a",
+        "b",
+        "e",
+        "g"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": []
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "4.1.1",
+       "tasks": [
+        "a",
+        "e"
+       ]
+      },
+      {
+       "seo": "4.1.2",
+       "tasks": [
+        "b",
+        "d",
+        "e",
+        "f",
+        "h",
+        "j",
+        "l",
+        "m",
+        "n",
+        "o",
+        "p"
+       ]
+      },
+      {
+       "seo": "4.1.3",
+       "tasks": [
+        "a",
+        "b",
+        "d"
+       ]
+      },
+      {
+       "seo": "4.1.4",
+       "tasks": [
+        "c",
+        "d",
+        "f",
+        "i"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST05105",
+   "name": "Rational Use of Medicines",
+   "level": 5,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "4.2.1",
+     "text": "Describe causes of irrational use of medicines and associated problems.",
+     "enabling": "4.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Differentiate between rational and irrational use of medicines"
+      },
+      {
+       "letter": "b",
+       "text": "Outline types of irrational use"
+      },
+      {
+       "letter": "c",
+       "text": "Explain factors contributing to irrational use"
+      },
+      {
+       "letter": "d",
+       "text": "Explain problems associated with irrational medicine usage"
+      },
+      {
+       "letter": "e",
+       "text": "Explain control measures for irrational medicines use"
+      }
+     ]
+    },
+    {
+     "code": "4.2.2",
+     "text": "Explain essential medicines concept in promoting rational use of medicines.",
+     "enabling": "4.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the concept of essential medicines"
+      },
+      {
+       "letter": "b",
+       "text": "List problems of national essential medicines list"
+      },
+      {
+       "letter": "c",
+       "text": "Relate essential medicines concept with promotion of rational medicines use"
+      },
+      {
+       "letter": "d",
+       "text": "Outline types of interventions in promoting rational medicines use"
+      },
+      {
+       "letter": "e",
+       "text": "Explain factors hindering promotion of rational medicines use"
+      },
+      {
+       "letter": "f",
+       "text": "Explain the importance of the Standard Treatment Guidelines (STG) and the Essential Medicines List (EML) in reducing irrational use of medicines"
+      }
+     ]
+    },
+    {
+     "code": "4.2.3",
+     "text": "Explain the role of drug marketing and promotions in supporting rational use of medicines.",
+     "enabling": "4.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain legal limitations on Medicines marketing and promotion"
+      },
+      {
+       "letter": "b",
+       "text": "Explain consequences of uncontrolled medicines marketing and promotion"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the role of information in medicines marketing and promotion"
+      },
+      {
+       "letter": "d",
+       "text": "Identify ethical issues in medicines marketing and promotion"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "4.2.1",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "4.2.2",
+       "tasks": [
+        "a",
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "4.2.3",
+       "tasks": [
+        "c"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": [
+      {
+       "seo": "4.2.2",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "4.2.3",
+       "tasks": [
+        "c"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "4.2.1",
+       "tasks": [
+        "a",
+        "d",
+        "e"
+       ]
+      },
+      {
+       "seo": "4.2.2",
+       "tasks": [
+        "b",
+        "e",
+        "f"
+       ]
+      },
+      {
+       "seo": "4.2.3",
+       "tasks": [
+        "a",
+        "b",
+        "d"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST05106",
+   "name": "Pharmaceutical Organic Chemistry",
+   "level": 5,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "6.1.1",
+     "text": "Describe the concept of organic chemistry in pharmacy",
+     "enabling": "6.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define organic chemistry"
+      },
+      {
+       "letter": "b",
+       "text": "List characteristics of organic compounds"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of organic chemistry in pharmacy"
+      }
+     ]
+    },
+    {
+     "code": "6.1.2",
+     "text": "Describe classification of organic compounds and their structures",
+     "enabling": "6.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Classify and explain organic compounds"
+      },
+      {
+       "letter": "b",
+       "text": "Explain nomenclature of organic compound"
+      },
+      {
+       "letter": "c",
+       "text": "Draw chemical structures of organic compounds"
+      },
+      {
+       "letter": "d",
+       "text": "List properties of different classes of organic compounds"
+      }
+     ]
+    },
+    {
+     "code": "6.1.3",
+     "text": "Describe chemical reactions involving organic compounds",
+     "enabling": "6.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define the term chemical reaction"
+      },
+      {
+       "letter": "b",
+       "text": "List types of chemical reactions in organic compounds"
+      },
+      {
+       "letter": "c",
+       "text": "Explain chemical reactions in organic compounds"
+      }
+     ]
+    },
+    {
+     "code": "6.3.1",
+     "text": "Explain the concept of isomerism",
+     "enabling": "6.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define isomers and isomerism"
+      },
+      {
+       "letter": "b",
+       "text": "List and explain types of isomers"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of isomerism in pharmacy"
+      }
+     ]
+    },
+    {
+     "code": "6.3.2",
+     "text": "Explain biotransformation methods of medicinal products",
+     "enabling": "6.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define biotransformation"
+      },
+      {
+       "letter": "b",
+       "text": "Explain metabolism of different organic compounds"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of biotransformation"
+      }
+     ]
+    },
+    {
+     "code": "6.3.3",
+     "text": "Describe structure-activity relationship of drugs",
+     "enabling": "6.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define structure-activity relationship"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the importance of structure-activity relationship in pharmacy"
+      },
+      {
+       "letter": "c",
+       "text": "Classify drugs according to their chemical nature"
+      },
+      {
+       "letter": "d",
+       "text": "Relate organic structures of penicillins, quinolones, cephalosporin and sulphonamides, aspirin and paracetamol"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "6.1.1",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "6.1.2",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "6.1.3",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "6.3.1",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "6.3.2",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": []
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "6.1.1",
+       "tasks": [
+        "b"
+       ]
+      },
+      {
+       "seo": "6.1.2",
+       "tasks": [
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "6.1.3",
+       "tasks": [
+        "b"
+       ]
+      },
+      {
+       "seo": "6.3.1",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "6.3.2",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "6.3.3",
+       "tasks": [
+        "a",
+        "c",
+        "d"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST05207",
+   "name": "Quality Assurance of Pharmaceutical Products",
+   "level": 5,
+   "semester": 2,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "2.1.1",
+     "text": "Explain the principles of Good Manufacturing Practices.",
+     "enabling": "2.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define Good Manufacturing Practices"
+      },
+      {
+       "letter": "b",
+       "text": "List principles of GMP"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of GMP in pharmaceutical manufacturing"
+      }
+     ]
+    },
+    {
+     "code": "2.1.2",
+     "text": "Explain components of Good Manufacturing Practices.",
+     "enabling": "2.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List the Components of GMP"
+      },
+      {
+       "letter": "b",
+       "text": "Explain premise requirements"
+      },
+      {
+       "letter": "c",
+       "text": "Explain personnel requirements"
+      },
+      {
+       "letter": "d",
+       "text": "Explain raw materials requirements"
+      },
+      {
+       "letter": "e",
+       "text": "Explain documentation requirements"
+      },
+      {
+       "letter": "f",
+       "text": "Explain equipment requirements"
+      }
+     ]
+    },
+    {
+     "code": "2.1.3",
+     "text": "Describe quality control and assurance in relation to preparation of pharmaceutical products",
+     "enabling": "2.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define quality assurance"
+      },
+      {
+       "letter": "b",
+       "text": "Define quality Control"
+      },
+      {
+       "letter": "c",
+       "text": "List functions of quality control laboratory in relation to preparation of pharmaceutical products"
+      }
+     ]
+    },
+    {
+     "code": "2.3.1",
+     "text": "Explain standard operating procedures of equipment and machines in facility-based pharmaceutical preparation unit",
+     "enabling": "2.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define standard operating procedures"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the components of an SOP"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of SOPs in the production of pharmaceuticals"
+      }
+     ]
+    },
+    {
+     "code": "2.3.2",
+     "text": "Explain the operating principles of equipment and machines in facility-based pharmaceutical preparation unit.",
+     "enabling": "2.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List equipment used in facility based pharmaceutical preparation unit (reverse osmosis machine, distiller, autoclave, de-ionizer etc.)"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the operating principles of an autoclave"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the operating principles of a reverse osmosis machine"
+      },
+      {
+       "letter": "d",
+       "text": "Explain the operating principles of a de-ionizer"
+      },
+      {
+       "letter": "e",
+       "text": "Explain the operating principles of a distiller"
+      }
+     ]
+    },
+    {
+     "code": "2.3.3",
+     "text": "Explain preventive maintenance procedures for equipment and machines in facility-based pharmaceutical preparation unit",
+     "enabling": "2.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the importance of proper preventive maintenance of equipment and machines"
+      },
+      {
+       "letter": "b",
+       "text": "Describe general considerations in preventive maintenance of machines and equipment"
+      },
+      {
+       "letter": "c",
+       "text": "Demonstrate the preventive maintenance procedures for equipment and machines (reverse osmosis machine, distiller, autoclave, de-ionizer etc.)"
+      }
+     ]
+    },
+    {
+     "code": "3.3.3",
+     "text": "Describe procedures for quality testing of pharmaceutical products.",
+     "enabling": "3.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List methods commonly used for quality testing of pharmaceutical products from monographs"
+      },
+      {
+       "letter": "b",
+       "text": "Explain procedures for carrying out physical quality tests for solid pharmaceutical dosage forms (Hardness, smell, colour, texture, thickness, diameter, friability, disintegration etc.)"
+      },
+      {
+       "letter": "c",
+       "text": "Explain procedures for carrying out physical quality tests for liquid pharmaceutical dosage forms (pH, smell, colour, conductivity, osmolarity etc.)"
+      },
+      {
+       "letter": "d",
+       "text": "Explain procedures for carrying out microbiological quality tests for pharmaceutical products (sterility tests, etc.)"
+      },
+      {
+       "letter": "e",
+       "text": "Explain procedures for carrying out chemical qualitative tests (volumetric analysis, colour reaction, dissolution test etc)"
+      },
+      {
+       "letter": "f",
+       "text": "Explain the procedures for carrying out chromatographic quality tests (TLC, etc.)"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "2.1.1",
+       "tasks": [
+        "b"
+       ]
+      },
+      {
+       "seo": "2.1.2",
+       "tasks": [
+        "b",
+        "e"
+       ]
+      },
+      {
+       "seo": "2.1.3",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "2.3.1",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "2.3.2",
+       "tasks": [
+        "b",
+        "d"
+       ]
+      },
+      {
+       "seo": "3.3.3",
+       "tasks": [
+        "a"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": [
+      {
+       "seo": "2.3.3",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "3.3.3",
+       "tasks": [
+        "e"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "2.1.1",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "2.1.2",
+       "tasks": [
+        "a",
+        "c",
+        "d",
+        "f"
+       ]
+      },
+      {
+       "seo": "2.1.3",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "2.3.1",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "2.3.2",
+       "tasks": [
+        "a",
+        "c",
+        "e"
+       ]
+      },
+      {
+       "seo": "2.3.3",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "3.3.3",
+       "tasks": [
+        "b",
+        "c",
+        "d",
+        "f"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST05208",
+   "name": "Pharmaceutics Theory and Compounding",
+   "level": 5,
+   "semester": 2,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "2.2.1",
+     "text": "Describe sterile pharmaceutical preparations",
+     "enabling": "2.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define sterile pharmaceutical products"
+      },
+      {
+       "letter": "b",
+       "text": "Explain categories of sterile pharmaceutical products"
+      },
+      {
+       "letter": "c",
+       "text": "List qualities of sterile pharmaceutical products"
+      },
+      {
+       "letter": "d",
+       "text": "Explain the role of aseptic techniques in assuring quality in pharmaceutical production"
+      }
+     ]
+    },
+    {
+     "code": "2.2.2",
+     "text": "Describe requirements for preparation of sterile pharmaceutical products",
+     "enabling": "2.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the concept of aseptic processing"
+      },
+      {
+       "letter": "b",
+       "text": "Explain premise requirements for sterile production"
+      },
+      {
+       "letter": "c",
+       "text": "Explain personnel requirements for sterile production"
+      },
+      {
+       "letter": "d",
+       "text": "Explain raw materials requirements for sterile production"
+      },
+      {
+       "letter": "e",
+       "text": "Explain documentation requirements for sterile production"
+      },
+      {
+       "letter": "f",
+       "text": "Explain equipment requirements for sterile production"
+      }
+     ]
+    },
+    {
+     "code": "2.2.3",
+     "text": "Use formula in the preparation of pharmaceutical products",
+     "enabling": "2.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define monographs"
+      },
+      {
+       "letter": "b",
+       "text": "List different types of references used in pharmaceutical production"
+      },
+      {
+       "letter": "c",
+       "text": "Identify formula for pharmaceutical preparation"
+      },
+      {
+       "letter": "d",
+       "text": "Reduce or enlarge official formula to obtain required formula for compounding"
+      },
+      {
+       "letter": "e",
+       "text": "Compound semi-solid preparations (ointments, creams, gels, pastes etc.)"
+      }
+     ]
+    },
+    {
+     "code": "2.2.4",
+     "text": "Describe formulation of semi-solid pharmaceutical preparations",
+     "enabling": "2.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define semisolid pharmaceutical preparations"
+      },
+      {
+       "letter": "b",
+       "text": "List ideal properties of semi-solid preparations"
+      },
+      {
+       "letter": "c",
+       "text": "Explain percutaneous absorption"
+      },
+      {
+       "letter": "d",
+       "text": "Explain factors affecting percutaneous absorption"
+      },
+      {
+       "letter": "e",
+       "text": "Explain rational approaches to topical formulation"
+      },
+      {
+       "letter": "f",
+       "text": "List treatment target for semi-solid preparations"
+      },
+      {
+       "letter": "g",
+       "text": "Explain the components of semi-solid preparations (ointments, creams, pastes, gels etc.)"
+      },
+      {
+       "letter": "h",
+       "text": "Explain containers, closures and labelling of semi-solid preparations"
+      }
+     ]
+    },
+    {
+     "code": "2.2.5",
+     "text": "Perform calculations on isotonicity, electrolytes, constitutions, intravenous admixtures and rate of flow.",
+     "enabling": "2.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define terms used in isotonicity and electrolytes"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the importance of isotonic solutions"
+      },
+      {
+       "letter": "c",
+       "text": "Perform calculations of isotonicity by freezing point methods, sodium chloride equivalent, and molecular concentrations"
+      },
+      {
+       "letter": "d",
+       "text": "Calculate milliequivalents, millimoles, milliosmoles and osmolarity/osmolality"
+      },
+      {
+       "letter": "e",
+       "text": "Perform calculations of constituted solutions, intravenous admixture and rate of flow"
+      },
+      {
+       "letter": "f",
+       "text": "Perform calculations of pH, buffers and buffer solutions"
+      }
+     ]
+    },
+    {
+     "code": "3.3.2",
+     "text": "Describe agents used in preservation of pharmaceutical products",
+     "enabling": "3.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "d",
+       "text": "List agents commonly used as antimicrobial preservative for pharmaceutical products"
+      },
+      {
+       "letter": "e",
+       "text": "List the criteria for selection of antimicrobial preservatives"
+      },
+      {
+       "letter": "f",
+       "text": "List the limitations for use of antimicrobial preservatives"
+      }
+     ]
+    }
+   ],
+   "checks": [
+    "Written tests: the instructions name tasks table 2 does not have (3.3.2 b).",
+    "Practical examination: the instructions name tasks table 2 does not have (3.3.2 a, 3.3.2 c)."
+   ],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "16",
+     "covers": [
+      {
+       "seo": "2.2.1",
+       "tasks": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "2.2.3",
+       "tasks": [
+        "b"
+       ]
+      },
+      {
+       "seo": "2.2.4",
+       "tasks": [
+        "b",
+        "e"
+       ]
+      },
+      {
+       "seo": "2.2.5",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "3.3.2",
+       "tasks": [
+        "b"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "practical_test",
+     "label": "Practical tests",
+     "tool": "Practical checklist",
+     "min_count": 2,
+     "weight": "20",
+     "covers": [
+      {
+       "seo": "2.2.3",
+       "tasks": [
+        "d",
+        "e"
+       ]
+      },
+      {
+       "seo": "2.2.5",
+       "tasks": [
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Individual assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "4",
+     "covers": [
+      {
+       "seo": "2.2.2",
+       "tasks": [
+        "e"
+       ]
+      },
+      {
+       "seo": "2.2.5",
+       "tasks": [
+        "b"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "30",
+     "covers": []
+    },
+    {
+     "stage": "se",
+     "method": "practical_exam",
+     "label": "Practical examination",
+     "tool": "Practical checklist",
+     "min_count": 1,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "2.2.1",
+       "tasks": [
+        "d"
+       ]
+      },
+      {
+       "seo": "2.2.2",
+       "tasks": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "f"
+       ]
+      },
+      {
+       "seo": "2.2.3",
+       "tasks": [
+        "a",
+        "c",
+        "d",
+        "e"
+       ]
+      },
+      {
+       "seo": "2.2.4",
+       "tasks": [
+        "a",
+        "c",
+        "d",
+        "f",
+        "g",
+        "h"
+       ]
+      },
+      {
+       "seo": "3.3.2",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "2.2.5",
+       "tasks": [
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST05209",
+   "name": "Health Information Management",
+   "level": 5,
+   "semester": 2,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "5.1.1",
+     "text": "Organize health related data using computer packages",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain concepts of electronic data storage and arrangement"
+      },
+      {
+       "letter": "b",
+       "text": "Demonstrate electronic filing and application of security to electronic data"
+      },
+      {
+       "letter": "c",
+       "text": "List methods of summarizing data (charts, graphs, tables, histogram)"
+      }
+     ]
+    },
+    {
+     "code": "5.1.2",
+     "text": "Analyse health related data using computer packages",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Generate tables from simple health data using spreadsheet"
+      },
+      {
+       "letter": "b",
+       "text": "Generate charts from simple health data using spreadsheet"
+      },
+      {
+       "letter": "c",
+       "text": "Generate graphs and histogram from simple health data using spreadsheet"
+      },
+      {
+       "letter": "d",
+       "text": "Generate trends from data and recognise problems to be solved using spreadsheet"
+      }
+     ]
+    },
+    {
+     "code": "5.1.3",
+     "text": "Report and present health related information using computer packages",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain principles of report writing"
+      },
+      {
+       "letter": "b",
+       "text": "Deduce information from analysed data and summarise it"
+      },
+      {
+       "letter": "c",
+       "text": "Generate presentation using computer packages"
+      }
+     ]
+    },
+    {
+     "code": "5.1.4",
+     "text": "Use computer applications for data backup, information searching and learning",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define data back up"
+      },
+      {
+       "letter": "b",
+       "text": "Describe importance of backing up data"
+      },
+      {
+       "letter": "c",
+       "text": "Explain causes of data loss"
+      },
+      {
+       "letter": "d",
+       "text": "Define a computer virus"
+      },
+      {
+       "letter": "e",
+       "text": "Classify different type computer viruses"
+      },
+      {
+       "letter": "f",
+       "text": "Describe importance of computer antiviruses"
+      },
+      {
+       "letter": "g",
+       "text": "Demonstrate techniques in searching information on the internet"
+      }
+     ]
+    },
+    {
+     "code": "5.1.5",
+     "text": "Use computer packages in ordering, invoicing, dispensing, selling and inventory management",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List common inventory management applications"
+      },
+      {
+       "letter": "b",
+       "text": "Demonstrate procedures for electronic ordering"
+      },
+      {
+       "letter": "c",
+       "text": "Demonstrate procedures for electronic invoicing"
+      },
+      {
+       "letter": "d",
+       "text": "Demonstrate procedures for electronic dispensing"
+      },
+      {
+       "letter": "e",
+       "text": "Demonstrate procedures for electronic selling"
+      },
+      {
+       "letter": "f",
+       "text": "Carry out inventory management functions using computer"
+      }
+     ]
+    },
+    {
+     "code": "5.2.1",
+     "text": "Describe components of the WHO health management information system",
+     "enabling": "5.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define health management system"
+      },
+      {
+       "letter": "b",
+       "text": "List components of the WHO health management system"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of health management system"
+      },
+      {
+       "letter": "d",
+       "text": "List key performance indicators of health management system"
+      }
+     ]
+    },
+    {
+     "code": "5.2.2",
+     "text": "Use MTUHA database in capturing and managing pharmaceutical data",
+     "enabling": "5.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define MTUHA"
+      },
+      {
+       "letter": "b",
+       "text": "List commonly used MTUHA tools"
+      },
+      {
+       "letter": "c",
+       "text": "Capture and process data using MTUHA database software"
+      },
+      {
+       "letter": "d",
+       "text": "Generate reports from MTUHA database"
+      }
+     ]
+    },
+    {
+     "code": "5.2.3",
+     "text": "Perform simple data analysis using MTUHA database",
+     "enabling": "5.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Establish trends of pharmaceutical services from MTUHA database"
+      },
+      {
+       "letter": "b",
+       "text": "Identify pharmaceutical services problems from analysed data"
+      },
+      {
+       "letter": "c",
+       "text": "Prepare reports"
+      }
+     ]
+    },
+    {
+     "code": "5.3.2",
+     "text": "Describe management of pharmaceutical information in vertical programs.",
+     "enabling": "5.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define the term vertical programme"
+      },
+      {
+       "letter": "b",
+       "text": "Mention vertical programme existing in the country"
+      },
+      {
+       "letter": "c",
+       "text": "Explain importance of pharmaceutical information management in vertical programmes"
+      }
+     ]
+    },
+    {
+     "code": "5.3.3",
+     "text": "Use networking programs in disseminating pharmaceutical information.",
+     "enabling": "5.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the importance of networking in dissemination of pharmaceutical information"
+      },
+      {
+       "letter": "b",
+       "text": "List networking programmes used in dissemination of pharmaceutical information"
+      },
+      {
+       "letter": "c",
+       "text": "Disseminate pharmaceutical information"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "18",
+     "covers": [
+      {
+       "seo": "5.1.1",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "5.1.5",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "5.2.1",
+       "tasks": [
+        "a",
+        "b",
+        "d"
+       ]
+      },
+      {
+       "seo": "5.2.2",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "5.2.3",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "5.3.3",
+       "tasks": [
+        "b"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "practical_test",
+     "label": "Practical test",
+     "tool": "Practical checklist",
+     "min_count": 2,
+     "weight": "18",
+     "covers": [
+      {
+       "seo": "5.1.2",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "5.1.5",
+       "tasks": [
+        "b",
+        "e"
+       ]
+      },
+      {
+       "seo": "5.2.2",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "5.3.3",
+       "tasks": [
+        "c"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Individual assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "4",
+     "covers": [
+      {
+       "seo": "5.1.4",
+       "tasks": [
+        "a",
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "5.3.2",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "5.1.3",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "5.1.4",
+       "tasks": [
+        "b",
+        "e",
+        "f"
+       ]
+      },
+      {
+       "seo": "5.2.1",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "5.3.2",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "5.3.3",
+       "tasks": [
+        "a"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "practical_exam",
+     "label": "Practical examination",
+     "tool": "Practical checklist",
+     "min_count": 1,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "5.1.1",
+       "tasks": [
+        "b"
+       ]
+      },
+      {
+       "seo": "5.1.2",
+       "tasks": [
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "5.1.3",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "5.1.4",
+       "tasks": [
+        "g"
+       ]
+      },
+      {
+       "seo": "5.1.5",
+       "tasks": [
+        "c",
+        "d",
+        "f"
+       ]
+      },
+      {
+       "seo": "5.2.2",
+       "tasks": [
+        "d"
+       ]
+      },
+      {
+       "seo": "5.2.3",
+       "tasks": [
+        "c"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST05210",
+   "name": "Basic Pharmacognosy",
+   "level": 5,
+   "semester": 2,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "6.2.1",
+     "text": "Describe basic structure and functions of plant parts",
+     "enabling": "6.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain structure of a plant cell"
+      },
+      {
+       "letter": "b",
+       "text": "List functions of plant cell organelles"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the ergastic substances"
+      },
+      {
+       "letter": "d",
+       "text": "Explain basic plant tissues and tissue systems"
+      },
+      {
+       "letter": "e",
+       "text": "Explain plant morphology and functions (roots, stem, leaves, flowers, fruits, seeds and barks)"
+      }
+     ]
+    },
+    {
+     "code": "6.2.2",
+     "text": "Describe natural sources of drugs",
+     "enabling": "6.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List sources of drugs"
+      },
+      {
+       "letter": "b",
+       "text": "Explain natural sources of drugs"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of plant as a major source of drugs"
+      },
+      {
+       "letter": "d",
+       "text": "List available plants commonly used as source of drugs in Tanzania"
+      }
+     ]
+    },
+    {
+     "code": "6.2.3",
+     "text": "Explain the importance and use of natural sources of drugs in pharmacy practice",
+     "enabling": "6.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain social influences on cultivation of medicinal plants"
+      },
+      {
+       "letter": "b",
+       "text": "Explain economic influences on cultivation of medicinal plants"
+      },
+      {
+       "letter": "c",
+       "text": "List common misuse of medicinal plants"
+      }
+     ]
+    },
+    {
+     "code": "6.2.4",
+     "text": "Explain cultivation, distribution, collection and storage of medicinal plants",
+     "enabling": "6.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Classify medicinal plants"
+      },
+      {
+       "letter": "b",
+       "text": "Explain methods used in cultivation of medicinal plants"
+      },
+      {
+       "letter": "c",
+       "text": "List factors influencing cultivation of medicinal plants"
+      },
+      {
+       "letter": "d",
+       "text": "List methods for collection medicinal drugs"
+      },
+      {
+       "letter": "e",
+       "text": "Explain storage of medicinal plants"
+      },
+      {
+       "letter": "f",
+       "text": "List monographs on medicinal plants"
+      },
+      {
+       "letter": "g",
+       "text": "Explain adulteration of crude drugs"
+      },
+      {
+       "letter": "h",
+       "text": "Explain evaluation of crude drugs"
+      }
+     ]
+    },
+    {
+     "code": "6.2.5",
+     "text": "Explain methods for processing and extraction of active medicinal principals from natural sources",
+     "enabling": "6.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the importance of processing medicinal plants"
+      },
+      {
+       "letter": "b",
+       "text": "List methods of extraction of crude drugs"
+      },
+      {
+       "letter": "c",
+       "text": "List solvents used in extraction"
+      },
+      {
+       "letter": "d",
+       "text": "Explain method of drying of crude drugs"
+      }
+     ]
+    },
+    {
+     "code": "6.2.6",
+     "text": "Identify medicinal plants containing toxic substances.",
+     "enabling": "6.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List plants containing toxic substances"
+      },
+      {
+       "letter": "b",
+       "text": "Classify plants containing toxic substances"
+      },
+      {
+       "letter": "c",
+       "text": "List toxic elements/principals in medicinal plants"
+      }
+     ]
+    },
+    {
+     "code": "6.2.7",
+     "text": "Describe active medicinal principals from natural sources",
+     "enabling": "6.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List sources of active principals from medicinal plants (alkaloids, glycosides, volatile oils, fixed oils, fats etc.)"
+      },
+      {
+       "letter": "b",
+       "text": "List uses of active principals from medicinal plants (alkaloids, glycosides, volatile oils, fixed oils, fats etc.)"
+      },
+      {
+       "letter": "c",
+       "text": "List sources and uses of active principals from animals (alkaloids, glycosides, volatile oils, fixed oils, fats etc.)"
+      },
+      {
+       "letter": "d",
+       "text": "List sources and uses of active principals from minerals"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "6.2.1",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "6.2.2",
+       "tasks": [
+        "b",
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "6.2.3",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "6.2.4",
+       "tasks": [
+        "d",
+        "f"
+       ]
+      },
+      {
+       "seo": "6.2.5",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "6.2.7",
+       "tasks": [
+        "b"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Individual assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": [
+      {
+       "seo": "6.2.3",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "6.2.5",
+       "tasks": [
+        "a"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "6.2.1",
+       "tasks": [
+        "b",
+        "d",
+        "e"
+       ]
+      },
+      {
+       "seo": "6.2.2",
+       "tasks": [
+        "a",
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "6.2.3",
+       "tasks": [
+        "b"
+       ]
+      },
+      {
+       "seo": "6.2.4",
+       "tasks": [
+        "a",
+        "b",
+        "c",
+        "e",
+        "g",
+        "h"
+       ]
+      },
+      {
+       "seo": "6.2.5",
+       "tasks": [
+        "b",
+        "d"
+       ]
+      },
+      {
+       "seo": "6.2.6",
+       "tasks": [
+        "b"
+       ]
+      },
+      {
+       "seo": "6.2.7",
+       "tasks": [
+        "a",
+        "c",
+        "d"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST05211",
+   "name": "Pharmacy Practice",
+   "level": 5,
+   "semester": 2,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "2.2.3",
+     "text": "Use formula in the preparation of pharmaceutical products",
+     "enabling": "2.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "d",
+       "text": "Reduce or enlarge official formula to obtain required formula for compounding"
+      },
+      {
+       "letter": "e",
+       "text": "Compound semi-solid preparations (ointments, creams, gels, pastes etc.)"
+      }
+     ]
+    },
+    {
+     "code": "5.1.1",
+     "text": "Organize health related data using computer packages",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "b",
+       "text": "Demonstrate electronic filing and application of security to electronic data"
+      }
+     ]
+    },
+    {
+     "code": "5.1.2",
+     "text": "Analyse health related data using computer packages",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Generate tables from simple health data using spreadsheet"
+      },
+      {
+       "letter": "b",
+       "text": "Generate charts from simple health data using spreadsheet"
+      },
+      {
+       "letter": "c",
+       "text": "Generate graphs and histogram from simple health data using spreadsheet"
+      },
+      {
+       "letter": "d",
+       "text": "Generate trends from data and recognise problems to be solved using spreadsheet"
+      }
+     ]
+    },
+    {
+     "code": "5.1.3",
+     "text": "Report and present health related information using computer packages",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "b",
+       "text": "Deduce information from analysed data and summarise it"
+      },
+      {
+       "letter": "c",
+       "text": "Generate presentation using computer packages"
+      }
+     ]
+    },
+    {
+     "code": "5.1.4",
+     "text": "Use computer applications for data backup, information searching and learning",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "g",
+       "text": "Demonstrate techniques in searching information on the internet"
+      }
+     ]
+    },
+    {
+     "code": "5.1.5",
+     "text": "Use computer packages in ordering, invoicing, dispensing, selling and inventory management",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "b",
+       "text": "Demonstrate procedures for electronic ordering"
+      },
+      {
+       "letter": "c",
+       "text": "Demonstrate procedures for electronic invoicing"
+      },
+      {
+       "letter": "d",
+       "text": "Demonstrate procedures for electronic dispensing"
+      },
+      {
+       "letter": "e",
+       "text": "Demonstrate procedures for electronic selling"
+      },
+      {
+       "letter": "f",
+       "text": "Carry out inventory management functions using computer"
+      }
+     ]
+    },
+    {
+     "code": "5.2.2",
+     "text": "Use MTUHA database in capturing and managing pharmaceutical data",
+     "enabling": "5.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "c",
+       "text": "Capture and process data using MTUHA database software"
+      },
+      {
+       "letter": "d",
+       "text": "Generate reports from MTUHA database"
+      }
+     ]
+    },
+    {
+     "code": "5.2.3",
+     "text": "Perform simple data analysis using MTUHA database",
+     "enabling": "5.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "c",
+       "text": "Prepare reports"
+      }
+     ]
+    },
+    {
+     "code": "5.3.3",
+     "text": "Use networking programs in disseminating pharmaceutical information.",
+     "enabling": "5.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "c",
+       "text": "Disseminate pharmaceutical information"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "field",
+     "method": "supervisor_report",
+     "label": "Evaluation checklist (supervisors)",
+     "tool": "Evaluation checklist (log book)",
+     "min_count": 1,
+     "weight": "40",
+     "covers": []
+    },
+    {
+     "stage": "field",
+     "method": "other",
+     "label": "Field attachment report",
+     "tool": "Field attachment report",
+     "min_count": 1,
+     "weight": "60",
+     "covers": []
+    }
+   ]
+  },
+  {
+   "code": "PST06101",
+   "name": "Leadership and Management",
+   "level": 6,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "1.1.1",
+     "text": "Describe the concept of participatory planning in provision of health care services.",
+     "enabling": "1.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define participatory planning"
+      },
+      {
+       "letter": "b",
+       "text": "List steps in participatory planning"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of participatory planning in pharmaceutical services"
+      }
+     ]
+    },
+    {
+     "code": "1.1.2",
+     "text": "Describe the role of pharmaceutical personnel in health care teams",
+     "enabling": "1.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain stages of team development"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the role of pharmaceutical personnel in health care team"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of team work in delivery of health care services"
+      }
+     ]
+    },
+    {
+     "code": "1.1.3",
+     "text": "Describe networking and negotiations techniques in delivery of health care services",
+     "enabling": "1.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define networking and negotiation"
+      },
+      {
+       "letter": "b",
+       "text": "List networking skills in delivery of health care services."
+      },
+      {
+       "letter": "c",
+       "text": "List negotiation skills in delivery of health care services."
+      },
+      {
+       "letter": "d",
+       "text": "Explain the importance of networking and negotiation in delivery of health care services"
+      }
+     ]
+    },
+    {
+     "code": "3.1.1",
+     "text": "Describe management concept and functions",
+     "enabling": "3.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define different terms used in management"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the historical development of management theory."
+      },
+      {
+       "letter": "c",
+       "text": "Distinguishing between various management theories and their pioneers."
+      },
+      {
+       "letter": "d",
+       "text": "Enumerate various management functions"
+      },
+      {
+       "letter": "e",
+       "text": "Describe the relationship between management functions"
+      }
+     ]
+    },
+    {
+     "code": "3.1.2",
+     "text": "Describe organization behaviour in relation to workplace productivity",
+     "enabling": "3.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define organization culture"
+      },
+      {
+       "letter": "b",
+       "text": "Explain cultural diversity in relation to workplace and productivity"
+      },
+      {
+       "letter": "c",
+       "text": "Relate productivity in workplace with management."
+      }
+     ]
+    },
+    {
+     "code": "3.1.3",
+     "text": "Differentiate forms of leadership and management styles",
+     "enabling": "3.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Describe forms of leadership"
+      },
+      {
+       "letter": "b",
+       "text": "Describe management style"
+      },
+      {
+       "letter": "c",
+       "text": "Relate forms of leadership with management style."
+      }
+     ]
+    },
+    {
+     "code": "3.1.4",
+     "text": "Distinguish various structures of organisations",
+     "enabling": "3.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Describe types of organizations"
+      },
+      {
+       "letter": "b",
+       "text": "Describe organization structures."
+      },
+      {
+       "letter": "c",
+       "text": "Draw organizational charts or diagrams"
+      },
+      {
+       "letter": "d",
+       "text": "Explain principles of organizations (Scalar chain of command, specialization, unit of command and span of control)"
+      },
+      {
+       "letter": "e",
+       "text": "Describe relationships within organization structures (vertical, horizontal, functional, formal and informal)"
+      },
+      {
+       "letter": "f",
+       "text": "Describe relationship with external organizations"
+      },
+      {
+       "letter": "g",
+       "text": "Explain delegation and its principles"
+      },
+      {
+       "letter": "h",
+       "text": "Explain advantages and disadvantages of delegations"
+      },
+      {
+       "letter": "i",
+       "text": "Describe organization context (Political, economic and social atmosphere)"
+      }
+     ]
+    },
+    {
+     "code": "3.1.5",
+     "text": "Describe leadership attributes in provision of pharmaceutical services",
+     "enabling": "3.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Differentiate between a leader and a manager"
+      },
+      {
+       "letter": "b",
+       "text": "List leadership attributes"
+      },
+      {
+       "letter": "c",
+       "text": "List leadership skills"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written test",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "1.1.1",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "1.1.2",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "1.1.3",
+       "tasks": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "3.1.1",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "3.1.2",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "3.1.3",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "3.1.4",
+       "tasks": [
+        "a",
+        "d",
+        "e",
+        "f",
+        "h"
+       ]
+      },
+      {
+       "seo": "3.1.5",
+       "tasks": [
+        "a",
+        "b",
+        "c"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": [
+      {
+       "seo": "3.1.1",
+       "tasks": [
+        "d"
+       ]
+      },
+      {
+       "seo": "3.1.4",
+       "tasks": [
+        "c"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "1.1.1",
+       "tasks": [
+        "b"
+       ]
+      },
+      {
+       "seo": "1.1.2",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "1.1.3",
+       "tasks": [
+        "d"
+       ]
+      },
+      {
+       "seo": "3.1.1",
+       "tasks": [
+        "c",
+        "e"
+       ]
+      },
+      {
+       "seo": "3.1.2",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "3.1.3",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "3.1.4",
+       "tasks": [
+        "b",
+        "g",
+        "i"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST06102",
+   "name": "Counselling and Guidance Skills",
+   "level": 6,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "1.3.1",
+     "text": "Describe counselling and guidance techniques in promoting rational use of medicines.",
+     "enabling": "1.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define counselling and guidance"
+      },
+      {
+       "letter": "b",
+       "text": "Differentiate between counselling and guidance"
+      },
+      {
+       "letter": "c",
+       "text": "Explain counselling and guidance techniques."
+      },
+      {
+       "letter": "d",
+       "text": "Identify situations requiring counselling."
+      },
+      {
+       "letter": "e",
+       "text": "Identify situations requiring guidance."
+      },
+      {
+       "letter": "f",
+       "text": "Explain the role of counselling and guidance in promoting rational use of medicines"
+      }
+     ]
+    },
+    {
+     "code": "1.3.2",
+     "text": "Describe operating mechanisms of Care and Treatment Clinics (CTC)",
+     "enabling": "1.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain operating procedures of CTC."
+      },
+      {
+       "letter": "b",
+       "text": "Describe the role of pharmaceutical personnel in CTC"
+      },
+      {
+       "letter": "c",
+       "text": "Explain interrelationship between health workers in CTC"
+      }
+     ]
+    },
+    {
+     "code": "1.3.3",
+     "text": "Describe various methods to encourage adherence, compliance and concordance to treatment",
+     "enabling": "1.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define adherence, compliance and concordance"
+      },
+      {
+       "letter": "b",
+       "text": "Differentiate between adherence, compliance and concordance"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of adherence, compliance and concordance in treatment"
+      },
+      {
+       "letter": "d",
+       "text": "List reasons for non-adherence"
+      },
+      {
+       "letter": "e",
+       "text": "List methods of improving adherence and compliance"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written test",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "1.3.1",
+       "tasks": [
+        "a",
+        "d",
+        "e"
+       ]
+      },
+      {
+       "seo": "1.3.2",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": []
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "1.3.1",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "1.3.2",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "1.3.3",
+       "tasks": [
+        "b"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST06103",
+   "name": "Pharmaceutical Productions",
+   "level": 6,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "2.1.1",
+     "text": "Describe procedures and processes of producing different dosage forms",
+     "enabling": "2.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define terminologies used in tablets and capsule production"
+      },
+      {
+       "letter": "b",
+       "text": "Explain concept and principles of powder technology in relation to solid dosage forms"
+      },
+      {
+       "letter": "c",
+       "text": "Classify and explain solid dosage forms"
+      },
+      {
+       "letter": "d",
+       "text": "Explain formulation and production of tablets and capsules"
+      },
+      {
+       "letter": "e",
+       "text": "List common problems and remedies in tableting and encapsulation processes"
+      }
+     ]
+    },
+    {
+     "code": "2.1.2",
+     "text": "Describe quality control and assurance procedures in pharmaceutical production",
+     "enabling": "2.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the concept of in-process quality control"
+      },
+      {
+       "letter": "b",
+       "text": "List tests and equipment/tools/apparatus used for in-process quality control of tablets and capsules"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the consequences of in-process quality control of tablets and capsules."
+      },
+      {
+       "letter": "d",
+       "text": "Explain the role of qualification equipment and validation of processes in assuring the quality of the tablets and capsules"
+      },
+      {
+       "letter": "e",
+       "text": "List documents used in production of tablets and capsules"
+      },
+      {
+       "letter": "f",
+       "text": "Explain importance of documentation in pharmaceutical production"
+      }
+     ]
+    },
+    {
+     "code": "2.1.3",
+     "text": "Describe waste management and disposal in pharmaceutical production",
+     "enabling": "2.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the importance of waste management in pharmaceutical production"
+      },
+      {
+       "letter": "b",
+       "text": "List types of wastes in pharmaceutical production"
+      },
+      {
+       "letter": "c",
+       "text": "Explain methods of waste management in pharmaceutical production"
+      },
+      {
+       "letter": "d",
+       "text": "Describe control of substances hazardous to health (COSHH) in pharmaceutical production."
+      }
+     ]
+    },
+    {
+     "code": "2.1.4",
+     "text": "Describe premise and equipment maintenance procedures in pharmaceutical manufacturing facilities",
+     "enabling": "2.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain maintenance procedures of premise and equipment in pharmaceutical manufacturing."
+      },
+      {
+       "letter": "b",
+       "text": "Differentiate documents relevant to premise and equipment maintenance in GMP complaint facility"
+      },
+      {
+       "letter": "c",
+       "text": "Explain GMP principles in relation to premise and equipment maintenance."
+      }
+     ]
+    },
+    {
+     "code": "2.2.1",
+     "text": "Describe policies and legislations governing manufacturing of pharmaceuticals",
+     "enabling": "2.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain sections of Tanzania Food, Drugs and Cosmetics Act, 2003 regulating manufacturing of pharmaceuticals"
+      },
+      {
+       "letter": "b",
+       "text": "Explain sections of the Environmental Management Act, 2004 regulating manufacturing"
+      },
+      {
+       "letter": "c",
+       "text": "Describe registration procedures for pharmaceutical manufacturing facilities."
+      },
+      {
+       "letter": "d",
+       "text": "Explain the role of Tanzania Investment Centre in supporting establishment of pharmaceutical industries"
+      }
+     ]
+    },
+    {
+     "code": "2.2.2",
+     "text": "Describe the importance of environmental impact assessment in establishing large scale manufacturing of pharmaceuticals",
+     "enabling": "2.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define environmental impact assessment"
+      },
+      {
+       "letter": "b",
+       "text": "Explain steps in conducting environmental impact assessment"
+      },
+      {
+       "letter": "c",
+       "text": "List components of environmental impact assessment"
+      },
+      {
+       "letter": "d",
+       "text": "List benefits of environmental impact assessment"
+      }
+     ]
+    },
+    {
+     "code": "2.2.3",
+     "text": "Explain statutory taxes and licencing procedures in establishing large scale manufacturing of pharmaceuticals",
+     "enabling": "2.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the role of Tanzania revenue authority in establishment of pharmaceutical industries"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the role of Tanzania Food and Drugs Authority in establishment of pharmaceutical industries"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the role of Business Registrations and Licensing Agency (BRELA) in establishment of pharmaceutical industries"
+      },
+      {
+       "letter": "d",
+       "text": "List taxes, levy and tariffs applicable to pharmaceutical industries"
+      }
+     ]
+    },
+    {
+     "code": "2.3.1",
+     "text": "Describe the importance of Standard Operating Procedures (SoPs) in the production of pharmaceuticals",
+     "enabling": "2.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define SoP"
+      },
+      {
+       "letter": "b",
+       "text": "List types of SoP in the production of pharmaceutical"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the need of SoP in production"
+      },
+      {
+       "letter": "d",
+       "text": "Explain the development and approval process of SOPs"
+      }
+     ]
+    },
+    {
+     "code": "2.3.2",
+     "text": "Describe the components of SoP",
+     "enabling": "2.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define the SoP of SoPs"
+      },
+      {
+       "letter": "b",
+       "text": "List components of SoP of SoPs"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of SoP of SoPs in production"
+      }
+     ]
+    },
+    {
+     "code": "2.3.3",
+     "text": "Carry out quality tests for raw materials and finished pharmaceutical products",
+     "enabling": "2.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the importance of quality testing of raw materials and finished pharmaceutical products"
+      },
+      {
+       "letter": "b",
+       "text": "List quality tests for raw materials and finished pharmaceutical products"
+      },
+      {
+       "letter": "c",
+       "text": "Explain methods for testing raw materials and finished pharmaceutical products"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written test",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "2.1.1",
+       "tasks": [
+        "a",
+        "e"
+       ]
+      },
+      {
+       "seo": "2.1.2",
+       "tasks": [
+        "b",
+        "c",
+        "f"
+       ]
+      },
+      {
+       "seo": "2.1.3",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "2.1.4",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "2.2.1",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "2.2.2",
+       "tasks": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "2.2.3",
+       "tasks": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "2.3.1",
+       "tasks": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "2.3.2",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "2.3.3",
+       "tasks": [
+        "b"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": []
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "2.1.1",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "2.1.2",
+       "tasks": [
+        "a",
+        "d",
+        "e"
+       ]
+      },
+      {
+       "seo": "2.1.3",
+       "tasks": [
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "2.1.4",
+       "tasks": [
+        "b"
+       ]
+      },
+      {
+       "seo": "2.2.1",
+       "tasks": [
+        "b",
+        "d"
+       ]
+      },
+      {
+       "seo": "2.3.2",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "2.3.3",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST06104",
+   "name": "Health and Medicines Policy",
+   "level": 6,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "3.2.1",
+     "text": "Describe national policies related to provision of health care services",
+     "enabling": "3.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List objectives and components of Tanzania Vision 2025"
+      },
+      {
+       "letter": "b",
+       "text": "List objectives and components of Alma-Ata Declaration"
+      },
+      {
+       "letter": "c",
+       "text": "List objectives and components of agenda 21 of Rio de Janeiro"
+      },
+      {
+       "letter": "d",
+       "text": "List objectives and components of Millennium Development Goals"
+      }
+     ]
+    },
+    {
+     "code": "3.2.2",
+     "text": "Describe the primary health care concept and principles",
+     "enabling": "3.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "State vision and mission of the MoHCDEC"
+      },
+      {
+       "letter": "b",
+       "text": "List levels of health care in Tanzania"
+      },
+      {
+       "letter": "c",
+       "text": "Define primary health care"
+      },
+      {
+       "letter": "d",
+       "text": "List principles of primary health care"
+      },
+      {
+       "letter": "e",
+       "text": "List objectives and components of Primary Health Services Development Programme (PHSDP"
+      }
+     ]
+    },
+    {
+     "code": "3.2.3",
+     "text": "Describe components of the National Health Policy",
+     "enabling": "3.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "State vision and mission of the National Health Policy, 2003"
+      },
+      {
+       "letter": "b",
+       "text": "List objectives of the National Health Policy"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the link between National Health Policy to the National Medicine Policy"
+      }
+     ]
+    }
+   ],
+   "checks": [
+    "Written test: the instructions name tasks table 2 does not have (2.2.1 a, 2.2.2 a)."
+   ],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written test",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "2.2.1",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "2.2.2",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "3.2.2",
+       "tasks": [
+        "d"
+       ]
+      },
+      {
+       "seo": "3.2.3",
+       "tasks": [
+        "a"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": []
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "3.2.1",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "3.2.2",
+       "tasks": [
+        "b",
+        "c",
+        "e"
+       ]
+      },
+      {
+       "seo": "3.2.3",
+       "tasks": [
+        "b"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST06105",
+   "name": "Health Financing",
+   "level": 6,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "3.4.1",
+     "text": "Describe health financing mechanisms",
+     "enabling": "3.4",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the concept of health financing"
+      },
+      {
+       "letter": "b",
+       "text": "List health financing mechanisms (Insurance, direct purchase, user fee, Government subsidy etc)"
+      },
+      {
+       "letter": "c",
+       "text": "Explain how each health financing mechanism operates"
+      },
+      {
+       "letter": "d",
+       "text": "Enumerate advantages and disadvantages of each health financing mechanism"
+      }
+     ]
+    },
+    {
+     "code": "3.4.2",
+     "text": "Describe public financing through Government subvention",
+     "enabling": "3.4",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the role of government in medicines and medical supplies financing"
+      },
+      {
+       "letter": "b",
+       "text": "Distinguish various public financing strategies"
+      },
+      {
+       "letter": "c",
+       "text": "Explain control of expenditures for medicines and medical supplies"
+      },
+      {
+       "letter": "d",
+       "text": "List challenges in public financing of medicines and medical supplies"
+      }
+     ]
+    },
+    {
+     "code": "3.4.3",
+     "text": "Describe health insurance mechanisms",
+     "enabling": "3.4",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the concept of health insurance"
+      },
+      {
+       "letter": "b",
+       "text": "List health insurance agencies in Tanzania"
+      },
+      {
+       "letter": "c",
+       "text": "List benefits and challenges associated with health insurance"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "3.4.1",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "3.4.2",
+       "tasks": [
+        "a",
+        "d"
+       ]
+      },
+      {
+       "seo": "3.4.3",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Assignment",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": []
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "3.4.1",
+       "tasks": [
+        "b",
+        "d"
+       ]
+      },
+      {
+       "seo": "3.4.2",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "3.4.3",
+       "tasks": [
+        "c"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST06106",
+   "name": "Basic Pharmacotherapy",
+   "level": 6,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "5.1.1",
+     "text": "Explain the principles and concept of pharmacotherapy",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define terms used in pharmacotherapy"
+      },
+      {
+       "letter": "b",
+       "text": "List principles and concepts applied in pharmacotherapy"
+      },
+      {
+       "letter": "c",
+       "text": "Describe the Importance of Therapeutic Drug Monitoring in pharmacotherapy"
+      },
+      {
+       "letter": "d",
+       "text": "Explain the importance of pharmacotherapy in management of common human diseases"
+      }
+     ]
+    },
+    {
+     "code": "5.1.2",
+     "text": "Apply knowledge of pharmacotherapy in management of common communicable diseases",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define the disease status of a patient"
+      },
+      {
+       "letter": "b",
+       "text": "Explain pathophysiology of common communicable diseases"
+      },
+      {
+       "letter": "c",
+       "text": "Outline the clinical presentation of common communicable disease"
+      },
+      {
+       "letter": "d",
+       "text": "Outline the diagnosis of common communicable diseases"
+      },
+      {
+       "letter": "e",
+       "text": "Describe the pharmacological management of common communicable diseases"
+      },
+      {
+       "letter": "f",
+       "text": "List Monitoring parameters of common communicable diseases during pharmacological therapy"
+      }
+     ]
+    },
+    {
+     "code": "5.1.3",
+     "text": "Apply knowledge of pharmacotherapy in management of common non communicable diseases",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define the disease status of a patient"
+      },
+      {
+       "letter": "b",
+       "text": "Explain pathophysiology of common non communicable disease"
+      },
+      {
+       "letter": "c",
+       "text": "Outline clinical presentation of common non communicable disease"
+      },
+      {
+       "letter": "d",
+       "text": "Outline the diagnosis of common non communicable diseases"
+      },
+      {
+       "letter": "e",
+       "text": "Describe the pharmacological management of common non communicable diseases"
+      },
+      {
+       "letter": "f",
+       "text": "List Monitoring parameters of common non communicable diseases during pharmacological therapy"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "5.1.1",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "5.1.2",
+       "tasks": [
+        "e",
+        "f"
+       ]
+      },
+      {
+       "seo": "5.1.3",
+       "tasks": [
+        "b",
+        "c",
+        "d"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": []
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "5.1.1",
+       "tasks": [
+        "a",
+        "b",
+        "d"
+       ]
+      },
+      {
+       "seo": "5.1.2",
+       "tasks": [
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "5.1.3",
+       "tasks": [
+        "e",
+        "f"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST06107",
+   "name": "Basic Veterinary Pharmacology",
+   "level": 6,
+   "semester": 1,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "5.2.1",
+     "text": "Describe principles and concept of veterinary medicine",
+     "enabling": "5.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define terminologies used in veterinary pharmacology"
+      },
+      {
+       "letter": "b",
+       "text": "Describe principles and concepts applied in veterinary pharmacology"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of veterinary pharmacology in management of common animal diseases"
+      }
+     ]
+    },
+    {
+     "code": "5.2.2",
+     "text": "Classify veterinary medicines according to pharmacological activities",
+     "enabling": "5.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List sources of veterinary medicines"
+      },
+      {
+       "letter": "b",
+       "text": "Describe basic veterinary toxicology according to pharmacological classes of veterinary medicines"
+      },
+      {
+       "letter": "c",
+       "text": "Describe the pharmacological/therapeutic classes of common veterinary medicines"
+      }
+     ]
+    },
+    {
+     "code": "5.2.3",
+     "text": "Apply knowledge of pharmacology in treatment of common veterinary diseases",
+     "enabling": "5.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List common veterinary diseases according to animal type/species"
+      },
+      {
+       "letter": "b",
+       "text": "Describe signs and symptoms of common veterinary diseases"
+      },
+      {
+       "letter": "c",
+       "text": "Describe pharmacological treatment of common veterinary diseases"
+      },
+      {
+       "letter": "d",
+       "text": "Describe dose, dosage and course of common veterinary medicines used for common veterinary diseases"
+      },
+      {
+       "letter": "e",
+       "text": "List contraindications of common veterinary medicines"
+      },
+      {
+       "letter": "f",
+       "text": "List important side effects and adverse effects of common veterinary medicines"
+      },
+      {
+       "letter": "g",
+       "text": "Describe Control and Prevention of common veterinary diseases"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "5.2.1",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "5.2.2",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "5.2.3",
+       "tasks": [
+        "a"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": []
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "5.2.1",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "5.2.2",
+       "tasks": [
+        "b"
+       ]
+      },
+      {
+       "seo": "5.2.3",
+       "tasks": [
+        "a",
+        "b",
+        "d",
+        "e",
+        "f"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST06208",
+   "name": "Pharmaceutical Public Health",
+   "level": 6,
+   "semester": 2,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "1.2.1",
+     "text": "Describe health promotion programmes related to pharmaceutical care and services.",
+     "enabling": "1.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define health care promotion"
+      },
+      {
+       "letter": "b",
+       "text": "Identify health promotion programmes related to pharmaceutical care and services"
+      },
+      {
+       "letter": "c",
+       "text": "Explain steps in conducting health promotion related to pharmaceutical health care and services"
+      },
+      {
+       "letter": "d",
+       "text": "Explain importance of health care promotion programmes."
+      }
+     ]
+    },
+    {
+     "code": "1.2.2",
+     "text": "Explain concepts and principles of pharmaceutical public health",
+     "enabling": "1.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define public health"
+      },
+      {
+       "letter": "b",
+       "text": "Explain principles of public health"
+      },
+      {
+       "letter": "c",
+       "text": "Explain principles of pharmaceutical public health"
+      },
+      {
+       "letter": "d",
+       "text": "Explain importance of pharmaceutical public health in provision of health care services."
+      }
+     ]
+    },
+    {
+     "code": "1.2.3",
+     "text": "Describe the concept of advocacy in relation to provision of pharmaceutical services.",
+     "enabling": "1.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain concepts of advocacy"
+      },
+      {
+       "letter": "b",
+       "text": "Differentiate between advocacy, sensitisation and mobilisation"
+      },
+      {
+       "letter": "c",
+       "text": "Explain approaches of conducting advocacy"
+      },
+      {
+       "letter": "d",
+       "text": "List components of advocacy plan"
+      },
+      {
+       "letter": "e",
+       "text": "Carry out needs assessment for advocacy"
+      },
+      {
+       "letter": "f",
+       "text": "Explain steps in conducting advocacy"
+      },
+      {
+       "letter": "g",
+       "text": "Explain the importance of advocacy in promoting rational use of medicines."
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "1.2.1",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "1.2.2",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "1.2.3",
+       "tasks": [
+        "a",
+        "c",
+        "g"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": []
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "1.2.1",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "1.2.2",
+       "tasks": [
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "1.2.3",
+       "tasks": [
+        "b",
+        "d",
+        "f"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST06209",
+   "name": "Entrepreneurship",
+   "level": 6,
+   "semester": 2,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "3.3.1",
+     "text": "Describe the concept and principles of entrepreneurship",
+     "enabling": "3.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define terms used in entrepreneurship"
+      },
+      {
+       "letter": "b",
+       "text": "Explain historical development and theories of entrepreneurship"
+      },
+      {
+       "letter": "c",
+       "text": "Explain concept and principles of entrepreneurship"
+      },
+      {
+       "letter": "d",
+       "text": "Differentiate between intrapreneurship and entrepreneurship."
+      },
+      {
+       "letter": "e",
+       "text": "Explain the importance of entrepreneurship in the economy and pharmacy profession"
+      },
+      {
+       "letter": "f",
+       "text": "Explain national strategy for economic empowerment and poverty reduction (NSEGPR) MKUKUTA objectives and National Development Vision 2025."
+      }
+     ]
+    },
+    {
+     "code": "3.3.2",
+     "text": "Distinguish between types of entrepreneurs and their key competencies",
+     "enabling": "3.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Describe types of entrepreneurs"
+      },
+      {
+       "letter": "b",
+       "text": "Describe characteristics of entrepreneurs"
+      },
+      {
+       "letter": "c",
+       "text": "Enumerate inherent competencies of entrepreneurs"
+      },
+      {
+       "letter": "d",
+       "text": "Explain factors influencing tendency to engage in entrepreneurship"
+      }
+     ]
+    },
+    {
+     "code": "3.3.3",
+     "text": "Explain challenges encountered by entrepreneurs in provision of pharmaceutical services",
+     "enabling": "3.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List challenges faced by entrepreneurs"
+      },
+      {
+       "letter": "b",
+       "text": "Explain ways to address challenges faced by entrepreneurs"
+      },
+      {
+       "letter": "c",
+       "text": "List misconceptions/myths about entrepreneurs"
+      },
+      {
+       "letter": "d",
+       "text": "Explain the role of innovation and creativity in entrepreneurship"
+      }
+     ]
+    },
+    {
+     "code": "3.3.4",
+     "text": "Describe concept and principles of marketing and sales of pharmaceuticals",
+     "enabling": "3.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain concept and principles of marketing"
+      },
+      {
+       "letter": "b",
+       "text": "List marketing skills needed in sales of pharmaceuticals"
+      },
+      {
+       "letter": "c",
+       "text": "Explain ethical issues in marketing and sales of pharmaceuticals"
+      }
+     ]
+    },
+    {
+     "code": "3.3.5",
+     "text": "Describe procedures and requirements for establishing marketing outlets for medicines and medical supplies",
+     "enabling": "3.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List types of medicines and medical supplies outlets in Tanzania"
+      },
+      {
+       "letter": "b",
+       "text": "List requirements for establishing medicines and medical supplies outlets (ADDO, pharmacies and warehouses etc.)"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the procedures for establishing medicines and medical supplies outlets"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "3.3.1",
+       "tasks": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "3.3.2",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "3.3.3",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "3.3.4",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "3.3.5",
+       "tasks": [
+        "b"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Individual assignments",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": [
+      {
+       "seo": "3.3.2",
+       "tasks": [
+        "b"
+       ]
+      },
+      {
+       "seo": "3.3.5",
+       "tasks": [
+        "a"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "3.3.1",
+       "tasks": [
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      {
+       "seo": "3.3.2",
+       "tasks": [
+        "d"
+       ]
+      },
+      {
+       "seo": "3.3.3",
+       "tasks": [
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "3.3.4",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "3.3.5",
+       "tasks": [
+        "c"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST06210",
+   "name": "Operational Research",
+   "level": 6,
+   "semester": 2,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "4.1.1",
+     "text": "Describe basic statistical concepts and principles",
+     "enabling": "4.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define common terms in biostatistics Basic statistical concepts and principles described"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the importance of different measures in statistics (central tendency, quartile and variations)"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the application of statistics in data analysis"
+      }
+     ]
+    },
+    {
+     "code": "4.1.2",
+     "text": "Summarize data using basic statistical principles to support decision making in provision of pharmaceutical services.",
+     "enabling": "4.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define data using basic statistical principles to support decision making in provision of pharmaceutical"
+      },
+      {
+       "letter": "b",
+       "text": "List types of data"
+      },
+      {
+       "letter": "c",
+       "text": "Explain methods of summarizing data (charts, tables, graphs etc.)"
+      },
+      {
+       "letter": "d",
+       "text": "Explain conditions in which each method is used"
+      }
+     ]
+    },
+    {
+     "code": "4.1.3",
+     "text": "Establish trends in health care services",
+     "enabling": "4.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Generate tables, charts and graphs Establish trends in health care services"
+      },
+      {
+       "letter": "b",
+       "text": "Interpret tables, charts and graphs"
+      },
+      {
+       "letter": "c",
+       "text": "Relate information from interpretation to project"
+      }
+     ]
+    },
+    {
+     "code": "4.2.1",
+     "text": "Describe basic concept and principles of research",
+     "enabling": "4.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Explain the concept and principles of research Basic concept and principles of research"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the importance of research in pharmaceutical services"
+      },
+      {
+       "letter": "c",
+       "text": "Explain ethical clearance in research"
+      },
+      {
+       "letter": "d",
+       "text": "Identify areas of research requiring ethical"
+      }
+     ]
+    },
+    {
+     "code": "4.2.2",
+     "text": "Differentiate between various types of research",
+     "enabling": "4.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Classify Various types of research"
+      },
+      {
+       "letter": "b",
+       "text": "Explain classes of research"
+      },
+      {
+       "letter": "c",
+       "text": "Explain approaches and strategies used in research"
+      }
+     ]
+    },
+    {
+     "code": "4.2.3",
+     "text": "Describe procedures for conducting operational research",
+     "enabling": "4.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Identify research problem for conducting operational research"
+      },
+      {
+       "letter": "b",
+       "text": "Conduct literature review in research"
+      },
+      {
+       "letter": "c",
+       "text": "Develop a research mini-proposal (introduction, objective, research methods, budget/action plan, tools)"
+      },
+      {
+       "letter": "d",
+       "text": "Explain research ethics"
+      },
+      {
+       "letter": "e",
+       "text": "Collect the data"
+      },
+      {
+       "letter": "f",
+       "text": "Analyze the data"
+      },
+      {
+       "letter": "g",
+       "text": "Write a research report"
+      },
+      {
+       "letter": "h",
+       "text": "Explain methods for dissemination of research findings"
+      }
+     ]
+    }
+   ],
+   "checks": [],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "4.1.1",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "4.1.2",
+       "tasks": [
+        "b"
+       ]
+      },
+      {
+       "seo": "4.1.3",
+       "tasks": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "4.2.1",
+       "tasks": [
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "4.2.2",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "4.2.3",
+       "tasks": [
+        "a",
+        "c",
+        "d",
+        "f",
+        "g"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Individual assignments (proposal +research report )",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": [
+      {
+       "seo": "4.1.2",
+       "tasks": [
+        "d"
+       ]
+      },
+      {
+       "seo": "4.2.3",
+       "tasks": [
+        "b",
+        "a",
+        "c",
+        "d",
+        "e",
+        "f",
+        "g",
+        "h"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "4.1.1",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "4.1.2",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "4.1.3",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "4.2.1",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "4.2.2",
+       "tasks": [
+        "a",
+        "c"
+       ]
+      },
+      {
+       "seo": "4.2.3",
+       "tasks": [
+        "d",
+        "e"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST06211",
+   "name": "Monitoring and Evaluation of Medicines Use",
+   "level": 6,
+   "semester": 2,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "4.3.1",
+     "text": "Explain the concept of pharmacovigillance",
+     "enabling": "4.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define terminologies in pharmacovigillance"
+      },
+      {
+       "letter": "b",
+       "text": "List aims of pharmacovigillance"
+      },
+      {
+       "letter": "c",
+       "text": "Identify and explain pharmacovigillance methods"
+      },
+      {
+       "letter": "d",
+       "text": "Explain different ways of documenting and reporting pharmacovigillance data"
+      },
+      {
+       "letter": "e",
+       "text": "Explain the importance of pharmacovigillance information"
+      }
+     ]
+    },
+    {
+     "code": "4.3.2",
+     "text": "Describe the procedures for monitoring and detection of adverse drug reactions (ADRs)",
+     "enabling": "4.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Classify ADRs"
+      },
+      {
+       "letter": "b",
+       "text": "Explain the importance of monitoring ADRs in pharmacy practice"
+      },
+      {
+       "letter": "c",
+       "text": "Explain documentation and reporting of ADRs"
+      },
+      {
+       "letter": "d",
+       "text": "List centres for monitoring ADRs"
+      }
+     ]
+    },
+    {
+     "code": "4.3.3",
+     "text": "Describe methods of controlling substandard and counterfeit medicines",
+     "enabling": "4.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define substandard and counterfeit medicines"
+      },
+      {
+       "letter": "b",
+       "text": "Distinguish between counterfeit and substandard medicines"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the effect of substandard and counterfeit medicines in the public health"
+      },
+      {
+       "letter": "d",
+       "text": "List and explain methods for detecting substandard and counterfeit medicines"
+      },
+      {
+       "letter": "e",
+       "text": "List and explain methods for controlling substandard and counterfeit medicines"
+      }
+     ]
+    },
+    {
+     "code": "4.3.4",
+     "text": "Explain factors contributing to distribution of substandard and counterfeit medicines",
+     "enabling": "4.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List factors contributing to existence of substandard and counterfeit medicines"
+      },
+      {
+       "letter": "b",
+       "text": "Identify possible points of entry for substandard and counterfeit medicines into Tanzania"
+      },
+      {
+       "letter": "c",
+       "text": "Identify loopholes contributing to spreading of substandard and counterfeit medicines in health systems"
+      },
+      {
+       "letter": "d",
+       "text": "Explain mechanisms for curbing spread of substandard and counterfeit medicines in Tanzania"
+      }
+     ]
+    },
+    {
+     "code": "5.3.1",
+     "text": "Describe the concept and principles of monitoring and evaluation",
+     "enabling": "5.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "Define terms used in monitoring and evaluation"
+      },
+      {
+       "letter": "b",
+       "text": "Differentiate between monitoring and evaluation"
+      },
+      {
+       "letter": "c",
+       "text": "Explain the importance of monitoring and evaluation in pharmacy practice"
+      }
+     ]
+    },
+    {
+     "code": "5.3.2",
+     "text": "Describe components of WHO operational package for assessing monitoring and evaluation of country pharmaceutical situations",
+     "enabling": "5.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List components of WHO operational package for assessing monitoring and evaluation of country pharmaceutical situations"
+      },
+      {
+       "letter": "b",
+       "text": "Explain each component of WHO operational package for assessing monitoring and evaluation of country pharmaceutical situations"
+      },
+      {
+       "letter": "c",
+       "text": "List performance indicators in monitoring and evaluation of different pharmaceutical situations"
+      }
+     ]
+    },
+    {
+     "code": "5.3.3",
+     "text": "Identify common drawbacks in monitoring and evaluation of medicines use",
+     "enabling": "5.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List factors hindering monitoring and evaluation of medicines use"
+      },
+      {
+       "letter": "b",
+       "text": "Explain factors hindering monitoring and evaluation of medicines use"
+      },
+      {
+       "letter": "c",
+       "text": "Identify measures to improve monitoring and evaluation of medicines uses"
+      }
+     ]
+    },
+    {
+     "code": "5.3.4",
+     "text": "Describe common indicators in medicines use. Tasks:",
+     "enabling": "5.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "a",
+       "text": "List indicators used in monitoring and evaluation of medicines use"
+      },
+      {
+       "letter": "b",
+       "text": "Explain application of each indicator in monitoring and evaluation of medicines use"
+      },
+      {
+       "letter": "c",
+       "text": "Describe tools used in monitoring and evaluation of medicines use"
+      }
+     ]
+    }
+   ],
+   "checks": [
+    "SEO 5.3.4 is in table 2 but not in table 1."
+   ],
+   "assessment": [
+    {
+     "stage": "ca",
+     "method": "written_test",
+     "label": "Written tests",
+     "tool": "Question paper and Marking guide",
+     "min_count": 2,
+     "weight": "30",
+     "covers": [
+      {
+       "seo": "4.3.1",
+       "tasks": [
+        "a",
+        "b"
+       ]
+      },
+      {
+       "seo": "4.3.2",
+       "tasks": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      {
+       "seo": "4.3.3",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "4.3.4",
+       "tasks": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "5.3.1",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "5.3.2",
+       "tasks": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "5.3.3",
+       "tasks": [
+        "a"
+       ]
+      },
+      {
+       "seo": "5.3.4",
+       "tasks": [
+        "a"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "ca",
+     "method": "assignment",
+     "label": "Individual assignments (proposal +research report )",
+     "tool": "Assignment reports",
+     "min_count": 2,
+     "weight": "10",
+     "covers": [
+      {
+       "seo": "4.3.3",
+       "tasks": [
+        "c"
+       ]
+      },
+      {
+       "seo": "5.3.4",
+       "tasks": [
+        "b"
+       ]
+      }
+     ]
+    },
+    {
+     "stage": "se",
+     "method": "written_exam",
+     "label": "Written examination",
+     "tool": "Question paper and Marking guide",
+     "min_count": 1,
+     "weight": "60",
+     "covers": [
+      {
+       "seo": "4.3.1",
+       "tasks": [
+        "c",
+        "d",
+        "e"
+       ]
+      },
+      {
+       "seo": "4.3.3",
+       "tasks": [
+        "b",
+        "d",
+        "e"
+       ]
+      },
+      {
+       "seo": "4.3.4",
+       "tasks": [
+        "d"
+       ]
+      },
+      {
+       "seo": "5.3.1",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "5.3.3",
+       "tasks": [
+        "b",
+        "c"
+       ]
+      },
+      {
+       "seo": "5.3.4",
+       "tasks": [
+        "c"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "PST06212",
+   "name": "Pharmacy Practice",
+   "level": 6,
+   "semester": 2,
+   "hours_per_week": {},
+   "credits": 0,
+   "outcomes": [
+    {
+     "code": "1.1.1",
+     "text": "Describe the concept of participatory planning in provision of health care services",
+     "enabling": "1.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "c",
+       "text": "Explain the importance of participatory planning in pharmaceutical services"
+      }
+     ]
+    },
+    {
+     "code": "1.1.2",
+     "text": "Describe the role of pharmaceutical personnel in health care teams",
+     "enabling": "1.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "b",
+       "text": "Explain the role of pharmaceutical personnel in health care team"
+      }
+     ]
+    },
+    {
+     "code": "1.1.3",
+     "text": "Describe networking and negotiation techniques in delivery of health care services",
+     "enabling": "1.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "d",
+       "text": "Explain the importance of networking and negotiation in delivery of health care services"
+      }
+     ]
+    },
+    {
+     "code": "1.2.3",
+     "text": "Describe the concept of advocacy in relation to provision of pharmaceutical services.",
+     "enabling": "1.2",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "b",
+       "text": "Differentiate between advocacy, sensitisation and mobilisation"
+      },
+      {
+       "letter": "e",
+       "text": "Carry out needs assessment for advocacy"
+      }
+     ]
+    },
+    {
+     "code": "1.3.1",
+     "text": "Describe counselling and guidance techniques in promoting rational use of medicines",
+     "enabling": "1.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "b",
+       "text": "Differentiate between counselling and guidance"
+      }
+     ]
+    },
+    {
+     "code": "2.1.3",
+     "text": "Describe waste management and disposal in pharmaceutical production",
+     "enabling": "2.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "d",
+       "text": "Describe control of substances hazardous to health (COSHH) in pharmaceutical production."
+      }
+     ]
+    },
+    {
+     "code": "3.1.2",
+     "text": "Describe organization behaviour in relation to workplace productivity",
+     "enabling": "3.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "c",
+       "text": "Relate productivity in workplace with management."
+      }
+     ]
+    },
+    {
+     "code": "4.3.1",
+     "text": "Explain the concept of pharmacovigillance",
+     "enabling": "4.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "d",
+       "text": "Explain different ways of documenting and reporting pharmacovigillance data"
+      }
+     ]
+    },
+    {
+     "code": "4.3.2",
+     "text": "Describe the procedures for monitoring and detection of adverse drug reactions (ADRs",
+     "enabling": "4.3",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "c",
+       "text": "Explain documentation and reporting of ADRs"
+      }
+     ]
+    },
+    {
+     "code": "5.1.2",
+     "text": "Apply knowledge of pharmacotherapy in management of common communicable diseases",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "c",
+       "text": "Relate diagnosis and therapy of common communicable disease"
+      },
+      {
+       "letter": "d",
+       "text": "Monitor therapy of common communicable disease"
+      }
+     ]
+    },
+    {
+     "code": "5.1.3",
+     "text": "Apply knowledge of pharmacotherapy in management of common non communicable diseases",
+     "enabling": "5.1",
+     "criteria": "",
+     "tasks": [
+      {
+       "letter": "c",
+       "text": "Relate diagnosis and therapy of common non communicable disease"
+      },
+      {
+       "letter": "d",
+       "text": "Monitor therapy of common non communicable disease"
+      }
+     ]
+    }
+   ],
+   "checks": [
+    "The plan also says checklist 40% and report 40% (80%); loaded 40% and 60%."
+   ],
+   "assessment": [
+    {
+     "stage": "field",
+     "method": "supervisor_report",
+     "label": "Evaluation checklist (supervisors)",
+     "tool": "Evaluation checklist (log book)",
+     "min_count": 1,
+     "weight": "40",
+     "covers": []
+    },
+    {
+     "stage": "field",
+     "method": "other",
+     "label": "Field attachment report",
+     "tool": "Field attachment report",
+     "min_count": 1,
+     "weight": "60",
+     "covers": []
+    }
+   ]
+  }
+ ]
+}

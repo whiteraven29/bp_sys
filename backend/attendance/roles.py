@@ -32,8 +32,8 @@ import contextvars
 from .models import (
     AccountantProfile, AdmissionOfficerProfile, DeanOfStudentsProfile, DeputyAcademicProfile,
     DeputyFinanceProfile, EstateOfficerProfile, ExamOfficerProfile, HeadOfDepartmentProfile, ICTOfficerProfile,
-    LabTechnicianProfile, PrincipalProfile, RecordsOfficerProfile, SecretaryProfile, TeacherProfile,
-    TrainingCoordinatorProfile,
+    LabTechnicianProfile, PrincipalProfile, QualityAssuranceProfile, RecordsOfficerProfile, SecretaryProfile,
+    TeacherProfile, TrainingCoordinatorProfile,
 )
 
 
@@ -86,7 +86,7 @@ OFFICE_MODELS = (
     PrincipalProfile, DeputyAcademicProfile, DeputyFinanceProfile, HeadOfDepartmentProfile,
     ExamOfficerProfile, ICTOfficerProfile, AccountantProfile, AdmissionOfficerProfile,
     RecordsOfficerProfile, EstateOfficerProfile, SecretaryProfile, TrainingCoordinatorProfile,
-    DeanOfStudentsProfile, LabTechnicianProfile,
+    DeanOfStudentsProfile, LabTechnicianProfile, QualityAssuranceProfile,
 )
 
 
@@ -116,6 +116,12 @@ def is_dparc(user):
 
 def is_dpfpa(user):
     return _holds(DeputyFinanceProfile, user)
+
+
+def is_quality_assurance(user):
+    """The Quality Assurance Manager: reads every teaching plan and runs the
+    college's evaluation forms (said 9 November 2026)."""
+    return _holds(QualityAssuranceProfile, user)
 
 
 def is_head_of_department(user):

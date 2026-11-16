@@ -47,6 +47,7 @@ from .roles import (
     is_coordinator, runs_veta_courses, can_approve_expenses, can_view_expenses,
     is_dean, can_read_health_records, can_keep_health_records, can_reset_passwords, can_issue_student_passwords,
     can_record_returning_students, can_approve_disposals, can_keep_lab_stock, can_read_lab_stock,
+    is_quality_assurance,
 )
 from .security import neutralise_formulas
 from .forms import TeacherRegistrationForm, StyledAuthForm, StudentLoginForm
@@ -68,6 +69,7 @@ from .models import (
     PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultCorrection, ResultRelease, ResultWithholding,
     StudentDocument, HealthRecord, HealthReport, ExitRequest, PasswordReset, AssetHandover, LabItem, LabStockMovement, ExamOfficerProfile, DeputyAcademicProfile, DeputyFinanceProfile,
     ICTOfficerProfile, RoleChange, TrainingCoordinatorProfile, DeanOfStudentsProfile, LabTechnicianProfile,
+    QualityAssuranceProfile,
     Intake, CourseFee, CourseFeeInstalment, CourseModule, CourseApplication, CourseEnrollment,
     ExpenseCategory, ExpenseBudget, Expense,
     Form, FormSection, FormQuestion, FormAnswer, FormResponse, FormSubmissionReceipt,
@@ -307,6 +309,37 @@ class ReadStaffWriteDepartments(BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated
                     and (request.method in SAFE_METHODS or runs_departments(request.user)))
+
+
+def _form_of(obj):
+    return getattr(obj, 'form', None) or getattr(getattr(obj, 'section', None), 'form', None) or obj
+
+
+class ReadStaffWriteForms(ReadStaffWriteDepartments):
+    """The college's forms, and the Quality Assurance Manager besides: QA runs
+    every student and staff evaluation form (said 9 November 2026). Service
+    requests stay with the departments — an evaluation is QA's, a request is
+    a department's to answer."""
+
+    def has_permission(self, request, view):
+        if super().has_permission(request, view):
+            return True
+        if not is_quality_assurance(request.user):
+            return False
+        if request.method != 'POST' or getattr(view, 'action', None) != 'create':
+            return True                         # the object check below decides
+        data = request.data
+        if 'kind' in data or view.basename == 'form':
+            return data.get('kind', Form.EVALUATION) == Form.EVALUATION
+        if 'form' in data:
+            return Form.objects.filter(pk=pk_or_none(data.get('form')), kind=Form.EVALUATION).exists()
+        section = FormSection.objects.filter(pk=pk_or_none(data.get('section'))).select_related('form').first()
+        return section is not None and section.form.kind == Form.EVALUATION
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in SAFE_METHODS or runs_departments(request.user):
+            return True
+        return is_quality_assurance(request.user) and _form_of(obj).kind == Form.EVALUATION
 
 
 class IsFinanceUser(BasePermission):
@@ -1474,6 +1507,7 @@ def student_dashboard(request):
         'total_absent': total_absent,
         'total_sessions': total_sessions,
         'eligibility_rows': eligibility_rows,
+        'eligibility_summary': _eligibility_summary(eligibility_rows),
         'finance_charges': finance_charges,
         'finance_payments': finance_payments,
         'finance_invoices': finance_invoices,
@@ -1484,6 +1518,8 @@ def student_dashboard(request):
         'fee_reminders': fee_reminders,
         'fee_reminders_due': fee_reminders_due,
         'fee_reminders_later': fee_reminders_later,
+        # The next instalment, for the dashboard's fees card.
+        'fee_next': (list(fee_reminders_due) or list(fee_reminders_later) or [None])[0],
         'academic_year_closes_on': ledger_year.closes_on if ledger_year else None,
         'finance_waived': ledger_totals['waived'],
         'finance_required': finance_required,
@@ -1496,6 +1532,24 @@ def student_dashboard(request):
         ),
         'active_semester': active_sem.label if active_sem else 'N/A',
     })
+
+
+def _eligibility_summary(rows):
+    """One line for the student's dashboard (said 10 November 2026): are they
+    clear to sit, held back somewhere, or still being checked. Read from the
+    rows the eligibility page shows; nothing is worked out twice."""
+    blocked = [row['module_code'] for row in rows
+               if False in (row['cat1_ok'], row['cat2_ok'], row['ese_ok'])]
+    clear = sum(1 for row in rows if row['ese_ok'] is True and row['module_code'] not in blocked)
+    if not rows:
+        state = 'none'
+    elif blocked:
+        state = 'blocked'
+    elif clear == len(rows):
+        state = 'clear'
+    else:
+        state = 'pending'
+    return {'state': state, 'modules': len(rows), 'blocked': len(blocked), 'clear': clear}
 
 
 def logout_view(request):
@@ -1547,13 +1601,14 @@ ROLE_PROFILES = {
     'coordinator': TrainingCoordinatorProfile,
     'dean': DeanOfStudentsProfile,
     'lab_technician': LabTechnicianProfile,
+    'qa': QualityAssuranceProfile,
 }
 #: The roles that open Django's own admin site. The ICT officer's role makes
 #: the account a Django superuser (every table in /admin/); nothing inside the
 #: app reads either flag for anybody else (see roles.py).
 STAFF_ROLES = ('ict_officer',)
 #: Which title an account is listed under when it holds more than one.
-ROLE_ORDER = ('principal', 'dparc', 'dpfpa', 'hod', 'coordinator', 'dean', 'exam_officer', 'ict_officer',
+ROLE_ORDER = ('principal', 'dparc', 'dpfpa', 'hod', 'coordinator', 'dean', 'qa', 'exam_officer', 'ict_officer',
               'admission_officer', 'records_officer', 'accountant', 'estate_officer',
               'lab_technician', 'secretary', 'tutor')
 ROLE_LABELS = {
@@ -1562,7 +1617,7 @@ ROLE_LABELS = {
     'exam_officer': 'Exam Officer', 'ict_officer': 'ICT Officer',
     'dparc': 'DPARC', 'dpfpa': 'DPFPA', 'coordinator': 'Course Coordinator', 'dean': 'Dean of Students',
     'records_officer': 'Records Officer', 'admission_officer': 'Admission Officer',
-    'lab_technician': 'Lab Technician',
+    'lab_technician': 'Lab Technician', 'qa': 'Quality Assurance',
 }
 
 
@@ -5108,6 +5163,7 @@ def dashboard(request):
             'is_secretary': False, 'is_principal': False,
             'is_head_of_department': False, 'can_manage_exams': False,
             'teaches': False, 'module_scope': 'college',
+            'full_name': full_name_for(request.user),
         })
     today = timezone.localdate()
     # This year's work. Counting every year the college has ever run made the
@@ -5190,6 +5246,8 @@ def dashboard(request):
         })
 
     return Response({
+        # For the dashboard's greeting (said 10 November 2026).
+        'full_name': full_name_for(request.user),
         'modules': subjects_count,
         'students': students_count,
         'sessions_today': sessions_today,
@@ -9658,7 +9716,7 @@ class FormViewSet(viewsets.ModelViewSet):
     (is_academic_admin) may create, edit or publish one.
     """
     serializer_class = FormSerializer
-    permission_classes = [ReadStaffWriteDepartments]
+    permission_classes = [ReadStaffWriteForms]
 
     def get_queryset(self):
         qs = (
@@ -9713,7 +9771,7 @@ class FormViewSet(viewsets.ModelViewSet):
             return Response(
                 {'detail': 'That form is answered by students on their portal.'},
                 status=status.HTTP_400_BAD_REQUEST)
-        if not runs_departments(request.user):
+        if not (runs_departments(request.user) or is_quality_assurance(request.user)):
             raise PermissionDenied('Only the admin can fill this form in.')
 
         answers = request.data.get('answers')
@@ -9779,7 +9837,7 @@ class FormViewSet(viewsets.ModelViewSet):
 
 class FormSectionViewSet(viewsets.ModelViewSet):
     serializer_class = FormSectionSerializer
-    permission_classes = [ReadStaffWriteDepartments]
+    permission_classes = [ReadStaffWriteForms]
 
     def get_queryset(self):
         qs = FormSection.objects.select_related('form').prefetch_related('questions')
@@ -9800,7 +9858,7 @@ class FormSectionViewSet(viewsets.ModelViewSet):
 
 class FormQuestionViewSet(viewsets.ModelViewSet):
     serializer_class = FormQuestionSerializer
-    permission_classes = [ReadStaffWriteDepartments]
+    permission_classes = [ReadStaffWriteForms]
 
     def get_queryset(self):
         qs = FormQuestion.objects.select_related('section__form')
@@ -10316,6 +10374,10 @@ def _waiver_row(waiver, names=None):
         'requested_at': waiver.requested_at,
         'decided_by': name(waiver.decided_by) if waiver.decided_by_id else '',
         'decided_at': waiver.decided_at, 'decision_note': waiver.decision_note,
+        # What is left to pay of an approved waiver, for its "Record payment"
+        # (said 16 November 2026); written off: approved before waivers had dates.
+        'to_pay': str(time_to_pay.still_to_pay(waiver)) if waiver.status == WaiverRequest.APPROVED else '',
+        'written_off': waiver.status == WaiverRequest.APPROVED and waiver.pay_by is None,
     }
 
 

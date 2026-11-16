@@ -453,6 +453,138 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      invoice and audits it; refused, nothing moves
    - [x] 1330 tests; the whole flow checked in the browser (asked, approved, more time, both summaries, phone portal;
      a plan replacing a waiver; an old waiver put back, 5 months)
+   - [x] Record payment from the list of waivers (16 Nov, on `feature/teaching-plans`, no migration; your rule: "a
+     waiver is not meant to write a bill off"): Shortfall waivers and Time to pay, accountant only. The slip pays the
+     waiver's instalment first (not the oldest), then the rest of its invoice; over that, on account. An old
+     written-off waiver: what is paid goes back on the bill first, the rest stays off; invoice refreshed; a slip
+     already recorded changes nothing (`time_to_pay.pay_waiver`, `POST /api/waiver-requests/<id>/pay/`). 8 tests
+   - [ ] Record one waiver payment on the laptop (one dated, one written off before) and read the statement
+3l. **Teaching plans, the curricula and the teaching calendar; the QA office — 8–9 Nov, on the branch
+   `feature/teaching-plans` (not merged; migration 0086). Guide `ops/guides/07-teaching-plans.md`.**
+   - [x] The 2022 PST curriculum loaded from the national documents (NTA 4–6 curricula, Word; assessment plans,
+     PDF): 33 modules, their SEOs and related tasks, weekly hours (L/T/P/A), credits and assessment schemes, with
+     the SEOs and tasks each kind of assessment must be drawn from. Counts checked against the plans' own totals
+     (PST04104: 12 SEOs, 59 tasks). Where the documents disagree, noted on the module, not guessed
+   - [x] CA 40 / SE 60 in every module (your note: the curriculum's 60/40 is a typing error); PST04106's SE,
+     printed 40% of 60, loaded as 60%
+   - [x] Teaching calendar from the almanac: teaching from 2 Nov 2026 (your date), holidays, CAT weeks, special
+     CATs, assignment results deadline, examinations, CQI supervisions. DPARC keeps it
+   - [x] A tutor starts a plan; the week comes from the scheme of study (PST04104: Mon L2+T1, Thu P4+A1 — as your
+     handwritten plan); laid out over 15 weeks around the recess and holidays, outcomes in curriculum order, tests
+     in the CAT weeks, assignments before the results deadline, the exam in its window (5% / 12.5% / 2.5%;
+     15 + 45 — as your plan)
+   - [x] A module the loaded curriculum does not describe (old curriculum) gets a plan without outcomes and the
+     weights results use today
+   - [x] Classes marked done / partly / missed; the register of that day linked as evidence, its absence shown;
+     moves after submission need a reason and keep the first date; make-up classes
+   - [x] Progress against the plan itself (on track ≥90%, behind 70–89%, far behind <70%), as at today or a CQI
+     date; hours, weeks behind, tests late
+   - [x] Approval by the Head of Department (DPARC without one, or when the HOD teaches it); test setting plans
+     moderated; coverage of what the assessment plan requires; tasks tested before they are taught
+   - [x] The tutor's own Word/PDF plan attached (checked to be a real file); review notes; history
+   - [x] Quality Assurance office (Principal appoints): reads every plan, notes, runs the evaluation forms
+     (your note) — never service requests
+   - [x] Results, marks and attendance untouched
+   - [ ] **You:** open the branch and commit (guide 07, A); try it on the laptop
+   - [ ] **DPARC:** confirm the Christmas recess (21 Dec – 3 Jan, from the PST04104 plan, not the almanac) and
+     Semester 2 CAT 1 (3–8 May, before the semester begins in the almanac)
+   - [ ] **Before Level 4 CAT 1 (18 Jan 2027):** the results scheme for the new curriculum, with the exam officer,
+     once all assessment plans are compared (oral tests, case studies, third assignments have no slot today)
+   - [ ] Merge and deploy when there are no doubts (guide 07, C): `load_curriculum`, `load_teaching_calendar`,
+     the QA role
+3m. **The new look — 10 Nov, on `feature/teaching-plans` (uncommitted). Guide 07, "Also on this branch".**
+   - [x] First identity ("the ledger") reviewed against the frontend-design brief and published as a canvas:
+     https://claude.ai/artifact/BQNj7A8xiPh8Ghet4dStWa. On review you chose Proposal B (soft cards, grouped
+     menu, blue base) in the colours of your reference: royal blue #1B5EAB running into navy #152945
+   - [x] Staff app, student portal and the six small pages (sign-in, both password changes, registration, the
+     required form, the course portal) on one palette: ground #F2F5FA, white cards (soft corners, faint
+     shadow), the blue for actions and position, status colours only for status. Earlier look layers replaced,
+     not stacked
+   - [x] Lato for the whole system (your choice, replacing Atkinson Hyperlegible Next the same day), served from
+     `static/vendor/lato` (OFL, @fontsource/lato 5.2.7: 400, 400 italic, 700, 700 italic, 900); loaded on the staff
+     app, the portal and the six small pages (checked in the browser); tabular figures only in number columns
+   - [x] Student portal on a phone, everything but the menu (which stays on the left): a 64 px strip with 12 px
+     names; the top bar names the page and semester; one menu under the photo (My profile, Change my password,
+     Light or dark, Sign out); Fees / Results / Exams cards on the dashboard (`fee_next` and
+     `eligibility_summary` added to the view, read only); eligibility notes as a list; profile tabs wrap.
+     Measured on all 13 screens at 390 px: no sideways scrolling, no target under 44 px, no text under 12 px
+   - [x] Contrast calculated: text 4.5:1 or better and input edges 3:1 or better, light and dark, and the pale
+     text on the blue panels (5:1 or better)
+   - [x] The frame: menu grouped under headings that show only when the office sees one of their items
+     (checked for DPARC, tutor, accountant); the top bar floats, the semester once; one menu under the name
+     with My profile and password and Sign out (Escape and a click outside close it)
+   - [x] The dashboard: blue welcome panel with the counts and an attendance ring; New for you (unread
+     notifications, opening where each is dealt with); Attendance by level as bars; Recent registers in five
+     columns; announcements. `full_name` added to the dashboard API for the greeting
+   - [x] Cut-off dates and Advance Semester moved to Semester Review ▸ Academic period (same people as before)
+   - [x] Student portal: the welcome in a blue panel with today's date (the semester shows there on a phone),
+     the four figures as cards with their signs
+   - [x] Teaching plan screen: the semester strip, one line of figures, this week first; each class's topic on
+     its own line with Done / Part / Missed under it; move, missed, make-up class and returning a test are
+     inline forms; the strip in miniature in My plans, To approve and Plan progress
+   - [x] Sign-in: the blue panel led by **College management system** in bold, five bullets of what it covers, the motto;
+     the help under the form as three bullets (staff, students, forgotten password → ICT officer or Principal)
+   - [x] Charts (11 Nov, your request "adjust all graphs"): the 16 charts on shared tokens (`--chart-*`, light and
+     dark) through `newChart()` / `chartLook()` / `setChartDefaults()`: Lato, card-like tooltips, round legend
+     markers, value lines only, soft bar ends, surface gaps; paid blue / owed red (green beside red failed the
+     colour-blind check), rating scales in shades of one blue, property condition blue → grey → red. Light ↔ dark
+     repaints every chart (checked in headless Chrome both ways). Location map on the same tokens
+   - [ ] Look at the charts with real data on your laptop (Finance summary, Spending, Inventory, Performance, a
+     form's results)
+   - [x] A tutor given no module yet is let into Teaching plans (the empty "Your Head of Department gives you
+     your modules" instead of an error); anyone without the Tutor office or a module is still refused (test)
+   - [x] Taught early (16 Nov): a button on a class still to come moves it to the day it was taught and marks it
+     done or part in one step (`taught_early`, `POST …/taught-early/`); refuses a future day or one not before
+     the class's own day; keeps "moved from" and the reason. A moved class takes the week of its new date
+   - [x] After a plan is sent, changes to a class's SEO, topic, tasks, kind or hours go into its History (so a
+     swap of two classes' topics is seen); not while it is a draft. Tests 1358 OK
+   - [ ] Try Taught early and a swap on one plan on your laptop
+   - [x] Classes off the plan (16 Nov): extra classes (added after sending: not measured on, hours counted);
+     Finished later (a missed or partly taught class finished in a later class: a make-up or the next class,
+     which keeps its own mark); Registers not in the plan (listed; mark the day's class or Add as a class;
+     attendance untouched). Migration 0087 (`extra`, `finished_in`; backfills extras from plan history)
+   - [x] Tutor KPIs for QA, Principal, DPARC, HOD: 10 measures (6 teaching plan, 4 assessment plan), met/near/below,
+     two tables, three charts, module breakdown, definitions (`teaching_kpis.py`). Tests 1365 OK (7 new)
+   - [ ] Run `python manage.py migrate` on the laptop before opening the plans (0087)
+   - [ ] Decide: should QA be able to change the KPI targets, and should tutors see their own KPIs?
+   - [x] Checked in the browser: DPARC, accountant, tutor (dashboard and a plan), the Academic period page, the
+     user menu, the student portal (desktop, 390 px phone, dark), sign-in, the staff phone menu, dark mode;
+     no script errors, no sideways scrolling on a phone
+   - [ ] Look at the screens on your own laptop and phone before merging
+
+3n. **The new Level 5 and 6 curricula (PDF), the transition letter, the old curriculum — 11 Nov, on `feature/teaching-plans` (uncommitted).**
+   - [x] `NTA4|5|6CURRICULUM.pdf` (CURRICUM/, made 9 Nov by LibreOffice) read against the Word curricula already
+     loaded: the same documents. Every word differs only by line-end hyphens and the table heads each page repeats;
+     nothing to add to the 2022 data
+   - [x] The extractor run again on the documents: modules, outcomes, tasks and assessment schemes identical to
+     `pst_2022.json`; only the note changed
+   - [x] `barua_mtaala069.pdf` (scanned, read by OCR): Ministry of Health LB.74/262/01B/172 of 27 Oct 2026 passing on
+     NACTVET BC.220/244/65 of 26 Oct 2026 — the revised curricula for **new NTA Level 4 students from 2026/27**;
+     students already in Levels 5 and 6 **finish on the earlier curriculum**. Written into the curriculum's note
+     (shown on Teaching plans ▸ Curriculum after `load_curriculum`)
+   - [x] Old curriculum documents already on the laptop, in `~/Documents/BPHACOH/Guides/FG LEVEL 4|5|6/`: the
+     assessment plans (Level 4 December 2016, Levels 5–6 March 2019; .doc, and PDFs made 11 Nov) and the facilitator
+     guide for each module. The old curricula themselves (hours, credits, every outcome) are not there
+   - [x] The old curriculum for Levels 5–6 loaded beside the 2022 one, from the assessment plans you gave
+     (`Guides/oldAP/`, March 2019, "developed … from the curriculum of February 2015"): 23 modules, their SEOs and
+     584 related tasks, each part of CA and SE with the tasks it is drawn from (`curricula/extract_2015.py` →
+     `pst_2015.json`). Checked against the documents: every task letter the printed plans show agrees (584/584);
+     CA and SE add to 40 and 60 in every module; the instructions' tasks agree with the CA/SE ticks of table 2 in
+     483 of 535 cases (the rest are ticks the reader does not see, or the plans' own slips). Weekly hours and
+     credits are not in those plans: shown *not given*
+   - [x] A Level 5–6 plan keeps the weights results use (so it agrees with the mark sheet) and gains the outcomes
+     and what each CAT, assignment and examination must cover. On the laptop's database (rolled back) all 23
+     2026/27 Level 5–6 modules found their own; PST05101 of 2027/28 (new curriculum) finds the 2022 one
+   - [x] Where the old plans are wrong, noted on the module: PST05204 → PST05104 (module four of semester 1, its
+     facilitator guide); PST06212's report 40% in one place and 60% in another (loaded 60); PST05208 SEO 3.3.2
+     tasks d–f against a–c; PST06104's test names SEOs it lacks; PST06211's SEO 5.3.4 missing from table 1
+   - [ ] After the merge, on the server: `load_curriculum attendance/curricula/pst_2015.json` (guide 07, C1)
+   - [ ] Optional: the old curricula of February 2015 (Word), for the weekly hours and credits
+   - [ ] Your answer: PST05208 and PST05209 are not marked *Has practical component* in the laptop's database,
+     though their plans give practical tests and a practical examination — is that so on the server?
+   - [x] 2026/27 Level 4 modules: the live server has the 2022 curriculum's (your answer, 11 Nov); only the laptop's
+     copy of the database still has the old names
+
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
    - [ ] Migrations to 0085 applied by the deploy (release guide B1–B4); `Ran 1330 tests … OK` on the laptop first
    - [ ] Students ▸ Supplementary consent: check the amounts in Sehemu B (copied from the 2025 form), then Open

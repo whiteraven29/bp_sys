@@ -99,11 +99,15 @@ Every power is defined once, in `attendance/roles.py`.
      ▼
   TUTORS: attendance, and CA for the modules they teach (so does any office
   holder who teaches). End-of-semester marks and approvals: exam officer only.
+  Teaching plans: the Tutor office opens the menu; My plans lists the open
+  semester's modules the account is a tutor of (Module.teachers).
 
   Reporting to DPFPA, though not on the chart: records officer, ICT officer, secretary.
   ICT OFFICER → staff accounts, passwords, the open roles (tutor, secretary);
                 Django /admin/ with every table (the role makes the account a superuser)
   SECRETARY   → service requests
+  QA          → Quality Assurance (appointed): every teaching plan, review notes;
+                the student and staff evaluation forms (not service requests)
 ```
 
 The staff page hides menu items with `data-roles` and body classes
@@ -205,13 +209,50 @@ sign in.
                          refused — DPFPA decides; since 6 Nov 2026 it gives
                          time: pay_by, first_pay_by, times_extended, the bill
                          unchanged (approved before: came off the bill);
-                         replaced — taken over by a monthly plan
+                         replaced — taken over by a monthly plan; paid from
+                         the list (time_to_pay.pay_waiver, 16 Nov 2026): its
+                         instalment first, an old write-off put back as paid
   MonthlyPlan            tuition by the month, as DPFPA agreed: monthly_amount,
                          first_due, total, paid_before, pending | active |
                          completed | lapsed | refused | cancelled — laid over
                          the bill, never changing it (time_to_pay.py); months
                          (set by the number of months), restores (old waivers
                          put back on the bill when DPFPA agrees)
+  Curriculum             a national curriculum as loaded (code, weeks of study);
+                         2022 PST: NTA 4–6 (load_curriculum, curricula/pst_2022.json);
+                         note: new Level 4 from 2026/27 only (MoH LB.74/262/01B/172);
+                         2015 PST: NTA 5–6 from its assessment plans (load_curriculum
+                         curricula/pst_2015.json; extract_2015.py); its plans keep the
+                         results' weights (RESULTS_SCHEME_CURRICULA in teaching_plans.py)
+  CurriculumModule       code + name + NTA level, semester, credits, weekly
+                         L/T/P/A hours, checks (where the documents disagree)
+  LearningOutcome        an SEO (5.1.1), its enabling outcome and criteria
+  RelatedTask            a, b, c … of an SEO
+  AssessmentComponent    how a module is assessed: CA / SE / field, method, at
+                         least how many, weight, required_tasks
+  TeachingCalendar       a semester's teaching start and end (DPARC)
+  CalendarEvent          holiday | recess | cat | special_cat | exam | revision |
+                         deadline | meeting | cqi | field | other (holiday,
+                         recess, exam: no class planned)
+  TeachingPlan           one per module: curriculum_module, pattern (day, kind,
+                         hours), weeks, starts_on, the tutor's document,
+                         draft | submitted | approved | returned
+  PlanSession            a class: week, planned_on, kind, hours, outcome, tasks,
+                         planned | done | partial | missed, delivered_on,
+                         register (the attendance Session that day), moved_from
+  PlanAssessment         Written test 1 …: weight, planned_on, held_on, setting
+                         plan tasks, moderation (HOD; DPARC without one)
+  PlanNote / PlanEvent   review notes (QA, HOD, DPARC) / the plan's history
+  teaching_plans.py      lay_out, progress (done of due), coverage, approval;
+                         edit_session (logs what a class covers once sent),
+                         taught_early (move to the day taught + mark;
+                         POST …/sessions/<id>/taught-early/);
+                         finish_later (…/finished-later/), registers_outside,
+                         class_from_register (…/registers/<id>/class/)
+  PlanSession.extra      added after the plan was sent: not measured on, hours count
+  PlanSession.finished_in  a missed/partial class finished in a later class (0087)
+  teaching_kpis.py       KPIS (10 measures, targets), tutor_kpis; GET /api/teaching-plans/kpis/
+                         (QA, Principal, DPARC; HOD own department)
   StudentPass            a pass issued: random code, valid_until, basis,
                          source (office / portal), issued_by
   semester_pass.py       the pass: coverage (windows paid), status, issue, verify by code
@@ -438,5 +479,43 @@ are dropped once the production row counts are checked.
 | `create_admin` | the first admin account |
 | `place_left_behind [--apply]` | once: places the Level 4/5 students the 2026/27 year end left behind (single-level PST04/PST05) |
 | `call_off_repeat_places [--apply]` | once: calls off the place a settled REPEAT still holds in a semester they owe nothing in (a repeat not sat, settled before 26 Oct 2026) |
+| `load_curriculum [path] [--dry-run]` | the curriculum and assessment plans (default: 2022 PST, NTA 4–6); updates in place |
+| `load_teaching_calendar [path] [--dry-run]` | the almanac's teaching weeks, holidays, CAT weeks, exams, CQI dates (default 2026/27) |
 
-Tests: 1330, run as described in `ops/guides/06-release-2026-27.md`.
+Tests: 1373 on the branch `feature/teaching-plans` (1330 on master), run as described in `ops/guides/06-release-2026-27.md`.
+
+## 7. The look (said 10 November 2026)
+
+Every page reads colour tokens from `:root` (and `html[data-theme="dark"]`); the last "look layer" in each page's
+`<style>` sets them. The staff app (`index.html`) and the student portal (`student_dashboard.html`) each have one
+layer, "SOFT CARDS, ROYAL BLUE" (Proposal B; it replaced "the ledger" the same day), placed before `@media print`
+(staff) and before the phone rules (portal), so printouts and phones keep their own rules. The six small pages
+carry the same tokens in a short tail. The typeface is Lato, `static/vendor/lato/lato.css` (eight woff2 files, OFL),
+linked from every page. The identity and its rules: https://claude.ai/artifact/BQNj7A8xiPh8Ghet4dStWa.
+
+The staff frame:
+
+- **Menu** (`aside#sidebar`): the brand first, then every top-level item. `groupSidebar()` (run by `uncloak()`)
+  gives each item a CSS `order` from `NAV_SECTIONS` and inserts the headings (Academic, Students, Money, Stores,
+  College); a heading is hidden when none of its items is displayed. Role gating is unchanged (`data-roles`,
+  the `*-only` classes); the grouping only reads it. For the accountant (`body.accountant-desk`) their
+  admissions desk comes first, then Money.
+- **Top bar** (`header`): fixed, floating beside the menu; the semester badge, light/dark, the bell, and the
+  menu under the name (`#user-menu`: My profile and password, Sign out).
+- **Dashboard** (`#page-dashboard`): `renderDashHero`, `renderLevelBars`, `renderRecentSessions` from
+  `GET /api/dashboard/` (which now carries `full_name`); `renderForYou` from the notifications, called by
+  `loadNotifications()` every minute.
+- **Academic period**: the cut-off card lives in `#page-progression` as review section `period`.
+- **Charts** (11 November 2026): every chart is made by `newChart(canvas, config)`. A dataset names its colours
+  by role in `tone` (`'blue'`, `'orange'`, `'bad'`, `'neutral'`, `'cond-1'`…`'cond-5'`, or `'seq:i/n'` for step i of n
+  of the blue ramp; one value or one per bar/slice). `chartLook(config)` turns roles into the `--chart-*` tokens
+  (defined in the Proposal B layer, with a dark set) and sets legend, tooltip, tick and rule colours from the page
+  tokens; `setChartDefaults()` (at init) sets font, markers, radii and interaction once. `applyTheme()` →
+  `retintCharts()` re-runs `chartLook` on every chart and calls `update()` (not `'none'`, which keeps shared
+  dataset colours). A new chart must use `newChart` and `tone`, never a hex colour.
+
+The student portal (`student_dashboard.html`): the last layer, "PHONES, SECOND PASS", sets the phone rules. The menu
+stays a strip on the left under 820 px (`--rail: 64px`). The top bar carries `#top-title` (set by `showView`) and the
+menu under the photo (`#me-chip`, `#me-menu`; items use the existing `data-profile-option` handlers). The dashboard's
+three cards (`.next-card`, `data-goto-view`) read `finance_*`, `fee_next`, `published_result_count`, `gpa`,
+`has_ca_results` and `eligibility_summary` (`_eligibility_summary` in `views.py`, from the eligibility rows).

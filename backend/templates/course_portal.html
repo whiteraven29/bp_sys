@@ -5,30 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% if registration %}My Programme{% else %}My Course{% endif %} — EduTrack</title>
 <link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet">
+<link href="{% static 'vendor/lato/lato.css' %}" rel="stylesheet">
 <style>
   /* The same tokens as the student portal, so both read as one system. */
   :root {
-    --bg: #eceff3; --surface: #ffffff; --surface-2: #f3f5f7; --line: #ccd4dc;
-    --text: #2b3440; --muted: #71808f; --blue: #123F80; --green: #16a34a;
-    --green-soft: #eaf7ef; --amber: #b45309; --amber-soft: #fdf3e7; --red: #dc2626;
-    --red-soft: #fdeded; --radius: 3px;
+    --bg: #F2F5FA; --surface: #FFFFFF; --surface-2: #F4F7FB; --line: #E0E6EF;
+    --text: #1B2430; --muted: #5E6B7A; --blue: #1B5EAB; --green: #187A38;
+    --green-soft: #E6F4EA; --amber: #8F5400; --amber-soft: #FDF1DC; --red: #B42318;
+    --red-soft: #FDECEA; --radius: 2px;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #10151b; --surface: #171d26; --surface-2: #1e2632; --line: #303b4a;
-      --text: #e3e9f0; --muted: #93a2b5; --blue: #4a9eff; --green: #35c46a;
-      --green-soft: #16301f; --amber: #e0a03a; --amber-soft: #33270f; --red: #ff6b6b;
-      --red-soft: #351b1b; color-scheme: dark;
+      --bg: #0D1626; --surface: #142036; --surface-2: #1A2842; --line: #26354F;
+      --text: #E6ECF5; --muted: #9FB0C8; --blue: #7FB0F0; --green: #5CC27F;
+      --green-soft: #12301E; --amber: #F0B35A; --amber-soft: #33270F; --red: #FF8A80;
+      --red-soft: #3A1C1A; color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #10151b; --surface: #171d26; --surface-2: #1e2632; --line: #303b4a;
-    --text: #e3e9f0; --muted: #93a2b5; --blue: #4a9eff; --green: #35c46a;
-    --green-soft: #16301f; --amber: #e0a03a; --amber-soft: #33270f; --red: #ff6b6b;
-    --red-soft: #351b1b; color-scheme: dark;
+    --bg: #0D1626; --surface: #142036; --surface-2: #1A2842; --line: #26354F;
+    --text: #E6ECF5; --muted: #9FB0C8; --blue: #7FB0F0; --green: #5CC27F;
+    --green-soft: #12301E; --amber: #F0B35A; --amber-soft: #33270F; --red: #FF8A80;
+    --red-soft: #3A1C1A; color-scheme: dark;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  body { margin: 0; font-family: 'Lato', system-ui, -apple-system, 'Segoe UI', sans-serif;
          font-size: 15px; color: var(--text); background: var(--bg); }
   header { background: var(--blue); color: #fff; padding: 14px 16px; display: flex;
            align-items: center; justify-content: space-between; gap: 12px; }
@@ -61,34 +62,34 @@
            border-radius: var(--radius); font: inherit; cursor: pointer; }
   .muted { color: var(--muted); }
 
-  /* DESIGN SYSTEM (said 21 October 2026): primary blue #123F80, light blue
-     #EFF6FF, white, cool grey #F1F5F9 — as the dashboards. */
-  :root { --bg: #F1F5F9; --surface: #FFFFFF; --surface-2: #F8FAFC; --line: #E2E8F0; --text: #1E293B;
-          --muted: #64748B; --blue: #123F80; --green: #15803D; --green-soft: #ECFDF3; --amber: #B45309;
-          --amber-soft: #FFF7ED; --red: #DC2626; --red-soft: #FEF2F2; --radius: 10px; }
+  /* SOFT CARDS, ROYAL BLUE (said 10 November 2026; replaces "the ledger" of the
+     same morning), as the dashboards: a cool grey ground, white cards with soft
+     corners, the blue bar running from royal blue into navy. */
+  :root { --bg: #F2F5FA; --surface: #FFFFFF; --surface-2: #F4F7FB; --line: #E0E6EF; --text: #1B2430;
+          --muted: #5E6B7A; --blue: #1B5EAB; --green: #187A38; --green-soft: #E6F4EA; --amber: #8F5400;
+          --amber-soft: #FDF1DC; --red: #B42318; --red-soft: #FDECEA; --radius: 10px; }
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { --bg: #0B1220; --surface: #111A2C; --surface-2: #162138; --line: #22314D;
-      --text: #E2E8F0; --muted: #94A3B8; --blue: #2B5BA8; }
+    :root:not([data-theme="light"]) { --bg: #0D1626; --surface: #142036; --surface-2: #1A2842; --line: #26354F;
+      --text: #E6ECF5; --muted: #9FB0C8; --blue: #7FB0F0; }
   }
-  :root[data-theme="dark"] { --bg: #0B1220; --surface: #111A2C; --surface-2: #162138; --line: #22314D;
-      --text: #E2E8F0; --muted: #94A3B8; --blue: #2B5BA8; }
-  body { -webkit-font-smoothing: antialiased; }
-  header { background: #123F80; padding: 14px 24px; box-shadow: 0 1px 3px rgba(15,23,42,.15); }
-  header a { border-radius: 999px; border-color: rgba(255,255,255,.35); }
-  header a:hover { background: rgba(255,255,255,.12); }
+  :root[data-theme="dark"] { --bg: #0D1626; --surface: #142036; --surface-2: #1A2842; --line: #26354F;
+      --text: #E6ECF5; --muted: #9FB0C8; --blue: #7FB0F0; }
+  body { -webkit-font-smoothing: antialiased; line-height: 1.45; }
+  header { background: linear-gradient(115deg, #1B5EAB 0%, #1A4D8D 42%, #153359 78%, #152945 100%); padding: 14px 24px; box-shadow: none; }
+  header a { border-radius: 999px; border-color: rgba(255,255,255,.6); }
+  header a:hover { background: #fff; color: #153359; }
   main { padding: 26px 18px 48px; }
-  h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.01em; }
-  .panel { border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06); padding: 20px; }
-  .panel h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
-  .facts { border: 0; gap: 10px; }
-  .facts div { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
-  .facts span { text-transform: uppercase; letter-spacing: .05em; font-size: .62rem; font-weight: 600; }
-  .table-wrap { border: 1px solid var(--line); border-radius: 12px; }
-  th { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; }
-  tr:last-child td { border-bottom: 0; }
-  input { border-radius: 8px; border-color: #CBD5E1; }
-  input:focus { outline: none; border-color: #123F80; box-shadow: 0 0 0 3px rgba(18,63,128,.14); }
-  button { border-radius: 8px; font-weight: 600; background: #123F80; }
+  h1 { font-size: 1.55rem; font-weight: 800; letter-spacing: -.01em; }
+  .panel { border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 1px 2px rgba(21,41,69,.05), 0 2px 8px rgba(21,41,69,.05); padding: 20px; }
+  .panel h2 { font-size: 1.08rem; text-transform: none; letter-spacing: 0; color: var(--text); }
+  .facts { border: 0; gap: 12px; }
+  .facts div { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+  .facts span { text-transform: none; letter-spacing: 0; font-size: .8rem; font-weight: 500; }
+  .table-wrap { border: 1px solid var(--line); border-radius: 10px; }
+  th { font-size: .82rem; text-transform: none; letter-spacing: 0; color: var(--muted); font-weight: 700; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+  input { border-radius: 8px; border-color: #7D8FA5; min-height: 44px; }
+  input:focus { outline: 0; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(27,94,171,.2); }
+  button { border-radius: 8px; font-weight: 700; background: var(--blue); min-height: 44px; }
   .notice { border-radius: 10px; }
 </style>
 </head>

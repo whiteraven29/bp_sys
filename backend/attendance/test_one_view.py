@@ -207,10 +207,13 @@ class StudentPhonesTests(TestCase):
         self.html = open(Path(__file__).resolve().parent.parent / 'templates' / 'student_dashboard.html').read()
 
     def test_the_phone_rules_come_after_the_design_system(self):
-        design = self.html.index('DESIGN SYSTEM (said 21 October 2026)')
+        # The look layer is "SOFT CARDS, ROYAL BLUE" since 10 November 2026 (it
+        # replaced the ledger of that morning, which replaced the design system
+        # of 21 October); the phone rules still come after it.
+        design = self.html.index('SOFT CARDS, ROYAL BLUE (said 10 November 2026')
         phones = self.html.index('PHONES (said 28 October 2026')
         self.assertLess(design, phones)
-        self.assertGreater(phones, self.html.rindex('.content { padding: 18px 28px 48px; }'))
+        self.assertGreater(phones, self.html.rindex('.content { padding: 22px 24px 48px; }'))
         self.assertIn('table.stackable td::before', self.html)
         self.assertIn('function labelTables(root)', self.html)
 
