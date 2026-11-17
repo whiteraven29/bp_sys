@@ -107,11 +107,16 @@ class SuppConsentTests(TestCase):
         self.admission.put('/api/supp-consent/form/', {'part_b': 'new wording'}, format='json')
         record.refresh_from_db()
         self.assertNotEqual(record.wording['part_b'], 'new wording')
-        page = self.portal.get(f'/supp-consent/{record.id}/print/')
+        # One download, a PDF file, no print dialog (said 17 November 2026).
+        page = self.portal.get(f'/supp-consent/{record.id}/download/')
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, 'Sehemu D')
-        self.assertContains(page, 'Muhuri wa ofisi')
-        self.assertContains(page, 'NS0700/0001/2025')
+        self.assertEqual(page['Content-Type'], 'application/pdf')
+        self.assertIn('attachment; filename="Supplementary-consent-NS0700-0001-2025.pdf"', page['Content-Disposition'])
+        self.assertTrue(page.content.startswith(b'%PDF-1.4'))
+        text = pdf_text(page.content)
+        for expected in ('Sehemu D', 'Muhuri wa ofisi', 'NS0700/0001/2025', 'NTA Level 5'):
+            self.assertIn(expected, text)
+        self.assertEqual(self.portal.get(f'/supp-consent/{record.id}/print/')['Content-Type'], 'application/pdf')
 
     def test_only_a_supplementary_student_is_asked(self):
         self.open_form()
@@ -174,3 +179,13 @@ class SuppConsentTests(TestCase):
             again = consent.form_for()
         self.assertEqual(again.title, 'made by the other request')
         self.assertEqual(real_filter(academic_year=made.academic_year).count(), 1)
+
+
+def pdf_text(data):
+    """The words drawn in a PDF from pdf.py: each page's stream, inflated."""
+    import re
+    import zlib
+    found = []
+    for stream in re.findall(rb'/FlateDecode >>\nstream\n(.*?)\nendstream', data, re.S):
+        found += re.findall(rb'\((.*?)\) Tj', zlib.decompress(stream))
+    return ' '.join(chunk.decode('cp1252') for chunk in found)

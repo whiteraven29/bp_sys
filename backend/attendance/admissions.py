@@ -245,19 +245,23 @@ def capture_student(*, nactvet_reg_no, name='', phone='', gender='', date_of_bir
 
 #: NECTA's Form Four (CSEE) index number: centre and candidate, and the year
 #: sat — S0123/0045/2021 for a school candidate, P… for a private one. The
-#: year is left off on some older slips.
-FORM_FOUR_INDEX = re.compile(r'^[SP]\d{4}/\d{4}(/\d{4})?$')
+#: year is left off on some older slips. A student who sat their secondary
+#: school abroad has NECTA's equivalence number in its place, EQ and digits
+#: (said 17 November 2026: their NACTVET number starts NEQ).
+FORM_FOUR_INDEX = re.compile(r'^(?:[SP]\d{4}/\d{4}(?:/\d{4})?|EQ\d{4,}(?:/\d+)*)$')
 
 
 def clean_form_four_index(value, profile=None):
     """The index number in its printed form, or AdmissionError saying what is
     wrong with it. Blank stays blank."""
     index = re.sub(r'[\s.-]+', '/', (value or '').strip().upper()).strip('/')
+    index = re.sub(r'^EQ/', 'EQ', index)             # "EQ 2019…" is written EQ2019…
     if not index:
         return ''
     if not FORM_FOUR_INDEX.match(index):
         raise AdmissionError(f'{value!r} is not a Form Four index number. It reads like '
-                             f'S0123/0045/2021: centre, candidate number and year.')
+                             f'S0123/0045/2021 (centre, candidate number and year), or EQ followed by '
+                             f'digits for a NECTA equivalence number (studied abroad).')
     taken = StudentProfile.objects.filter(form_four_index=index)
     if profile is not None:
         taken = taken.exclude(pk=profile.pk)

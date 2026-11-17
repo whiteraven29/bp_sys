@@ -569,7 +569,15 @@ def full_statement(profile):
         entry['paid'] = money(sum((c.payable - charge_balance(c) for c in entry['charges']), ZERO))
         entry['balance'] = money(entry['billed'] - entry['waived'] - entry['paid'])
     payments = list(Payment.objects.filter(profile=profile).exclude(channel=Payment.CREDIT)
+                    .select_related('recorded_by', 'invoice')
+                    .prefetch_related('allocations__charge__charge_type', 'allocations__charge__academic_year')
                     .order_by('payment_date', 'id'))
+    for payment in payments:
+        # What each slip paid, for the auditors (said 17 November 2026).
+        payment.paid_for = [f'{a.charge.charge_type.name} {a.charge.academic_year.name}'
+                            + (f', instalment {a.charge.installment_number}' if a.charge.installment_number else '')
+                            + f': {money(a.amount):,.2f}' for a in payment.allocations.all()]
+        payment.on_account = money(payment.amount - sum((a.amount for a in payment.allocations.all()), ZERO))
     totals = balance_for(profile)
     return {'years': years, 'payments': payments, 'totals': totals,
             'received': money(sum((p.amount for p in payments), ZERO))}

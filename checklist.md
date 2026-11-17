@@ -585,6 +585,28 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] 2026/27 Level 4 modules: the live server has the 2022 curriculum's (your answer, 11 Nov); only the laptop's
      copy of the database still has the old names
 
+3o. **Fixes of 17 Nov, on master after the merge (uncommitted; no migration, nothing new to install).**
+   - [x] VETA: Send to records leaves the admission desk and waits for records (`veta_views._works_desk`: the VETA
+     records desk is records' and the Principal's); each desk's button names the next desk (test)
+   - [x] VETA: with two intakes open, New application keeps the intake chosen and asks for one ("— choose the
+     intake —") instead of falling back to the first; the toast names the intake (backend checked: it saves the
+     intake sent)
+   - [x] Students from abroad: Form Four index accepts NECTA's equivalence number EQ… (`FORM_FOUR_INDEX`); NEQ
+     NACTVET numbers were already accepted (tests)
+   - [x] Payment history print for audit: what each slip paid and who recorded it, monthly plans month by month,
+     waivers with dates; Print in Statement, Payment History, Record a Payment and Time to pay; every plan student at
+     once (`/statements/monthly-plans/`); accountant, DPFPA, Principal (tests)
+   - [x] Smaller text and cards: root 15px (14px on phones), tighter cards, tiles, tables, buttons, fields; checked in
+     headless Chrome at 1280 and 390 px, light and dark
+   - [x] Overall print (your follow-up: "overall and student wise"): Payment History ▸ Print overall (every payment
+     From–To, every student, what each paid, who recorded it, totals by channel and account) and Monthly-plan
+     students; student-wise stays Statement ▸ Print (tests)
+   - [x] Supplementary consent: one Download button (portal and office list) giving a one-page PDF, no print dialog;
+     written by `pdf.py`, the invoice download's own writer (no new library); checked with pdftoppm and mutool (tests)
+   - [ ] Try on the laptop: two VETA intakes open, one application to each; Send to records as admission, then as
+     records; an EQ index at the PST records desk; print one plan student's statement; Print overall for November;
+     download a consent form on a phone
+
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
    - [ ] Migrations to 0085 applied by the deploy (release guide B1–B4); `Ran 1330 tests … OK` on the laptop first
    - [ ] Students ▸ Supplementary consent: check the amounts in Sehemu B (copied from the 2025 form), then Open

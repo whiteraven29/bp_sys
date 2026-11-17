@@ -1198,6 +1198,55 @@
     .quick-facts { grid-template-columns: 1fr 1fr; gap: 10px; }
   }
 
+  /* Compact (said 17 November 2026: "reduce the text sizes and cards which
+     look large for both mobile and pc"). The root moves from 17px to 15px
+     (14px on a phone), so every rem size follows; cards, tiles, tables,
+     buttons and fields are tightened to match. Print keeps its own sizes. */
+  html { font-size: 93.75%; }
+  .main-inner { padding: 4px 24px 44px; }
+  .page-title { font-size: 1.35rem; }
+  .page-sub { font-size: .88rem; margin-bottom: 16px; }
+  .card { padding: 15px 18px 17px; margin-bottom: 16px; border-radius: 10px; }
+  .card-title { font-size: 1rem; margin-bottom: 10px; }
+  .stat-card { padding: 11px 14px; border-radius: 10px; }
+  .stat-card .label { font-size: .8rem; }
+  .stat-card .value { font-size: 1.3rem; }
+  .quick-facts { gap: 12px; margin-bottom: 16px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .qf-item { padding: 11px 14px; border-radius: 10px; }
+  .qf-item:has(.qf-icon) { column-gap: 11px; }
+  .qf-icon { width: 36px; height: 36px; font-size: 1.05rem; border-radius: 9px; }
+  .qf-item span { font-size: .8rem; }
+  .qf-item strong { font-size: 1.22rem; }
+  table { font-size: .88rem; }
+  thead th, th { padding: 8px 12px; font-size: .8rem; }
+  td { padding: 8px 12px; }
+  .btn { padding: 7px 14px; min-height: 36px; font-size: .86rem; }
+  .btn-sm { padding: 5px 11px; min-height: 32px; font-size: .8rem; }
+  .field label { font-size: .82rem; }
+  .field input, .field select, .field textarea, .inventory-filter-control { padding: 7px 10px; font-size: .9rem; }
+  .field input:not([type=checkbox]):not([type=radio]), .field select { min-height: 38px; }
+  .help-note { font-size: .84rem; }
+  .modal-title { padding: 14px 24px; font-size: 1.05rem; margin-bottom: 16px; }
+  .nav-btn { min-height: 38px; font-size: .88rem; }
+  .nav-sub-btn { min-height: 34px; font-size: .84rem; }
+  .dash-row { gap: 16px; }
+  .dash-row > .card { margin-bottom: 16px; }
+  @media (max-width: 580px) {
+    html { font-size: 87.5%; }
+    .main-inner { padding: 4px 10px 36px; }
+    .card { padding: 13px 13px 15px; margin-bottom: 12px; }
+    .quick-facts { gap: 8px; grid-template-columns: 1fr 1fr; }
+    .qf-item { padding: 10px 11px; }
+    .qf-icon { width: 32px; height: 32px; font-size: .95rem; }
+    .qf-item strong { font-size: 1.12rem; }
+    .stat-card .value { font-size: 1.15rem; }
+    .page-title { font-size: 1.2rem; }
+    td { padding: 7px 10px; }
+    thead th, th { padding: 7px 10px; }
+    /* Fingers still need room: buttons and fields stay 34px or more. */
+    .btn-sm { min-height: 34px; }
+  }
+
   /* The accountant's menu, most used first (said 22 October 2026): their desk
      at admissions, then the money; groupSidebar() orders it. */
 
@@ -2491,7 +2540,7 @@
         <div class="form-grid-3">
           <div class="field"><label>Programme *</label><select id="adm-programme" onchange="syncAdmissionYear()"></select></div>
           <div class="field"><label>Level *</label><select id="adm-level"></select></div>
-          <div class="field"><label>Form Four index No.</label><input id="adm-f4" placeholder="S0123/0045/2021"></div>
+          <div class="field"><label>Form Four index No.</label><input id="adm-f4" placeholder="S0123/0045/2021 or EQ2019000123"></div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="openApplication(event)"><i class="bi bi-person-plus"></i> Open the application</button>
       </div>
@@ -3818,7 +3867,11 @@
       <!-- PAYMENT HISTORY -->
       <div class="finance-section" id="finance-section-history">
         <div class="card finance-only">
-          <div class="card-title">Payments recorded</div>
+          <div class="card-title">Payments recorded
+            <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" onclick="printPayments(false)" title="Every payment in the period above, every student, with totals by channel and account">🖨 Print overall</button>
+              <button class="btn btn-ghost btn-sm" onclick="printPayments(true)" title="The same, only students on a monthly tuition plan">🖨 Monthly-plan students</button>
+            </span></div>
           <div class="form-grid-3">
             <div class="field"><label>From</label><input id="fin-hist-from" type="date" onchange="loadPaymentHistory()" /></div>
             <div class="field"><label>To</label><input id="fin-hist-to" type="date" onchange="loadPaymentHistory()" /></div>
@@ -4935,7 +4988,7 @@
 
 <div class="modal-overlay" id="statement-modal">
   <div class="modal" style="max-width:900px">
-    <div class="modal-title"><span id="statement-title">Statement</span><button class="modal-close" onclick="closeStatementModal()">✕</button></div>
+    <div class="modal-title"><span id="statement-title">Statement</span><span style="display:flex;gap:8px;align-items:center"><button class="btn btn-ghost btn-sm" id="statement-print-btn">🖨 Print</button><button class="modal-close" onclick="closeStatementModal()">✕</button></span></div>
     <div id="statement-body"></div>
   </div>
 </div>
@@ -11236,6 +11289,7 @@ async function loadOutstandingForPayment() {
     box.innerHTML = `
       <div style="font-size:.78rem;color:var(--muted);margin-bottom:6px">
         Outstanding for ${safeText(statement.profile.name)} — total ${money(statement.totals.balance)}
+        <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="printStatement(${Number(profileId)})">🖨 Payment history</button>
       </div>
       <div class="table-wrap"><table>
         <thead><tr><th>Charge</th><th>Inst.</th><th>Due</th><th>Outstanding</th></tr></thead>
@@ -11298,6 +11352,17 @@ async function recordPayment() {
 
 // ── payment history ───────────────────────────────────────────────────────────
 
+// The overall print (said 17 November 2026: "overall and student wise"):
+// every payment between From and To; each student's own is Statement ▸ Print.
+function printPayments(onlyPlans) {
+  const params = new URLSearchParams();
+  const from = document.getElementById('fin-hist-from')?.value, to = document.getElementById('fin-hist-to')?.value;
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  if (onlyPlans) params.set('plans', '1');
+  window.open(`/payments/print/?${params}`, '_blank', 'noopener');
+}
+
 async function loadPaymentHistory() {
   let url = '/payments/?';
   const from = document.getElementById('fin-hist-from')?.value;
@@ -11329,7 +11394,7 @@ function renderPaymentHistory() {
         ? safeText(p.efd_receipt_no) : '<span class="badge badge-yellow">missing</span>'}</td>
       <td style="font-size:.72rem">${p.allocations.map(a => safeText(a.charge_type_name)).join(', ') || '—'}</td>
       <td style="font-size:.72rem;color:var(--muted)">${safeText(p.recorded_by_name)}</td>
-      <td>${p.is_reversal
+      <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" title="Print this student's payment history" onclick="printStatement(${p.profile})">🖨</button> ${p.is_reversal
         ? `<span class="badge badge-red">reversal</span>`
         : p.is_reversed
           ? `<span class="badge badge-yellow">reversed</span>`
@@ -11412,10 +11477,18 @@ function renderFinanceStudents() {
     : '<tr><td colspan="12"><div class="empty"><div class="ei">🎓</div>No students match this filter</div></td></tr>';
 }
 
+// The printable statement: every charge, every payment (what it paid, who
+// recorded it), monthly plans month by month and waiver dates — for audit
+// (said 17 November 2026).
+function printStatement(profileId) {
+  window.open(`/statement/${profileId}/`, '_blank', 'noopener');
+}
+
 async function openStatement(profileId) {
   try {
     const s = await api('GET', `/finance/statement/${profileId}/`);
     document.getElementById('statement-title').textContent = `${s.profile.nactvet_reg_no} · ${s.profile.name}`;
+    document.getElementById('statement-print-btn').onclick = () => printStatement(profileId);
     document.getElementById('statement-body').innerHTML = `
       <div class="stats-grid">
         <div class="stat-card" style="--c:var(--accent)"><div class="label">Billed</div><div class="value">${money(s.totals.billed)}</div></div>
@@ -13230,7 +13303,7 @@ const ADMISSION_SECTIONS = {
   items: ['Items check', 'Items checked again each semester — the TPH book by finance, rim paper and the other checked items by the admission office.'],
   classlist: ['Class lists', 'A level\'s students this semester: first sitting or repeater.'],
   noshow: ['Did not report', 'Continuing students who never came: decide three months after admission opened.'],
-  suppconsent: ['Supplementary consent', 'The consent form supplementary students fill in, print and bring back signed.'],
+  suppconsent: ['Supplementary consent', 'The consent form supplementary students fill in, download as a PDF and bring back signed.'],
   transfer: ['Transfer', 'A student going to another college: find them, check, approve.'],
   transferred: ['Transferred records', 'Students transferred to another college, with their details and last results.'],
 };
@@ -13377,7 +13450,7 @@ async function loadSuppConsents() {
         <td>${safeText(r.level || '—')}</td>
         <td>${r.agreed_at ? safeText(new Date(r.agreed_at).toLocaleDateString()) : '<span style="color:var(--muted)">not yet</span>'}</td>
         <td>${r.paper_received_at ? `${safeText(new Date(r.paper_received_at).toLocaleDateString())} · <strong>${safeText(r.decision)}</strong>${r.paper_note ? ` <span style="color:var(--muted)">${safeText(r.paper_note)}</span>` : ''}` : (r.consent_id ? '<span class="badge badge-orange">not back</span>' : '—')}</td>
-        <td style="white-space:nowrap">${r.consent_id ? `<a class="btn btn-ghost btn-sm" href="/supp-consent/${r.consent_id}/print/" target="_blank" rel="noopener">Print</a>` : ''}
+        <td style="white-space:nowrap">${r.consent_id ? `<a class="btn btn-ghost btn-sm" href="/supp-consent/${r.consent_id}/download/" download>Download</a>` : ''}
           ${r.consent_id && keeps ? `<select id="sc-dec-${r.consent_id}" class="btn btn-secondary btn-sm"><option value="allowed">Allowed</option><option value="not_allowed">Not allowed</option></select>
           <button class="btn btn-primary btn-sm" onclick="recordSuppPaper(${r.consent_id}, ${jsArg(r.name)})">${r.paper_received_at ? 'Correct' : 'Signed copy back'}</button>` : ''}</td></tr>`).join('')
       : '<tr><td colspan="6"><div class="empty">Nobody here</div></td></tr>';
@@ -14387,7 +14460,7 @@ function detailsFormHtml(prefix, details, { withReason = false } = {}) {
       <div class="field"><label>Religion</label><input id="${prefix}-religion" maxlength="60" value="${safeText(details.religion || '')}"></div>
       <div class="field"><label>Education level now</label><input id="${prefix}-education-level" maxlength="120" value="${safeText(details.education_level || '')}" placeholder="e.g. Darasa la 7, Form Four"></div>
       ${details.veta_only ? '' : `<div class="field"><label>Form Four index No. (CSEE)</label>
-        <input id="${prefix}-f4" value="${safeText(details.form_four_index || '')}" placeholder="S0123/0045/2021"></div>`}
+        <input id="${prefix}-f4" value="${safeText(details.form_four_index || '')}" placeholder="S0123/0045/2021 or EQ2019000123"></div>`}
     </div>
     ${[1, 2].map(n => `<div class="form-grid-4">
       <div class="field"><label>Next of kin ${n}${n === 1 ? ' *' : ''}</label><input id="${prefix}-kin${n}-name" value="${safeText(kin(n).name || '')}"></div>
@@ -16491,6 +16564,8 @@ async function saveExpenseCategory(event) {
 
 const VETA_DESKS = { intake: 'Intake', information: 'Records', finance: 'Finance', admission: 'Admission',
                      admitted: 'Admitted', rejected: 'Refused', cancelled: 'Withdrawn' };
+const VETA_NEXT = { intake: 'Send to records →', information: 'Send to finance →', finance: 'Send to admission →',
+                    admission: 'Admit the student' };
 
 async function loadVeta(section = state.admissionSection) {
   try {
@@ -16515,8 +16590,15 @@ async function loadVeta(section = state.admissionSection) {
     document.getElementById('veta-intake-course').innerHTML = state.vetaCourses.length
       ? state.vetaCourses.map(p => `<option value="${p.id}">${safeText(p.code)} · ${safeText(p.name)} (${p.duration_months} months)</option>`).join('')
       : '<option value="">No VETA course yet — the Principal defines one under Departments</option>';
-    document.getElementById('veta-app-intake').innerHTML = intakes.filter(i => i.is_open)
-      .map(i => `<option value="${i.id}">${safeText(i.name)}</option>`).join('') || '<option value="">No intake is open</option>';
+    // The intake chosen stays chosen across reloads, and with more than one
+    // open nobody is put in the first by default (said 17 November 2026: with
+    // two courses open every application went to one of them).
+    const chosen = document.getElementById('veta-app-intake'), wasChosen = chosen.value;
+    const open = intakes.filter(i => i.is_open);
+    chosen.innerHTML = !open.length ? '<option value="">No intake is open</option>'
+      : (open.length > 1 ? '<option value="">— choose the intake —</option>' : '')
+        + open.map(i => `<option value="${i.id}">${safeText(i.name)} · ${safeText(i.programme_code)}</option>`).join('');
+    if (wasChosen && open.some(i => String(i.id) === wasChosen)) chosen.value = wasChosen;
     if (section === 'veta-applicants') await loadVetaApplications();
     if (section === 'veta-admitted') await loadVetaAdmitted();
   } catch (e) { toast(apiErrorText(e, 'Could not load the VETA courses'), 'var(--red)'); }
@@ -16593,12 +16675,12 @@ async function createVetaApplication(event) {
   const payload = { intake: Number(document.getElementById('veta-app-intake').value),
                     ...readNameParts('veta-app-name'),
                     phone: document.getElementById('veta-app-phone').value.trim() };
-  if (!payload.intake || !payload.first_name || !payload.last_name) { toast('Pick the intake and give the first and last name', 'var(--red)'); return; }
+  if (!payload.intake || !payload.first_name || !payload.last_name) { toast('Choose the intake and give the first and last name', 'var(--red)'); return; }
   const done = working(event?.currentTarget, 'Starting…');
   try {
     const made = await api('POST', '/course-applications/', payload);
     ['veta-app-name-first', 'veta-app-name-middle', 'veta-app-name-last', 'veta-app-phone'].forEach(id => document.getElementById(id).value = '');
-    toast('Application started — at the intake desk', 'var(--green)');
+    toast(`Application started for ${made.intake_name} — at the intake desk`, 'var(--green)');
     await loadVeta();
     openVetaModal(made.id);
   } catch (e) { toast(apiErrorText(e, 'Could not start it'), 'var(--red)'); }
@@ -16661,7 +16743,8 @@ async function openVetaModal(id) {
   }
   const actions = [];
   if (a.can_work) {
-    actions.push(`<button class="btn btn-primary btn-sm" onclick="vetaAction(event, 'clear')">${a.state === 'admission' ? 'Admit the student' : 'Clear this desk →'}</button>`);
+    // Each desk says where the student goes next (said 17 November 2026).
+    actions.push(`<button class="btn btn-primary btn-sm" onclick="vetaAction(event, 'clear')">${VETA_NEXT[a.state] || 'Clear this desk →'}</button>`);
     if (a.state !== 'intake') actions.push(`<button class="btn btn-ghost btn-sm" onclick="vetaAction(event, 'send-back')">Send back…</button>`);
   }
   if (a.can_refuse) actions.push(`<button class="btn btn-danger btn-sm" onclick="vetaAction(event, 'refuse')">Refuse…</button>`);
@@ -16749,7 +16832,7 @@ async function vetaAction(event, action) {
       closeVetaModal();
       document.getElementById('pin-modal').classList.add('open');
     } else {
-      toast(action === 'clear' ? 'Done — on to the next desk' : 'Done', 'var(--green)');
+      toast(action === 'clear' ? `Sent to ${VETA_DESKS[result.state] || 'the next desk'}` : 'Done', 'var(--green)');
       if (result.state && result.can_work) await openVetaModal(id); else closeVetaModal();
     }
     await loadVeta();
@@ -17025,7 +17108,7 @@ async function loadTimeToPay(prefix) {
           <div class="field"><label>Find a student</label><input id="${prefix}-ttp-q" type="search" placeholder="Name, NS number or college ID" oninput="renderTimeToPay('${prefix}')"></div>
         </div>
       </div>
-      <div class="card"><div class="card-title">Monthly tuition plans</div><div class="table-wrap"><table>
+      <div class="card"><div class="card-title">Monthly tuition plans <a class="btn btn-ghost btn-sm" style="margin-left:auto;text-decoration:none" href="/statements/monthly-plans/" target="_blank" rel="noopener" title="Every student on a plan this year, one statement a page">🖨 Print every plan's history</a></div><div class="table-wrap"><table>
         <thead><tr><th>Student</th><th class="num">A month</th><th class="num">Agreed</th><th class="num">Paid</th><th class="num">Remaining</th><th>Months paid</th><th>Next due</th><th>Status</th><th></th></tr></thead>
         <tbody id="${prefix}-ttp-plans"></tbody></table></div></div>
       <div class="card"><div class="card-title">Waivers with a pay-by date</div><div class="table-wrap"><table>
@@ -17046,7 +17129,7 @@ function renderTimeToPay(prefix) {
       <td>${p.months_paid} of ${p.months.length}</td>
       <td>${p.next_due ? `${safeText(ttpDate(p.next_due))}<div style="font-size:.72rem;color:var(--muted)">${money(p.next_amount)}<br>grace to ${safeText(ttpDate(p.until))}</div>` : (p.ended_on ? `ended ${safeText(ttpDate(p.ended_on))}` : '—')}</td>
       <td>${ttpBadge(p.state)}</td>
-      <td class="act"><button class="btn btn-ghost btn-sm" onclick="document.getElementById('${prefix}-plan-${p.id}').hidden = !document.getElementById('${prefix}-plan-${p.id}').hidden">Months</button></td></tr>
+      <td class="act"><button class="btn btn-ghost btn-sm" onclick="document.getElementById('${prefix}-plan-${p.id}').hidden = !document.getElementById('${prefix}-plan-${p.id}').hidden">Months</button> <button class="btn btn-ghost btn-sm" title="Print the payment history" onclick="printStatement(${p.profile_id})">🖨 Print</button></td></tr>
     <tr id="${prefix}-plan-${p.id}" hidden><td colspan="9"><div style="font-size:.78rem;margin-bottom:6px;color:var(--muted)">${safeText(p.reason)} · asked by ${safeText(p.requested_by)}${p.decided_by ? ` · agreed by ${safeText(p.decided_by)}` : ''}</div>
       <table><thead><tr><th>Month</th><th>Pay by</th><th class="num">Amount</th><th class="num">Paid</th></tr></thead><tbody>${p.months.map(m => `<tr><td>${m.number}</td><td>${safeText(ttpDate(m.due))}</td><td class="num">${money(m.amount)}</td><td class="num">${m.state === 'paid' ? '<span class="badge badge-green">Paid</span>' : money(m.paid)}</td></tr>`).join('')}</tbody></table></td></tr>`).join('')
     : '<tr><td colspan="9"><div class="empty">No monthly plans</div></td></tr>';
@@ -17055,7 +17138,7 @@ function renderTimeToPay(prefix) {
       <td class="num">${money(w.amount)}</td><td class="num"><strong>${money(w.outstanding)}</strong></td>
       <td style="white-space:nowrap">${safeText(ttpDate(w.pay_by))}${w.times_extended ? `<div style="font-size:.72rem;color:var(--muted)">first ${safeText(ttpDate(w.first_pay_by))}, moved ${w.times_extended}×</div>` : ''}</td>
       <td>${ttpBadge(w.state)}</td><td>${safeText(w.reason)}</td>
-      <td class="act">${data.can_record && w.state !== 'paid' ? waiverPayButton(prefix, w.id) : ''}${data.can_extend && w.state !== 'paid' ? `<button class="btn btn-warning btn-sm" onclick="document.getElementById('${prefix}-ext-${w.id}').hidden = !document.getElementById('${prefix}-ext-${w.id}').hidden">More time</button>` : ''}</td></tr>
+      <td class="act"><button class="btn btn-ghost btn-sm" title="Print the payment history" onclick="printStatement(${w.profile_id})">🖨</button> ${data.can_record && w.state !== 'paid' ? waiverPayButton(prefix, w.id) : ''}${data.can_extend && w.state !== 'paid' ? `<button class="btn btn-warning btn-sm" onclick="document.getElementById('${prefix}-ext-${w.id}').hidden = !document.getElementById('${prefix}-ext-${w.id}').hidden">More time</button>` : ''}</td></tr>
     ${data.can_record && w.state !== 'paid' ? waiverPayFormHtml(prefix, { ...w, to_pay: w.outstanding, written_off: false }, w.what, 8) : ''}
     ${data.can_extend && w.state !== 'paid' ? `<tr id="${prefix}-ext-${w.id}" hidden><td colspan="8"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
       <div class="field" style="margin:0;"><label>New date</label><input type="date" id="${prefix}-ext-date-${w.id}"></div>

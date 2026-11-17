@@ -178,6 +178,20 @@ class TheFourDesksTests(VetaBase):
         profile = CourseApplication.objects.get(id=app).profile
         self.assertTrue(StudentCharge.objects.filter(profile=profile, charge_type=self.hostel).exists())
 
+    def test_sent_to_records_it_leaves_the_admission_desk(self):
+        # Said 17 November 2026: "send to record still appears to admission and don't go to record".
+        _, intake = self.course_with_fees()
+        app = self.apply(intake)
+        self.admission.post(f'/api/course-applications/{app}/clear/', {}, format='json')
+        at_admission = self.admission.get(f'/api/course-applications/{app}/').data
+        self.assertEqual((at_admission['state'], at_admission['can_work']), ('information', False))
+        self.assertEqual(self.admission.post(f'/api/course-applications/{app}/details/', {'gender': 'F'},
+                                             format='json').status_code, 403)
+        self.assertEqual(self.admission.post(f'/api/course-applications/{app}/clear/', {},
+                                             format='json').status_code, 403)
+        at_records = self.records.get('/api/course-applications/?state=information').data
+        self.assertEqual([(row['id'], row['can_work']) for row in at_records], [(app, True)])
+
     def test_records_needs_a_next_of_kin_but_no_documents(self):
         _, intake = self.course_with_fees()
         app = self.apply(intake)

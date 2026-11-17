@@ -75,6 +75,22 @@ class FormFourIndexTests(RecordsBase):
         self.assertEqual(refused.status_code, 400)
         self.assertIn('S0123/0045/2021', refused.data['detail'])
 
+    def test_studied_abroad_the_necta_equivalence_number(self):
+        # Said 17 November 2026: students from abroad have EQ…, and a NACTVET number NEQ….
+        saved = self.records.post(f'/api/student-records/{self.profile.id}/',
+                                  {'form_four_index': ' eq 2019000123 '}, format='json')
+        self.assertEqual(saved.status_code, 200, saved.data)
+        self.assertEqual(saved.data['form_four_index'], 'EQ2019000123')
+        self.assertEqual(admissions.clean_form_four_index('EQ2019/0123'), 'EQ2019/0123')
+        for bad in ('EQ', 'EQ12', 'EQABC123'):
+            with self.assertRaises(admissions.AdmissionError):
+                admissions.clean_form_four_index(bad)
+
+    def test_a_neq_registration_number_is_kept_as_given(self):
+        profile = admissions.capture_student(nactvet_reg_no='neq0001/0012/2026', name='Amina Abroad',
+                                             form_four_index='EQ2020000456', actor=self.officer)
+        self.assertEqual((profile.nactvet_reg_no, profile.form_four_index), ('NEQ0001/0012/2026', 'EQ2020000456'))
+
     def test_one_person_per_number(self):
         other = self.student('NIT/PST/2026/0301', 'Someone Else')
         number = self.profile.form_four_index

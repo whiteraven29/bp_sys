@@ -21,9 +21,12 @@ urlpatterns = [
     path('announcements/<int:pk>/download/', att_views.announcement_download, name='announcement-download'),
     path('invoice/<str:reference>/', att_views.invoice_print, name='invoice-print'),
     path('statement/<int:profile_id>/', att_views.statement_print, name='statement-print'),
+    path('statements/monthly-plans/', att_views.statements_print_plans, name='statements-print-plans'),
+    path('payments/print/', att_views.payments_print, name='payments-print'),
     # An approved service request, as the college's own paper form.
     path('request/<int:pk>/', att_views.request_print, name='request-print'),
     # A supplementary student's consent form, to print, sign and bring back.
     path('supp-consent/<int:pk>/print/', consent_views.supp_consent_print, name='supp-consent-print'),
+    path('supp-consent/<int:pk>/download/', consent_views.supp_consent_print, name='supp-consent-download'),
     path('', login_required(TemplateView.as_view(template_name='index.html')), name='frontend'),
 ]

@@ -602,3 +602,61 @@ class PayFromTheWaiverTests(MonthlyPlanBase):
         self.assertEqual((rows[0]['to_pay'], rows[0]['written_off']), ('50000.00', True))
         self.assertTrue(self.accounts.get('/api/time-to-pay/').data['can_record'])
         self.assertFalse(self.dpfpa.get('/api/time-to-pay/').data['can_record'])
+
+
+class PrintingTheHistoryTests(MonthlyPlanBase):
+    """Said 17 November 2026: the payment history of a student on a monthly plan
+    printed for audit, and of every other student at finance."""
+
+    def setUp(self):
+        super().setUp()
+        self.pay('450000', 'P1')
+        self.plan_record = self.plan()
+        self.pay('250000', 'P2', on=date(2026, 11, 14))
+
+    def test_one_students_statement_shows_the_plan_and_what_each_slip_paid(self):
+        page = self.accounts.get(f'/statement/{self.profile.id}/')
+        self.assertEqual(page.status_code, 200)
+        text = page.content.decode()
+        for expected in ('D. Monthly tuition plan', 'Paid under the plan', 'Recorded by', 'P2',
+                         'instalment 1: 450,000.00', self.plan_record.academic_year.name):
+            self.assertIn(expected, text)
+
+    def test_a_dated_waiver_is_listed_with_its_date(self):
+        other = self.waiver('20000', date.today() + timedelta(days=9), family=ChargeType.DIRECT_COST)
+        text = self.accounts.get(f'/statement/{self.profile.id}/').content.decode()
+        self.assertIn('Waivers: time given to pay', text)
+        self.assertIn(f'{other.pay_by:%d-%m-%Y}', text)
+
+    def test_every_plan_student_at_once_and_who_may_print(self):
+        page = self.dpfpa.get('/statements/monthly-plans/')
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('1 student on a monthly tuition plan', page.content.decode())
+        self.assertEqual(office('rec9', 'records_officer')[1].get(f'/statement/{self.profile.id}/').status_code, 403)
+
+
+class OverallPrintTests(MonthlyPlanBase):
+    """Said 17 November 2026: "the print should be overall and student wise"."""
+
+    def setUp(self):
+        super().setUp()
+        self.pay('450000', 'P1')
+        self.plan()
+        self.pay('250000', 'P2', on=date(2026, 11, 14))
+
+    def test_every_payment_in_a_period(self):
+        page = self.accounts.get('/payments/print/?from=2026-11-01&to=2026-11-30')
+        self.assertEqual(page.status_code, 200)
+        text = page.content.decode()
+        self.assertIn('P2', text)
+        self.assertNotIn('P1', text)                                   # paid 10 Oct, outside the period
+        self.assertIn('250,000.00', text)
+        self.assertIn('Every student', text)
+        everything = self.accounts.get('/payments/print/').content.decode()
+        self.assertIn('P1', everything)
+        self.assertIn('700,000.00', everything)
+
+    def test_only_the_plan_students(self):
+        page = self.dpfpa.get('/payments/print/?plans=1')
+        self.assertIn('Students on a monthly tuition plan', page.content.decode())
+        self.assertEqual(office('rec8', 'records_officer')[1].get('/payments/print/').status_code, 403)

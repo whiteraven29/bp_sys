@@ -245,6 +245,17 @@ def course_modules(request):
 
 # ── applications through the desks ────────────────────────────────────────────
 
+def _works_desk(user, state):
+    """Whether this account works a VETA desk. As a PST application, except
+    the records desk: records' alone (the Principal covers every desk), so an
+    application the admission office sends on leaves its desk and waits for
+    records (said 17 November 2026: "send to record still appears to
+    admission and don't go to record")."""
+    if state == CourseApplication.INFORMATION:
+        return bool(user and user.is_authenticated) and (is_principal(user) or is_records_officer(user))
+    return can_work_desk(user, state)
+
+
 def _visible_applications(user):
     qs = CourseApplication.objects.select_related('profile', 'intake__programme', 'intake__academic_year')
     if runs_veta_courses(user):
@@ -261,7 +272,7 @@ def _application_row(app, user, *, full=False):
         'name': app.profile.name, 'reg_no': app.profile.nactvet_reg_no,
         'college_id': app.profile.college_id, 'residence': app.residence,
         'fees_raised': app.fees_raised_at is not None, 'created_at': app.created_at,
-        'can_work': app.is_open and can_work_desk(user, app.state),
+        'can_work': app.is_open and _works_desk(user, app.state),
         # The list shows who they are, not only where they are (said 28 October 2026).
         'phone': app.profile.phone, 'gender_display': app.profile.get_gender_display() if app.profile.gender else '',
         'programme_name': app.intake.programme.name, 'intake_starts_on': app.intake.starts_on,
@@ -337,7 +348,7 @@ def course_application_action(request, pk, action=None):
     note = str(request.data.get('note') or '')
     try:
         if action == 'details':
-            if not (app.state == CourseApplication.INFORMATION and can_work_desk(user, app.state)
+            if not (app.state == CourseApplication.INFORMATION and _works_desk(user, app.state)
                     or is_principal(user)):
                 raise PermissionDenied('The records desk takes the details.')
             kin = request.data.get('next_of_kin') or []
@@ -354,7 +365,7 @@ def course_application_action(request, pk, action=None):
                              and can_work_desk(user, CourseApplication.ADMISSION))
             if brought_later and str(request.data.get('status') or '') != 'has_it':
                 return _bad('After admission an item can only be recorded as brought (Has it).')
-            if not brought_later and not (app.state == CourseApplication.ADMISSION and can_work_desk(user, app.state)):
+            if not brought_later and not (app.state == CourseApplication.ADMISSION and _works_desk(user, app.state)):
                 raise PermissionDenied('Items are checked at the admission desk.')
             requirement = AdmissionRequirement.objects.filter(
                 id=pk_or_none(request.data.get('requirement_id'))).first()
@@ -367,7 +378,7 @@ def course_application_action(request, pk, action=None):
                 raise PermissionDenied('Finance raises the fees at its own desk.')
             veta.raise_fees(app, residence=request.data.get('residence'), actor=user)
         elif action == 'clear':
-            if not can_work_desk(user, app.state):
+            if not _works_desk(user, app.state):
                 raise PermissionDenied('This desk is worked by another office.')
             cleared = veta.clear_desk(app, actor=user, note=note)
             app.refresh_from_db()
@@ -376,7 +387,7 @@ def course_application_action(request, pk, action=None):
             row['portal_password'] = getattr(cleared, 'issued_pin', None)
             return Response(row)
         elif action == 'send-back':
-            if not can_work_desk(user, app.state):
+            if not _works_desk(user, app.state):
                 raise PermissionDenied('This desk is worked by another office.')
             veta.send_back(app, actor=user, note=note)
         elif action == 'refuse':

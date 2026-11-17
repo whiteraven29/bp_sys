@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Statement — {{ profile.nactvet_reg_no }}</title>
+<title>{{ title }}</title>
 <style>
   :root { --navy:#123A6B; --navy-soft:#EBF0F7; --ink:#1B2430; --muted:#6B7785; --rule:#DCE2EA; }
   * { box-sizing:border-box; }
@@ -29,10 +29,15 @@
   .signs { display:flex; gap:40px; margin-top:44px; }
   .signs div { flex:1; border-top:1px solid var(--ink); padding-top:6px; font-size:.78rem; color:var(--muted); }
   .note { color:var(--muted); font-size:.75rem; }
-  @media print { body { background:#fff; } .sheet { box-shadow:none; margin:0; padding:0; max-width:none; } }
+  .sheet + .sheet { page-break-before:always; break-before:page; }
+  .bundle { max-width:820px; margin:24px auto 0; color:var(--muted); font-size:.8rem; }
+  td .note { display:block; }
+  @media print { body { background:#fff; } .sheet { box-shadow:none; margin:0; padding:0; max-width:none; } .bundle { display:none; } }
 </style>
 </head>
 <body>
+{% if bundle %}<div class="bundle">{{ sheets|length }} student{{ sheets|length|pluralize }} on a monthly tuition plan in {{ bundle }} — one statement a page.</div>{% endif %}
+{% for sheet in sheets %}{% with profile=sheet.profile statement=sheet.statement %}
 <div class="sheet">
   <div class="head">
     <div>
@@ -50,7 +55,7 @@
   <h2>A. Student</h2>
   <table>
     <tr><th>Name</th><td>{{ profile.name }}</td><th>Registration no.</th><td>{{ profile.nactvet_reg_no }}</td></tr>
-    <tr><th>College ID</th><td>{{ profile.college_id|default:"—" }}</td><th>Standing</th><td>{{ standing|default:"—" }}</td></tr>
+    <tr><th>College ID</th><td>{{ profile.college_id|default:"—" }}</td><th>Standing</th><td>{{ sheet.standing|default:"—" }}</td></tr>
   </table>
 
   <h2>B. What was billed, year by year</h2>
@@ -61,7 +66,7 @@
       {% for charge in entry.charges %}
       <tr>
         <td>{% if forloop.first %}{{ entry.year.name }}{% endif %}</td>
-        <td>{{ charge.charge_type.name }}{% if charge.waived_reason %} <span class="note">({{ charge.waived_reason }})</span>{% endif %}</td>
+        <td>{{ charge.charge_type.name }}{% if charge.installment_number %}, instalment {{ charge.installment_number }}{% endif %}{% if charge.waived_reason %} <span class="note">({{ charge.waived_reason }})</span>{% endif %}</td>
         <td>{{ charge.due_date|date:"d-m-Y" }}</td>
         <td class="num">{{ charge.amount|floatformat:"2g" }}</td>
         <td class="num">{{ charge.waived_amount|floatformat:"2g" }}</td>
@@ -80,29 +85,68 @@
 
   <h2>C. Every payment received</h2>
   <table>
-    <thead><tr><th>Date</th><th>Channel</th><th>Bank reference</th><th>EFD receipt</th><th>Paid by</th><th class="num">Amount</th></tr></thead>
+    <thead><tr><th>Date on the slip</th><th>Channel · reference</th><th>EFD receipt</th><th>Paid by</th><th>What it paid</th><th>Recorded by</th><th class="num">Amount</th></tr></thead>
     <tbody>
     {% for payment in statement.payments %}
       <tr>
         <td>{{ payment.payment_date|date:"d-m-Y" }}</td>
-        <td>{{ payment.get_channel_display }}{% if payment.reverses_id %} — reversal{% endif %}</td>
-        <td>{{ payment.bank_reference|default:"—" }}</td>
+        <td>{{ payment.get_channel_display }}{% if payment.reverses_id %} — reversal{% endif %}<span class="note">{{ payment.bank_reference|default:"—" }}{% if payment.invoice %} · invoice {{ payment.invoice.reference }}{% endif %}</span></td>
         <td>{{ payment.efd_receipt_no|default:"—" }}</td>
         <td>{{ payment.payer_name|default:"—" }}</td>
+        <td>{% for line in payment.paid_for %}<span class="note">{{ line }}</span>{% endfor %}{% if payment.on_account > 0 %}<span class="note">On account: {{ payment.on_account|floatformat:"2g" }}</span>{% endif %}{% if payment.note %}<span class="note">{{ payment.note }}</span>{% endif %}</td>
+        <td>{{ payment.recorded_by_name|default:"—" }}<span class="note">{{ payment.created_at|date:"d-m-Y H:i" }}</span></td>
         <td class="num">{{ payment.amount|floatformat:"2g" }}</td>
       </tr>
     {% empty %}
-      <tr><td colspan="6">No payments recorded in this system.</td></tr>
+      <tr><td colspan="7">No payments recorded in this system.</td></tr>
     {% endfor %}
     </tbody>
   </table>
   <p class="note">Fees from before this system (kept in Excel) are not shown here.</p>
 
+  {% if sheet.plans %}
+  <h2>D. Monthly tuition plan{{ sheet.plans|length|pluralize }}</h2>
+  {% for plan in sheet.plans %}
+  <table style="margin-bottom:8px">
+    <tr><th>Academic year</th><td>{{ plan.year }}</td><th>Status</th><td>{{ plan.row.status_display }}{% if plan.row.ended_on %} (ended {{ plan.row.ended_on|date:"d-m-Y" }}){% endif %}</td></tr>
+    <tr><th>Agreed</th><td>{{ plan.row.total|floatformat:"2g" }} at {{ plan.row.monthly_amount|floatformat:"2g" }} a month</td><th>Agreed by</th><td>{{ plan.row.decided_by|default:"—" }}{% if plan.decided_at %}, {{ plan.decided_at|date:"d-m-Y" }}{% endif %}</td></tr>
+    <tr><th>Asked by</th><td>{{ plan.row.requested_by|default:"—" }}, {{ plan.row.requested_at|date:"d-m-Y" }}</td><th>Why</th><td>{{ plan.row.reason }}</td></tr>
+  </table>
+  <table style="margin-bottom:14px">
+    <thead><tr><th>Month</th><th>Pay by (7 days' grace)</th><th class="num">Amount</th><th class="num">Paid</th><th>State</th></tr></thead>
+    <tbody>
+    {% for month in plan.row.months %}
+      <tr><td>{{ month.number }}</td><td>{{ month.due|date:"d-m-Y" }}</td><td class="num">{{ month.amount|floatformat:"2g" }}</td>
+        <td class="num">{{ month.paid|floatformat:"2g" }}</td><td>{% if month.state == "paid" %}Paid{% elif month.state == "part" %}Part paid{% else %}Not paid{% endif %}</td></tr>
+    {% endfor %}
+      <tr class="sub"><td colspan="2">Paid under the plan · remaining</td><td class="num">{{ plan.row.total|floatformat:"2g" }}</td>
+        <td class="num">{{ plan.row.paid|floatformat:"2g" }}</td><td>{{ plan.row.remaining|floatformat:"2g" }} remaining</td></tr>
+    </tbody>
+  </table>
+  {% endfor %}
+  {% endif %}
+
+  {% if sheet.waivers %}
+  <h2>{% if sheet.plans %}E{% else %}D{% endif %}. Waivers: time given to pay</h2>
+  <table>
+    <thead><tr><th>On</th><th class="num">Short</th><th>To pay by</th><th>Approved by</th><th>Reason</th><th>State</th><th class="num">Still to pay</th></tr></thead>
+    <tbody>
+    {% for w in sheet.waivers %}
+      <tr><td>{{ w.what }}</td><td class="num">{{ w.amount|floatformat:"2g" }}</td>
+        <td>{{ w.pay_by|date:"d-m-Y"|default:"—" }}{% if w.times_extended %}<span class="note">first {{ w.first_pay_by|date:"d-m-Y" }}, moved {{ w.times_extended }}×</span>{% endif %}</td>
+        <td>{{ w.decided_by|default:"—" }}{% if w.decided_at %}<span class="note">{{ w.decided_at|date:"d-m-Y" }}</span>{% endif %}</td>
+        <td>{{ w.reason }}</td><td>{{ w.state }}</td>
+        <td class="num">{% if w.still_to_pay is None %}—{% else %}{{ w.still_to_pay|floatformat:"2g" }}{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
   <div class="totals">
     <div><span>Billed</span><span>{{ statement.totals.billed|floatformat:"2g" }}</span></div>
     <div><span>Waived</span><span>{{ statement.totals.waived|floatformat:"2g" }}</span></div>
     <div><span>Received</span><span>{{ statement.received|floatformat:"2g" }}</span></div>
-    <div class="due"><span>{% if statement.totals.balance < 0 %}In credit{% else %}Owed{% endif %}</span><span>{{ balance_abs|floatformat:"2g" }}</span></div>
+    <div class="due"><span>{% if statement.totals.balance < 0 %}In credit{% else %}Owed{% endif %}</span><span>{{ sheet.balance_abs|floatformat:"2g" }}</span></div>
   </div>
 
   <div class="signs">
@@ -110,6 +154,9 @@
     <div>Principal — name, signature, stamp</div>
   </div>
 </div>
+{% endwith %}{% empty %}
+<div class="sheet"><p>Nobody to print.</p></div>
+{% endfor %}
 {% if auto_print %}<script>window.addEventListener('load', () => setTimeout(() => window.print(), 250));</script>{% endif %}
 </body>
 </html>

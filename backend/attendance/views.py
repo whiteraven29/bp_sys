@@ -63,7 +63,7 @@ from .models import (
     ChargeType, FeeStructure, FeeInstallment, StudentProfile, StudentCharge,
     Invoice, InvoiceLine, Payment, PaymentAllocation, FinanceOverride, FinanceAuditLog,
     BankAccount, CollegeProfile,
-    CatNumberFormat, Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration, StudentPass, WaiverRequest,
+    CatNumberFormat, Department, Programme, RecordsOfficerProfile, AdmissionOfficerProfile, SemesterRegistration, StudentPass, WaiverRequest, MonthlyPlan,
     OutstandingRepeat, SemesterReview, StudentStanding, StandingChange, Notification,
     AdmissionWindow, CollegeIdFormat, AdmissionRequirement, RequirementCheck, Application,
     PaymentSchedule, StudentResidence, HostelApplication, Postponement, ResultCorrection, ResultRelease, ResultWithholding,
@@ -4221,21 +4221,131 @@ def finishing_action(request, profile_id, step):
     return Response(_finishing_row(row))
 
 
+def _prints_statements(user):
+    """The accountant and the Principal sign statements; DPFPA reads them for
+    audit (said 17 November 2026)."""
+    return can_see_finishing(user) or is_dpfpa(user)
+
+
+def _statement_sheet(profile, names):
+    """One student's statement: every charge, every payment (what it paid,
+    who recorded it), and the time given to pay — monthly plans month by
+    month, waivers with their dates."""
+    statement = finance.full_statement(profile)
+    for payment in statement['payments']:
+        payment.recorded_by_name = names(payment.recorded_by)
+    standing = getattr(profile, 'standing', None)
+    plans = [{'year': plan.academic_year.name, 'row': time_to_pay.plan_row(plan),
+              'decided_at': plan.decided_at}
+             for plan in profile.monthly_plans.exclude(status__in=[MonthlyPlan.REFUSED, MonthlyPlan.CANCELLED])
+             .select_related('profile', 'academic_year', 'requested_by', 'decided_by').order_by('requested_at')]
+    waivers = []
+    for waiver in (WaiverRequest.objects.filter(profile=profile, status__in=[WaiverRequest.APPROVED,
+                                                                           WaiverRequest.REPLACED])
+                   .select_related('charge__charge_type', 'decided_by').order_by('requested_at')):
+        approved = waiver.status == WaiverRequest.APPROVED
+        waivers.append({
+            'what': finance.waiver_label(waiver), 'amount': waiver.amount, 'reason': waiver.reason,
+            'pay_by': waiver.pay_by, 'first_pay_by': waiver.first_pay_by, 'times_extended': waiver.times_extended,
+            'decided_by': names(waiver.decided_by), 'decided_at': waiver.decided_at,
+            'state': ('Replaced by a monthly plan' if not approved else 'Written off (before 6 Nov 2026)'
+                      if waiver.pay_by is None else {'paid': 'Paid', 'running': 'Date running',
+                                                     'expired': 'Date passed'}[time_to_pay.waiver_state(waiver)]),
+            'still_to_pay': time_to_pay.still_to_pay(waiver) if approved else None,
+        })
+    return {'profile': profile, 'statement': statement, 'plans': plans, 'waivers': waivers,
+            'standing': standing.get_status_display() if standing else '',
+            'balance_abs': abs(statement['totals']['balance'])}
+
+
+def _names_once():
+    known = {}
+
+    def name(user):
+        if user is None:
+            return ''
+        if user.pk not in known:
+            known[user.pk] = full_name_for(user)
+        return known[user.pk]
+    return name
+
+
 @login_required
 def statement_print(request, profile_id):
     """Every charge in every year and every payment since the student started,
-    printed for the accountant and the Principal to sign."""
-    if not can_see_finishing(request.user):
+    printed for the accountant and the Principal to sign, and for audit."""
+    if not _prints_statements(request.user):
         # A page, not the API: Django's own refusal, answered with a 403.
         from django.core.exceptions import PermissionDenied as PageDenied
-        raise PageDenied('For the accountant and the Principal.')
+        raise PageDenied('For the accountant, DPFPA and the Principal.')
     profile = get_object_or_404(StudentProfile.objects.select_related('standing'), pk=profile_id)
-    statement = finance.full_statement(profile)
-    standing = getattr(profile, 'standing', None)
     return render(request, 'statement_print.html', {
-        'profile': profile, 'statement': statement,
-        'standing': standing.get_status_display() if standing else '',
-        'balance_abs': abs(statement['totals']['balance']),
+        'sheets': [_statement_sheet(profile, _names_once())], 'title': f'Statement — {profile.nactvet_reg_no}',
+        'college': CollegeProfile.get(), 'printed_on': timezone.localdate(),
+        'auto_print': request.GET.get('download') in ('1', 'true', 'yes'),
+    })
+
+
+@login_required
+def payments_print(request):
+    """Every payment recorded in a period, for every student — the overall
+    history, beside each student's own statement (said 17 November 2026: "the
+    print should be overall and student wise"). `plans=1`: only students on a
+    monthly tuition plan."""
+    if not _prints_statements(request.user):
+        from django.core.exceptions import PermissionDenied as PageDenied
+        raise PageDenied('For the accountant, DPFPA and the Principal.')
+    start, end = _a_date(request.GET.get('from')), _a_date(request.GET.get('to'))
+    payments = (Payment.objects.exclude(channel=Payment.CREDIT)
+                .select_related('profile', 'recorded_by', 'invoice', 'bank_account', 'reverses')
+                .prefetch_related('allocations__charge__charge_type', 'allocations__charge__academic_year')
+                .order_by('payment_date', 'id'))
+    if start:
+        payments = payments.filter(payment_date__gte=start)
+    if end:
+        payments = payments.filter(payment_date__lte=end)
+    only_plans = request.GET.get('plans') == '1'
+    if only_plans:
+        payments = payments.filter(profile__monthly_plans__status__in=[
+            MonthlyPlan.ACTIVE, MonthlyPlan.COMPLETED, MonthlyPlan.LAPSED]).distinct()
+    payments = list(payments[:5000])
+    names = _names_once()
+    by_channel, by_account, students = {}, {}, set()
+    for payment in payments:
+        payment.recorded_by_name = names(payment.recorded_by)
+        payment.paid_for = [f'{a.charge.charge_type.name} {a.charge.academic_year.name}'
+                            + (f', inst. {a.charge.installment_number}' if a.charge.installment_number else '')
+                            + f': {finance.money(a.amount):,.2f}' for a in payment.allocations.all()]
+        by_channel[payment.get_channel_display()] = by_channel.get(payment.get_channel_display(), finance.ZERO) + payment.amount
+        account = (f'{payment.bank_account.bank_name} {payment.bank_account.account_number}'
+                   if payment.bank_account_id else 'Not stated')
+        by_account[account] = by_account.get(account, finance.ZERO) + payment.amount
+        students.add(payment.profile_id)
+    return render(request, 'payments_print.html', {
+        'payments': payments, 'start': start, 'end': end, 'only_plans': only_plans,
+        'by_channel': sorted(by_channel.items()), 'by_account': sorted(by_account.items()),
+        'total': sum((p.amount for p in payments), finance.ZERO), 'students': len(students), 'capped': len(payments) == 5000,
+        'college': CollegeProfile.get(), 'printed_on': timezone.localdate(),
+    })
+
+
+@login_required
+def statements_print_plans(request):
+    """Every student on a monthly tuition plan in a year, one statement a
+    page, for audit (said 17 November 2026)."""
+    if not _prints_statements(request.user):
+        from django.core.exceptions import PermissionDenied as PageDenied
+        raise PageDenied('For the accountant, DPFPA and the Principal.')
+    year = (AcademicYear.objects.filter(id=pk_or_none(request.GET.get('academic_year_id'))).first()
+            or active_academic_year())
+    profile_ids = (MonthlyPlan.objects.filter(academic_year=year)
+                   .exclude(status__in=[MonthlyPlan.REFUSED, MonthlyPlan.CANCELLED, MonthlyPlan.PENDING])
+                   .values_list('profile_id', flat=True).distinct()) if year else []
+    names = _names_once()
+    profiles = StudentProfile.objects.filter(id__in=list(profile_ids)).select_related('standing').order_by('name')
+    return render(request, 'statement_print.html', {
+        'sheets': [_statement_sheet(profile, names) for profile in profiles],
+        'title': f'Monthly tuition plans — {year.name if year else ""}', 'bundle': year.name if year else '',
         'college': CollegeProfile.get(), 'printed_on': timezone.localdate(),
         'auto_print': request.GET.get('download') in ('1', 'true', 'yes'),
     })

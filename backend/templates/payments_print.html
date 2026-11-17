@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Payments {% if start %}{{ start|date:"d-m-Y" }}{% endif %}{% if end %} to {{ end|date:"d-m-Y" }}{% endif %}</title>
+<style>
+  :root { --navy:#123A6B; --navy-soft:#EBF0F7; --ink:#1B2430; --muted:#6B7785; --rule:#DCE2EA; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#EDEFF2; color:var(--ink);
+         font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; font-size:13px; line-height:1.5; }
+  .sheet { max-width:1000px; margin:24px auto; background:#fff; padding:40px 44px 32px;
+           box-shadow:0 1px 6px rgba(0,0,0,.13); }
+  .head { display:flex; justify-content:space-between; gap:24px; align-items:flex-start;
+          border-bottom:2px solid var(--navy); padding-bottom:14px; }
+  .college { font-size:1.15rem; font-weight:700; color:var(--navy); }
+  .contact { color:var(--muted); font-size:.78rem; }
+  h1 { font-size:1.5rem; color:var(--navy); margin:0; text-align:right; }
+  .kind { font-size:.7rem; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); text-align:right; }
+  h2 { font-size:.82rem; text-transform:uppercase; letter-spacing:.06em; margin:24px 0 8px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { border:1px solid var(--rule); padding:6px 8px; text-align:left; font-size:.8rem; }
+  th { background:var(--navy-soft); font-weight:600; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr.sub td { font-weight:700; background:#F7F9FC; }
+  .totals { margin-top:18px; margin-left:auto; width:320px; background:var(--navy-soft); padding:14px 18px; }
+  .totals div { display:flex; justify-content:space-between; padding:3px 0; }
+  .totals .due { border-top:1px solid #C6D2E2; margin-top:8px; padding-top:8px; font-size:1.05rem; font-weight:700; color:var(--navy); }
+  .signs { display:flex; gap:40px; margin-top:44px; }
+  .signs div { flex:1; border-top:1px solid var(--ink); padding-top:6px; font-size:.78rem; color:var(--muted); }
+  .note { color:var(--muted); font-size:.75rem; }
+  .sheet + .sheet { page-break-before:always; break-before:page; }
+  .bundle { max-width:1000px; margin:24px auto 0; color:var(--muted); font-size:.8rem; }
+  td .note { display:block; }
+  @media print { body { background:#fff; } .sheet { box-shadow:none; margin:0; padding:0; max-width:none; } .bundle { display:none; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="head">
+    <div>
+      <div class="college">{{ college.name }}</div>
+      <div class="contact">{{ college.po_box }}{% if college.town %}, {{ college.town }}{% endif %}{% if college.country %}, {{ college.country }}{% endif %}</div>
+      <div class="contact">{{ college.phone }}{% if college.email %} · {{ college.email }}{% endif %}</div>
+    </div>
+    <div>
+      <h1>Payments received</h1>
+      <div class="kind">{% if only_plans %}Students on a monthly tuition plan{% else %}Every student{% endif %}</div>
+      <div class="kind">{% if start or end %}{{ start|date:"d M Y"|default:"From the first" }} — {{ end|date:"d M Y"|default:"today" }}{% else %}Every date{% endif %}</div>
+      <div class="kind">Printed {{ printed_on|date:"d M Y" }}</div>
+    </div>
+  </div>
+
+  <h2>A. In total</h2>
+  <table>
+    <tr><th>Payments</th><td class="num">{{ payments|length }}</td><th>Students</th><td class="num">{{ students }}</td><th>Received</th><td class="num"><strong>{{ total|floatformat:"2g" }}</strong></td></tr>
+  </table>
+  <div style="display:flex;gap:16px;margin-top:8px;align-items:flex-start">
+    <table>
+      <thead><tr><th>Paid through</th><th class="num">Amount</th></tr></thead>
+      <tbody>{% for row in by_channel %}<tr><td>{{ row.0 }}</td><td class="num">{{ row.1|floatformat:"2g" }}</td></tr>{% endfor %}</tbody>
+    </table>
+    <table>
+      <thead><tr><th>Paid into</th><th class="num">Amount</th></tr></thead>
+      <tbody>{% for row in by_account %}<tr><td>{{ row.0 }}</td><td class="num">{{ row.1|floatformat:"2g" }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  {% if capped %}<p class="note">Only the first 5,000 payments are printed: choose a shorter period.</p>{% endif %}
+
+  <h2>B. Every payment</h2>
+  <table>
+    <thead><tr><th>Date on the slip</th><th>Student</th><th>Channel · reference</th><th>EFD receipt</th><th>What it paid</th><th>Recorded by</th><th class="num">Amount</th></tr></thead>
+    <tbody>
+    {% for payment in payments %}
+      <tr>
+        <td>{{ payment.payment_date|date:"d-m-Y" }}</td>
+        <td>{{ payment.profile.name }}<span class="note">{{ payment.profile.nactvet_reg_no }}{% if payment.profile.college_id %} · {{ payment.profile.college_id }}{% endif %}</span></td>
+        <td>{{ payment.get_channel_display }}{% if payment.reverses_id %} — reversal{% endif %}<span class="note">{{ payment.bank_reference|default:"—" }}{% if payment.invoice %} · invoice {{ payment.invoice.reference }}{% endif %}</span></td>
+        <td>{{ payment.efd_receipt_no|default:"—" }}</td>
+        <td>{% for line in payment.paid_for %}<span class="note">{{ line }}</span>{% empty %}<span class="note">On account</span>{% endfor %}</td>
+        <td>{{ payment.recorded_by_name|default:"—" }}<span class="note">{{ payment.created_at|date:"d-m-Y H:i" }}</span></td>
+        <td class="num">{{ payment.amount|floatformat:"2g" }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="7">No payments in this period.</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if payments %}<tfoot><tr class="sub"><td colspan="6">Total</td><td class="num">{{ total|floatformat:"2g" }}</td></tr></tfoot>{% endif %}
+  </table>
+  <p class="note">Each student's own history: Statement ▸ Print. Reversals are listed with their negative amounts, so the total is what stands.</p>
+
+  <div class="signs">
+    <div>Accountant — name, signature, date</div>
+    <div>Principal — name, signature, stamp</div>
+  </div>
+</div>
+</body>
+</html>

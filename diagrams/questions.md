@@ -1149,3 +1149,19 @@ to just pass the student until some time when they come to pay".
 Should they all go back on the bill now, each with a date DPFPA sets? That would hold those students again until they
 pay or are given a date. And the payment desk itself still pays the oldest instalment first: say if it should also offer
 "Pays which instalment".
+
+### Q83. Five fixes of 17 November ●
+
+**Asked (17 November 2026):** (1) a VETA application sent to records stays with admission; (2) with two VETA courses
+open, applications go to one; (3) students from abroad (index EQ…, registration NEQ…) cannot pass records; (4) print the
+payment history of students on monthly plans, and of every other student, for audit; (5) smaller text and cards.
+
+**Built (uncommitted; no migration):** all five. Release guide 06, "Five fixes of 17 November".
+
+**Then (same day):** "the print should be overall and student wise" — Payment History ▸ Print overall added beside each
+student's statement; the consent form "just download, not print" — one Download button, a one-page PDF.
+
+**Still yours:** (a) the PST records desk can still be worked by the admission office as well as records (since
+21 September). Should it be records' alone, like VETA's now? (b) The exact form of NECTA's equivalence number: the system
+takes EQ followed by digits (with or without slashes). If yours look different, send one or two (no names).
+

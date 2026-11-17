@@ -2669,7 +2669,7 @@
     const status = !data.filled_in ? ''
       : data.paper_received_at
         ? `<p style="margin:8px 0 0"><strong>Signed copy received</strong> ${esc(new Date(data.paper_received_at).toLocaleDateString())}${data.decision ? ` — the Principal: ${esc(data.decision)}` : ''}.</p>`
-        : `<p style="margin:8px 0 0">Filled in on ${esc(new Date(data.agreed_at).toLocaleDateString())}. <strong>Print it, sign Part C and bring it to the admission office</strong> for the Principal's signature and stamp.</p>`;
+        : `<p style="margin:8px 0 0">Filled in on ${esc(new Date(data.agreed_at).toLocaleDateString())}. <strong>Download it, print it, sign Part C and bring it to the admission office</strong> for the Principal's signature and stamp.</p>`;
     box.innerHTML = `<div class="notice" style="margin:0 0 14px;border-left-color:var(--amber);">
       <strong>Consent form — supplementary examination</strong>
       Your results ask for a supplementary. To continue to ${esc(data.level || 'the next level')} while you prepare for it, read the conditions${data.filled_in ? '' : ' and fill in the form'}.
@@ -2677,13 +2677,13 @@
         <div style="margin-top:8px"><strong>Sehemu A</strong>${lines(w.part_a)}<strong>Sehemu B</strong>${lines(w.part_b)}<strong>Sehemu C</strong>${lines(w.part_c)}</div>
       </details>
       ${data.filled_in
-        ? `${status}<p style="margin:8px 0 0"><a class="btn-mini" href="/supp-consent/${data.consent_id}/print/?download=1" target="_blank" rel="noopener">Print the form</a></p>`
+        ? `${status}<p style="margin:8px 0 0"><a class="btn-mini" href="/supp-consent/${data.consent_id}/download/" download>Download the form (PDF)</a></p>`
         : `<label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="supp-consent-agree"> <span>Nimesoma masharti na ninaridhia (I have read the conditions and agree).</span></label>
            <p style="margin:8px 0 0"><button type="button" class="btn-mini" id="supp-consent-send">Fill in the form</button></p>`}
     </div>`;
     document.getElementById('supp-consent-send')?.addEventListener('click', async () => {
       if (!document.getElementById('supp-consent-agree').checked) { toast('Tick that you have read the conditions and agree.'); return; }
-      try { await api('POST', '/my-supp-consent/'); toast('Filled in — now print it, sign it and bring it back.'); loadSuppConsent(); }
+      try { await api('POST', '/my-supp-consent/'); toast('Filled in — now download it, print it, sign it and bring it back.'); loadSuppConsent(); }
       catch (error) { toast(error?.detail || 'Could not send it.'); }
     });
   }

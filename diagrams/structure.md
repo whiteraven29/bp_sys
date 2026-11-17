@@ -53,8 +53,12 @@ When the structure changes, update this file in the same change.
                           Ansible, guides 01–06
 ```
 
-Printable pages (no API): `invoice/<ref>/`, `statement/<profile>/`,
-`request/<pk>/`.
+Printable pages (no API): `invoice/<ref>/`, `statement/<profile>/` (every charge
+and payment, what each paid and who recorded it, monthly plans month by month,
+waivers with dates), `statements/monthly-plans/` (every plan student of the
+year, one a page), `payments/print/` (every payment in a period, every student;
+`?plans=1` plan students only), `request/<pk>/`. Downloads (PDF, made by
+`attendance/pdf.py`, no library): the invoice, `supp-consent/<pk>/download/`.
 
 ---
 
@@ -145,7 +149,8 @@ ICT officer's.
    ├──► AttendanceRecord   per Session
    └──► profile ──► StudentProfile   one row per PERSON
                       nactvet_reg_no (unique), college_id, phone,
-                      gender, DOB, form_four_index (PST, unique),
+                      gender, DOB, form_four_index (PST, unique;
+                      S…/P… or NECTA's EQ… equivalence number),
                       address, guarantor / sponsor, passport photo
                       (media/passports/, served only through the app),
                       NextOfKin ×2, StudentEducation (O-level, A-level,
@@ -482,7 +487,7 @@ are dropped once the production row counts are checked.
 | `load_curriculum [path] [--dry-run]` | the curriculum and assessment plans (default: 2022 PST, NTA 4–6); updates in place |
 | `load_teaching_calendar [path] [--dry-run]` | the almanac's teaching weeks, holidays, CAT weeks, exams, CQI dates (default 2026/27) |
 
-Tests: 1373 on the branch `feature/teaching-plans` (1330 on master), run as described in `ops/guides/06-release-2026-27.md`.
+Tests: 1381 on master (teaching plans merged, 17 Nov 2026), run as described in `ops/guides/06-release-2026-27.md`.
 
 ## 7. The look (said 10 November 2026)
 

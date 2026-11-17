@@ -2,18 +2,22 @@
 student fills it in and prints it from the portal; the admission office keeps
 the wording and records the signed hard copy. See consent.py."""
 
+import re
+
 from django.contrib.auth.decorators import login_required
-from django.http import Http404
-from django.shortcuts import get_object_or_404, redirect, render
+from django.http import Http404, HttpResponse
+from django.shortcuts import get_object_or_404, redirect
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from . import consent
+from . import consent, pdf
 from .models import CollegeProfile, SuppConsent
+from .registers import LOGO
 from .roles import is_admission_officer, is_break_glass, is_dparc, is_principal, is_records_officer
-from .views import _student_profile, _pass_logo, full_name_for, portal_signed_in
+from .views import _student_profile, full_name_for, portal_signed_in
 
 
 def _keeps_the_form(user):
@@ -60,9 +64,107 @@ def my_supp_consent(request):
     return Response(_mine(view), status=status.HTTP_201_CREATED if request.method == 'POST' else status.HTTP_200_OK)
 
 
+NAVY, INK, MUTED, LINE = '#123F80', '#1E293B', '#6B7785', '#DCE2EA'
+
+
+def _dashed_box(doc, x, y, w, h, *, dash=3):
+    """The stamp's box: dashes, so it reads as a place to stamp."""
+    for start in range(0, int(w), 2 * dash):
+        end = min(start + dash, w)
+        doc.line(x + start, y, x + end, y, colour=MUTED, thickness=.7)
+        doc.line(x + start, y + h, x + end, y + h, colour=MUTED, thickness=.7)
+    for start in range(0, int(h), 2 * dash):
+        end = min(start + dash, h)
+        doc.line(x, y + start, x, y + end, colour=MUTED, thickness=.7)
+        doc.line(x + w, y + start, x + w, y + end, colour=MUTED, thickness=.7)
+
+
+def consent_pdf(record):
+    """The form as the student agreed to it, as a one-page PDF (the same writer
+    as the invoice download, pdf.py): the college, the four parts, two places
+    to sign, the stamp."""
+    college = CollegeProfile.get()
+    wording = record.wording or {}
+    doc = pdf.Document()
+    margin, top, bottom = 48, 30, 30
+    width = doc.page_w - 2 * margin
+    y = top
+
+    def room(height):
+        nonlocal y
+        if y + height > doc.page_h - bottom:
+            doc.new_page()
+            y = top
+
+    def lines(text, *, font='regular', size=9.2, lead=11.8, align='left', colour=INK):
+        nonlocal y
+        for line in pdf.wrap(text, size, width, font):
+            room(lead)
+            x = doc.page_w / 2 if align == 'center' else margin
+            doc.text(x, y + size, line, size=size, font=font, align=align, colour=colour)
+            y += lead
+
+    def paragraphs(block):
+        nonlocal y
+        for line in [part for part in (block or '').splitlines() if part.strip()]:
+            lines(line)
+            y += 2
+
+    def heading(text):
+        nonlocal y
+        y += 5
+        room(40)
+        lines(text, font='bold', size=10, lead=14)
+
+    def sign_here(stamp=False):
+        nonlocal y
+        room(58 if stamp else 28)
+        y += 18
+        doc.text(margin, y, 'Saini:', size=9.5, colour=INK)
+        doc.line(margin + 34, y + 2, margin + 200, y + 2, colour=MUTED)
+        doc.text(margin + 214, y, 'Tarehe:', size=9.5, colour=INK)
+        doc.line(margin + 254, y + 2, margin + 330, y + 2, colour=MUTED)
+        if stamp:      # the office's stamp beside the Principal's signature
+            _dashed_box(doc, margin + width - 140, y - 26, 140, 56)
+            doc.text(margin + width - 70, y + 6, 'Muhuri wa ofisi', size=9, colour=MUTED, align='center')
+            y += 30
+        y += 8
+
+    lines((college.name or '').upper(), font='bold', size=13, lead=18, align='center', colour=NAVY)
+    try:
+        doc.image(pdf.png_image(LOGO), doc.page_w / 2 - 25, y + 2, 50, 50)
+        y += 56
+    except (OSError, ValueError):
+        pass
+    doc.line(margin, y + 4, margin + width, y + 4, colour=NAVY, thickness=1.6)
+    y += 16
+    lines(wording.get('title', ''), font='bold', size=10.5, lead=14, align='center')
+    y += 2
+    heading('Sehemu A: Uelewa kuhusiana na Miongozo')
+    paragraphs(wording.get('part_a'))
+    heading('Sehemu B: Masharti ya kuendelea na ngazi inayofuata')
+    paragraphs(wording.get('part_b'))
+    heading('Sehemu C: Ridhaa ya Mwanafunzi')
+    paragraphs(wording.get('part_c'))
+    sign_here()
+    heading('Sehemu D: Ruhusa ya Mkuu wa Chuo')
+    paragraphs(wording.get('part_d'))
+    sign_here(stamp=True)
+    # The footer sits at the foot of the last page, below the margin the text keeps.
+    profile = record.profile
+    agreed = timezone.localtime(record.agreed_at).strftime('%d %b %Y %H:%M') if record.agreed_at else ''
+    foot = doc.page_h - 24
+    doc.line(margin, foot - 10, margin + width, foot - 10, colour=LINE, thickness=.5)
+    doc.text(doc.page_w / 2, foot, f'{profile.nactvet_reg_no} · {profile.name} · {record.next_level} · Imejazwa '
+             f'mtandaoni (filled in online) {agreed} · {record.form.academic_year.name}',
+             size=7.5, colour=MUTED, align='center')
+    return doc.output(title=wording.get('title', ''))
+
+
 def supp_consent_print(request, pk):
-    """The form as filled in, to print, sign and bring back — for the student
-    who filled it in, and for the offices that keep it."""
+    """The form as filled in, downloaded as a PDF to print, sign and bring
+    back — for the student who filled it in, and for the offices that keep it.
+    One download, no print dialog (said 17 November 2026)."""
     record = get_object_or_404(SuppConsent.objects.select_related('profile', 'form__academic_year'), pk=pk)
     if portal_signed_in(request):
         mine = _student_profile(request)
@@ -70,13 +172,10 @@ def supp_consent_print(request, pk):
             raise Http404('No such form.')
     elif not (request.user.is_authenticated and _reads_the_list(request.user)):
         return redirect('login')
-    return render(request, 'supp_consent_print.html', {
-        'consent': record, 'wording': record.wording, 'college': CollegeProfile.get(), 'logo': _pass_logo(),
-        'part_a': [line for line in record.wording.get('part_a', '').splitlines() if line.strip()],
-        'part_b': [line for line in record.wording.get('part_b', '').splitlines() if line.strip()],
-        'part_d': [line for line in record.wording.get('part_d', '').splitlines() if line.strip()],
-        'auto_print': request.GET.get('download') == '1',
-    })
+    response = HttpResponse(consent_pdf(record), content_type='application/pdf')
+    name = re.sub(r'[^A-Za-z0-9]+', '-', record.profile.nactvet_reg_no).strip('-') or 'student'
+    response['Content-Disposition'] = f'attachment; filename="Supplementary-consent-{name}.pdf"'
+    return response
 
 
 # ── the offices ───────────────────────────────────────────────────────────────
