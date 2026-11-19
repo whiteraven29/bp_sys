@@ -58,6 +58,10 @@ def dparc():
     return _users_holding(DeputyAcademicProfile)
 
 
+def principal():
+    return _users_holding(PrincipalProfile)
+
+
 def deans():
     """The Dean of Students, who deals with students' welfare day to day: told
     about every request, postponement and hostel application (said 16 October

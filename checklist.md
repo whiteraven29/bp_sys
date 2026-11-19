@@ -622,6 +622,15 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [ ] `python manage.py migrate` on the laptop (0088); on the server the deploy applies it
    - [ ] The Principal gives the QA office to the QA officer (User accounts ▸ Roles) before tutors send PDFs
    - [ ] Tell the tutors: upload the plan as a PDF first; nothing to lay out until QA approves
+   - [x] A plan the QA officer teaches goes to DPARC (the Principal if DPARC teaches it too); *Plans to approve* for
+     DPARC and the Principal lists only those (`tp.plan_approver`, 2 tests)
+   - [x] Reopen the set-up (your live test: laid on Monday and Thursday instead of Wednesday to Friday, three
+     classes marked): unmark the classes, Reopen with a reason, lay out again, set up again; refused while a class
+     is marked or once a test went for moderation (`tp.reopen`, `POST …/reopen/`, 2 tests)
+   - [ ] On the server after the deploy: unmark the three classes, reopen, lay out Wednesday–Friday, set up again
+   - [x] Curriculum for tutors (19 Nov, your request): a tutor sees only the curriculum modules of the modules they
+     teach (the one their plan follows, or the one the module matches); opening another is refused. The Principal,
+     DPARC, QA and the Heads of Department still see every module (`tp.curriculum_scope`; 2 tests)
 
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
    - [ ] Migrations to 0085 applied by the deploy (release guide B1–B4); `Ran 1330 tests … OK` on the laptop first

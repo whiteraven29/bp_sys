@@ -1175,3 +1175,11 @@ plans and moderates tests; plans started before keep their classes and ask for t
 
 **Built (uncommitted; migration 0088):** guide 07, "QA approves the plan first, as a PDF".
 
+### Q85. A QA officer's own plan; undoing a plan set up on the wrong days ✅
+
+**Asked (19 November 2026):** "how does QA approve their own plan?" — then "okay do that", and how to revert a live test plan
+laid on Monday and Thursday instead of Wednesday to Friday with three classes marked.
+
+**Built (uncommitted; no migration):** DPARC approves a plan the QA officer teaches (the Principal if DPARC teaches it too);
+**Reopen the set-up** after unmarking. Guide 07.
+

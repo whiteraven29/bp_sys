@@ -136,6 +136,7 @@ urlpatterns = [
     path('teaching-plans/<int:pk>/', teaching_plan_views.plan, name='teaching-plan'),
     path('teaching-plans/<int:pk>/lay-out/', teaching_plan_views.lay_out, name='teaching-plan-lay-out'),
     path('teaching-plans/<int:pk>/submit/', teaching_plan_views.submit, name='teaching-plan-submit'),
+    path('teaching-plans/<int:pk>/reopen/', teaching_plan_views.reopen, name='teaching-plan-reopen'),
     path('teaching-plans/<int:pk>/decide/', teaching_plan_views.decide, name='teaching-plan-decide'),
     path('teaching-plans/<int:pk>/sessions/', teaching_plan_views.add_session, name='teaching-plan-add-session'),
     path('teaching-plans/<int:pk>/sessions/<int:session_id>/', teaching_plan_views.session,

@@ -142,6 +142,19 @@ def submit(request, pk):
 
 
 @api_view(['POST'])
+def reopen(request, pk):
+    """The tutor reopens a plan set up with a mistake, before anything is
+    marked (teaching_plans.reopen)."""
+    found = _plan(request.user, pk)
+    _tutor(found, request.user)
+    try:
+        tp.reopen(found, reason=request.data.get('reason', ''), actor=request.user)
+    except tp.PlanError as exc:
+        return _bad(exc)
+    return _detail(found, request.user)
+
+
+@api_view(['POST'])
 def decide(request, pk):
     found = _plan(request.user, pk)
     if not tp.may_approve_plan(found.module, request.user):
@@ -321,7 +334,7 @@ def decide_document(request, pk):
     """QA approves the tutor's PDF, or returns it saying what to change."""
     found = _plan(request.user, pk)
     if not tp.may_approve_plan(found.module, request.user):
-        raise PermissionDenied('QA approves teaching plans, never a plan of a module they teach.')
+        raise PermissionDenied('QA approves teaching plans (DPARC one a QA officer teaches), never one\'s own.')
     try:
         tp.decide_document(found, bool(request.data.get('approve')), note=request.data.get('note', ''),
                            actor=request.user)
@@ -401,14 +414,22 @@ def curricula(request):
     national documents disagree on."""
     if not _staff(request.user):
         raise PermissionDenied('For tutors and the academic offices.')
-    return Response([{
-        'id': c.id, 'code': c.code, 'name': c.name, 'note': c.note, 'weeks_of_study': c.weeks_of_study,
-        'modules': [{'id': m.id, 'code': m.code, 'name': m.name, 'level': m.level, 'semester': m.semester,
-                     'credits': m.credits, 'hours': {'L': m.lecture_hours, 'T': m.tutorial_hours,
-                                                     'P': m.practical_hours, 'A': m.assignment_hours},
-                     'outcomes': m.outcomes.count(), 'checks': m.checks}
-                    for m in c.modules.all()],
-    } for c in Curriculum.objects.prefetch_related('modules')])
+    scope = tp.curriculum_scope(request.user)       # a tutor: only the modules they teach
+    rows = []
+    for c in Curriculum.objects.prefetch_related('modules'):
+        modules = [m for m in c.modules.all() if scope is None or m.id in scope]
+        if scope is not None and not modules:
+            continue
+        rows.append({
+            'id': c.id, 'code': c.code, 'name': c.name, 'note': c.note, 'weeks_of_study': c.weeks_of_study,
+            'only_mine': scope is not None,
+            'modules': [{'id': m.id, 'code': m.code, 'name': m.name, 'level': m.level, 'semester': m.semester,
+                         'credits': m.credits, 'hours': {'L': m.lecture_hours, 'T': m.tutorial_hours,
+                                                         'P': m.practical_hours, 'A': m.assignment_hours},
+                         'outcomes': m.outcomes.count(), 'checks': m.checks}
+                        for m in modules],
+        })
+    return Response(rows)
 
 
 @api_view(['GET'])
@@ -416,6 +437,9 @@ def curriculum_module(request, pk):
     if not _staff(request.user):
         raise PermissionDenied('For tutors and the academic offices.')
     m = get_object_or_404(CurriculumModule.objects.select_related('curriculum'), pk=pk)
+    scope = tp.curriculum_scope(request.user)
+    if scope is not None and m.id not in scope:
+        raise PermissionDenied('A tutor reads the curriculum of the modules they teach.')
     return Response({
         'id': m.id, 'code': m.code, 'name': m.name, 'level': m.level, 'semester': m.semester,
         'credits': m.credits, 'curriculum': m.curriculum.name, 'checks': m.checks,

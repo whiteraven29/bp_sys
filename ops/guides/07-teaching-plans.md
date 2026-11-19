@@ -20,6 +20,20 @@ or money.
   classes and can be marked; each shows "No PDF yet" until the tutor sends one, and is set up only
   after QA approves it (your choice). A PDF already attached goes to QA as waiting; a Word copy does
   not count (only PDFs are taken now).
+- **A plan the QA officer teaches (19 November 2026).** It goes to DPARC, and to the Principal if DPARC
+  teaches the module too; nobody approves their own. DPARC and the Principal find it under *Plans to
+  approve*, which lists only plans waiting for them.
+- **A plan set up with a mistake (19 November 2026: laid on Monday and Thursday instead of Wednesday to
+  Friday, three classes marked).** Put each marked class back to planned (press its Done, Part or Missed
+  again), then **Reopen the set-up** (at the foot of the plan, under *Set up with a mistake?*), saying
+  what was wrong. The plan goes back to being prepared; change the week, lay it out again, and press
+  **Plan set up** again. The PDF's approval stands; the reopening is in the History. Refused while any
+  class is marked, and once a test has gone to the Head of Department (then move classes one at a time).
+  A plan set up before 19 November has no approved PDF: after reopening, the tutor sends the PDF and
+  sets it up once it is approved.
+- **The Curriculum page, for tutors (19 November 2026).** A tutor sees only the curriculum modules of the
+  modules they teach — the one their plan follows, or the one the module matches; opening any other is
+  refused. The Principal, DPARC, QA and the Heads of Department see every module.
 - **Teaching plans.** A tutor's plan for one module in one semester. The curriculum gives the
   outcomes (SEOs), their related tasks, the hours a week of lecture, tutorial, practical and
   assignment, and how the module is assessed. The almanac gives the weeks. The tutor says which

@@ -95,12 +95,30 @@ def approver_of(module):
     return department.hod if department is not None and department.hod_id else None
 
 
+QA, DPARC, PRINCIPAL = 'qa', 'dparc', 'principal'
+
+
+def plan_approver(module):
+    """Whose approval a module's plan (the PDF) waits for: QA; DPARC when a QA
+    officer teaches the module; the Principal when DPARC teaches it too (said
+    19 November 2026: nobody approves their own plan)."""
+    tutors = list(module.teachers.all())
+    if not any(is_quality_assurance(t) for t in tutors):
+        return QA
+    if not any(is_dparc(t) for t in tutors):
+        return DPARC
+    return PRINCIPAL
+
+
 def may_approve_plan(module, user):
     """QA approves a teaching plan, reading the tutor's PDF (said 19 November
-    2026) — never a plan of a module they teach."""
+    2026); a plan a QA officer teaches goes to DPARC, then the Principal —
+    never a plan of a module one teaches."""
     if is_break_glass(user):
         return True
-    return is_quality_assurance(user) and not teaches(module, user)
+    if teaches(module, user):
+        return False
+    return {QA: is_quality_assurance, DPARC: is_dparc, PRINCIPAL: is_principal}[plan_approver(module)](user)
 
 
 def may_moderate(module, user):
@@ -148,6 +166,24 @@ def curriculum_module_for(module):
 
 
 # ── the calendar ──────────────────────────────────────────────────────────────
+
+def curriculum_scope(user):
+    """Which curriculum modules this account reads under Curriculum: None for
+    every one (the Principal, DPARC, QA, a Head of Department); for a tutor,
+    only those of the modules they teach (said 19 November 2026: "for tutors
+    on curriculum part they must see only their responsible modules") — the
+    one their plan follows, or the one the module matches."""
+    if sees_every_plan(user) or is_head_of_department(user):
+        return None
+    ids = set()
+    for module in (Module.objects.filter(teachers=user)
+                   .select_related('class_level', 'teaching_plan')):
+        plan = getattr(module, 'teaching_plan', None)
+        cm = plan.curriculum_module if plan is not None and plan.curriculum_module_id else curriculum_module_for(module)
+        if cm is not None:
+            ids.add(cm.id)
+    return ids
+
 
 def calendar_for(semester):
     return TeachingCalendar.objects.filter(semester=semester).first()
@@ -778,7 +814,10 @@ def upload_document(plan, upload, *, actor):
     plan.save()
     log(plan, actor, 'sent the PDF to QA', plan.document_name)
     module = plan.module
-    notifications.notify(notifications.quality_assurance(), kind=Notification.PLAN_SENT,
+    approver = plan_approver(module)
+    to = {QA: notifications.quality_assurance, DPARC: notifications.dparc,
+          PRINCIPAL: notifications.principal}[approver]()
+    notifications.notify([u for u in to if not teaches(module, u)], kind=Notification.PLAN_SENT,
                          title=f'Teaching plan to approve: {module.code}',
                          body=f'{module.code} {module.name} ({module.class_level.name}), from {_name(actor)}.',
                          link='tplans:qa')
@@ -826,6 +865,32 @@ def submit(plan, *, actor):
     plan.decision_note = 'Set up after QA approved the PDF.'
     plan.save()
     log(plan, actor, 'set up: approved with the PDF QA approved')
+    return plan
+
+
+@transaction.atomic
+def reopen(plan, *, reason, actor):
+    """A plan set up with a mistake in its week (said 19 November 2026: laid on
+    Monday and Thursday instead of Wednesday to Friday, three classes marked):
+    back to being prepared so it can be laid out again — only while no class
+    is marked and no test has gone to the Head of Department. QA's approval of
+    the PDF stands; setting it up again approves it again."""
+    reason = str(reason or '').strip()
+    if plan.status not in (TeachingPlan.SUBMITTED, TeachingPlan.APPROVED):
+        raise PlanError('It is not set up: lay it out again from Change the week.')
+    if not reason:
+        raise PlanError('Say what was wrong.')
+    marked = plan.sessions.exclude(status=PlanSession.PLANNED).count()
+    if marked:
+        raise PlanError(f'{marked} class{"" if marked == 1 else "es"} marked: press Done, Part or Missed on each again '
+                        f'to put it back to planned, then reopen.')
+    if plan.assessments.filter(moderation__in=[PlanAssessment.SUBMITTED, PlanAssessment.APPROVED]).exists():
+        raise PlanError('A test has gone to the Head of Department for moderation: move classes one at a time instead.')
+    plan.status = TeachingPlan.DRAFT
+    plan.submitted_by = plan.submitted_at = plan.decided_by = plan.decided_at = None
+    plan.decision_note = ''
+    plan.save()
+    log(plan, actor, 'reopened the set-up', reason)
     return plan
 
 
@@ -1151,6 +1216,7 @@ def _plan_detail(plan, user, day=None):
         'document': ({'name': plan.document_name or plan.document.name.rsplit('/', 1)[-1],
                       'is_pdf': plan.document.name.lower().endswith('.pdf')} if plan.document else None),
         'document_review': {'status': plan.document_status, 'status_display': plan.get_document_status_display(),
+                            'approver': {QA: 'QA', DPARC: 'DPARC', PRINCIPAL: 'the Principal'}[plan_approver(module)],
                             'uploaded_by': _name(plan.document_uploaded_by) if plan.document_uploaded_by_id else '',
                             'uploaded_at': plan.document_uploaded_at,
                             'decided_by': _name(plan.document_decided_by) if plan.document_decided_by_id else '',
@@ -1164,6 +1230,7 @@ def _plan_detail(plan, user, day=None):
         'can': {'edit': mine and plan.status in (TeachingPlan.DRAFT, TeachingPlan.RETURNED),
                 'set_up': mine and plan.status in (TeachingPlan.DRAFT, TeachingPlan.RETURNED)
                 and (document_approved(plan) or bool(sessions)),
+                'reopen': mine and plan.status in (TeachingPlan.SUBMITTED, TeachingPlan.APPROVED),
                 'upload': mine,
                 'decide_document': may_approve_plan(module, user)
                 and plan.document_status == TeachingPlan.DOC_PENDING,

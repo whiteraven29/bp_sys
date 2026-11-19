@@ -720,3 +720,101 @@ class QaApprovesThePdfTests(PlanBase):
         self.assertEqual(TeachingPlan.objects.get(pk=plan.pk).document_status, 'pending')
         self.assertEqual(TeachingPlan.objects.get(pk=word.pk).document_status, '')
 
+
+
+class CurriculumScopeTests(PlanBase):
+    """Said 19 November 2026: "for tutors on curriculum part they must see only
+    their responsible modules"."""
+
+    def test_a_tutor_reads_only_the_curriculum_of_their_modules(self):
+        rows = client_for(self.tutor).get('/api/curricula/').data
+        codes = [m['code'] for c in rows for m in c['modules']]
+        self.assertEqual(codes, ['PST04104'])
+        self.assertTrue(rows[0]['only_mine'])
+        mine = rows[0]['modules'][0]['id']
+        other = CurriculumModule.objects.exclude(pk=mine).first()
+        self.assertEqual(client_for(self.tutor).get(f'/api/curricula/modules/{mine}/').status_code, 200)
+        self.assertEqual(client_for(self.tutor).get(f'/api/curricula/modules/{other.id}/').status_code, 403)
+        # A tutor with no module reads none; the offices read every one.
+        self.assertEqual(client_for(self.other).get('/api/curricula/').data, [])
+        for office in (self.qa, self.dparc, self.hod):
+            every = client_for(office).get('/api/curricula/').data
+            self.assertGreater(sum(len(c['modules']) for c in every), 1, office.username)
+            self.assertFalse(every[0]['only_mine'])
+        self.assertEqual(client_for(self.qa).get(f'/api/curricula/modules/{other.id}/').status_code, 200)
+
+    def test_the_curriculum_their_plan_follows_counts(self):
+        plan = tp.start_plan(self.module, self.tutor)
+        moved = CurriculumModule.objects.exclude(pk=plan.curriculum_module_id).first()
+        TeachingPlan.objects.filter(pk=plan.pk).update(curriculum_module=moved)    # put right by the HOD
+        self.assertEqual(tp.curriculum_scope(self.tutor), {moved.id})
+
+
+class WhoApprovesAQaOfficersPlanTests(PlanBase):
+    """Said 19 November 2026: a plan a QA officer teaches goes to DPARC (the
+    Principal when DPARC teaches it too) — nobody approves their own."""
+
+    def test_dparc_then_the_principal(self):
+        boss = person('boss', ['principal'])
+        self.assertEqual(tp.plan_approver(self.module), tp.QA)
+        self.module.teachers.add(self.qa)
+        self.assertEqual(tp.plan_approver(self.module), tp.DPARC)
+        self.assertFalse(tp.may_approve_plan(self.module, self.qa))
+        self.assertTrue(tp.may_approve_plan(self.module, self.dparc))
+        self.assertFalse(tp.may_approve_plan(self.module, boss))
+        self.module.teachers.add(self.dparc)
+        self.assertEqual(tp.plan_approver(self.module), tp.PRINCIPAL)
+        self.assertTrue(tp.may_approve_plan(self.module, boss))
+        self.assertFalse(tp.may_approve_plan(self.module, self.dparc))
+
+    def test_the_pdf_goes_to_dparc_who_finds_it_and_approves_it(self):
+        self.module.teachers.add(self.qa)
+        plan = tp.start_plan(self.module, self.qa)
+        tp.upload_document(plan, pdf_file(), actor=self.qa)
+        self.assertTrue(Notification.objects.filter(user=self.dparc, kind=Notification.PLAN_SENT).exists())
+        self.assertFalse(Notification.objects.filter(user=self.qa, kind=Notification.PLAN_SENT).exists())
+        dparc = client_for(self.dparc)
+        self.assertEqual([r['code'] for r in dparc.get('/api/teaching-plans/?scope=qa').data['rows']], ['PST04104'])
+        self.assertEqual(client_for(self.qa).post(f'/api/teaching-plans/{plan.id}/document/decide/',
+                                                  {'approve': True}, format='json').status_code, 403)
+        done = dparc.post(f'/api/teaching-plans/{plan.id}/document/decide/', {'approve': True}, format='json')
+        self.assertEqual(done.data['document_review']['status'], 'approved')
+
+
+class ReopenTests(PlanBase):
+    """Said 19 November 2026: a plan set up on Monday and Thursday instead of
+    Wednesday to Friday, with three classes marked."""
+
+    def test_unmark_reopen_lay_out_again_set_up_again(self):
+        plan = self.laid_out()
+        tp.submit(plan, actor=self.tutor)
+        marked = list(plan.sessions.order_by('planned_on')[:3])
+        for s in marked:
+            tp.mark(s, PlanSession.DONE, delivered_on=s.planned_on, actor=self.tutor, today=date(2026, 11, 12))
+        client = client_for(self.tutor)
+        url = f'/api/teaching-plans/{plan.id}/reopen/'
+        self.assertEqual(client.post(url, {'reason': 'Wrong days'}, format='json').status_code, 400)  # 3 marked
+        for s in marked:
+            tp.mark(s, PlanSession.PLANNED, actor=self.tutor)                       # Done pressed again
+        self.assertEqual(client.post(url, {}, format='json').status_code, 400)                     # say why
+        self.assertEqual(client_for(self.qa).post(url, {'reason': 'x'}, format='json').status_code, 403)
+        opened = client.post(url, {'reason': 'Laid on Monday and Thursday; I teach Wednesday to Friday'},
+                             format='json')
+        self.assertEqual((opened.status_code, opened.data['status']), (200, 'draft'))
+        self.assertEqual(opened.data['document_review']['status'], 'approved')      # QA's approval stands
+        week = [{'weekday': 2, 'kind': 'lecture', 'hours': 2}, {'weekday': 3, 'kind': 'tutorial', 'hours': 1},
+                {'weekday': 4, 'kind': 'practical', 'hours': 4}]
+        plan.refresh_from_db()
+        tp.lay_out(plan, week, actor=self.tutor)
+        self.assertEqual({d.weekday() for d in plan.sessions.values_list('planned_on', flat=True)}, {2, 3, 4})
+        tp.submit(plan, actor=self.tutor)
+        plan.refresh_from_db()
+        self.assertEqual(plan.status, TeachingPlan.APPROVED)
+        self.assertTrue(plan.history.filter(action='reopened the set-up').exists())
+
+    def test_not_once_a_test_went_to_the_head_of_department(self):
+        plan = self.laid_out()
+        tp.submit(plan, actor=self.tutor)
+        PlanAssessment.objects.filter(plan=plan).update(moderation=PlanAssessment.SUBMITTED)
+        with self.assertRaises(tp.PlanError):
+            tp.reopen(plan, reason='Wrong days', actor=self.tutor)
