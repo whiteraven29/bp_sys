@@ -20,8 +20,6 @@ from .models import (
 from .roles import is_break_glass, is_dparc, is_head_of_department
 from .views import _a_date, active_semester, pk_or_none
 
-DOCUMENT_TYPES = {'pdf': b'%PDF', 'docx': b'PK', 'doc': b'\xd0\xcf\x11\xe0'}
-DOCUMENT_MAX_BYTES = 15 * 1024 * 1024
 
 
 def _bad(message):
@@ -146,8 +144,8 @@ def submit(request, pk):
 @api_view(['POST'])
 def decide(request, pk):
     found = _plan(request.user, pk)
-    if not tp.may_approve(found.module, request.user):
-        raise PermissionDenied("The Head of Department approves (DPARC where there is none), never one's own.")
+    if not tp.may_approve_plan(found.module, request.user):
+        raise PermissionDenied("QA approves teaching plans, never a plan of a module they teach.")
     try:
         tp.decide(found, bool(request.data.get('approve')), note=request.data.get('note', ''), actor=request.user)
     except tp.PlanError as exc:
@@ -269,7 +267,7 @@ def moderate(request, pk, assessment_id):
     action = str(request.data.get('action') or '')
     if action == 'submit':
         _tutor(found, request.user)
-    elif not tp.may_approve(found.module, request.user):
+    elif not tp.may_moderate(found.module, request.user):
         raise PermissionDenied('The Head of Department moderates (DPARC where there is none).')
     try:
         tp.moderate(item, action, note=request.data.get('note', ''), actor=request.user)
@@ -292,29 +290,19 @@ def note(request, pk):
 @api_view(['GET', 'POST'])
 @parser_classes([MultiPartParser, FormParser, JSONParser])
 def document(request, pk):
-    """The tutor's own Word or PDF plan, kept as the reference copy: uploaded
-    by a tutor of the module, read by whoever reads the plan."""
+    """The tutor's plan as a PDF, for QA to read and approve before the plan
+    is set up (said 19 November 2026): uploaded by a tutor of the module,
+    read by whoever reads the plan — ?view=1 opens a PDF in the browser."""
     found = _plan(request.user, pk)
     if request.method == 'POST':
         _tutor(found, request.user)
         upload = request.FILES.get('file')
         if upload is None:
             return _bad('Choose the file.')
-        ext = upload.name.rsplit('.', 1)[-1].lower() if '.' in upload.name else ''
-        if ext not in DOCUMENT_TYPES:
-            return _bad('A teaching plan is a PDF or a Word document.')
-        if upload.size > DOCUMENT_MAX_BYTES:
-            return _bad('The file must be 15 MB or smaller.')
-        head = upload.read(8)
-        upload.seek(0)
-        if not head.startswith(DOCUMENT_TYPES[ext]):
-            return _bad(f'That file is not a real {ext.upper()}.')
-        if found.document:
-            found.document.delete(save=False)
-        found.document = upload
-        found.document_name = upload.name[:200]
-        found.save(update_fields=['document', 'document_name', 'updated_at'])
-        tp.log(found, request.user, 'uploaded the document', found.document_name)
+        try:
+            tp.upload_document(found, upload, actor=request.user)
+        except tp.PlanError as exc:
+            return _bad(exc)
         return _detail(found, request.user)
     if not found.document:
         raise Http404
@@ -322,9 +310,24 @@ def document(request, pk):
     kind = {'pdf': 'application/pdf',
             'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'doc': 'application/msword'}.get(name.rsplit('.', 1)[-1].lower(), 'application/octet-stream')
-    response = FileResponse(found.document.open('rb'), as_attachment=True, filename=name, content_type=kind)
+    inline = request.query_params.get('view') == '1' and kind == 'application/pdf'
+    response = FileResponse(found.document.open('rb'), as_attachment=not inline, filename=name, content_type=kind)
     response['Content-Security-Policy'] = 'sandbox'
     return response
+
+
+@api_view(['POST'])
+def decide_document(request, pk):
+    """QA approves the tutor's PDF, or returns it saying what to change."""
+    found = _plan(request.user, pk)
+    if not tp.may_approve_plan(found.module, request.user):
+        raise PermissionDenied('QA approves teaching plans, never a plan of a module they teach.')
+    try:
+        tp.decide_document(found, bool(request.data.get('approve')), note=request.data.get('note', ''),
+                           actor=request.user)
+    except tp.PlanError as exc:
+        return _bad(exc)
+    return _detail(found, request.user)
 
 
 # ── the teaching calendar ─────────────────────────────────────────────────────

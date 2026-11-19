@@ -607,6 +607,22 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      records; an EQ index at the PST records desk; print one plan student's statement; Print overall for November;
      download a consent form on a phone
 
+3p. **QA approves the teaching plan as a PDF first — 19 Nov, on master (uncommitted; migration 0088).**
+   - [x] Your rule: the tutor uploads the plan as a PDF, QA reads and approves it, then the tutor sets it up.
+     Your choices: set up, it is approved with the PDF (no second approval); the HOD reads plans and moderates
+     tests; plans started before keep their classes and ask for the PDF
+   - [x] PDF only (checked as a real PDF, 15 MB); QA's *Plans to approve* (waiting first), Read the PDF in the
+     browser, Approve / Return with a reason; QA never approves a module they teach; notifications both ways
+   - [x] Lay out refused until QA approves (a plan already laid out may be again); **Plan set up: start teaching**
+     makes it approved, approved by the QA officer; a new PDF goes back to QA while the plan carries on
+   - [x] HOD/DPARC menu item renamed *Tests to moderate*; KPI "Plans approved" now reads QA's approval
+   - [x] Migration 0088: PDF status, who sent and decided, QA's note; a PDF already attached waits for QA
+     (Word copies do not count); two notification kinds. Tests 39 in teaching plans (4 new); screens checked
+     in headless Chrome (tutor waiting, QA deciding, approved and setting up, QA list)
+   - [ ] `python manage.py migrate` on the laptop (0088); on the server the deploy applies it
+   - [ ] The Principal gives the QA office to the QA officer (User accounts ▸ Roles) before tutors send PDFs
+   - [ ] Tell the tutors: upload the plan as a PDF first; nothing to lay out until QA approves
+
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
    - [ ] Migrations to 0085 applied by the deploy (release guide B1–B4); `Ran 1330 tests … OK` on the laptop first
    - [ ] Students ▸ Supplementary consent: check the amounts in Sehemu B (copied from the 2025 form), then Open

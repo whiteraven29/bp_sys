@@ -18,10 +18,17 @@ with no register is shown, not refused.
 
 How far a tutor has got is measured against their own plan — classes done
 of those due by today — so a 4-credit module and a 20-credit one are judged
-alike. The Head of Department approves a plan and moderates each test before
-it is given (assessment plan, Part IV); DPARC does for a module with no Head
-of Department. The Principal, DPARC and QA see every plan; a Head of
-Department their department's.
+alike.
+
+A plan begins as the tutor's own document: uploaded as a PDF, read and
+approved by QA (said 19 November 2026: "QA is the one who approve the
+teaching plan after reading it … then they get permission to setup the plan
+in their account"). Only then is it laid out here, and once set up it is
+approved with the PDF: no second approval. A plan started before that keeps
+its classes and asks for the PDF. The Head of Department reads the plans and
+moderates each test before it is given (assessment plan, Part IV); DPARC does
+for a module with no Head of Department. The Principal, DPARC and QA see
+every plan; a Head of Department their department's.
 
 Nothing here touches marks or results: the weights shown are the assessment
 plan's, or for a module of the old curriculum the weights results use today.
@@ -88,9 +95,18 @@ def approver_of(module):
     return department.hod if department is not None and department.hod_id else None
 
 
-def may_approve(module, user):
-    """Never one's own plan: a Head of Department who teaches the module
-    leaves it to DPARC."""
+def may_approve_plan(module, user):
+    """QA approves a teaching plan, reading the tutor's PDF (said 19 November
+    2026) — never a plan of a module they teach."""
+    if is_break_glass(user):
+        return True
+    return is_quality_assurance(user) and not teaches(module, user)
+
+
+def may_moderate(module, user):
+    """Who moderates a module's tests: its Head of Department, DPARC where
+    there is none — never one's own: a Head of Department who teaches the
+    module leaves it to DPARC."""
     if is_break_glass(user):
         return True
     if teaches(module, user):
@@ -317,11 +333,14 @@ def start_plan(module, actor):
 
 @transaction.atomic
 def lay_out(plan, pattern, *, actor, weeks=None, starts_on=None, assessments=True):
-    """Lay the classes out over the semester from the weekly pattern. Only
+    """Lay the classes out over the semester from the weekly pattern — once
+    QA has approved the PDF (a plan laid out before then may be again). Only
     before the plan is sent for approval and before any class is marked; after
     that, classes are moved one at a time with a reason."""
+    if not document_approved(plan) and not plan.sessions.exists():
+        raise PlanError('QA approves your plan first: upload it as a PDF, and once it is approved, set it up here.')
     if plan.status in (TeachingPlan.SUBMITTED, TeachingPlan.APPROVED):
-        raise PlanError('This plan has been sent for approval: move classes one at a time instead.')
+        raise PlanError('This plan is set up: move classes one at a time instead.')
     if plan.sessions.exclude(status=PlanSession.PLANNED).exists():
         raise PlanError('Classes are already marked as taught: move classes one at a time instead.')
     plan.pattern = clean_pattern(pattern)
@@ -726,20 +745,94 @@ def moderate(assessment, action, *, note='', actor):
     return assessment
 
 
+# ── the PDF, for QA ───────────────────────────────────────────────────────────
+
+PDF_MAX_BYTES = 15 * 1024 * 1024
+
+
+def document_approved(plan):
+    return plan.document_status == TeachingPlan.DOC_APPROVED
+
+
+@transaction.atomic
+def upload_document(plan, upload, *, actor):
+    """The tutor's plan as a PDF, sent to QA. A new one replaces the last and
+    waits for QA again; a plan already set up goes on meanwhile."""
+    from . import notifications
+    from .models import Notification
+    name = str(getattr(upload, 'name', '') or '')
+    if not name.lower().endswith('.pdf'):
+        raise PlanError('Upload the teaching plan as a PDF.')
+    if upload.size > PDF_MAX_BYTES:
+        raise PlanError('The file must be 15 MB or smaller.')
+    head = upload.read(5)
+    upload.seek(0)
+    if head != b'%PDF-':
+        raise PlanError('That file is not a real PDF.')
+    if plan.document:
+        plan.document.delete(save=False)
+    plan.document, plan.document_name = upload, name[:200]
+    plan.document_status = TeachingPlan.DOC_PENDING
+    plan.document_uploaded_by, plan.document_uploaded_at = actor, timezone.now()
+    plan.document_decided_by, plan.document_decided_at, plan.document_note = None, None, ''
+    plan.save()
+    log(plan, actor, 'sent the PDF to QA', plan.document_name)
+    module = plan.module
+    notifications.notify(notifications.quality_assurance(), kind=Notification.PLAN_SENT,
+                         title=f'Teaching plan to approve: {module.code}',
+                         body=f'{module.code} {module.name} ({module.class_level.name}), from {_name(actor)}.',
+                         link='tplans:qa')
+    return plan
+
+
+@transaction.atomic
+def decide_document(plan, approve, *, note='', actor):
+    """QA approves the PDF — the tutor may then set the plan up — or returns
+    it saying what to change."""
+    from . import notifications
+    from .models import Notification
+    if plan.document_status != TeachingPlan.DOC_PENDING:
+        raise PlanError('No PDF of this plan is waiting for QA.')
+    note = str(note or '').strip()
+    if not approve and not note:
+        raise PlanError('Say what to change.')
+    plan.document_status = TeachingPlan.DOC_APPROVED if approve else TeachingPlan.DOC_RETURNED
+    plan.document_decided_by, plan.document_decided_at, plan.document_note = actor, timezone.now(), note[:500]
+    plan.save()
+    log(plan, actor, 'QA approved the PDF' if approve else 'QA returned the PDF', note)
+    module = plan.module
+    notifications.notify(list(module.teachers.all()), kind=Notification.PLAN_DECIDED,
+                         title=(f'Teaching plan approved: {module.code}' if approve
+                                else f'Teaching plan returned: {module.code}'),
+                         body=('QA approved your PDF. Set the plan up under Teaching plans ▸ My plans.' if approve
+                               else f'QA returned your PDF: {note}'),
+                         link='tplans:mine')
+    return plan
+
+
 @transaction.atomic
 def submit(plan, *, actor):
+    """The plan is set up: approved with the PDF QA approved (said 19
+    November 2026: no second approval)."""
     if plan.status not in (TeachingPlan.DRAFT, TeachingPlan.RETURNED):
-        raise PlanError('It has already been sent.')
+        raise PlanError('It is already set up.')
     if not plan.sessions.exists():
         raise PlanError('Lay the classes out first.')
-    plan.status, plan.submitted_by, plan.submitted_at = TeachingPlan.SUBMITTED, actor, timezone.now()
+    if not document_approved(plan):
+        raise PlanError('Upload your plan as a PDF first: once QA approves it, the plan set up here is approved with it.')
+    now = timezone.now()
+    plan.status, plan.submitted_by, plan.submitted_at = TeachingPlan.APPROVED, actor, now
+    plan.decided_by, plan.decided_at = plan.document_decided_by, now
+    plan.decision_note = 'Set up after QA approved the PDF.'
     plan.save()
-    log(plan, actor, 'sent for approval')
+    log(plan, actor, 'set up: approved with the PDF QA approved')
     return plan
 
 
 @transaction.atomic
 def decide(plan, approve, *, note='', actor):
+    """A plan sent for approval before QA approved PDFs (19 November 2026):
+    QA decides it now."""
     if plan.status != TeachingPlan.SUBMITTED:
         raise PlanError('It is not waiting for approval.')
     if not approve and not str(note).strip():
@@ -944,7 +1037,9 @@ def plan_summary(module, plan, day):
     sessions = list(plan.sessions.all())
     return {**row, 'plan_id': plan.id, 'status': plan.status, 'status_display': plan.get_status_display(),
             'curriculum': plan.curriculum_module.curriculum.code if plan.curriculum_module_id else '',
-            'has_document': bool(plan.document), 'progress': progress(plan, day, sessions),
+            'has_document': bool(plan.document), 'document_status': plan.document_status,
+            'document_status_display': plan.get_document_status_display(),
+            'document_uploaded_at': plan.document_uploaded_at, 'progress': progress(plan, day, sessions),
             'strip': week_strip(sessions, day),
             'assessments': assessments_progress(plan, day), 'updated_at': plan.updated_at}
 
@@ -964,7 +1059,9 @@ def _overview(user, semester, day=None, scope='all'):
     if scope == 'mine':
         modules = modules.filter(teachers=user)
     elif scope == 'approve':
-        modules = [m for m in modules if may_approve(m, user)]
+        modules = [m for m in modules if may_moderate(m, user)]
+    elif scope == 'qa':
+        modules = [m for m in modules if may_approve_plan(m, user)]
     plans = {p.module_id: p for p in TeachingPlan.objects.filter(module__in=[m.id for m in modules])
              .select_related('curriculum_module__curriculum').prefetch_related('sessions', 'assessments')}
     rows = [plan_summary(m, plans.get(m.id), day) for m in modules]
@@ -1051,7 +1148,13 @@ def _plan_detail(plan, user, day=None):
                           else 'assessment plan' if cm is not None and cm.components.exists() else 'results today'),
         'progress': progress(plan, day, sessions), 'assessment_progress': assessments_progress(plan, day),
         'coverage': coverage(plan),
-        'document': ({'name': plan.document_name or plan.document.name.rsplit('/', 1)[-1]} if plan.document else None),
+        'document': ({'name': plan.document_name or plan.document.name.rsplit('/', 1)[-1],
+                      'is_pdf': plan.document.name.lower().endswith('.pdf')} if plan.document else None),
+        'document_review': {'status': plan.document_status, 'status_display': plan.get_document_status_display(),
+                            'uploaded_by': _name(plan.document_uploaded_by) if plan.document_uploaded_by_id else '',
+                            'uploaded_at': plan.document_uploaded_at,
+                            'decided_by': _name(plan.document_decided_by) if plan.document_decided_by_id else '',
+                            'decided_at': plan.document_decided_at, 'note': plan.document_note},
         'decision': {'by': _name(plan.decided_by) if plan.decided_by_id else '', 'at': plan.decided_at,
                      'note': plan.decision_note},
         'notes': [{'id': n.id, 'text': n.text, 'checkpoint': n.checkpoint, 'author': _name(n.author),
@@ -1059,8 +1162,13 @@ def _plan_detail(plan, user, day=None):
         'history': [{'action': e.action, 'detail': e.detail, 'by': _name(e.actor), 'at': e.at}
                     for e in plan.history.select_related('actor')[:200]],
         'can': {'edit': mine and plan.status in (TeachingPlan.DRAFT, TeachingPlan.RETURNED),
-                'follow': mine, 'approve': may_approve(module, user) and plan.status == TeachingPlan.SUBMITTED,
-                'moderate': may_approve(module, user), 'note': may_read(plan, user),
+                'set_up': mine and plan.status in (TeachingPlan.DRAFT, TeachingPlan.RETURNED)
+                and (document_approved(plan) or bool(sessions)),
+                'upload': mine,
+                'decide_document': may_approve_plan(module, user)
+                and plan.document_status == TeachingPlan.DOC_PENDING,
+                'follow': mine, 'approve': may_approve_plan(module, user) and plan.status == TeachingPlan.SUBMITTED,
+                'moderate': may_moderate(module, user), 'note': may_read(plan, user),
                 'relink': is_dparc(user) or is_break_glass(user) or (is_head_of_department(user)
                                                                       and approver_of(module) == user)},
         'weekdays': WEEKDAYS, 'kinds': PlanSession.KIND_CHOICES,

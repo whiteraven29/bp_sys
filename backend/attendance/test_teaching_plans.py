@@ -21,7 +21,7 @@ from . import teaching_plans as tp
 from .management.commands.load_curriculum import load as load_curriculum
 from .management.commands.load_teaching_calendar import load_semester
 from .models import (
-    AcademicYear, ClassLevel, CurriculumModule, Department, Form, Module, PlanAssessment, PlanSession,
+    AcademicYear, ClassLevel, CurriculumModule, Department, Form, Module, Notification, PlanAssessment, PlanSession,
     Programme, Semester, Session, TeachingPlan,
 )
 from .views import set_roles
@@ -39,6 +39,21 @@ def client_for(user):
     client = APIClient()
     client.force_authenticate(user)
     return client
+
+
+def qa_approved(plan, qa=None):
+    """As if the tutor's PDF had been uploaded and QA had approved it (said 19
+    November 2026: a plan is set up only after that)."""
+    TeachingPlan.objects.filter(pk=plan.pk).update(
+        document_status=TeachingPlan.DOC_APPROVED, document_decided_by=qa,
+        document_decided_at=timezone.now())
+    plan.refresh_from_db()
+    return plan
+
+
+def pdf_file(name='plan.pdf', body=b'%PDF-1.4\n%fake but starts right\n'):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    return SimpleUploadedFile(name, body, content_type='application/pdf')
 
 
 class PlanBase(TestCase):
@@ -64,7 +79,7 @@ class PlanBase(TestCase):
         cls.module.teachers.add(cls.tutor)
 
     def plan(self):
-        return tp.start_plan(self.module, self.tutor)
+        return qa_approved(tp.start_plan(self.module, self.tutor), self.qa)
 
     def laid_out(self):
         plan = self.plan()
@@ -150,7 +165,7 @@ class OldCurriculumTests(PlanBase):
     def test_its_plan_keeps_the_weights_results_use_and_gains_the_outcomes(self):
         # The plan says written tests 18% and practical tests 18%; results use 16 and 20.
         module = self.level5_module('PST05209', 'Health Information Management', has_practical=True)
-        plan = tp.start_plan(module, self.tutor)
+        plan = qa_approved(tp.start_plan(module, self.tutor))
         self.assertEqual(plan.curriculum_module.curriculum.code, 'PST-2015')
         self.assertTrue(plan.pattern)                                   # no hours given: the usual guess
         tp.lay_out(plan, plan.pattern, actor=self.tutor)
@@ -212,7 +227,7 @@ class LayOutTests(PlanBase):
         old = Module.objects.create(name='Pharmaceutical Dosage Forms', code='PST04199', teacher='x',
                                     class_level=self.level4, semester=self.sem1, has_practical=True)
         old.teachers.add(self.tutor)
-        plan = tp.start_plan(old, self.tutor)
+        plan = qa_approved(tp.start_plan(old, self.tutor))
         tp.lay_out(plan, plan.pattern, actor=self.tutor)
         weights = sorted((a.method, a.weight) for a in plan.assessments.all())
         self.assertIn(('assignment', Decimal('2.00')), weights)
@@ -226,7 +241,7 @@ class LayOutTests(PlanBase):
         module = Module.objects.create(name='Basic Pharmacology', code='PST04208', teacher='x',
                                        class_level=self.level4, semester=other_sem)
         module.teachers.add(self.tutor)
-        plan = tp.start_plan(module, self.tutor)
+        plan = qa_approved(tp.start_plan(module, self.tutor))
         with self.assertRaises(tp.PlanError):
             tp.lay_out(plan, plan.pattern, actor=self.tutor)
 
@@ -252,16 +267,18 @@ class FollowingTests(PlanBase):
             tp.mark(plan.sessions.last(), PlanSession.DONE, delivered_on=date(2027, 2, 25), actor=self.tutor,
                     today=date(2026, 11, 12))
 
-    def test_approval_and_moves_after_it(self):
+    def test_set_up_it_is_approved_with_the_pdf_and_classes_move_one_at_a_time(self):
         plan = self.laid_out()
         tp.submit(plan, actor=self.tutor)
+        plan.refresh_from_db()
+        self.assertEqual((plan.status, plan.decided_by, plan.decision_note),
+                         (TeachingPlan.APPROVED, self.qa, 'Set up after QA approved the PDF.'))
         with self.assertRaises(tp.PlanError):
             tp.lay_out(plan, plan.pattern, actor=self.tutor)
-        self.assertFalse(tp.may_approve(self.module, self.tutor))
-        self.assertTrue(tp.may_approve(self.module, self.hod))
-        with self.assertRaises(tp.PlanError):
-            tp.decide(plan, False, note='', actor=self.hod)
-        tp.decide(plan, True, actor=self.hod)
+        self.assertFalse(tp.may_approve_plan(self.module, self.tutor))
+        self.assertFalse(tp.may_approve_plan(self.module, self.hod))        # the HOD moderates tests only
+        self.assertTrue(tp.may_approve_plan(self.module, self.qa))
+        self.assertTrue(tp.may_moderate(self.module, self.hod))
         session = plan.sessions.order_by('planned_on').first()
         with self.assertRaises(tp.PlanError):
             tp.edit_session(session, {'planned_on': date(2026, 11, 3)}, actor=self.tutor)
@@ -272,7 +289,6 @@ class FollowingTests(PlanBase):
     def test_a_class_taught_early_moves_to_its_day_and_counts_there(self):
         plan = self.laid_out()
         tp.submit(plan, actor=self.tutor)
-        tp.decide(plan, True, actor=self.hod)
         register = Session.objects.create(module=self.module, date=date(2026, 11, 30), label='L5')
         later = plan.sessions.filter(planned_on__gte=date(2026, 12, 7)).order_by('planned_on').first()
         first_day = later.planned_on
@@ -312,8 +328,8 @@ class FollowingTests(PlanBase):
 
     def test_a_head_of_department_never_approves_their_own(self):
         self.module.teachers.add(self.hod)
-        self.assertFalse(tp.may_approve(self.module, self.hod))
-        self.assertTrue(tp.may_approve(self.module, self.dparc))
+        self.assertFalse(tp.may_moderate(self.module, self.hod))
+        self.assertTrue(tp.may_moderate(self.module, self.dparc))
 
     def test_moderation_and_coverage(self):
         plan = self.laid_out()
@@ -343,7 +359,6 @@ class FollowUpTests(PlanBase):
     def sent(self):
         plan = self.laid_out()
         tp.submit(plan, actor=self.tutor)
-        tp.decide(plan, True, actor=self.hod)
         return plan
 
     def day(self, plan, on, nth=0):
@@ -467,7 +482,6 @@ class KpiTests(PlanBase):
     def test_a_tutors_kpis_come_from_the_plans(self):
         plan = self.laid_out()
         tp.submit(plan, actor=self.tutor)
-        tp.decide(plan, True, actor=self.hod)
         day = date(2026, 11, 12)
         due = list(plan.sessions.filter(planned_on__lte=day).order_by('planned_on'))
         Session.objects.create(module=self.module, date=due[0].planned_on, label='L1')
@@ -509,6 +523,11 @@ class ApiTests(PlanBase):
         pk = made.data['id']
         self.assertEqual(client_for(self.qa).post(f'/api/teaching-plans/{pk}/lay-out/',
                                                   {'pattern': made.data['pattern']}, format='json').status_code, 403)
+        refused = client_for(self.tutor).post(f'/api/teaching-plans/{pk}/lay-out/', {'pattern': made.data['pattern']},
+                                              format='json')
+        self.assertEqual(refused.status_code, 400)                          # QA has not approved the PDF
+        self.assertIn('QA approves your plan first', refused.data['detail'])
+        qa_approved(TeachingPlan.objects.get(pk=pk), self.qa)
         laid = client_for(self.tutor).post(f'/api/teaching-plans/{pk}/lay-out/', {'pattern': made.data['pattern']},
                                            format='json')
         self.assertEqual(laid.status_code, 200)
@@ -544,6 +563,8 @@ class ApiTests(PlanBase):
         self.assertEqual(qa.post(f'/api/teaching-plans/{plan.id}/sessions/{session.id}/mark/',
                                  {'status': 'done'}, format='json').status_code, 403)
         self.assertEqual(qa.post(f'/api/teaching-plans/{plan.id}/decide/', {'approve': True},
+                                 format='json').status_code, 400)                  # nothing waits for it
+        self.assertEqual(qa.post(f'/api/teaching-plans/{plan.id}/lay-out/', {'pattern': plan.pattern},
                                  format='json').status_code, 403)
 
     def test_only_a_tutor_marks_a_class_taught_early(self):
@@ -621,3 +642,81 @@ class CostTests(PlanBase):
         with CaptureQueriesContext(connection) as queries:
             tp.overview(self.qa, self.sem1, date(2027, 1, 1))
         self.assertLess(len(queries), 60)
+
+
+class QaApprovesThePdfTests(PlanBase):
+    """Said 19 November 2026: the tutor uploads the teaching plan as a PDF, QA
+    reads and approves it, and only then is the plan set up in the system —
+    approved with the PDF, no second approval. The HOD reads and moderates."""
+
+    def upload(self, client, plan, upload):
+        return client.post(f'/api/teaching-plans/{plan.id}/document/', {'file': upload}, format='multipart')
+
+    def test_upload_qa_approves_then_set_up(self):
+        plan = tp.start_plan(self.module, self.tutor)
+        tutor, qa, hod = client_for(self.tutor), client_for(self.qa), client_for(self.hod)
+        self.assertEqual(self.upload(tutor, plan, pdf_file('plan.docx', b'PK\x03\x04')).status_code, 400)
+        self.assertEqual(self.upload(tutor, plan, pdf_file('plan.pdf', b'not a pdf')).status_code, 400)
+        self.assertEqual(self.upload(qa, plan, pdf_file()).status_code, 403)          # a tutor of the module
+        sent = self.upload(tutor, plan, pdf_file('PST04104 plan.pdf'))
+        self.assertEqual(sent.status_code, 200, sent.data)
+        self.assertEqual(sent.data['document_review']['status'], 'pending')
+        self.assertFalse(sent.data['can']['set_up'])
+        self.assertTrue(Notification.objects.filter(user=self.qa, kind=Notification.PLAN_SENT).exists())
+        # QA sees it waiting, reads it in the browser, returns it with a reason, then approves the next one.
+        rows = qa.get('/api/teaching-plans/?scope=qa').data['rows']
+        self.assertEqual([(r['code'], r['document_status']) for r in rows], [('PST04104', 'pending')])
+        opened = qa.get(f'/api/teaching-plans/{plan.id}/document/?view=1')
+        self.assertEqual((opened.status_code, opened['Content-Type']), (200, 'application/pdf'))
+        self.assertNotIn('attachment', opened['Content-Disposition'])
+        url = f'/api/teaching-plans/{plan.id}/document/decide/'
+        self.assertEqual(hod.post(url, {'approve': True}, format='json').status_code, 403)
+        self.assertEqual(qa.post(url, {'approve': False}, format='json').status_code, 400)   # say why
+        back = qa.post(url, {'approve': False, 'note': 'Add the practical weeks'}, format='json')
+        self.assertEqual(back.data['document_review']['status'], 'returned')
+        self.assertTrue(Notification.objects.filter(user=self.tutor, kind=Notification.PLAN_DECIDED,
+                                                    body__contains='Add the practical weeks').exists())
+        self.upload(tutor, plan, pdf_file('PST04104 plan v2.pdf'))
+        done = qa.post(url, {'approve': True}, format='json')
+        self.assertEqual(done.data['document_review']['status'], 'approved')
+        self.assertEqual(qa.post(url, {'approve': True}, format='json').status_code, 400)     # nothing waits
+        # Now the tutor sets it up; set up, it is approved — no second approval.
+        laid = tutor.post(f'/api/teaching-plans/{plan.id}/lay-out/', {'pattern': plan.pattern}, format='json')
+        self.assertEqual(laid.status_code, 200, laid.data)
+        self.assertTrue(laid.data['can']['set_up'])
+        ready = tutor.post(f'/api/teaching-plans/{plan.id}/submit/', {}, format='json')
+        self.assertEqual((ready.data['status'], ready.data['decision']['by']), ('approved', 'Quality Assurance'))
+        # A new version goes back to QA; the plan already set up goes on.
+        again = self.upload(tutor, plan, pdf_file('PST04104 plan v3.pdf'))
+        self.assertEqual((again.data['status'], again.data['document_review']['status']), ('approved', 'pending'))
+
+    def test_qa_never_approves_a_plan_of_a_module_they_teach(self):
+        self.module.teachers.add(self.qa)
+        self.assertFalse(tp.may_approve_plan(self.module, self.qa))
+
+    def test_a_plan_started_before_keeps_its_classes_and_asks_for_the_pdf(self):
+        plan = tp.start_plan(self.module, self.tutor)
+        qa_approved(plan)
+        tp.lay_out(plan, plan.pattern, actor=self.tutor)
+        TeachingPlan.objects.filter(pk=plan.pk).update(document_status='')        # as before 19 November
+        plan.refresh_from_db()
+        tp.lay_out(plan, plan.pattern, actor=self.tutor)                          # its classes may be laid again
+        with self.assertRaises(tp.PlanError):
+            tp.submit(plan, actor=self.tutor)                                     # but it is set up after QA
+        first = plan.sessions.order_by('planned_on').first()
+        tp.mark(first, PlanSession.DONE, delivered_on=first.planned_on, actor=self.tutor,
+                today=first.planned_on)                                           # and marked meanwhile
+
+    def test_a_pdf_attached_before_waits_for_qa(self):
+        import importlib
+        from django.apps import apps
+        migration = importlib.import_module('attendance.migrations.0088_teaching_plan_pdf_for_qa')
+        plan = tp.start_plan(self.module, self.tutor)
+        plan.document.save('old.pdf', pdf_file().file, save=True)
+        word = tp.start_plan(Module.objects.create(name='Other', code='PST04198', teacher='x',
+                                                   class_level=self.level4, semester=self.sem1), self.tutor)
+        word.document.save('old.docx', pdf_file('old.docx', b'PK').file, save=True)
+        migration.pdfs_wait_for_qa(apps, None)
+        self.assertEqual(TeachingPlan.objects.get(pk=plan.pk).document_status, 'pending')
+        self.assertEqual(TeachingPlan.objects.get(pk=word.pk).document_status, '')
+

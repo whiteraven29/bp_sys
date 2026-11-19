@@ -7,6 +7,19 @@ or money.
 
 ## What it is
 
+- **QA approves the plan first, as a PDF (19 November 2026; migration 0088).** "QA is the one who
+  approve the teaching plan after reading it … then they get permission to setup the plan in their
+  account." The tutor opens the module under *My plans* (**Start: upload the PDF**) and sends the
+  plan as a PDF (**Send to QA**). QA finds it under *Teaching plans ▸ Plans to approve*, reads it
+  (**Read the PDF** opens it in the browser), and **Approves** it or **Returns** it saying what to
+  change (both notify the tutors). Only after QA's approval can the tutor give the days they teach
+  and lay the plan out; **Plan set up: start teaching** then makes it approved with the PDF — no
+  second approval (your choice). A new PDF later goes to QA again while the plan carries on. QA never
+  approves a plan of a module they teach. The Head of Department no longer approves plans: they read
+  their department's and moderate each test (*Tests to moderate*). Plans started before keep their
+  classes and can be marked; each shows "No PDF yet" until the tutor sends one, and is set up only
+  after QA approves it (your choice). A PDF already attached goes to QA as waiting; a Word copy does
+  not count (only PDFs are taken now).
 - **Teaching plans.** A tutor's plan for one module in one semester. The curriculum gives the
   outcomes (SEOs), their related tasks, the hours a week of lecture, tutorial, practical and
   assignment, and how the module is assessed. The almanac gives the weeks. The tutor says which
@@ -58,9 +71,10 @@ or money.
 - **Measured against itself.** Classes done of those due by today (partly done counts a half; a
   class made up or finished later, a whole): 90% or more on track, 70–89% behind, below 70% far
   behind. A 4-credit and a 20-credit module are judged alike.
-- **Approval and moderation.** The Head of Department approves the plan and moderates each test's
-  setting plan before it is given (assessment plan, Part IV). DPARC does it for a module with no
-  Head of Department, or one the Head of Department teaches. Nobody approves their own.
+- **Approval and moderation.** QA approves the plan (the tutor's PDF, above). The Head of Department
+  moderates each test's setting plan before it is given (assessment plan, Part IV); DPARC does it for
+  a module with no Head of Department, or one the Head of Department teaches. Nobody approves or
+  moderates their own.
 - **Who follows it.** The Principal, DPARC and QA see every plan; a Head of Department, their
   department's; QA leaves review notes. The CQI supervision dates show the plans as they stood
   that day.
@@ -81,8 +95,8 @@ or money.
   runs the student and staff evaluation forms (your note, 9 November). The Principal, DPARC and the
   Heads of Department keep the evaluation forms they had; service requests stay theirs.
 
-Menu: **Teaching plans** ▸ My plans (tutors) · To approve (HOD, DPARC) · Plan progress (HOD, DPARC,
-Principal, QA) · Teaching calendar · Curriculum.
+Menu: **Teaching plans** ▸ My plans (tutors) · Plans to approve (QA) · Tests to moderate (HOD,
+DPARC) · Plan progress (HOD, DPARC, Principal, QA) · Tutor KPIs · Teaching calendar · Curriculum.
 
 **When a tutor sees their plans (checked 11 November 2026).** Nobody approves a tutor before they see
 the menu; two things decide what they find in it:
@@ -96,9 +110,8 @@ the menu; two things decide what they find in it:
 
 A tutor given no module yet sees "You teach no module in … Your Head of Department gives you your
 modules." Until 11 November the server refused them instead (an error message), because it let in
-only accounts that had a module; it now lets in the Tutor office as well. A plan needs no approval
-to be seen or worked on: approval by the Head of Department (or DPARC) is what makes it the
-approved plan. On the laptop's database no module of 2026/27 Semester 1 has a tutor yet, so
+only accounts that had a module; it now lets in the Tutor office as well. Since 19 November a plan
+is set up only after QA approves the tutor's PDF; set up, it is the approved plan. On the laptop's database no module of 2026/27 Semester 1 has a tutor yet, so
 nobody would see a plan there; the server has its own assignments.
 
 **Tests on the branch:** `Ran 1365 tests … OK` (16 November 2026; 1330 on master).
@@ -172,8 +185,9 @@ git merge --no-ff feature/teaching-plans
 git push
 ```
 
-Then deploy as in guide 03 (it applies migrations 0086 and 0087; 0087 marks classes already added
-after their plan was sent as extra classes, read from each plan's history, and changes nothing else).
+Then deploy as in guide 03 (it applies migrations 0086, 0087 and 0088; 0087 marks classes already
+added after their plan was sent as extra classes, read from each plan's history; 0088 adds QA's
+approval of the PDF and puts any PDF already attached before QA as waiting; nothing else changes).
 After the deploy, on the server:
 
 1. Load both curricula — read each dry run first:
@@ -220,7 +234,8 @@ After the deploy, on the server:
   `curricula/extract_2015.py`; the old curricula themselves would add the hours and credits.
 - **The attendance screen is unchanged.** A class marked done finds the register taken that day
   by itself; picking the plan's class while taking attendance is not built.
-- **No notifications yet.** The Head of Department sees plans waiting under *To approve*.
+- **Notifications (19 November).** QA is told when a PDF is sent; the module's tutors when QA approves
+  or returns it. Tests sent for moderation still show in the plan only.
 
 ## Also on this branch: the new look (10 November 2026)
 

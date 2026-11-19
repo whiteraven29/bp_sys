@@ -4131,6 +4131,8 @@ class Notification(models.Model):
     WAIVER_DECIDED = 'waiver.decided'
     CORRECTION_PROPOSED = 'correction.proposed'
     CORRECTION_DECIDED = 'correction.decided'
+    PLAN_SENT = 'plan.sent'
+    PLAN_DECIDED = 'plan.decided'
     KIND_CHOICES = [
         (REQUEST_SUBMITTED, 'A student asked for something'),
         (REQUEST_FORWARDED, 'A request needs a decision'),
@@ -4160,6 +4162,8 @@ class Notification(models.Model):
         (WAIVER_DECIDED, 'A fee waiver was decided'),
         (CORRECTION_PROPOSED, 'A result correction needs approval'),
         (CORRECTION_DECIDED, 'A result correction was decided'),
+        (PLAN_SENT, 'A teaching plan (PDF) waits for QA'),
+        (PLAN_DECIDED, 'QA decided a teaching plan (PDF)'),
     ]
 
     # Exactly one of these two is set: staff sign in as Django users, students
@@ -4879,8 +4883,22 @@ class TeachingPlan(models.Model):
     starts_on = models.DateField(null=True, blank=True, help_text='Later than the semester, for a late start.')
     weeks = models.PositiveSmallIntegerField(null=True, blank=True, help_text='Weeks of teaching, if not the usual.')
     document = models.FileField(upload_to='teaching_plans/%Y/', blank=True,
-                                validators=[FileExtensionValidator(['pdf', 'docx', 'doc'])])
+                                validators=[FileExtensionValidator(['pdf'])])
     document_name = models.CharField(max_length=200, blank=True)
+    # The tutor's plan as a PDF, read and approved by QA before the plan is set
+    # up in the system (said 19 November 2026: "first its uploading the
+    # teaching plan from the teacher for QA approval").
+    DOC_NONE, DOC_PENDING, DOC_APPROVED, DOC_RETURNED = '', 'pending', 'approved', 'returned'
+    DOC_STATUS_CHOICES = [(DOC_NONE, 'No PDF yet'), (DOC_PENDING, 'Waiting for QA'),
+                          (DOC_APPROVED, 'Approved by QA'), (DOC_RETURNED, 'Returned by QA')]
+    document_status = models.CharField(max_length=10, choices=DOC_STATUS_CHOICES, default=DOC_NONE, blank=True)
+    document_uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                             blank=True, related_name='+')
+    document_uploaded_at = models.DateTimeField(null=True, blank=True)
+    document_decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                            blank=True, related_name='+')
+    document_decided_at = models.DateTimeField(null=True, blank=True)
+    document_note = models.CharField(max_length=500, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                    related_name='teaching_plans_made')
     created_at = models.DateTimeField(auto_now_add=True)

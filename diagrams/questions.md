@@ -1165,3 +1165,13 @@ student's statement; the consent form "just download, not print" — one Downloa
 21 September). Should it be records' alone, like VETA's now? (b) The exact form of NECTA's equivalence number: the system
 takes EQ followed by digits (with or without slashes). If yours look different, send one or two (no names).
 
+### Q84. QA approves the teaching plan (PDF) before it is set up ✅
+
+**Asked (19 November 2026):** "QA is the one who approve the teaching plan after reading it so must be uploaded as a pdf
+from the teacher and QA will see it for approval then they get permission to setup the plan in their account."
+
+**Answered (your choices):** set up, the plan is approved with the PDF — no second approval; the Head of Department reads
+plans and moderates tests; plans started before keep their classes and ask for the PDF.
+
+**Built (uncommitted; migration 0088):** guide 07, "QA approves the plan first, as a PDF".
+

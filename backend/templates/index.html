@@ -1590,7 +1590,8 @@
       <button class="nav-btn" data-page="tplans" onclick="toggleTpMenu(event)"><span class="icon"><i class="bi bi-journal-check"></i></span> Teaching plans <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
         <button class="nav-sub-btn" data-tp-nav="mine" data-roles="tutor" onclick="showTpSection('mine', this)">My plans</button>
-        <button class="nav-sub-btn" data-tp-nav="approve" data-roles="hod dparc" onclick="showTpSection('approve', this)">To approve</button>
+        <button class="nav-sub-btn" data-tp-nav="qa" data-roles="qa" onclick="showTpSection('qa', this)">Plans to approve</button>
+        <button class="nav-sub-btn" data-tp-nav="approve" data-roles="hod dparc" onclick="showTpSection('approve', this)">Tests to moderate</button>
         <button class="nav-sub-btn" data-tp-nav="progress" data-roles="hod dparc principal qa" onclick="showTpSection('progress', this)">Plan progress</button>
         <button class="nav-sub-btn" data-tp-nav="kpis" data-roles="hod dparc principal qa" onclick="showTpSection('kpis', this)">Tutor KPIs</button>
         <button class="nav-sub-btn" data-tp-nav="calendar" onclick="showTpSection('calendar', this)">Teaching calendar</button>
@@ -1942,16 +1943,25 @@
 
       <div class="card" data-tp-section="mine">
         <div class="card-title">My modules this semester</div>
-        <p class="help-note">Start a plan, give the days you teach, and the plan is laid out from the curriculum and the teaching calendar. After each class, mark it done.</p>
+        <p class="help-note">First upload your teaching plan as a PDF: QA reads and approves it. Then give the days you teach, and the plan is laid out from the curriculum and the teaching calendar. After each class, mark it done.</p>
         <div class="table-wrap"><table>
           <thead><tr><th>Module</th><th>Plan</th><th>Week by week</th><th>On schedule</th><th></th></tr></thead>
           <tbody id="tp-mine-tbody"></tbody>
         </table></div>
       </div>
 
+      <div class="card" data-tp-section="qa">
+        <div class="card-title">Teaching plans sent to you</div>
+        <p class="help-note">Each tutor uploads their plan as a PDF. Read it, then approve it or return it saying what to change. Once approved, the tutor sets the plan up in the system and it counts as approved; nothing comes back to you unless they send a new PDF.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Module</th><th>Tutors</th><th>PDF</th><th>Sent</th><th>Plan in the system</th><th></th></tr></thead>
+          <tbody id="tp-qa-tbody"></tbody>
+        </table></div>
+      </div>
+
       <div class="card" data-tp-section="approve">
-        <div class="card-title">Plans you approve</div>
-        <p class="help-note">Your department's modules (DPARC: modules with no Head of Department, and any plan a Head of Department teaches). Tests sent for moderation are approved inside each plan.</p>
+        <div class="card-title">Your department's plans</div>
+        <p class="help-note">QA approves each teaching plan (the tutor's PDF). You read your department's plans and moderate each test before it is given: open a plan to approve or return its tests (DPARC: modules with no Head of Department, and any plan a Head of Department teaches).</p>
         <div class="table-wrap"><table>
           <thead><tr><th>Module</th><th>Tutors</th><th>Plan</th><th>Week by week</th><th>Tests</th><th></th></tr></thead>
           <tbody id="tp-approve-tbody"></tbody>
@@ -9954,6 +9964,8 @@ const NOTIFICATION_LINKS = {
   'status:postponements': () => showStatusSection('postpone', document.querySelector('[data-status-section="postpone"].nav-sub-btn')),
   'executive:spending': () => showExecSection('spending', document.querySelector('[data-exec-section="spending"].nav-sub-btn')),
   'executive:waivers': () => showExecSection('waivers', document.querySelector('[data-exec-section="waivers"].nav-sub-btn')),
+  'tplans:qa': () => showTpSection('qa'),
+  'tplans:mine': () => showTpSection('mine'),
   'finance:overrides': () => showFinanceSection('overrides', document.querySelector('[data-finance-section="overrides"].nav-sub-btn')),
   'finance:timetopay': () => state.offices?.finance
     ? showFinanceSection('timetopay', document.querySelector('[data-finance-section="timetopay"].nav-sub-btn'))
@@ -11927,7 +11939,8 @@ function renderPasswordAge(reading) {
 // was opened from.
 const TP_SECTIONS = {
   mine: ['My plans', 'The modules you teach this semester, and your plan for each.'],
-  approve: ['Plans to approve', 'Plans and tests waiting on you.'],
+  qa: ['Plans to approve', 'Teaching plans tutors sent as a PDF: read each one, then approve it or return it.'],
+  approve: ['Tests to moderate', "Your department's plans, and the tests waiting for your moderation."],
   progress: ['Plan progress', 'How far each plan has got, against itself.'],
   kpis: ['Tutor KPIs', 'Each tutor against their teaching plans and assessment plans.'],
   calendar: ['Teaching calendar', 'The weeks plans are laid out over: from the almanac, kept by DPARC.'],
@@ -11950,6 +11963,7 @@ function toggleTpMenu(event) {
 function defaultTpSection() {
   const o = state.offices || {};
   if (o.tutor && !(o.hod || o.dparc || o.principal || o.qa)) return 'mine';
+  if (o.qa) return 'qa';
   return (o.hod || o.dparc) ? 'approve' : 'progress';
 }
 
@@ -11986,6 +12000,7 @@ async function showTpSection(section, btn) {
     const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = title;
   }
   if (section === 'mine') return loadTpMine();
+  if (section === 'qa') return loadTpQa();
   if (section === 'approve') return loadTpApprove();
   if (section === 'progress') return loadTpProgress();
   if (section === 'kpis') return loadTpKpis();
@@ -11999,10 +12014,10 @@ async function loadTpMine() {
     const data = await api('GET', '/teaching-plans/?scope=mine');
     body.innerHTML = data.rows.length ? data.rows.map(r => `<tr>
         <td><b>${safeText(r.code)}</b> ${safeText(r.name)}<div class="tp-sub">${safeText(r.level)}</div></td>
-        <td>${tpStatus(r)}</td><td>${tpMiniStrip(r.strip) || '—'}</td>
+        <td>${tpStatus(r)}${r.plan_id ? `<div class="tp-sub">PDF: ${safeText((TP_DOC[r.document_status || ''] || [])[0] === 'Waiting for you' ? 'waiting for QA' : (r.document_status_display || '').toLowerCase())}</div>` : ''}</td><td>${tpMiniStrip(r.strip) || '—'}</td>
         <td>${r.plan_id ? `${tpPct(r.progress.on_schedule)} ${tpBand(r.progress)}` : '—'}</td>
         <td class="act">${r.plan_id ? `<button class="btn btn-secondary btn-sm" onclick="openTpPlan(${r.plan_id})">Open</button>`
-          : `<button class="btn btn-primary btn-sm" onclick="startTpPlan(event, ${r.module_id})">Start the plan</button>`}</td></tr>`).join('')
+          : `<button class="btn btn-primary btn-sm" onclick="startTpPlan(event, ${r.module_id})">Start: upload the PDF</button>`}</td></tr>`).join('')
       : `<tr><td colspan="5"><div class="empty">You teach no module in ${safeText(data.semester)}. Your Head of Department gives you your modules.</div></td></tr>`;
   } catch (e) { body.innerHTML = ''; toast(apiErrorText(e, 'Could not load your plans'), 'var(--red)'); }
 }
@@ -12031,6 +12046,32 @@ async function loadTpApprove() {
   } catch (e) { body.innerHTML = ''; toast(apiErrorText(e, 'Could not load the plans'), 'var(--red)'); }
 }
 
+// QA reads each tutor's PDF and approves it before the plan is set up
+// (said 19 November 2026). Waiting ones first.
+const TP_DOC = { pending: ['Waiting for you', 'badge-yellow'], approved: ['Approved', 'badge-green'],
+                 returned: ['Returned', 'badge-red'], '': ['No PDF yet', 'badge-gen'] };
+function tpDocBadge(status, label) {
+  const [word, cls] = TP_DOC[status || ''] || [label || status, 'badge-gen'];
+  return `<span class="badge ${cls}">${safeText(label && status !== 'pending' ? label : word)}</span>`;
+}
+
+async function loadTpQa() {
+  const body = document.getElementById('tp-qa-tbody');
+  try {
+    const data = await api('GET', '/teaching-plans/?scope=qa');
+    const order = { pending: 0, returned: 1, '': 2, approved: 3 };
+    const rows = data.rows.filter(r => r.plan_id).sort((a, b) => (order[a.document_status] ?? 2) - (order[b.document_status] ?? 2));
+    body.innerHTML = rows.length ? rows.map(r => `<tr>
+        <td><b>${safeText(r.code)}</b> ${safeText(r.name)}<div class="tp-sub">${safeText(r.level)}${r.department ? `, ${safeText(r.department)}` : ''}</div></td>
+        <td>${safeText(r.tutors.join(', ') || '—')}</td>
+        <td>${tpDocBadge(r.document_status, r.document_status_display)}</td>
+        <td>${r.document_uploaded_at ? new Date(r.document_uploaded_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—'}</td>
+        <td>${tpStatus(r)}</td>
+        <td class="act">${r.has_document ? `<a class="btn btn-ghost btn-sm" href="/api/teaching-plans/${r.plan_id}/document/?view=1" target="_blank" rel="noopener">Read the PDF</a> ` : ''}<button class="btn ${r.document_status === 'pending' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="openTpPlan(${r.plan_id})">${r.document_status === 'pending' ? 'Approve or return' : 'Open'}</button></td></tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty">No tutor has sent a plan yet.</div></td></tr>';
+  } catch (e) { body.innerHTML = ''; toast(apiErrorText(e, 'Could not load the plans'), 'var(--red)'); }
+}
+
 async function loadTpProgress() {
   const select = document.getElementById('tp-asof');
   let asOf = '';
@@ -12054,7 +12095,7 @@ async function loadTpProgress() {
       return `<tr>
         <td><b>${safeText(r.code)}</b> ${safeText(r.name)}<div class="tp-sub">${safeText(r.level)}${r.department ? `, ${safeText(r.department)}` : ''}</div></td>
         <td>${safeText(r.tutors.join(', ') || '—')}</td>
-        <td>${tpStatus(r)}${r.has_document ? '<div class="tp-sub">own plan attached</div>' : ''}</td>
+        <td>${tpStatus(r)}<div class="tp-sub">PDF: ${safeText((r.document_status_display || 'No PDF yet').toLowerCase())}</div></td>
         <td>${tpMiniStrip(r.strip) || '—'}</td>
         <td>${r.plan_id ? `${tpPct(p.on_schedule)} ${tpBand(p)}` : tpBand(p)}</td>
         <td>${looks.length ? `<span class="tp-warn">${safeText(looks.join('; '))}</span>` : '—'}</td>
@@ -12536,7 +12577,7 @@ function renderTpPlan(plan) {
   const statusLine = `<div class="tp-status">${tpStatus(plan)}
       ${plan.status === 'approved' && plan.decision.by ? `<span>approved by ${safeText(plan.decision.by)}</span>` : ''}
       ${plan.status === 'returned' ? `<span class="tp-bad">${safeText(plan.decision.note)}</span>` : ''}
-      ${plan.document ? `<a href="/api/teaching-plans/${plan.id}/document/">The tutor's own plan (${safeText(plan.document.name)})</a>` : ''}
+      ${plan.document ? `<a href="/api/teaching-plans/${plan.id}/document/${plan.document.is_pdf ? '?view=1' : ''}" target="_blank" rel="noopener">The plan as a PDF (${safeText(plan.document.name)})</a>` : ''}
       <button class="btn btn-secondary btn-sm" onclick="showTpSection(state.tpSection || defaultTpSection())">Back to the list</button></div>`;
 
   const kinds = plan.kinds;
@@ -12598,18 +12639,36 @@ function renderTpPlan(plan) {
       ${!gaps.length && !cov.tested_before_taught.length ? '<p class="tp-ok">Every required task is covered, each after it is taught.</p>' : ''}
     </section>` : '';
 
+  const docOk = plan.document_review.status === 'approved';
   const approval = `<section class="tp-block"><h3>Approval</h3>
-      ${can.edit ? `<p class="help-note">When the plan is right, send it to your Head of Department (DPARC where there is none).</p>
-        <button class="btn btn-primary btn-sm" onclick="submitTp(event)" ${plan.sessions.length ? '' : 'disabled'}>Send for approval</button>` : ''}
-      ${can.approve ? `<div class="field"><label for="tp-decision-note">Note, needed to return it</label><input id="tp-decision-note" maxlength="500" /></div>
+      ${can.edit ? (docOk
+        ? `<p class="help-note">QA approved your PDF. When the classes and tests are right, finish setting up: the plan is then approved with the PDF and you start marking classes. After that, classes move one at a time with a reason.</p>
+           <button class="btn btn-primary btn-sm" onclick="submitTp(event)" ${plan.sessions.length ? '' : 'disabled'}>Plan set up: start teaching</button>`
+        : `<p class="help-note">This plan is set up once QA approves your PDF (above).</p>`) : ''}
+      ${can.approve ? `<p class="help-note">Sent for approval before QA approved PDFs: decide it here.</p><div class="field"><label for="tp-decision-note">Note, needed to return it</label><input id="tp-decision-note" maxlength="500" /></div>
         <div class="tp-actions"><button class="btn btn-primary btn-sm" onclick="decideTp(event, true)">Approve the plan</button>
         <button class="btn btn-secondary btn-sm" onclick="decideTp(event, false)">Return it for changes</button></div>` : ''}
       ${!can.edit && !can.approve ? `<p>${safeText(plan.status_display)}.${plan.decision.note ? ' ' + safeText(plan.decision.note) : ''}</p>` : ''}
     </section>`;
 
-  const document_ = `<section class="tp-block"><h3>The tutor's own plan</h3>
-      ${plan.document ? `<p><a href="/api/teaching-plans/${plan.id}/document/">Download ${safeText(plan.document.name)}</a></p>` : '<p class="help-note">None attached.</p>'}
-      ${can.follow ? `<div class="tp-actions"><input type="file" id="tp-doc" accept=".pdf,.docx,.doc" aria-label="Word or PDF plan" /><button class="btn btn-secondary btn-sm" onclick="uploadTpDocument(event)">Attach it</button></div>` : ''}
+  // Step 1 (said 19 November 2026): the plan as a PDF, read and approved by QA
+  // before it is set up here.
+  const rv = plan.document_review;
+  const when = v => v ? new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const docLine = {
+    '': `<p class="help-note">${can.upload ? 'Upload your teaching plan as a PDF. QA reads it and approves it; then you set the plan up here.' : 'The tutor has not sent the plan as a PDF yet.'}</p>`,
+    pending: `<p><span class="badge badge-yellow">Waiting for QA</span> sent by ${safeText(rv.uploaded_by)} on ${when(rv.uploaded_at)}.</p>`,
+    approved: `<p><span class="badge badge-green">Approved by QA</span> ${safeText(rv.decided_by)}, ${when(rv.decided_at)}.</p>`,
+    returned: `<p><span class="badge badge-red">Returned by QA</span> ${safeText(rv.decided_by)}, ${when(rv.decided_at)}: <b>${safeText(rv.note)}</b></p>`,
+  }[rv.status || ''];
+  const pdfBlock = `<section class="tp-block"><h3>The teaching plan (PDF) for QA</h3>
+      ${docLine}
+      ${plan.document ? `<p><a class="btn btn-ghost btn-sm" href="/api/teaching-plans/${plan.id}/document/${plan.document.is_pdf ? '?view=1' : ''}" target="_blank" rel="noopener">Read ${safeText(plan.document.name)}</a>${plan.document.is_pdf ? '' : ' <span class="tp-warn">A Word copy: upload the plan as a PDF for QA.</span>'}</p>` : ''}
+      ${can.decide_document ? `<div class="field"><label for="tp-doc-note">What to change (needed to return it)</label><input id="tp-doc-note" maxlength="500" /></div>
+        <div class="tp-actions"><button class="btn btn-primary btn-sm" onclick="decideTpDocument(event, true)">Approve the plan</button>
+        <button class="btn btn-secondary btn-sm" onclick="decideTpDocument(event, false)">Return it</button></div>` : ''}
+      ${can.upload ? `<div class="tp-actions"><input type="file" id="tp-doc" accept=".pdf,application/pdf" aria-label="Teaching plan as a PDF" /><button class="btn ${rv.status ? 'btn-secondary' : 'btn-primary'} btn-sm" onclick="uploadTpDocument(event)">${rv.status ? 'Send a new PDF to QA' : 'Send to QA'}</button></div>
+        ${rv.status === 'approved' ? '<p class="help-note">A new PDF goes to QA again; the plan you set up carries on meanwhile.</p>' : ''}` : ''}
     </section>`;
 
   const notes = `<section class="tp-block"><h3>Review notes</h3>
@@ -12644,7 +12703,8 @@ function renderTpPlan(plan) {
       ${cm && cm.checks.length ? `<p class="help-note">Where the national documents disagree for this module: ${safeText(cm.checks.join(' '))}</p>` : ''}
       ${tpStripHtml(plan)}${figures}
     </div>
-    ${!plan.sessions.length ? `<div class="card"><div class="card-title">${can.edit ? 'Give the days you teach' : 'Not laid out yet'}</div>${can.edit ? weekCard : '<p class="help-note">The tutor has not laid the plan out yet.</p>'}</div>` : ''}
+    <div class="card">${pdfBlock}</div>
+    ${!plan.sessions.length ? `<div class="card"><div class="card-title">${can.set_up ? 'Give the days you teach' : 'Not set up yet'}</div>${can.set_up ? weekCard : `<p class="help-note">${can.edit ? 'Once QA approves your PDF, you give the days you teach here and the plan is laid out.' : 'The tutor sets the plan up here once QA approves their PDF.'}</p>`}</div>` : ''}
     ${plan.sessions.length ? `<div class="tp-cols">
       <div class="card"><div class="card-title">Classes</div>${classes}</div>
       <div class="card"><div class="card-title">Assessments</div>
@@ -12652,8 +12712,8 @@ function renderTpPlan(plan) {
         ${assessments || '<p class="help-note">Laid out with the plan.</p>'}</div>
     </div>` : ''}
     ${coverage || plan.sessions.length ? `<div class="card">${coverage}${approval}</div>` : ''}
-    ${plan.sessions.length && can.edit ? `<div class="card"><details class="tp-fold"><summary>Change the week (lays the plan out again)</summary>${weekCard}</details></div>` : ''}
-    <div class="tp-cols"><div class="card">${document_}</div><div class="card">${notes}</div></div>
+    ${plan.sessions.length && can.set_up ? `<div class="card"><details class="tp-fold"><summary>Change the week (lays the plan out again)</summary>${weekCard}</details></div>` : ''}
+    <div class="card">${notes}</div>
     <div class="card">${history}</div>`;
   showTpSection('plan');
   // Bring this week into view on a narrow screen.
@@ -12802,7 +12862,17 @@ function returnTpTest(event, id) {
     `/teaching-plans/${state.tpPlan.id}/assessments/${id}/moderate/`, { action: 'return', note: event.target.elements.note.value }, 'Test returned');
 }
 
-function submitTp(event) { tpCall(event, 'Sending…', 'POST', `/teaching-plans/${state.tpPlan.id}/submit/`, {}, 'Sent for approval'); }
+function submitTp(event) {
+  if (!confirm('Finish setting up? The plan is then approved with the PDF QA approved, and classes move one at a time with a reason.')) return;
+  tpCall(event, 'Saving…', 'POST', `/teaching-plans/${state.tpPlan.id}/submit/`, {}, 'Plan set up: approved with the PDF');
+}
+
+function decideTpDocument(event, approve) {
+  const note = document.getElementById('tp-doc-note').value.trim();
+  if (!approve && !note) { toast('Say what to change', 'var(--red)'); return; }
+  tpCall(event, '…', 'POST', `/teaching-plans/${state.tpPlan.id}/document/decide/`, { approve, note },
+    approve ? 'Approved: the tutor may set the plan up' : 'Returned to the tutor');
+}
 
 function decideTp(event, approve) {
   tpCall(event, '…', 'POST', `/teaching-plans/${state.tpPlan.id}/decide/`,
@@ -12816,10 +12886,11 @@ function addTpNote(event) {
 
 async function uploadTpDocument(event) {
   const file = document.getElementById('tp-doc').files[0];
-  if (!file) { toast('Choose the Word or PDF file first', 'var(--red)'); return; }
+  if (!file) { toast('Choose the PDF first', 'var(--red)'); return; }
+  if (!/\.pdf$/i.test(file.name)) { toast('Upload the teaching plan as a PDF', 'var(--red)'); return; }
   const body = new FormData();
   body.append('file', file);
-  tpCall(event, 'Attaching…', 'POST', `/teaching-plans/${state.tpPlan.id}/document/`, body, 'Plan attached');
+  tpCall(event, 'Sending…', 'POST', `/teaching-plans/${state.tpPlan.id}/document/`, body, 'Sent to QA');
 }
 
 // ── THE LABORATORY ────────────────────────────────────────────────────────────

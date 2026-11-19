@@ -240,8 +240,11 @@ sign in.
                          deadline | meeting | cqi | field | other (holiday,
                          recess, exam: no class planned)
   TeachingPlan           one per module: curriculum_module, pattern (day, kind,
-                         hours), weeks, starts_on, the tutor's document,
-                         draft | submitted | approved | returned
+                         hours), weeks, starts_on, the tutor's plan as a PDF
+                         with QA's decision (document_status: none | pending |
+                         approved | returned, by, at, note — 0088); laid out
+                         only after QA approves; draft | approved (set up),
+                         submitted | returned (plans sent before 19 Nov 2026)
   PlanSession            a class: week, planned_on, kind, hours, outcome, tasks,
                          planned | done | partial | missed, delivered_on,
                          register (the attendance Session that day), moved_from
@@ -487,7 +490,7 @@ are dropped once the production row counts are checked.
 | `load_curriculum [path] [--dry-run]` | the curriculum and assessment plans (default: 2022 PST, NTA 4–6); updates in place |
 | `load_teaching_calendar [path] [--dry-run]` | the almanac's teaching weeks, holidays, CAT weeks, exams, CQI dates (default 2026/27) |
 
-Tests: 1381 on master (teaching plans merged, 17 Nov 2026), run as described in `ops/guides/06-release-2026-27.md`.
+Tests: 1385 on master (teaching plans merged, 17 Nov 2026), run as described in `ops/guides/06-release-2026-27.md`.
 
 ## 7. The look (said 10 November 2026)
 

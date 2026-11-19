@@ -18,7 +18,7 @@ from django.utils import timezone
 
 from .models import (
     AccountantProfile, DeanOfStudentsProfile, DeputyAcademicProfile, DeputyFinanceProfile,
-    HeadOfDepartmentProfile, Notification, PrincipalProfile, SecretaryProfile,
+    HeadOfDepartmentProfile, Notification, PrincipalProfile, QualityAssuranceProfile, SecretaryProfile,
 )
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,12 @@ def deans():
 
 def accountants():
     return _users_holding(AccountantProfile)
+
+
+def quality_assurance():
+    """QA reads and approves each tutor's teaching plan (PDF) before it is set
+    up (said 19 November 2026)."""
+    return _users_holding(QualityAssuranceProfile)
 
 
 def deciders():

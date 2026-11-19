@@ -23,7 +23,7 @@ from .models import PlanAssessment, PlanSession, Session, TeachingPlan
 KPIS = [
     {'key': 'plans_approved', 'group': 'teaching', 'name': 'Plans approved', 'unit': '%', 'better': 'higher',
      'target': 100, 'floor': 75,
-     'measure': 'Modules taught whose teaching plan the Head of Department (or DPARC) has approved.',
+     'measure': 'Modules taught whose teaching plan QA has approved (the PDF) and the tutor has set up.',
      'source': 'Teaching plan: approval'},
     {'key': 'on_schedule', 'group': 'teaching', 'name': 'Classes on schedule', 'unit': '%', 'better': 'higher',
      'target': 90, 'floor': 70,

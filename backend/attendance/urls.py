@@ -154,6 +154,8 @@ urlpatterns = [
          name='teaching-plan-moderate'),
     path('teaching-plans/<int:pk>/notes/', teaching_plan_views.note, name='teaching-plan-note'),
     path('teaching-plans/<int:pk>/document/', teaching_plan_views.document, name='teaching-plan-document'),
+    path('teaching-plans/<int:pk>/document/decide/', teaching_plan_views.decide_document,
+         name='teaching-plan-document-decide'),
     path('teaching-calendar/', teaching_plan_views.calendar, name='teaching-calendar'),
     path('teaching-calendar/events/', teaching_plan_views.calendar_event, name='teaching-calendar-events'),
     path('teaching-calendar/events/<int:event_id>/', teaching_plan_views.calendar_event,
