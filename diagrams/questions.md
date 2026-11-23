@@ -1207,3 +1207,15 @@ hold 20 teaching weeks for Levels 5–6. No calendar per level.
 **Built (uncommitted; no migration):** `consent.asks_consent`: a supplementary at Level 6 (`grading.is_level_six` of the
 review's level) is not shown the form, cannot fill it in, and is not on the office's list. A form already filled in stays
 on record; no record is changed.
+
+### Q88. Performance from grades, not marks ✅
+
+**Asked (23 November 2026):** "does the performance area include the authority grade import processing?" — it did not (marks
+only) — then "so the results come as grades not marks but end of the day we need performance analysis: pass, fails, best
+performing modules and underperforming modules, also ability to compare from last semesters on the same module or class and
+overall performance".
+
+**Built (uncommitted; no migration):** Performance opens on *Final result (official grade)*. Choices made, say if any is wrong:
+first sittings only (repeat sittings are not counted: a student's second try is not the class's result); "best" and "need attention" split
+at the semester's own pass rate; a semester is compared with the same semester a year before (Semester 1 with Semester 1, the
+same modules); a module with the last semester its code was taught.

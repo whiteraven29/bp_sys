@@ -191,7 +191,7 @@ class PerformanceApiTests(PerformanceTestBase):
                          ['2026/2027', '2025/2026'])
         self.assertIn('PHM101', [m['code'] for m in options['modules']])
         self.assertEqual([a['value'] for a in options['assessments']],
-                         ['cat1', 'cat2', 'ca', 'end', 'final'])
+                         ['result', 'cat1', 'cat2', 'ca', 'end', 'final'])
 
     def test_filters_narrow_the_population(self):
         other = ClassLevel.objects.create(name='NTA Level 5', order=5)
@@ -223,3 +223,82 @@ class PerformanceApiTests(PerformanceTestBase):
         tutor_api = APIClient()
         tutor_api.force_authenticate(tutor)
         self.assertEqual(tutor_api.get('/api/performance/').json()['scope'], 'my-modules')
+
+
+class OfficialResultTests(PerformanceTestBase):
+    """Said 23 November 2026: results come as NACTVET's grades, not marks, and
+    the college still wants passes and fails, the best and weakest modules,
+    and each against the last time."""
+
+    def _graded(self, module, reg, grade, supp='', attempt=Student.NORMAL):
+        student = Student.objects.create(nactvet_reg_no=reg, name=f'Student {reg}', module=module, attempt=attempt)
+        return StudentResult.objects.create(student=student, authority_grade=grade, authority_supp_grade=supp,
+                                            final_approved=True)
+
+    def test_imported_grades_count_without_any_marks(self):
+        for reg, grade in (('R1', 'A'), ('R2', 'B'), ('R3', 'C*'), ('R4', 'D')):
+            self._graded(self.module, reg, grade)
+        data = analytics.summary(assessment=analytics.RESULT)
+        self.assertEqual(data['kind'], 'grades')
+        h = data['headline']
+        self.assertEqual((h['graded'], h['passed'], h['supp'], h['failed']), (4, 2, 1, 1))
+        self.assertEqual(h['pass_rate'], 50.0)
+        bands = {row['grade']: row['count'] for row in data['distribution']}
+        self.assertEqual((bands['A'], bands['B'], bands['C'], bands['D']), (1, 1, 1, 1))
+
+    def test_the_supplementary_grade_replaces_the_first_sitting(self):
+        self._graded(self.module, 'R1', 'C*', supp='C')       # passed the supplementary
+        self._graded(self.module, 'R2', 'B*', supp='D*')      # failed it: repeats
+        h = analytics.summary(assessment=analytics.RESULT)['headline']
+        self.assertEqual((h['passed'], h['supp'], h['failed']), (1, 0, 1))
+
+    def test_only_published_first_sittings_count(self):
+        self._complete(self.module, 'R1', 70, end=70)                      # marks, not approved yet
+        approved = self._complete(self.module, 'R2', 70, end=70)
+        approved.final_approved = True
+        approved.save()
+        self._graded(self.module, 'R3', 'F', attempt=Student.REPEAT)      # a repeat: the student's second try
+        h = analytics.summary(assessment=analytics.RESULT)['headline']
+        self.assertEqual((h['graded'], h['passed']), (1, 1))
+
+    def test_best_and_weakest_modules_and_the_last_time_each_was_taught(self):
+        strong = Module.objects.create(name='Anatomy', code='ANA101', teacher='T', class_level=self.level,
+                                       semester=self.sem)
+        middle = Module.objects.create(name='Law', code='LAW101', teacher='T', class_level=self.level,
+                                       semester=self.sem)
+        for reg, grade in (('O1', 'A'), ('O2', 'D')):                   # last year: half passed
+            self._graded(self.old_module, reg, grade)
+        for reg, grade in (('N1', 'D'), ('N2', 'D'), ('N3', 'C')):      # this year: a third
+            self._graded(self.module, reg, grade)
+        for reg in ('S1', 'S2'):
+            self._graded(strong, reg, 'A')
+        self._graded(middle, 'M1', 'B')
+        self._graded(middle, 'M2', 'C*')
+        data = analytics.summary(assessment=analytics.RESULT)
+        ranking = data['ranking']
+        self.assertEqual(ranking['semester'], '2026/2027 · Semester 1')
+        self.assertEqual(ranking['overall_pass_rate'], 57.1)                  # 4 of 7 this semester
+        self.assertEqual([r['code'] for r in ranking['best']], ['ANA101'])
+        self.assertEqual([r['code'] for r in ranking['weakest']], ['PHM101', 'LAW101'])   # weakest first
+        row = next(r for r in data['by_module'] if r['code'] == 'PHM101' and r['semester'].startswith('2026'))
+        self.assertEqual(row['pass_rate'], 33.3)
+        self.assertEqual(row['previous']['label'], '2025/2026 · Semester 1')
+        self.assertEqual(row['previous']['pass_rate'], 50.0)
+        self.assertEqual(row['previous']['change'], -16.7)
+
+    def test_a_semester_is_compared_with_the_same_semester_a_year_before(self):
+        self._graded(self.old_module, 'O1', 'A')
+        self._graded(self.old_module, 'O2', 'D')
+        self._graded(self.module, 'N1', 'A')
+        data = analytics.summary(semester=self.sem, class_level=self.level, assessment=analytics.RESULT)
+        previous = data['headline']['previous']
+        self.assertEqual((previous['label'], previous['pass_rate'], previous['change']),
+                         ('2025/2026 · Semester 1', 50.0, 50.0))
+        self.assertEqual([(p['academic_year'], p['pass_rate']) for p in data['trend']],
+                         [('2025/2026', 50.0), ('2026/2027', 100.0)])
+
+    def test_the_page_opens_on_the_official_result(self):
+        self._graded(self.module, 'R1', 'B')
+        payload = self.api.get('/api/performance/').json()
+        self.assertEqual(payload['assessment'], 'result')
+        self.assertEqual(payload['headline']['passed'], 1)

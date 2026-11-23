@@ -5476,7 +5476,7 @@ def performance(request):
             semester=pick(Semester, 'semester_id'),
             class_level=pick(ClassLevel, 'class_level_id'),
             module=pick(Module, 'module_id'),
-            assessment=request.query_params.get('assessment', analytics.FINAL),
+            assessment=request.query_params.get('assessment', analytics.RESULT),
             modules=modules,
         )
     except ValueError as exc:

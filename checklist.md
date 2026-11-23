@@ -642,6 +642,13 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      `pst_2015.json`, `extract_2015.py`; Semester 1 holds 19 teaching weeks, so its plans get 19 — right this semester only, we started late (1 test)
    - [ ] After the deploy: `showmigrations attendance` ends at 0089; Curriculum ▸ PST-2015 shows 20 weeks
    - [x] Classes per SEO or task: left free, no limit or warning (23 Nov, your choice)
+   - [x] Performance on the official grade (23 Nov, your request): NACTVET's grades counted (they carry no marks),
+     passes/supplementaries/fails, best and weakest modules of a semester, each module against the last time it was
+     taught, a semester against the same one a year before; CATs and CA stay on marks (`analytics.grade_summary`; 6 tests)
+   - [ ] After the deploy: Performance ▸ 2026/27 Semester 1 (or the last semester with NACTVET grades) ▸ a level —
+     compare the counts with Results ▸ Results Summary for that level
+   - [x] Menu: an item shown by role (Results ▸ Authority Grades, Results Summary …) had its words above its dot;
+     centred (`.nav-sub-btn { align-items: center }`, 23 Nov)
 
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
    - [ ] Migrations to 0085 applied by the deploy (release guide B1–B4); `Ran 1330 tests … OK` on the laptop first

@@ -186,6 +186,16 @@
      cards saying one number each read as clutter; this reads as one card. */
   .quick-facts { display: flex; flex-wrap: wrap; margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
   .quick-facts:empty { display: none; }
+  .pf-rank-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; }
+  .pf-rank-head { font-size: .86rem; font-weight: 700; margin: 0 0 6px; display: flex; align-items: center; gap: 6px; }
+  .pf-rank-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--rule, var(--border)); }
+  .pf-rank-row > div { flex: 1 1 auto; min-width: 0; }
+  .pf-rank-row small { display: block; color: var(--muted); font-size: .74rem; }
+  .pf-change { font-size: .76rem; font-weight: 700; white-space: nowrap; }
+  .pf-change.up { color: var(--green); }
+  .pf-change.down { color: var(--red); }
+  .qf-item small { display: block; color: var(--muted); font-size: .72rem; margin-top: 2px; }
+  @media (max-width: 720px) { .pf-rank-grid { grid-template-columns: 1fr; } }
   .qf-item { flex: 1 1 150px; padding: 11px 16px; border-right: 1px solid var(--border); }
   .qf-item:last-child { border-right: 0; }
   .qf-item span { display: block; margin-bottom: 3px; color: var(--muted); font-size: .75rem; }
@@ -908,8 +918,11 @@
   .nav-group > .nav-btn.active .icon, .nav-group > .nav-btn.active .nav-caret { color: var(--accent); }
   .nav-caret { color: var(--muted); }
   .nav-submenu { background: transparent; border: 0; margin: 2px 0 6px; padding: 0; }
+  /* align-items: an item shown by role (.admin-only and the like) is made a
+     flex box, which put its words at the top and its dot in the middle (seen
+     23 November 2026 on Results ▸ Results Summary); centred, every item lines up. */
   .nav-sub-btn { margin: 1px 12px; padding: 0 12px 0 44px; min-height: 38px; border-radius: var(--radius-sm); position: relative;
-                 color: var(--muted); font-size: .86rem; }
+                 color: var(--muted); font-size: .86rem; align-items: center; }
   .nav-sub-btn::before { content: ''; position: absolute; left: 21px; top: 50%; width: 6px; height: 6px; margin-top: -3px;
                          border-radius: 50%; border: 1.5px solid currentColor; }
   .nav-sub-btn:hover { color: var(--ink); background: var(--surface2); }
@@ -4248,18 +4261,23 @@
             <button class="btn btn-ghost btn-sm" onclick="resetPerformanceFilters()">Clear filters</button>
           </div>
         </div>
-        <div style="font-size:.75rem;color:var(--muted)">
-          Every assessment is shown as a percentage so a CAT out of 100, a CA out of 40 and a
-          final total out of 100 sit on the same axis and can be compared across semesters. A
-          student marked absent counts as zero — they sat nothing and scored nothing, and
-          leaving them out would flatter the module.
-        </div>
+        <div style="font-size:.75rem;color:var(--muted)" id="pf-note"></div>
       </div>
 
       <div class="quick-facts" id="pf-headline"></div>
 
+      <!-- Said 23 November 2026: the modules doing best and the ones that need
+           attention, within one semester so like is ranked with like. -->
+      <div class="card" id="pf-rank-card" hidden>
+        <div class="card-title">Best and weakest modules <span id="pf-rank-when" style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px"></span></div>
+        <div class="pf-rank-grid">
+          <div><h3 class="pf-rank-head"><i class="bi bi-arrow-up-circle" aria-hidden="true"></i> Doing best</h3><div id="pf-best"></div></div>
+          <div><h3 class="pf-rank-head"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> Need attention</h3><div id="pf-weakest"></div></div>
+        </div>
+      </div>
+
       <div class="card">
-        <div class="card-title">Trend <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px">— the same measurement, semester by semester</span></div>
+        <div class="card-title">Trend <span id="pf-trend-sub" style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px">— the same measurement, semester by semester</span></div>
         <div class="inventory-chart-wrap"><canvas id="pf-trend-chart"></canvas></div>
       </div>
 
@@ -4273,7 +4291,7 @@
         <div class="inventory-chart-wrap"><canvas id="pf-module-chart"></canvas></div>
         <div class="table-wrap" style="margin-top:14px">
           <table>
-            <thead><tr><th>Module</th><th>Level</th><th>Semester</th><th>Assessed</th><th>Mean %</th><th>Highest</th><th>Lowest</th><th>Pass rate</th></tr></thead>
+            <thead id="pf-module-thead"></thead>
             <tbody id="pf-module-tbody"></tbody>
           </table>
         </div>
@@ -10286,7 +10304,7 @@ function destroyPerformanceCharts() {
 }
 
 function performanceQuery() {
-  const params = new URLSearchParams({ assessment: document.getElementById('pf-assessment').value || 'final' });
+  const params = new URLSearchParams({ assessment: document.getElementById('pf-assessment').value || 'result' });
   for (const [id, key] of [['pf-year', 'academic_year_id'], ['pf-semester', 'semester_id'],
                            ['pf-level', 'class_level_id'], ['pf-module', 'module_id']]) {
     const value = document.getElementById(id).value;
@@ -10300,7 +10318,7 @@ function fillPerformanceFilters(options) {
   if (!assessment.options.length) {
     assessment.innerHTML = options.assessments
       .map(a => `<option value="${a.value}">${safeText(a.label)}</option>`).join('');
-    assessment.value = 'final';
+    assessment.value = 'result';
   }
   const year = document.getElementById('pf-year');
   if (year.options.length <= 1) {
@@ -10372,7 +10390,28 @@ async function loadPerformance() {
   renderPerformance(data);
 }
 
+const PF_MARKS_NOTE = 'Every assessment is shown as a percentage so a CAT out of 100, a CA out of 40 and a final total out of 100 sit on the same axis and can be compared across semesters. A student marked absent counts as zero — they sat nothing and scored nothing, and leaving them out would flatter the module. These are the marks entered here; NACTVET\'s imported grades are under Final result (official grade).';
+const PF_GRADES_NOTE = 'The official result of each module: NACTVET\'s grade where it was imported (its supplementary grade replacing a starred one), otherwise the marks entered here once the examination office approved them. First sittings only: a repeat is a student\'s second try. Results withheld, nullified or not complete are not counted.';
+
+// ▲ / ▼ and the change in pass rate against an earlier time.
+function pfChange(previous) {
+  if (!previous || previous.change == null) return '';
+  const c = previous.change;
+  const way = c > 0 ? 'up' : c < 0 ? 'down' : '';
+  const mark = c > 0 ? '▲' : c < 0 ? '▼' : '=';
+  return `<span class="pf-change ${way}" title="Pass rate ${previous.pass_rate}% in ${safeText(previous.label)}">${mark} ${Math.abs(c)}</span>`;
+}
+
 function renderPerformance(data) {
+  const graded = data.kind === 'grades';
+  document.getElementById('pf-note').textContent = graded ? PF_GRADES_NOTE : PF_MARKS_NOTE;
+  document.getElementById('pf-rank-card').hidden = !graded;
+  document.getElementById('pf-trend-sub').textContent = graded
+    ? '— pass, supplementary and fail rates, semester by semester' : '— the same measurement, semester by semester';
+  document.getElementById('pf-module-thead').innerHTML = graded
+    ? '<tr><th>Module</th><th>Level</th><th>Semester</th><th>Graded</th><th>Passed</th><th>Supp</th><th>Failed</th><th>Pass rate</th><th>Last time</th></tr>'
+    : '<tr><th>Module</th><th>Level</th><th>Semester</th><th>Assessed</th><th>Mean %</th><th>Highest</th><th>Lowest</th><th>Pass rate</th></tr>';
+  if (graded) return renderGradePerformance(data);
   const h = data.headline;
   const show = value => (value === null || value === undefined) ? '—' : value;
   document.getElementById('pf-headline').innerHTML = `
@@ -10440,6 +10479,99 @@ function renderPerformance(data) {
         labels: rows.map(r => r.code),
         datasets: [{ label: 'Mean %', data: rows.map(r => r.mean),
                      tone: rows.map(r => r.mean < data.pass_mark ? 'bad' : 'blue'), maxBarThickness: 22 }],
+      },
+      options: { ...base, indexAxis: 'y', scales: { x: { beginAtZero: true, max: 100 } } },
+    }));
+  }
+}
+
+// The final result as graded (said 23 November 2026): passes and fails, the
+// best and weakest modules, each against the last time it was taught.
+function renderGradePerformance(data) {
+  const h = data.headline;
+  const pct = v => v == null ? '—' : `${v}%`;
+  const was = h.previous
+    ? `<small>${pfChange(h.previous)} on ${safeText(h.previous.label)} (${pct(h.previous.pass_rate)})</small>` : '';
+  document.getElementById('pf-headline').innerHTML = `
+    <div class="qf-item"><span>Results graded</span><strong>${h.graded}</strong></div>
+    <div class="qf-item"><span>Pass rate</span><strong>${pct(h.pass_rate)}</strong>${was}</div>
+    <div class="qf-item"><span>Passed</span><strong>${h.passed}</strong></div>
+    <div class="qf-item"><span>Supplementary</span><strong>${h.supp}</strong><small>${pct(h.supp_rate)}</small></div>
+    <div class="qf-item"><span>Failed (repeat)</span><strong>${h.failed}</strong><small>${pct(h.fail_rate)}</small></div>
+    <div class="qf-item"><span>Average grade point</span><strong>${h.mean_points ?? '—'}</strong></div>`;
+
+  const r = data.ranking;
+  document.getElementById('pf-rank-when').textContent = r.semester
+    ? `— ${r.semester}; the semester's pass rate is ${pct(r.overall_pass_rate)}` : '';
+  const rankRow = row => `<div class="pf-rank-row"><div><strong>${safeText(row.code)}</strong> ${safeText(row.module)}
+      <small>${row.passed} of ${row.graded} passed${row.supp ? `, ${row.supp} supplementary` : ''}${row.failed ? `, ${row.failed} failed` : ''}${row.previous ? ` · last time ${pct(row.previous.pass_rate)}` : ''}</small></div>
+      ${pfChange(row.previous)}
+      <span class="badge ${row.pass_rate >= 75 ? 'badge-green' : row.pass_rate >= 50 ? 'badge-yellow' : 'badge-red'}">${pct(row.pass_rate)}</span></div>`;
+  const none = text => `<div style="color:var(--muted);font-size:.84rem;padding:8px 0">${text}</div>`;
+  document.getElementById('pf-best').innerHTML = r.best.length ? r.best.map(rankRow).join('') : none('Only one module has results here.');
+  document.getElementById('pf-weakest').innerHTML = r.weakest.length ? r.weakest.map(rankRow).join('') : none('No module is below the semester\'s pass rate.');
+
+  document.getElementById('pf-module-tbody').innerHTML = data.by_module.length
+    ? data.by_module.map(row => `
+      <tr>
+        <td><strong>${safeText(row.code)}</strong>
+          <div style="font-size:.72rem;color:var(--muted)">${safeText(row.module)}</div></td>
+        <td style="font-size:.78rem">${safeText(row.level)}</td>
+        <td style="font-size:.78rem">${safeText(row.semester)}</td>
+        <td style="text-align:center">${row.graded}</td>
+        <td style="text-align:center">${row.passed}</td>
+        <td style="text-align:center">${row.supp}</td>
+        <td style="text-align:center">${row.failed}</td>
+        <td style="text-align:center"><span class="badge ${row.pass_rate >= 75 ? 'badge-green' : row.pass_rate >= 50 ? 'badge-yellow' : 'badge-red'}">${pct(row.pass_rate)}</span></td>
+        <td style="font-size:.78rem;white-space:nowrap">${row.previous
+          ? `${pct(row.previous.pass_rate)} ${pfChange(row.previous)}<div style="color:var(--muted);font-size:.7rem">${safeText(row.previous.label)}</div>`
+          : '<span style="color:var(--muted)">first time</span>'}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="9"><div class="empty"><div class="ei">📊</div>No results for this selection yet</div></td></tr>';
+
+  destroyPerformanceCharts();
+  const base = { responsive: true, plugins: { legend: { display: false } } };
+  const trend = document.getElementById('pf-trend-chart');
+  if (trend) {
+    pfCharts.push(newChart(trend, {
+      type: 'line',
+      data: {
+        labels: data.trend.map(p => p.label),
+        datasets: [
+          { label: 'Pass rate', data: data.trend.map(p => p.pass_rate), tone: 'blue', fill: true },
+          // Dashed and dotted as well as coloured, so the lines differ without colour.
+          { label: 'Supplementary', data: data.trend.map(p => p.supp_rate), tone: 'orange', borderDash: [6, 4], fill: false },
+          { label: 'Failed', data: data.trend.map(p => p.fail_rate), tone: 'bad', borderDash: [2, 3], fill: false },
+        ],
+      },
+      options: { ...base, plugins: { legend: { display: true },
+                                     tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.formattedValue}%` } } },
+                 scales: { y: { beginAtZero: true, max: 100 } } },
+    }));
+  }
+  const gradeChart = document.getElementById('pf-grade-chart');
+  if (gradeChart) {
+    pfCharts.push(newChart(gradeChart, {
+      type: 'bar',
+      data: {
+        labels: data.distribution.map(d => d.grade),
+        datasets: [{ label: 'Results', data: data.distribution.map(d => d.count),
+                     tone: data.distribution.map(d => ['D', 'F'].includes(d.grade) ? 'bad' : 'blue'), maxBarThickness: 56 }],
+      },
+      options: { ...base, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+    }));
+  }
+  const moduleChart = document.getElementById('pf-module-chart');
+  if (moduleChart) {
+    const rows = data.by_module.slice(0, 15);
+    const several = new Set(rows.map(row => row.semester)).size > 1;
+    const bar = h.pass_rate ?? 0;
+    pfCharts.push(newChart(moduleChart, {
+      type: 'bar',
+      data: {
+        labels: rows.map(row => several ? `${row.code} (${row.semester.replace(' · Semester ', ' S')})` : row.code),
+        datasets: [{ label: 'Pass rate %', data: rows.map(row => row.pass_rate),
+                     tone: rows.map(row => row.pass_rate < bar ? 'bad' : 'blue'), maxBarThickness: 22 }],
       },
       options: { ...base, indexAxis: 'y', scales: { x: { beginAtZero: true, max: 100 } } },
     }));
