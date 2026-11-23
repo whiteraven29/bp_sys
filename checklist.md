@@ -653,6 +653,8 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      only when ticked) and, apart, Overall results (the students' remarks PASS / SUPP / REPEAT / FAIL / INCOMPLETE by
      semester, level and sheet, as Results Summary, against last year); chart; Excel (Modules, Overall, Comparison
      with an Excel chart) and the chart as a picture (`analytics.year_report`, `year_overall`; 5 tests)
+   - [x] Each percentage with its number in brackets, on the page and in Excel; the comparison chart in golden
+     yellow (last year) and deep red (this year), checked apart under protanopia, deuteranopia and tritanopia (23 Nov)
    - [ ] After the deploy: download 2025/2026 (the last full year) and open it in Excel; check the chart sheet
    - [x] Menu: an item shown by role (Results ▸ Authority Grades, Results Summary …) had its words above its dot;
      centred (`.nav-sub-btn { align-items: center }`, 23 Nov)

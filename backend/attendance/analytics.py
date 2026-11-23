@@ -587,6 +587,7 @@ def year_overall(year, before_year, class_level=None):
     for key in sorted(rows, key=lambda k: (k[0], k[1], k[2] != 'continuing')):
         row, last = rows[key], before.get(key)
         row['previous'] = None if last is None else {'students': last['students'],
+                                                     **{n: last[n] for n in names},
                                                      **{f'{n}_pct': last[f'{n}_pct'] for n in names}}
         row['change'] = (round(row['pass_pct'] - last['pass_pct'], 1)
                          if last and row['pass_pct'] is not None and last['pass_pct'] is not None else None)
@@ -608,6 +609,7 @@ def year_report(year, *, class_level=None, modules=None, include_field=False):
         last = before.get(key)
         row['previous'] = None if last is None else {
             'name': last['name'], 'registered': last['registered'],
+            **{name: last[name] for name in YEAR_OUTCOMES},
             **{f'{name}_pct': last[f'{name}_pct'] for name in YEAR_OUTCOMES},
             # The new curriculum reuses some codes for other modules: say so
             # rather than compare unlike with like in silence.
@@ -654,6 +656,10 @@ def year_report_workbook(report):
     def pct(value):
         return '' if value is None else value
 
+    def with_count(value, count):
+        """As the page shows it: the percentage, the number in brackets."""
+        return '' if value is None else f'{value:g} ({count})'
+
     def change(now, then):
         return round(now - then, 1) if now is not None and then is not None else ''
 
@@ -685,14 +691,14 @@ def year_report_workbook(report):
     for row in report['rows']:
         last = row['previous']
         sheet.append([row['level'], row['code'], row['name'], row['semester'], row['registered'], row['repeaters'],
-                      *[pct(row[f'{name}_pct']) for name in YEAR_OUTCOMES],
-                      pct(last['pass_pct']) if last else '', pct(row['change'])])
+                      *[with_count(row[f'{name}_pct'], row[name]) for name in YEAR_OUTCOMES],
+                      with_count(last['pass_pct'], last['pass']) if last else '', pct(row['change'])])
         for cell in sheet[sheet.max_row]:
             cell.border = thin
     totals, last_totals = report['totals'], report['previous_totals']
     sheet.append(['All', '', 'All modules', '', totals['registered'], totals['repeaters'],
-                  *[pct(totals[f'{name}_pct']) for name in YEAR_OUTCOMES],
-                  pct(last_totals['pass_pct']) if last_totals else '',
+                  *[with_count(totals[f'{name}_pct'], totals[name]) for name in YEAR_OUTCOMES],
+                  with_count(last_totals['pass_pct'], last_totals['pass']) if last_totals else '',
                   change(totals['pass_pct'], last_totals['pass_pct']) if last_totals else ''])
     for cell in sheet[sheet.max_row]:
         cell.font = Font(bold=True)
@@ -709,7 +715,7 @@ def year_report_workbook(report):
     for note in notes:
         sheet.append([note])
         sheet.cell(sheet.max_row, 1).font = muted
-    widths(sheet, (14, 13, 40, 9, 11, 11, 9, 9, 9, 12, 14, 12))
+    widths(sheet, (14, 13, 40, 9, 11, 11, 12, 12, 12, 13, 15, 12))
     sheet.freeze_panes = 'D5'
 
     # ── the students, overall ──
@@ -725,13 +731,14 @@ def year_report_workbook(report):
         for row in overall['rows']:
             last = row['previous']
             people.append([row['semester'], row['level'], 'Continuing' if row['sheet'] == 'continuing' else 'Repeaters',
-                           row['students'], *[pct(row[f'{name}_pct']) for name in names],
-                           pct(last['pass_pct']) if last else '', pct(row['change'])])
+                           row['students'], *[with_count(row[f'{name}_pct'], row[name]) for name in names],
+                           with_count(last['pass_pct'], last['pass']) if last else '', pct(row['change'])])
             for cell in people[people.max_row]:
                 cell.border = thin
         if overall['totals']:
             t = overall['totals']
-            people.append(['All', '', 'Continuing', t['students'], *[pct(t[f'{name}_pct']) for name in names]])
+            people.append(['All', '', 'Continuing', t['students'],
+                           *[with_count(t[f'{name}_pct'], t[name]) for name in names]])
             for cell in people[people.max_row]:
                 cell.font = Font(bold=True)
         people.append([])
@@ -740,7 +747,7 @@ def year_report_workbook(report):
                        'supplementary). Fail: discontinued (GPA below 2.0, NACTVET\'s FAIL, or a repeat failed). '
                        'Incomplete: a result still missing.'])
         people.cell(people.max_row, 1).font = muted
-        widths(people, (10, 14, 13, 10, 9, 9, 10, 9, 12, 14, 12))
+        widths(people, (10, 14, 13, 10, 12, 12, 12, 12, 13, 15, 12))
         people.freeze_panes = 'D5'
 
     # ── the comparison, with its chart ──
@@ -762,6 +769,11 @@ def year_report_workbook(report):
         chart.y_axis.title = 'Pass %'
         chart.y_axis.scaling.min, chart.y_axis.scaling.max = 0, 100
         chart.add_data(Reference(compare, min_col=3, max_col=4, min_row=1, max_row=count + 1), titles_from_data=True)
+        # The page's colours: last year golden yellow, this year deep red —
+        # far apart in lightness, so they stay apart for colour-blind readers.
+        for series, colour in zip(chart.series, ('E9B11B', 'C62F2F')):
+            series.graphicalProperties.solidFill = colour
+            series.graphicalProperties.line.solidFill = colour
         chart.set_categories(Reference(compare, min_col=1, min_row=2, max_row=count + 1))
         chart.height = max(8, 0.6 * count + 3)
         chart.width = 18

@@ -192,6 +192,7 @@
   .pfy-actions { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
   .pfy-note { font-size: .78rem; color: var(--muted); margin: 10px 0 0; line-height: 1.5; }
   .pfy-table td.num, .pfy-table th.num { text-align: right; white-space: nowrap; }
+  .pfy-count { color: var(--muted); font-weight: 400; font-size: .86em; }
   .pfy-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); }
   .pfy-chart-wrap { position: relative; min-height: 240px; }
   .pf-rank-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; }
@@ -1015,12 +1016,18 @@
     --chart-area: rgba(27,94,171,.10);
     --chart-seq-1: #86B5EC; --chart-seq-2: #5E98E0; --chart-seq-3: #3577C8; --chart-seq-4: #1B5EAB; --chart-seq-5: #153F75;
     --chart-cond-1: #164C8C; --chart-cond-2: #5E98E0; --chart-cond-3: #B3BAC4; --chart-cond-4: #EC9384; --chart-cond-5: #C93A26;
+    /* This year against last (said 23 November 2026: red and yellow, still
+       readable to colour-blind eyes): far apart in lightness as well as hue —
+       L* 45 and 75, still 36 / 28 / 29 apart seen with protanopia,
+       deuteranopia and tritanopia. */
+    --chart-now: #C62F2F; --chart-then: #E9B11B;
   }
   html[data-theme="dark"] {
     --chart-blue: #3F86DB; --chart-orange: #D9692E; --chart-bad: #E0584A; --chart-neutral: #5E6B80;
     --chart-area: rgba(63,134,219,.16);
     --chart-seq-1: #2459A6; --chart-seq-2: #3473C9; --chart-seq-3: #5590DD; --chart-seq-4: #7EAEEB; --chart-seq-5: #AFCDF4;
     --chart-cond-1: #9CC2F3; --chart-cond-2: #3F7FD2; --chart-cond-3: #6A7689; --chart-cond-4: #C04A3A; --chart-cond-5: #F59A8A;
+    --chart-now: #F0645A; --chart-then: #F5C84C;
   }
   .inventory-chart-card .card-title { display: flex; align-items: center; gap: 10px; }
   .inventory-chart-card .card-title > .bi { width: 34px; height: 34px; border-radius: 8px; flex: none; display: grid; place-items: center;
@@ -10619,6 +10626,11 @@ async function loadYearResults() {
   renderYearResults(data);
 }
 
+// A percentage with the count behind it, in brackets (said 23 November 2026).
+function pctCount(value, count) {
+  return value == null ? '—' : `${value}${count == null ? '' : ` <span class="pfy-count">(${count})</span>`}`;
+}
+
 function renderYearResults(data) {
   const pct = v => v == null ? '—' : `${v}`;
   const last = data.previous_year || 'last year';
@@ -10633,18 +10645,18 @@ function renderYearResults(data) {
       <td style="font-size:.78rem;white-space:nowrap">${safeText(row.level)}</td>
       <td class="num">${row.semester}</td>
       <td class="num">${row.registered}${row.repeaters ? `<div style="font-size:.7rem;color:var(--muted)">${row.repeaters} repeating</div>` : ''}</td>
-      <td class="num"><strong>${pct(row.pass_pct)}</strong></td>
-      <td class="num">${pct(row.supp_pct)}</td><td class="num">${pct(row.fail_pct)}</td>
-      <td class="num">${pct(row.incomplete_pct)}</td>
-      <td class="num">${row.previous ? pct(row.previous.pass_pct) : '<span style="color:var(--muted)">not taught</span>'}${row.previous && !row.previous.same_name ? `<div style="font-size:.68rem;color:var(--orange)" title="${safeText(row.previous.name)}">another module then</div>` : ''}</td>
+      <td class="num"><strong>${pctCount(row.pass_pct, row.pass)}</strong></td>
+      <td class="num">${pctCount(row.supp_pct, row.supp)}</td><td class="num">${pctCount(row.fail_pct, row.fail)}</td>
+      <td class="num">${pctCount(row.incomplete_pct, row.incomplete)}</td>
+      <td class="num">${row.previous ? pctCount(row.previous.pass_pct, row.previous.pass) : '<span style="color:var(--muted)">not taught</span>'}${row.previous && !row.previous.same_name ? `<div style="font-size:.68rem;color:var(--orange)" title="${safeText(row.previous.name)}">another module then</div>` : ''}</td>
       <td class="num">${change(row.change)}</td></tr>`).join('')
     : '<tr><td colspan="10"><div class="empty"><div class="ei">📊</div>No modules with students registered this year</div></td></tr>';
   const t = data.totals, pt = data.previous_totals;
   document.getElementById('pfy-tfoot').innerHTML = data.rows.length ? `<tr><td>All modules</td><td></td><td></td>
       <td class="num">${t.registered}${t.repeaters ? `<div style="font-size:.7rem;color:var(--muted)">${t.repeaters} repeating</div>` : ''}</td>
-      <td class="num">${pct(t.pass_pct)}</td><td class="num">${pct(t.supp_pct)}</td>
-      <td class="num">${pct(t.fail_pct)}</td><td class="num">${pct(t.incomplete_pct)}</td>
-      <td class="num">${pt ? pct(pt.pass_pct) : '—'}</td>
+      <td class="num">${pctCount(t.pass_pct, t.pass)}</td><td class="num">${pctCount(t.supp_pct, t.supp)}</td>
+      <td class="num">${pctCount(t.fail_pct, t.fail)}</td><td class="num">${pctCount(t.incomplete_pct, t.incomplete)}</td>
+      <td class="num">${pt ? pctCount(pt.pass_pct, pt.pass) : '—'}</td>
       <td class="num">${change(pt && t.pass_pct != null && pt.pass_pct != null ? Math.round((t.pass_pct - pt.pass_pct) * 10) / 10 : null)}</td></tr>` : '';
   const notes = [];
   const renamed = data.rows.filter(r => r.previous && !r.previous.same_name);
@@ -10673,11 +10685,11 @@ function renderYearOverall(data, change) {
     `Overall results ${data.academic_year}${data.class_level ? ` — ${data.class_level}` : ''}`;
   document.getElementById('pfy-overall-last').textContent = `Pass % ${last}`;
   const cells = r => ['pass', 'supp', 'repeat', 'fail', 'incomplete']
-    .map(n => `<td class="num">${n === 'pass' ? `<strong>${pct(r[n + '_pct'])}</strong>` : pct(r[n + '_pct'])}</td>`).join('');
+    .map(n => `<td class="num">${n === 'pass' ? `<strong>${pctCount(r[n + '_pct'], r[n])}</strong>` : pctCount(r[n + '_pct'], r[n])}</td>`).join('');
   document.getElementById('pfy-overall-tbody').innerHTML = overall.rows.length ? overall.rows.map(r => `<tr>
       <td>Semester ${r.semester}</td><td style="white-space:nowrap">${safeText(r.level)}</td>
       <td>${r.sheet === 'continuing' ? 'Continuing' : 'Repeaters'}</td><td class="num">${r.students}</td>${cells(r)}
-      <td class="num">${r.previous ? pct(r.previous.pass_pct) : '<span style="color:var(--muted)">—</span>'}</td>
+      <td class="num">${r.previous ? pctCount(r.previous.pass_pct, r.previous.pass) : '<span style="color:var(--muted)">—</span>'}</td>
       <td class="num">${change(r.change)}</td></tr>`).join('')
     : '<tr><td colspan="11" style="color:var(--muted)">No students\' results for this year yet</td></tr>';
   const t = overall.totals;
@@ -10692,8 +10704,8 @@ function yearChartConfig(data) {
     data: {
       labels: data.rows.map(r => r.code),
       datasets: [
-        { label: last, data: data.rows.map(r => r.previous ? r.previous.pass_pct : null), tone: 'neutral', maxBarThickness: 14 },
-        { label: data.academic_year, data: data.rows.map(r => r.pass_pct), tone: 'blue', maxBarThickness: 14 },
+        { label: last, data: data.rows.map(r => r.previous ? r.previous.pass_pct : null), tone: 'then', maxBarThickness: 14 },
+        { label: data.academic_year, data: data.rows.map(r => r.pass_pct), tone: 'now', maxBarThickness: 14 },
       ],
     },
     options: { responsive: true, indexAxis: 'y',
