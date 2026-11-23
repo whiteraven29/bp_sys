@@ -5247,7 +5247,25 @@ class SessionViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('You may only record attendance for modules you teach.')
         period = serializer.validated_data.get('exam_period', Session.GENERAL)
         self._check_attendance_cutoff(module, period)
-        serializer.save()
+        # The class of the teaching plan this register is for (said 19 November
+        # 2026): chosen on the form, marked taught with this very register.
+        from . import teaching_plans
+        from .models import PlanSession
+        chosen = pk_or_none(self.request.data.get('plan_class_id'))
+        with transaction.atomic():
+            register = serializer.save()
+            if chosen:
+                plan_class = PlanSession.objects.select_related('plan__module', 'outcome').filter(
+                    pk=chosen, plan__module=module).first()
+                if plan_class is None or not teaching_plans.teaches(module, self.request.user):
+                    raise PermissionDenied('That class is not in the plan of a module you teach.')
+                try:
+                    teaching_plans.taught_with_register(
+                        plan_class, register, actor=self.request.user,
+                        status=str(self.request.data.get('plan_class_status') or PlanSession.DONE))
+                except teaching_plans.PlanError as exc:
+                    from rest_framework.exceptions import ValidationError
+                    raise ValidationError({'detail': str(exc)})
 
     def perform_update(self, serializer):
         module = serializer.validated_data.get('module', serializer.instance.module)

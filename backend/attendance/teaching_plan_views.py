@@ -85,6 +85,20 @@ def plans(request):
 
 
 @api_view(['GET'])
+def classes_for_register(request):
+    """For the attendance form: the plan's classes the register being taken
+    may be for (?module_id, date, session_type T|P)."""
+    module = get_object_or_404(Module, pk=pk_or_none(request.query_params.get('module_id')))
+    if not tp.teaches(module, request.user):
+        return Response({'plan_id': None, 'classes': [], 'teaches': False})
+    day = _a_date(request.query_params.get('date'))
+    if day is None:
+        return _bad('Give the date.')
+    return Response({**tp.classes_for_register(module, day, request.query_params.get('session_type') or 'T'),
+                     'teaches': True})
+
+
+@api_view(['GET'])
 def kpis(request):
     """The tutor KPIs against the teaching plan and the assessment plan, on a
     day (?as_of=, default today): QA, the Principal and DPARC for every

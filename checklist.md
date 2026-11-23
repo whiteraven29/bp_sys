@@ -628,9 +628,17 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      classes marked): unmark the classes, Reopen with a reason, lay out again, set up again; refused while a class
      is marked or once a test went for moderation (`tp.reopen`, `POST …/reopen/`, 2 tests)
    - [ ] On the server after the deploy: unmark the three classes, reopen, lay out Wednesday–Friday, set up again
+   - [x] The register says which class it is (19 Nov, your choice A): Take Attendance ▸ Class of the teaching plan;
+     saving marks that class Done/Part with that register; from the plan, a register of the class's kind not
+     linked elsewhere is chosen (`tp.classes_for_register`, `taught_with_register`, `register_for`; 4 tests)
+   - [ ] Try it on the server after the deploy: take a register choosing the plan's class, then open the plan
    - [x] Curriculum for tutors (19 Nov, your request): a tutor sees only the curriculum modules of the modules they
      teach (the one their plan follows, or the one the module matches); opening another is refused. The Principal,
      DPARC, QA and the Heads of Department still see every module (`tp.curriculum_scope`; 2 tests)
+   - [x] The 2015 curriculum (Levels 5–6) has 20 weeks of study, not 15 (23 Nov, your note): migration 0089,
+     `pst_2015.json`, `extract_2015.py`; Semester 1 holds 19 teaching weeks, so its plans get 19 — right this semester only, we started late (1 test)
+   - [ ] After the deploy: `showmigrations attendance` ends at 0089; Curriculum ▸ PST-2015 shows 20 weeks
+   - [x] Classes per SEO or task: left free, no limit or warning (23 Nov, your choice)
 
 2y. **On the server, after this deploy (12–25 Oct work) — in this order.**
    - [ ] Migrations to 0085 applied by the deploy (release guide B1–B4); `Ran 1330 tests … OK` on the laptop first

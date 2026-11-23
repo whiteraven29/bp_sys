@@ -715,6 +715,98 @@ def class_from_register(plan, register, data, *, actor, today=None):
     return session
 
 
+# ── the attendance register of a class (said 19 November 2026: "how do we say
+# this attendance was marked on this day with this session taught?") ─────────
+
+THEORY_KINDS = frozenset({PlanSession.LECTURE, PlanSession.TUTORIAL, PlanSession.ASSIGNMENT, PlanSession.REVISION})
+PRACTICAL_KINDS = frozenset({PlanSession.PRACTICAL, PlanSession.FIELD})
+
+
+def kind_matches(kind, session_type):
+    """A Practical register is for a practical or field class; a Theory one
+    for the rest."""
+    return kind in (PRACTICAL_KINDS if session_type == Session.PRACTICAL else THEORY_KINDS)
+
+
+def register_for(session, day):
+    """The register of that day for a class marked from the plan: one of the
+    class's kind not yet linked to another class, else any not yet linked,
+    else the first of the day (two classes may share one register)."""
+    registers = list(Session.objects.filter(module=session.plan.module, date=day).order_by('created_at'))
+    if not registers:
+        return None
+    taken = set(PlanSession.objects.filter(register__in=registers).exclude(pk=session.pk)
+                .values_list('register_id', flat=True))
+    for wanted in ((True, False), (False, False), (True, True)):
+        for register in registers:
+            if (not wanted[0] or kind_matches(session.kind, register.session_type)) and \
+                    (wanted[1] or register.id not in taken):
+                return register
+    return registers[0]
+
+
+def classes_for_register(module, day, session_type):
+    """The classes of the plan a register taken on `day` may be for: that day's
+    classes not yet marked; earlier ones still not marked (taught late); that
+    day's classes marked taught with no register yet. The kind that matches
+    the register (Theory or Practical) first."""
+    plan = TeachingPlan.objects.filter(module=module).first()
+    if plan is None:
+        return {'plan_id': None, 'classes': []}
+    rows = []
+    found = (plan.sessions.select_related('outcome')
+             .filter(Q(planned_on=day, status=PlanSession.PLANNED)
+                     | Q(planned_on__lt=day, status=PlanSession.PLANNED)
+                     | Q(delivered_on=day, status__in=[PlanSession.DONE, PlanSession.PARTIAL], register__isnull=True))
+             .order_by('-planned_on', 'order'))
+    earlier = 0
+    for s in found:
+        when = ('marked' if s.status != PlanSession.PLANNED else 'today' if s.planned_on == day else 'earlier')
+        if when == 'earlier':
+            earlier += 1
+            if earlier > 10:                    # the ten most recent still unmarked
+                continue
+        rows.append({'id': s.id, 'planned_on': s.planned_on, 'kind': s.kind, 'kind_display': s.get_kind_display(),
+                     'hours': s.hours, 'outcome': s.outcome.code if s.outcome_id else '',
+                     'outcome_text': s.outcome.text if s.outcome_id else '', 'topic': s.topic,
+                     'status': s.status, 'when': when, 'matches': kind_matches(s.kind, session_type),
+                     'extra': s.extra})
+    order = {'today': 0, 'marked': 1, 'earlier': 2}
+    rows.sort(key=lambda r: (not r['matches'], order[r['when']]))
+    return {'plan_id': plan.id, 'plan_status': plan.status, 'classes': rows}
+
+
+@transaction.atomic
+def taught_with_register(session, register, *, status=PlanSession.DONE, actor):
+    """A register saved for a class of the plan: the class is marked taught on
+    the register's day, with that very register as its evidence; a register
+    with no topic takes the class's."""
+    if session.plan.module_id != register.module_id:
+        raise PlanError('That class is in another module\'s plan.')
+    if status not in (PlanSession.DONE, PlanSession.PARTIAL):
+        raise PlanError('Say whether all of the class was taught, or part of it.')
+    if session.status == PlanSession.MISSED:
+        raise PlanError('That class is marked missed: put it back to planned on the plan first.')
+    if session.status != PlanSession.PLANNED and session.register_id and session.register_id != register.id:
+        raise PlanError('That class already has its register.')
+    if session.planned_on > register.date:
+        raise PlanError('That class is planned for a later day: use Taught early on the plan.')
+    session.status, session.delivered_on, session.register = status, register.date, register
+    if status == PlanSession.DONE:
+        session.finished_in = None
+    if actor is not None and teaches(session.plan.module, actor):
+        session.tutor = actor
+    session.save()
+    if not register.topic.strip():
+        register.topic = (session.topic or (session.outcome.text if session.outcome_id else ''))[:300]
+        if register.topic:
+            register.save(update_fields=['topic'])
+    log(session.plan, actor, 'marked a class with its register',
+        f'{session.get_kind_display()} of {session.planned_on:%d %b}: {session.get_status_display()}, '
+        f'register "{register.label}" of {register.date:%d %b}')
+    return session
+
+
 @transaction.atomic
 def mark(session, status, *, delivered_on=None, note='', actor, today=None):
     """What became of a class. Done or partly done needs the day it was
@@ -726,8 +818,7 @@ def mark(session, status, *, delivered_on=None, note='', actor, today=None):
         delivered_on = delivered_on or session.planned_on
         if delivered_on > today:
             raise PlanError('A class is marked once it has been taught.')
-        session.register = (Session.objects.filter(module=session.plan.module, date=delivered_on)
-                            .order_by('created_at').first())
+        session.register = register_for(session, delivered_on)
     else:
         delivered_on, session.register = None, None
     session.status, session.delivered_on = status, delivered_on

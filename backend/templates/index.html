@@ -1283,6 +1283,12 @@
   .tp-inline { border-radius: var(--radius); }
   .tp-inline input, .tp-inline select, .tp-inline-field input, .tp-pattern-row select, .tp-pattern-row input,
   .tp-arow-when input { border-radius: var(--radius-sm); }
+  .att-plan-opt { display: flex; gap: 10px; align-items: flex-start; padding: 7px 10px; border: 1px solid var(--rule); border-radius: var(--radius-sm); margin-bottom: 6px; font-weight: 400; cursor: pointer; }
+  .att-plan-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+  .field .att-plan-opt input[type=radio] { width: auto; min-height: 0; flex: none; margin: 3px 0 0; padding: 0; }
+  .att-plan-opt > span { flex: 1 1 auto; text-align: left; min-width: 0; }
+  .field #att-plan-how select { width: auto; min-width: 170px; display: inline-block; margin-left: 8px; }
+  .att-plan-opt small { display: block; color: var(--muted); font-size: .78rem; }
   .tp-tasks { border-radius: var(--radius-sm); }
   .tp-figures b { color: var(--accent); }
   @media (max-width: 640px) { .tp-row-act { grid-column: 1; } }
@@ -3165,17 +3171,17 @@
           <div class="field"><label>Semester</label><select id="att-flt-sem" onchange="onAttFilterChange()"><option value="">All Semesters</option></select></div>
           <div class="field"><label>Class Level</label><select id="att-flt-level" onchange="onAttFilterChange()"><option value="">All Levels</option></select></div>
           <div class="field"><label>Module *</label><select id="att-module" onchange="onAttendanceModuleChange()"><option value="">— select module —</option></select></div>
-          <div class="field"><label>Date *</label><input type="date" id="att-date" /></div>
+          <div class="field"><label>Date *</label><input type="date" id="att-date" onchange="loadAttPlanClasses()" /></div>
           <div class="field"><label>Session Label *</label><input id="att-label" placeholder="e.g. Week 3 – Lecture 1" /></div>
         </div>
         <div class="field" style="margin-bottom:14px;">
           <label>Session Type *</label>
           <div class="type-toggle">
             <label>
-              <input type="radio" name="att-type" value="T" checked> Theory
+              <input type="radio" name="att-type" value="T" checked onchange="loadAttPlanClasses()"> Theory
             </label>
             <label class="practical">
-              <input type="radio" name="att-type" value="P"> Practical
+              <input type="radio" name="att-type" value="P" onchange="loadAttPlanClasses()"> Practical
             </label>
           </div>
         </div>
@@ -3196,6 +3202,10 @@
         <div class="field field-full" style="margin-bottom:0;">
           <label>Topic Taught</label>
           <input id="att-topic" placeholder="e.g. Introduction to Financial Statements" />
+        </div>
+        <div class="field field-full" id="att-plan-box" style="margin:14px 0 0;display:none">
+          <label>Class of the teaching plan <span class="tip" tabindex="0" role="note" aria-label="Help: class of the plan" data-tip="Which class of your teaching plan this register is for. Saving the register marks that class taught, with this register as its evidence, so you need not mark it again on the plan. Choose Not in the plan for a class the plan does not have; the plan then lists the register under Registers not in the plan.">?</span></label>
+          <div id="att-plan-classes"></div>
         </div>
       </div>
       <div class="card" id="att-register-card" style="display:none">
@@ -7129,19 +7139,61 @@ async function submitAttendance() {
   }));
   try {
     const payload = { module: parseInt(modId), session_type: sessionType, exam_period: examPeriod, date, label, topic, records };
+    const planClass = !editingAttendanceSessionId && document.querySelector('input[name="att-plan-class"]:checked')?.value;
+    if (planClass) { payload.plan_class_id = Number(planClass); payload.plan_class_status = document.getElementById('att-plan-status')?.value || 'done'; }
     await api(editingAttendanceSessionId ? 'PATCH' : 'POST', editingAttendanceSessionId ? `/sessions/${editingAttendanceSessionId}/` : '/sessions/', payload);
-    toast(editingAttendanceSessionId ? 'Attendance corrections saved!' : 'Session saved!', 'var(--green)');
+    toast(editingAttendanceSessionId ? 'Attendance corrections saved!' : (payload.plan_class_id ? 'Session saved, and the class marked taught on your teaching plan' : 'Session saved!'), 'var(--green)');
     document.getElementById('att-date').value = '';
     document.getElementById('att-label').value = '';
     document.getElementById('att-topic').value = '';
     document.getElementById('att-roster-card').style.display = 'none';
     rosterStudents = [];
     setAttendanceEditMode(null);
+    loadAttPlanClasses();
     await loadAttendanceHistory();
   } catch(e) { toast(e?.detail || 'Error saving session', 'var(--red)'); }
 }
 
+// The class of the teaching plan this register is for (said 19 November 2026):
+// saving the register marks that class taught with this very register.
+async function loadAttPlanClasses() {
+  const box = document.getElementById('att-plan-box');
+  const list = document.getElementById('att-plan-classes');
+  const modId = document.getElementById('att-module').value;
+  const day = document.getElementById('att-date').value;
+  const type = document.querySelector('input[name="att-type"]:checked')?.value || 'T';
+  state.attPlanClasses = [];
+  if (!modId || !day || editingAttendanceSessionId) { box.style.display = 'none'; list.innerHTML = ''; return; }
+  let data;
+  try { data = await api('GET', `/teaching-plans/classes-for-register/?module_id=${modId}&date=${day}&session_type=${type}`); }
+  catch (e) { box.style.display = 'none'; return; }
+  if (!data.teaches) { box.style.display = 'none'; list.innerHTML = ''; return; }
+  box.style.display = '';
+  if (!data.plan_id) { list.innerHTML = '<p class="help-note">This module has no teaching plan in the system yet: the register is saved on its own.</p>'; return; }
+  state.attPlanClasses = data.classes;
+  const when = c => c.when === 'today' ? 'planned this day'
+    : c.when === 'marked' ? `marked ${c.status === 'partial' ? 'partly done' : 'done'}, no register yet`
+    : `planned ${tpDate(c.planned_on)}, not marked yet`;
+  const row = (c, i) => `<label class="att-plan-opt"><input type="radio" name="att-plan-class" value="${c.id}" ${i === 0 && c.matches && c.when !== 'earlier' ? 'checked' : ''} onchange="attPlanChosen()">
+      <span><b>${safeText(c.kind_display)}, ${Number(c.hours)} h</b>${c.outcome ? ` · ${safeText(c.outcome)} ${safeText(c.outcome_text.slice(0, 80))}` : ''}${c.topic ? ` · ${safeText(c.topic.slice(0, 60))}` : ''}
+      <small>${safeText(when(c))}${c.matches ? '' : ` · not a ${type === 'P' ? 'practical' : 'theory'} class`}</small></span></label>`;
+  list.innerHTML = (data.classes.length ? data.classes.map(row).join('') : '<p class="help-note">No class of the plan waits to be marked on or before this day.</p>')
+    + `<label class="att-plan-opt"><input type="radio" name="att-plan-class" value="" ${data.classes.length && data.classes[0].matches && data.classes[0].when !== 'earlier' ? '' : 'checked'} onchange="attPlanChosen()"><span><b>Not in the plan</b><small>an extra class, or one you will match on the plan later</small></span></label>
+      <div id="att-plan-how" style="margin-top:8px"><label class="tp-inline-field">How much was taught <select id="att-plan-status"><option value="done">All of it</option><option value="partial">Part of it</option></select></label></div>`;
+  attPlanChosen();
+}
+
+function attPlanChosen() {
+  const chosen = document.querySelector('input[name="att-plan-class"]:checked')?.value;
+  const how = document.getElementById('att-plan-how');
+  if (how) how.style.display = chosen ? '' : 'none';
+  const c = (state.attPlanClasses || []).find(x => String(x.id) === chosen);
+  const topic = document.getElementById('att-topic');
+  if (c && !topic.value.trim()) topic.placeholder = c.topic || c.outcome_text || topic.placeholder;
+}
+
 function onAttendanceModuleChange() {
+  loadAttPlanClasses();
   loadAttendanceRoster();
   loadAttendanceHistory();
   loadAttendanceRegister();
@@ -7226,6 +7278,7 @@ async function loadAttendanceHistory() {
 
 function setAttendanceEditMode(sessionId) {
   editingAttendanceSessionId = sessionId;
+  if (sessionId) { const box = document.getElementById('att-plan-box'); if (box) box.style.display = 'none'; }
   document.getElementById('att-save-btn').textContent = sessionId ? '💾 Save Corrections' : '💾 Save Session';
   document.getElementById('att-cancel-edit-btn').style.display = sessionId ? '' : 'none';
 }

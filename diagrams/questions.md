@@ -1183,3 +1183,19 @@ laid on Monday and Thursday instead of Wednesday to Friday with three classes ma
 **Built (uncommitted; no migration):** DPARC approves a plan the QA officer teaches (the Principal if DPARC teaches it too);
 **Reopen the set-up** after unmarking. Guide 07.
 
+
+### Q86. Classes per SEO; the 2015 curriculum's weeks; one step for class and register ✅
+
+**Asked (23 November 2026):** "what if a teacher taught one SEO for more than four sessions or a subtask of an SEO for three or
+more sessions?" — then "no just leave flexible like that, and a reminder the 2015 curriculum has 20 weeks for level 5 and
+level 6", and how to record a class and its attendance without confusion.
+
+**Decided:** classes per SEO or task stay free: no limit and no warning (a cap of 4 per SEO would not fit 27 of the 31 modules
+of 2022, from their weekly hours). The 2015 curriculum has 20 weeks of study a semester (migration 0089).
+
+**Answered:** start at Take Attendance and choose the plan's class there: one save records the register and marks the class.
+
+**Settled (23 November 2026):** the teaching calendar stays one for every level. Semester 1 (2 Nov – 26 Mar, the recess out)
+holds 19 teaching weeks, so a Level 5–6 plan gets 19 of its 20. "19 weeks is right this year … I mean this semester, it is
+us who were late": the college started late this semester; 20 weeks stays the rule, and later semesters' calendars should
+hold 20 teaching weeks for Levels 5–6. No calendar per level.

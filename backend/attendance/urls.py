@@ -132,6 +132,8 @@ urlpatterns = [
     path('time-to-pay/', time_to_pay_views.summary, name='time-to-pay'),
     # Teaching plans, the teaching calendar, the curricula (said 8–9 November 2026).
     path('teaching-plans/', teaching_plan_views.plans, name='teaching-plans'),
+    path('teaching-plans/classes-for-register/', teaching_plan_views.classes_for_register,
+         name='teaching-plan-classes-for-register'),
     path('teaching-plans/kpis/', teaching_plan_views.kpis, name='teaching-plan-kpis'),
     path('teaching-plans/<int:pk>/', teaching_plan_views.plan, name='teaching-plan'),
     path('teaching-plans/<int:pk>/lay-out/', teaching_plan_views.lay_out, name='teaching-plan-lay-out'),

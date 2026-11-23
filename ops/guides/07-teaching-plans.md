@@ -101,6 +101,12 @@ or money.
   plans of March 2019 (the old curricula of February 2015 are not on hand): their SEOs and related
   tasks, and each part of CA and SE with the tasks it is drawn from. Weekly hours and credits are
   not in those plans, so they show *not given*, and a plan starts from the usual guess of a week.
+  A semester of it has **20 weeks of study** (your note, 23 November 2026; migration 0089), against
+  15 for the 2022 one. The teaching calendar is one for every level: Semester 1 (2 Nov – 26 Mar,
+  the Christmas recess out) holds 19 teaching weeks, so a Level 5–6 plan laid out there gets 19 and
+  its history says *only 19 of 20 weeks fit* — right for this semester only, because the college started late (your note,
+  23 November 2026); 20 stays the rule, so DPARC's later calendars should hold 20 teaching weeks. A plan laid out
+  before keeps its classes.
   A Level 5–6 plan keeps the weights results use today, so it agrees with the mark sheet; the
   assessment plan adds which tasks each CAT, assignment and examination must cover.
 - **The teaching calendar.** From the almanac, kept by DPARC. Semester 1 teaching started on
@@ -199,9 +205,10 @@ git merge --no-ff feature/teaching-plans
 git push
 ```
 
-Then deploy as in guide 03 (it applies migrations 0086, 0087 and 0088; 0087 marks classes already
+Then deploy as in guide 03 (it applies migrations 0086 to 0089; 0087 marks classes already
 added after their plan was sent as extra classes, read from each plan's history; 0088 adds QA's
-approval of the PDF and puts any PDF already attached before QA as waiting; nothing else changes).
+approval of the PDF and puts any PDF already attached before QA as waiting; 0089 gives the 2015
+curriculum its 20 weeks of study; nothing else changes).
 After the deploy, on the server:
 
 1. Load both curricula — read each dry run first:
@@ -246,8 +253,16 @@ After the deploy, on the server:
   checked against the Word curricula already loaded: the same documents, nothing new to load. The old
   assessment plans (`Guides/oldAP/`, the same files as in `Guides/FG LEVEL 5|6/`) are read by
   `curricula/extract_2015.py`; the old curricula themselves would add the hours and credits.
-- **The attendance screen is unchanged.** A class marked done finds the register taken that day
-  by itself; picking the plan's class while taking attendance is not built.
+- **The register says which class it is (19 November 2026, your choice A).** On *Take Attendance*, once
+  the module and date are chosen, **Class of the teaching plan** lists that day's classes not yet marked
+  (the kind matching Theory or Practical first), earlier ones still unmarked (taught late), and that day's
+  classes marked with no register yet; or **Not in the plan**. Choosing one, with *All of it* or *Part
+  of it*, and saving the register marks that class taught on the register's day with that very register
+  as its evidence; a register with no topic takes the class's. A class planned for a later day is
+  refused (Taught early on the plan), and then the register is not saved either, so nothing is half
+  done. Marking from the plan still works, and now picks a register of the class's kind not already
+  linked to another class, so two classes on one day get their own registers when there are two.
+  Students' attendance and eligibility are unchanged.
 - **Notifications (19 November).** QA is told when a PDF is sent; the module's tutors when QA approves
   or returns it. Tests sent for moderation still show in the plan only.
 
@@ -354,6 +369,8 @@ backend/attendance/models.py                    QualityAssuranceProfile; Curricu
                                                 PlanAssessment, PlanNote, PlanEvent
 backend/attendance/migrations/0086_teaching_plans.py
 backend/attendance/migrations/0087_plan_session_follow_up.py   extra classes; finished later
+backend/attendance/migrations/0088_teaching_plan_pdf_for_qa.py  QA approves the tutor's PDF
+backend/attendance/migrations/0089_curriculum_2015_twenty_weeks.py  the 2015 curriculum: 20 weeks of study
 backend/attendance/teaching_plans.py            the rules
 backend/attendance/teaching_kpis.py             the tutor KPIs: definitions, targets, figures
 backend/attendance/teaching_plan_views.py       the API

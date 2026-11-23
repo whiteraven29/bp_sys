@@ -182,6 +182,19 @@ class OldCurriculumTests(PlanBase):
         detail = client_for(self.tutor).get(f'/api/teaching-plans/{plan.id}/').json()
         self.assertTrue(detail['scheme_source'].startswith('results today'))
 
+    def test_its_semester_has_twenty_weeks_of_study(self):
+        # Said 23 November 2026. Semester 1 of the almanac holds 19 teaching
+        # weeks (2 Nov – 26 Mar, the Christmas recess left out): the plan takes
+        # them all and says the twentieth did not fit.
+        self.assertEqual(CurriculumModule.objects.get(curriculum__code='PST-2015', code='PST05101')
+                         .curriculum.weeks_of_study, 20)
+        module = self.level5_module('PST05209', 'Health Information Management', has_practical=True)
+        plan = qa_approved(tp.start_plan(module, self.tutor))
+        self.assertEqual(tp.weeks_of_study(plan), 20)
+        tp.lay_out(plan, plan.pattern, actor=self.tutor)
+        self.assertEqual(len({s.week for s in plan.sessions.all()}), 19)
+        self.assertTrue(plan.history.filter(detail__contains='only 19 of 20 weeks').exists())
+
 
 class LayOutTests(PlanBase):
     def test_the_pattern_comes_from_the_scheme_of_study(self):
@@ -818,3 +831,66 @@ class ReopenTests(PlanBase):
         PlanAssessment.objects.filter(plan=plan).update(moderation=PlanAssessment.SUBMITTED)
         with self.assertRaises(tp.PlanError):
             tp.reopen(plan, reason='Wrong days', actor=self.tutor)
+
+
+class RegisterForAClassTests(PlanBase):
+    """Said 19 November 2026 (option A): while taking attendance the tutor
+    picks the class of the plan the register is for; saving the register marks
+    that class taught with that very register."""
+
+    def setUp(self):
+        self.plan_ = self.laid_out()
+        tp.submit(self.plan_, actor=self.tutor)
+        self.day = date(2026, 11, 2)                                   # Monday: lecture and tutorial
+        self.lecture = self.plan_.sessions.get(planned_on=self.day, kind='lecture')
+        self.tutorial = self.plan_.sessions.get(planned_on=self.day, kind='tutorial')
+
+    def take(self, client=None, **extra):
+        data = {'module': self.module.id, 'session_type': 'T', 'exam_period': 'GN', 'date': self.day.isoformat(),
+                'label': extra.pop('label', 'Week 1 lecture'), 'topic': extra.pop('topic', ''), 'records': [], **extra}
+        return (client or client_for(self.tutor)).post('/api/sessions/', data, format='json')
+
+    def test_the_form_lists_that_days_classes_matching_kind_first(self):
+        data = client_for(self.tutor).get('/api/teaching-plans/classes-for-register/', {
+            'module_id': self.module.id, 'date': '2026-11-05', 'session_type': 'P'}).data
+        first = data['classes'][0]
+        self.assertEqual((first['kind'], first['when'], first['matches']), ('practical', 'today', True))
+        self.assertIn('lecture', [c['kind'] for c in data['classes'] if c['when'] == 'earlier'])  # Monday's, unmarked
+        self.assertFalse(client_for(self.other).get('/api/teaching-plans/classes-for-register/', {
+            'module_id': self.module.id, 'date': '2026-11-05'}).data['teaches'])
+
+    def test_saving_the_register_marks_the_class_with_it(self):
+        saved = self.take(plan_class_id=self.lecture.id, plan_class_status='done')
+        self.assertEqual(saved.status_code, 201, saved.data)
+        register = Session.objects.get(pk=saved.data['id'])
+        self.lecture.refresh_from_db()
+        self.assertEqual((self.lecture.status, self.lecture.delivered_on, self.lecture.register),
+                         (PlanSession.DONE, self.day, register))
+        self.assertEqual(register.topic, self.lecture.outcome.text[:300])     # empty topic takes the class's
+        second = self.take(label='Week 1 tutorial', topic='Spreadsheets', plan_class_id=self.tutorial.id,
+                           plan_class_status='partial')
+        self.tutorial.refresh_from_db()
+        self.assertEqual((self.tutorial.status, self.tutorial.register_id), (PlanSession.PARTIAL, second.data['id']))
+        self.assertTrue(self.plan_.history.filter(action='marked a class with its register').exists())
+
+    def test_a_refused_link_saves_no_register(self):
+        later = self.plan_.sessions.filter(planned_on__gt=self.day).order_by('planned_on').first()
+        refused = self.take(plan_class_id=later.id)
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('later day', refused.data['detail'])
+        self.assertFalse(Session.objects.filter(module=self.module, date=self.day).exists())
+
+    def test_marked_from_the_plan_each_class_gets_its_own_register(self):
+        theory = Session.objects.create(module=self.module, date=self.day, label='Lecture', session_type='T')
+        other = Session.objects.create(module=self.module, date=self.day, label='Tutorial', session_type='T')
+        tp.mark(self.lecture, PlanSession.DONE, actor=self.tutor, today=self.day)
+        tp.mark(self.tutorial, PlanSession.DONE, actor=self.tutor, today=self.day)
+        self.lecture.refresh_from_db()
+        self.tutorial.refresh_from_db()
+        self.assertEqual((self.lecture.register, self.tutorial.register), (theory, other))
+        thursday = self.plan_.sessions.get(planned_on=date(2026, 11, 5), kind='practical')
+        Session.objects.create(module=self.module, date=thursday.planned_on, label='Theory', session_type='T')
+        lab = Session.objects.create(module=self.module, date=thursday.planned_on, label='Lab', session_type='P')
+        tp.mark(thursday, PlanSession.DONE, actor=self.tutor, today=thursday.planned_on)
+        thursday.refresh_from_db()
+        self.assertEqual(thursday.register, lab)                                # the practical register

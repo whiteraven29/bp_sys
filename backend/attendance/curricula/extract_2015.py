@@ -431,8 +431,8 @@ def main():
                        'the curriculum itself was not on hand, so weekly hours and credits are not given and the '
                        'outcomes carry no assessment criteria. For students already in NTA Levels 5 and 6, who finish '
                        'on it (NACTVET BC.220/244/65 of 26 October 2026; Ministry of Health LB.74/262/01B/172 of '
-                       '27 October 2026). Each semester: 15 weeks of study and 2 weeks of assessment.'),
-              'weeks_of_study': 15, 'weeks_of_assessment': 2, 'enabling': {}, 'modules': []}
+                       '27 October 2026). Each semester: 20 weeks of study and 2 weeks of assessment (said 23 November 2026).'),
+              'weeks_of_study': 20, 'weeks_of_assessment': 2, 'enabling': {}, 'modules': []}
     with tempfile.TemporaryDirectory() as work:
         for level in (5, 6):
             found = [p for p in glob.glob(os.path.join(args.docs, f'*LEVEL {level}.doc')) if '~$' not in p]

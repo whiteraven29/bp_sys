@@ -223,7 +223,7 @@ sign in.
                          the bill, never changing it (time_to_pay.py); months
                          (set by the number of months), restores (old waivers
                          put back on the bill when DPFPA agrees)
-  Curriculum             a national curriculum as loaded (code, weeks of study);
+  Curriculum             a national curriculum as loaded (code, weeks of study: 15 for 2022, 20 for 2015 — 0089);
                          2022 PST: NTA 4–6 (load_curriculum, curricula/pst_2022.json);
                          note: new Level 4 from 2026/27 only (MoH LB.74/262/01B/172);
                          2015 PST: NTA 5–6 from its assessment plans (load_curriculum
@@ -490,7 +490,7 @@ are dropped once the production row counts are checked.
 | `load_curriculum [path] [--dry-run]` | the curriculum and assessment plans (default: 2022 PST, NTA 4–6); updates in place |
 | `load_teaching_calendar [path] [--dry-run]` | the almanac's teaching weeks, holidays, CAT weeks, exams, CQI dates (default 2026/27) |
 
-Tests: 1391 on master (teaching plans merged, 17 Nov 2026), run as described in `ops/guides/06-release-2026-27.md`.
+Tests: 1396 on master (teaching plans merged, 17 Nov 2026; 23 Nov), run as described in `ops/guides/06-release-2026-27.md`.
 
 ## 7. The look (said 10 November 2026)
 
