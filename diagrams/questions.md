@@ -1219,3 +1219,18 @@ overall performance".
 first sittings only (repeat sittings are not counted: a student's second try is not the class's result); "best" and "need attention" split
 at the semester's own pass rate; a semester is compared with the same semester a year before (Semester 1 with Semester 1, the
 same modules); a module with the last semester its code was taught.
+
+### Q89. The year's results table for the report ✅ / check
+
+**Asked (23 November 2026):** "a table for results of the year with module code, students registered for the module
+including repeaters, pass rate in percent, supp/repeat/failed in percent, also incomplete, excluding field, and then a graph of
+comparison with last year results based on the table by module, and this summary can be downloaded for report preparation" —
+"and maybe a filter to include field if needed" — "repeat considers a GPA and passing or failing half the modules, right?" —
+"don't mix two things: the overall pass, repeat, fail and module individual performance".
+
+**Built (uncommitted; no migration):** Performance ▸ Year results table, two tables apart. *Module performance*: each module
+on its own grades — Pass, Supp (starred, not yet sat), Fail (D/F, supplementary or repeat failed, NACTVET's FAIL),
+Incomplete — as % of everyone registered (repeaters included; one taken off part-way not counted). *Overall results*: each
+student's semester remark (PASS / SUPP / REPEAT / FAIL / INCOMPLETE) from `progression.results_summary`, continuing and
+repeaters' sheets. Last year = the same module code (a reused code is flagged), or the same semester, level and sheet.
+**Check:** a student discontinued on GPA keeps their passed modules as passes in Module performance (it reads the module).

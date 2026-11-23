@@ -302,3 +302,110 @@ class OfficialResultTests(PerformanceTestBase):
         payload = self.api.get('/api/performance/').json()
         self.assertEqual(payload['assessment'], 'result')
         self.assertEqual(payload['headline']['passed'], 1)
+
+
+class YearReportTests(PerformanceTestBase):
+    """Said 23 November 2026: a table of the year's results — each module, the
+    students registered for it with the repeaters, pass, supp, repeat, failed
+    and incomplete in percent, field modules left out — and last year beside it."""
+
+    def _sit(self, module, reg, grade='', attempt=Student.NORMAL, **extra):
+        student = Student.objects.create(nactvet_reg_no=reg, name=f'Student {reg}', module=module,
+                                         attempt=attempt, **extra)
+        if grade:
+            StudentResult.objects.create(student=student, authority_grade=grade, final_approved=True)
+        return student
+
+    def _a_semester(self):
+        """Seven students of a whole semester (four modules, the field module
+        among them), two repeating PHM101, one taken off part-way."""
+        from django.utils import timezone
+        others = [Module.objects.create(name=n, code=c, teacher='T', class_level=self.level, semester=self.sem,
+                                        credits=10) for c, n in (('ANA101', 'Anatomy'), ('LAW101', 'Law'))]
+        field = Module.objects.create(name='Field Practice', code='PST04211', teacher='T', class_level=self.level,
+                                      semester=self.sem, is_field_module=True, credits=10)
+        self.module.credits = 10
+        self.module.save()
+        modules = [self.module, *others, field]
+        students = {
+            'S1': ['C*', 'B', 'B', 'B'],      # GPA 2.7, 1 of 4 failed        → SUPP
+            'S2': ['C*', 'D*', 'C*', 'B'],    # GPA 2.0, 3 of 4 failed        → REPEAT, no supplementary
+            'S3': ['D', 'D', 'C', 'C'],       # GPA 1.5                        → FAIL (discontinued)
+            'S4': ['D', 'B', 'B', 'A'],       # GPA 2.7, failed outright       → REPEAT
+            'S5': ['A', 'A', 'A', 'A'],       #                                → PASS
+            'S6': ['', 'A', 'A', 'A'],        # no result yet                  → INCOMPLETE
+            'S7': ['C*', 'D*', 'A', 'D*'],    # GPA 2.0, 3 of 4 with the field → REPEAT
+        }
+        for reg, grades in students.items():
+            for module, grade in zip(modules, grades):
+                self._sit(module, reg, grade)
+        self._sit(self.module, 'S8', 'D', attempt=Student.REPEAT)
+        self._sit(self.module, 'S9', 'B', attempt=Student.REPEAT)
+        self._sit(self.module, 'S10', withdrawn_at=timezone.now())        # taken off part-way: not counted
+        self._sit(self.old_module, 'O1', 'A')
+        self._sit(self.old_module, 'O2', 'A')
+
+    def test_a_module_is_read_on_its_own_grades(self):
+        """Said 23 November 2026: don't mix the module's performance with the
+        students' overall pass, repeat and fail."""
+        self._a_semester()
+        report = analytics.year_report(self.year)
+        self.assertEqual(report['previous_year'], '2025/2026')
+        self.assertNotIn('PST04211', [r['code'] for r in report['rows']])              # field: when asked for
+        self.assertIn('PST04211', [r['code'] for r in analytics.year_report(self.year, include_field=True)['rows']])
+        row = next(r for r in report['rows'] if r['code'] == 'PHM101')
+        self.assertEqual((row['registered'], row['repeaters']), (9, 2))
+        # S1, S2 and S7 starred → supp, whatever their semester; S3, S4 and S8 (a repeat sitting) → fail.
+        self.assertEqual({name: row[name] for name in analytics.YEAR_OUTCOMES},
+                         {'pass': 2, 'supp': 3, 'fail': 3, 'incomplete': 1})
+        self.assertEqual((row['pass_pct'], row['supp_pct']), (22.2, 33.3))
+        self.assertEqual((row['previous']['pass_pct'], row['change']), (100.0, -77.8))
+        self.assertTrue(row['previous']['same_name'])
+        law = next(r for r in report['rows'] if r['code'] == 'LAW101')
+        self.assertEqual((law['pass'], law['supp'], law['fail']), (6, 1, 0))
+
+    def test_the_students_overall_remarks_are_apart_and_as_the_results_summary(self):
+        self._a_semester()
+        overall = analytics.year_report(self.year)['overall']
+        row = next(r for r in overall['rows'] if r['sheet'] == 'continuing')
+        self.assertEqual((row['semester'], row['level'], row['students']), (1, 'NTA Level 4', 7))
+        self.assertEqual({name: row[name] for _remark, name in analytics.OVERALL_OUTCOMES},
+                         {'pass': 1, 'supp': 1, 'repeat': 3, 'fail': 1, 'incomplete': 1})
+        self.assertEqual((row['previous']['pass_pct'], row['change']), (100.0, -85.7))
+        self.assertIn('repeaters', [r['sheet'] for r in overall['rows']])               # S8 and S9
+        self.assertIsNone(analytics.year_report(self.year, modules=Module.objects.filter(id=self.module.id))['overall'])
+
+    def test_a_code_reused_for_another_module_is_flagged_and_one_gone_is_listed(self):
+        Module.objects.create(name='Old Module', code='OLD101', teacher='T', class_level=self.level,
+                              semester=self.old_sem)
+        self._sit(Module.objects.get(code='OLD101'), 'O1', 'C')
+        self.old_module.name = 'Another Name'
+        self.old_module.save()
+        self._sit(self.old_module, 'O2', 'A')
+        self._sit(self.module, 'N1', 'B')
+        report = analytics.year_report(self.year)
+        self.assertFalse(report['rows'][0]['previous']['same_name'])
+        self.assertEqual([r['code'] for r in report['not_this_year']], ['OLD101'])
+
+    def test_the_endpoint_answers_for_the_chosen_year(self):
+        self._sit(self.module, 'N1', 'B')
+        data = self.api.get(f'/api/performance/year/?academic_year_id={self.year.id}').json()
+        self.assertEqual((data['academic_year'], data['rows'][0]['pass_pct']), ('2026/2027', 100.0))
+
+    def test_the_download_is_a_workbook_with_the_table_and_a_chart(self):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+        self._sit(self.old_module, 'O1', 'D')
+        self._sit(self.module, 'N1', 'B')
+        reply = self.api.get(f'/api/performance/year/download/?academic_year_id={self.year.id}')
+        self.assertEqual(reply.status_code, 200)
+        self.assertIn('Module-results-2026-2027.xlsx', reply['Content-Disposition'])
+        book = load_workbook(BytesIO(reply.content))
+        self.assertEqual(book.sheetnames, ['Modules 2026-2027', 'Overall 2026-2027', 'Comparison'])
+        table, compare = book['Modules 2026-2027'], book['Comparison']
+        self.assertEqual([c.value for c in table[4]][:7],
+                         ['Level', 'Module code', 'Module', 'Semester', 'Registered', 'of whom repeaters', 'Pass %'])
+        self.assertEqual([c.value for c in table[5]][1:7], ['PHM101', 'Pharmaceutics', 1, 1, 0, 100])
+        self.assertEqual([c.value for c in compare[2]], ['PHM101', 'Pharmaceutics', 0, 100, 100])
+        self.assertEqual(len(compare._charts), 1)

@@ -647,6 +647,13 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      taught, a semester against the same one a year before; CATs and CA stay on marks (`analytics.grade_summary`; 6 tests)
    - [ ] After the deploy: Performance ▸ 2026/27 Semester 1 (or the last semester with NACTVET grades) ▸ a level —
      compare the counts with Results ▸ Results Summary for that level
+   - [x] Year results table for the report (23 Nov, your request; "don't mix the overall pass/repeat/fail and module
+     individual performance"): Performance ▸ Year results table — Module performance (per module, its own grades:
+     registered incl. repeaters, pass / supp / fail / incomplete %, last year's pass % and the change; field modules
+     only when ticked) and, apart, Overall results (the students' remarks PASS / SUPP / REPEAT / FAIL / INCOMPLETE by
+     semester, level and sheet, as Results Summary, against last year); chart; Excel (Modules, Overall, Comparison
+     with an Excel chart) and the chart as a picture (`analytics.year_report`, `year_overall`; 5 tests)
+   - [ ] After the deploy: download 2025/2026 (the last full year) and open it in Excel; check the chart sheet
    - [x] Menu: an item shown by role (Results ▸ Authority Grades, Results Summary …) had its words above its dot;
      centred (`.nav-sub-btn { align-items: center }`, 23 Nov)
 

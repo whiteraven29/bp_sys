@@ -186,6 +186,14 @@
      cards saying one number each read as clutter; this reads as one card. */
   .quick-facts { display: flex; flex-wrap: wrap; margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
   .quick-facts:empty { display: none; }
+  #page-performance [data-pf-section]:not(.sec-on) { display: none !important; }
+  .pfy-check label { display: flex; align-items: center; gap: 8px; font-weight: 400; margin-top: 26px; cursor: pointer; }
+  .field.pfy-check input[type=checkbox] { width: auto; min-height: 0; }
+  .pfy-actions { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+  .pfy-note { font-size: .78rem; color: var(--muted); margin: 10px 0 0; line-height: 1.5; }
+  .pfy-table td.num, .pfy-table th.num { text-align: right; white-space: nowrap; }
+  .pfy-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); }
+  .pfy-chart-wrap { position: relative; min-height: 240px; }
   .pf-rank-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; }
   .pf-rank-head { font-size: .86rem; font-weight: 700; margin: 0 0 6px; display: flex; align-items: center; gap: 6px; }
   .pf-rank-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--rule, var(--border)); }
@@ -1676,7 +1684,14 @@
       </div>
     </div>
     <button class="nav-btn finance-only" data-page="finance" data-finance-section="audit" onclick="showFinanceSection('audit', this)"><span class="icon"><i class="bi bi-shield-check"></i></span> Audit Trail</button>
-    <button class="nav-btn academic-only" data-page="performance" onclick="showPage('performance',this)"><span class="icon"><i class="bi bi-graph-up"></i></span> Performance</button>
+    <!-- Performance (said 23 November 2026): the trends, and the year's table for the report — one item, one view. -->
+    <div class="nav-group academic-only" id="performance-nav-group">
+      <button class="nav-btn" data-page="performance" onclick="togglePerformanceMenu(event)"><span class="icon"><i class="bi bi-graph-up"></i></span> Performance <span class="nav-caret">›</span></button>
+      <div class="nav-submenu">
+        <button class="nav-sub-btn" data-pf-section="trends" onclick="showPerformanceSection('trends', this)">Trends &amp; modules</button>
+        <button class="nav-sub-btn" data-pf-section="year" onclick="showPerformanceSection('year', this)">Year results table</button>
+      </div>
+    </div>
     <div class="nav-group" data-roles="runs secretary dean qa" id="services-nav-group">
       <button class="nav-btn" data-page="forms" onclick="toggleServicesMenu(event)"><span class="icon"><i class="bi bi-life-preserver"></i></span> Services <span class="nav-caret">›</span></button>
       <div class="nav-submenu">
@@ -4231,10 +4246,10 @@
 
     <!-- SICK RECORDS -->
     <div class="page" id="page-performance">
-      <div class="page-title">Performance &amp; Trends</div>
+      <div class="page-title" id="pf-page-title">Performance &amp; Trends</div>
       <div class="page-sub" id="pf-scope">Results by year, level, module and assessment.</div>
 
-      <div class="card">
+      <div class="card" data-pf-section="trends">
         <div class="card-title">What to look at</div>
         <div class="form-grid-3">
           <div class="field">
@@ -4264,11 +4279,11 @@
         <div style="font-size:.75rem;color:var(--muted)" id="pf-note"></div>
       </div>
 
-      <div class="quick-facts" id="pf-headline"></div>
+      <div class="quick-facts" id="pf-headline" data-pf-section="trends"></div>
 
       <!-- Said 23 November 2026: the modules doing best and the ones that need
            attention, within one semester so like is ranked with like. -->
-      <div class="card" id="pf-rank-card" hidden>
+      <div class="card" id="pf-rank-card" data-pf-section="trends" hidden>
         <div class="card-title">Best and weakest modules <span id="pf-rank-when" style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px"></span></div>
         <div class="pf-rank-grid">
           <div><h3 class="pf-rank-head"><i class="bi bi-arrow-up-circle" aria-hidden="true"></i> Doing best</h3><div id="pf-best"></div></div>
@@ -4276,17 +4291,17 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" data-pf-section="trends">
         <div class="card-title">Trend <span id="pf-trend-sub" style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px">— the same measurement, semester by semester</span></div>
         <div class="inventory-chart-wrap"><canvas id="pf-trend-chart"></canvas></div>
       </div>
 
-      <div class="card">
+      <div class="card" data-pf-section="trends">
         <div class="card-title">Grade distribution</div>
         <div class="inventory-chart-wrap"><canvas id="pf-grade-chart"></canvas></div>
       </div>
 
-      <div class="card">
+      <div class="card" data-pf-section="trends">
         <div class="card-title">By module <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:6px">— weakest first, because those are the ones to look at</span></div>
         <div class="inventory-chart-wrap"><canvas id="pf-module-chart"></canvas></div>
         <div class="table-wrap" style="margin-top:14px">
@@ -4295,6 +4310,51 @@
             <tbody id="pf-module-tbody"></tbody>
           </table>
         </div>
+      </div>
+
+      <!-- The year's results, module by module, and last year beside them: the
+           table and the chart for the report (said 23 November 2026). -->
+      <div class="card" data-pf-section="year">
+        <div class="card-title">Which year</div>
+        <div class="form-grid-3">
+          <div class="field"><label>Academic year</label><select id="pfy-year" onchange="loadYearResults()"></select></div>
+          <div class="field"><label>Class level</label><select id="pfy-level" onchange="loadYearResults()"><option value="">All levels</option></select></div>
+          <div class="field pfy-check"><label><input type="checkbox" id="pfy-field" onchange="loadYearResults()"> Include field modules</label></div>
+          <div class="field pfy-actions">
+            <button class="btn btn-primary btn-sm" onclick="downloadYearResults()"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Download Excel</button>
+            <button class="btn btn-secondary btn-sm" onclick="downloadYearChart()"><i class="bi bi-image" aria-hidden="true"></i> Chart as picture</button>
+          </div>
+        </div>
+        <p class="pfy-note">Two things, kept apart. <b>Module performance</b> reads each module on its own grades: every student registered for it, repeaters included, as a percentage of those registered — <b>Pass</b> passed (first sitting, after the supplementary, or at a repeat); <b>Supp</b> a starred grade, the supplementary not yet sat; <b>Fail</b> D or F, the supplementary failed, a repeat failed, or NACTVET's FAIL; <b>Incomplete</b> no published result yet. Field modules only when ticked; a student taken off part-way is not counted. <b>Overall results</b> are the students' semester remarks, as NACTVET decides them from the GPA and from failing more than half the modules — the same as Results ▸ Results Summary. The Excel file has both, and the comparison with an Excel chart to paste into the report.</p>
+      </div>
+
+      <div class="card" data-pf-section="year">
+        <div class="card-title" id="pfy-title">Module performance</div>
+        <div class="table-wrap">
+          <table class="pfy-table">
+            <thead><tr><th>Module</th><th>Level</th><th class="num">Sem</th><th class="num">Registered</th><th class="num">Pass %</th><th class="num">Supp %</th><th class="num">Fail %</th><th class="num">Incomplete %</th><th class="num" id="pfy-last-head">Last year pass %</th><th class="num">Change</th></tr></thead>
+            <tbody id="pfy-tbody"><tr><td colspan="10" style="color:var(--muted)">Choose a year</td></tr></tbody>
+            <tfoot id="pfy-tfoot"></tfoot>
+          </table>
+        </div>
+        <div id="pfy-notes" class="pfy-note"></div>
+      </div>
+
+      <div class="card" data-pf-section="year" id="pfy-overall-card">
+        <div class="card-title" id="pfy-overall-title">Overall results</div>
+        <div class="table-wrap">
+          <table class="pfy-table">
+            <thead><tr><th>Semester</th><th>Level</th><th>Sheet</th><th class="num">Students</th><th class="num">Pass %</th><th class="num">Supp %</th><th class="num">Repeat %</th><th class="num">Fail %</th><th class="num">Incomplete %</th><th class="num" id="pfy-overall-last">Last year pass %</th><th class="num">Change</th></tr></thead>
+            <tbody id="pfy-overall-tbody"></tbody>
+            <tfoot id="pfy-overall-tfoot"></tfoot>
+          </table>
+        </div>
+        <p class="pfy-note">Each student once a semester, by their remark: <b>Pass</b> every module passed; <b>Supp</b> supplementaries to sit (GPA 2.0 or more, half or fewer failed); <b>Repeat</b> modules to repeat (failed, or more than half failed so no supplementary); <b>Fail</b> discontinued (GPA below 2.0, NACTVET's FAIL, or a repeat failed); <b>Incomplete</b> a result still missing. Continuing is the class's first sittings; Repeaters are the students sitting repeats, as NACTVET keeps the two sheets.</p>
+      </div>
+
+      <div class="card" data-pf-section="year">
+        <div class="card-title" id="pfy-chart-title">Pass rate by module: this year against last year</div>
+        <div class="pfy-chart-wrap" id="pfy-chart-wrap"><canvas id="pfy-chart"></canvas></div>
       </div>
     </div>
 
@@ -5240,6 +5300,7 @@ function showPage(name, btn) {
       (g.id === 'veta-nav-group' && name === 'veta-courses') ||
       (g.id === 'attendance-nav-group' && (name === 'attendance' || name === 'reports')) ||
       (g.id === 'results-nav-group' && name === 'results') ||
+      (g.id === 'performance-nav-group' && name === 'performance') ||
       (g.id === 'declarations-nav-group' && name === 'declarations') ||
       (g.id === 'eligibility-nav-group' && name === 'eligibility') ||
       (g.id === 'services-nav-group' && name === 'forms') ||
@@ -5301,7 +5362,7 @@ function showPage(name, btn) {
       showFormsSection(state.formsSection || defaultFormsSection());
     }
   }
-  if (name === 'performance') loadPerformance();
+  if (name === 'performance') loadPerformanceSection();
   if (name === 'results') loadResultWindows();
   if (name === 'students') loadStudents();
   if (name === 'attendance') { loadAttendanceModuleSelect(); loadAttendanceHistory(); updatePeriodLocks(); }
@@ -5644,7 +5705,7 @@ function renderForYou(unread) {
 const NAV_SECTIONS = [
   ['', ['[data-page="dashboard"]']],
   ['Academic', ['#modules-nav-group', '#attendance-nav-group', '#results-nav-group', '#tp-nav-group',
-                '[data-page="performance"]', '#eligibility-nav-group', '#declarations-nav-group',
+                '#performance-nav-group', '#eligibility-nav-group', '#declarations-nav-group',
                 '[data-page="catnumbers"]', '[data-page="returning"]', '#review-nav-group']],
   ['Students', ['#admissions-nav-group', '#veta-nav-group', '#students-nav-group', '#transfers-nav-group',
                 '#status-nav-group', '[data-page="sick"]']],
@@ -10483,6 +10544,201 @@ function renderPerformance(data) {
       options: { ...base, indexAxis: 'y', scales: { x: { beginAtZero: true, max: 100 } } },
     }));
   }
+}
+
+// Performance has two views (said 23 November 2026): the trends, and the
+// year's results table for the report. One item, one view.
+const PF_SECTIONS = {
+  trends: ['Performance & Trends', 'Results by year, level, module and assessment.'],
+  year: ['Year results table', "Each module's results for the year, against the year before — for the report."],
+};
+
+function togglePerformanceMenu(event) {
+  const group = document.getElementById('performance-nav-group');
+  group.classList.toggle('open');
+  if (!document.getElementById('page-performance').classList.contains('active')) showPerformanceSection(state.pfSection || 'trends');
+  event.stopPropagation();
+}
+
+function showPerformanceSection(section, btn) {
+  state.pfSection = PF_SECTIONS[section] ? section : 'trends';
+  showPage('performance', document.querySelector('#performance-nav-group .nav-btn'));
+  document.querySelector(`[data-pf-section="${state.pfSection}"].nav-sub-btn`)?.classList.add('active');
+}
+
+// Called by showPage: shows this view's cards and loads them.
+function loadPerformanceSection() {
+  const section = state.pfSection || 'trends';
+  const group = document.getElementById('performance-nav-group');
+  group.classList.add('open');
+  group.querySelector('.nav-btn').classList.add('active');
+  document.querySelectorAll('#page-performance [data-pf-section]').forEach(card =>
+    card.classList.toggle('sec-on', card.dataset.pfSection === section));
+  document.querySelectorAll('[data-pf-section].nav-sub-btn').forEach(b => b.classList.toggle('active', b.dataset.pfSection === section));
+  const [title, sub] = PF_SECTIONS[section];
+  document.getElementById('pf-page-title').textContent = title;
+  document.getElementById('pf-scope').textContent = sub;
+  const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = title;
+  return section === 'year' ? openYearResults() : loadPerformance();
+}
+
+let pfyChart = null;
+
+async function openYearResults() {
+  const year = document.getElementById('pfy-year');
+  if (!year.options.length) {
+    try {
+      if (!state.academicYears) { const years = await api('GET', '/academic-years/'); state.academicYears = years.results ?? years; }
+    } catch (e) { state.academicYears = []; }
+    const years = [...state.academicYears].sort((a, b) => b.name.localeCompare(a.name));
+    year.innerHTML = years.map(y => `<option value="${y.id}">${safeText(y.name)}</option>`).join('');
+    year.value = String((years.find(y => y.is_active) || years[0] || {}).id || '');
+    document.getElementById('pfy-level').innerHTML = '<option value="">All levels</option>' + (state.levels || [])
+      .map(l => `<option value="${l.id}">${safeText(l.name)}</option>`).join('');
+  }
+  return loadYearResults();
+}
+
+function yearResultsQuery() {
+  const params = new URLSearchParams({ academic_year_id: document.getElementById('pfy-year').value });
+  const level = document.getElementById('pfy-level').value;
+  if (level) params.set('class_level_id', level);
+  if (document.getElementById('pfy-field').checked) params.set('include_field', '1');
+  return params.toString();
+}
+
+async function loadYearResults() {
+  let data;
+  try {
+    data = await api('GET', `/performance/year/?${yearResultsQuery()}`);
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not load the year\'s results'), 'var(--red)');
+    return;
+  }
+  state.yearResults = data;
+  renderYearResults(data);
+}
+
+function renderYearResults(data) {
+  const pct = v => v == null ? '—' : `${v}`;
+  const last = data.previous_year || 'last year';
+  document.getElementById('pfy-title').textContent =
+    `Module performance ${data.academic_year}${data.class_level ? ` — ${data.class_level}` : ''}`;
+  document.getElementById('pfy-last-head').textContent = `Pass % ${last}`;
+  document.getElementById('pfy-chart-title').textContent = `Pass rate by module: ${data.academic_year} against ${last}`;
+  const change = c => c == null ? '<span style="color:var(--muted)">—</span>'
+    : `<span class="pf-change ${c > 0 ? 'up' : c < 0 ? 'down' : ''}">${c > 0 ? '▲' : c < 0 ? '▼' : '='} ${Math.abs(c)}</span>`;
+  document.getElementById('pfy-tbody').innerHTML = data.rows.length ? data.rows.map(row => `<tr>
+      <td><strong>${safeText(row.code)}</strong> <span style="color:var(--muted);font-size:.76rem">${safeText(row.name)}</span>${row.field ? ' <span class="badge badge-gen">Field</span>' : ''}</td>
+      <td style="font-size:.78rem;white-space:nowrap">${safeText(row.level)}</td>
+      <td class="num">${row.semester}</td>
+      <td class="num">${row.registered}${row.repeaters ? `<div style="font-size:.7rem;color:var(--muted)">${row.repeaters} repeating</div>` : ''}</td>
+      <td class="num"><strong>${pct(row.pass_pct)}</strong></td>
+      <td class="num">${pct(row.supp_pct)}</td><td class="num">${pct(row.fail_pct)}</td>
+      <td class="num">${pct(row.incomplete_pct)}</td>
+      <td class="num">${row.previous ? pct(row.previous.pass_pct) : '<span style="color:var(--muted)">not taught</span>'}${row.previous && !row.previous.same_name ? `<div style="font-size:.68rem;color:var(--orange)" title="${safeText(row.previous.name)}">another module then</div>` : ''}</td>
+      <td class="num">${change(row.change)}</td></tr>`).join('')
+    : '<tr><td colspan="10"><div class="empty"><div class="ei">📊</div>No modules with students registered this year</div></td></tr>';
+  const t = data.totals, pt = data.previous_totals;
+  document.getElementById('pfy-tfoot').innerHTML = data.rows.length ? `<tr><td>All modules</td><td></td><td></td>
+      <td class="num">${t.registered}${t.repeaters ? `<div style="font-size:.7rem;color:var(--muted)">${t.repeaters} repeating</div>` : ''}</td>
+      <td class="num">${pct(t.pass_pct)}</td><td class="num">${pct(t.supp_pct)}</td>
+      <td class="num">${pct(t.fail_pct)}</td><td class="num">${pct(t.incomplete_pct)}</td>
+      <td class="num">${pt ? pct(pt.pass_pct) : '—'}</td>
+      <td class="num">${change(pt && t.pass_pct != null && pt.pass_pct != null ? Math.round((t.pass_pct - pt.pass_pct) * 10) / 10 : null)}</td></tr>` : '';
+  const notes = [];
+  const renamed = data.rows.filter(r => r.previous && !r.previous.same_name);
+  if (renamed.length) notes.push(`Same code, another module last year — compare with care: ${renamed.map(r => `${safeText(r.code)} (then ${safeText(r.previous.name)})`).join(', ')}.`);
+  if (data.not_this_year.length) notes.push(`Taught in ${safeText(last)}, not this year: ${data.not_this_year.map(m => `${safeText(m.code)} ${safeText(m.name)}`).join(', ')}.`);
+  document.getElementById('pfy-notes').innerHTML = notes.join('<br>');
+  renderYearOverall(data, change);
+
+  if (pfyChart) { pfyChart.destroy(); pfyChart = null; }
+  const wrap = document.getElementById('pfy-chart-wrap');
+  wrap.style.height = `${Math.max(240, data.rows.length * 34 + 90)}px`;
+  if (!data.rows.length) return;
+  pfyChart = newChart(document.getElementById('pfy-chart'), yearChartConfig(data));
+}
+
+// The students' semester remarks — kept apart from the modules (said 23
+// November 2026). Not shown to a tutor, who sees their own modules only.
+function renderYearOverall(data, change) {
+  const card = document.getElementById('pfy-overall-card');
+  const overall = data.overall;
+  card.hidden = !overall;
+  if (!overall) return;
+  const pct = v => v == null ? '—' : `${v}`;
+  const last = data.previous_year || 'last year';
+  document.getElementById('pfy-overall-title').textContent =
+    `Overall results ${data.academic_year}${data.class_level ? ` — ${data.class_level}` : ''}`;
+  document.getElementById('pfy-overall-last').textContent = `Pass % ${last}`;
+  const cells = r => ['pass', 'supp', 'repeat', 'fail', 'incomplete']
+    .map(n => `<td class="num">${n === 'pass' ? `<strong>${pct(r[n + '_pct'])}</strong>` : pct(r[n + '_pct'])}</td>`).join('');
+  document.getElementById('pfy-overall-tbody').innerHTML = overall.rows.length ? overall.rows.map(r => `<tr>
+      <td>Semester ${r.semester}</td><td style="white-space:nowrap">${safeText(r.level)}</td>
+      <td>${r.sheet === 'continuing' ? 'Continuing' : 'Repeaters'}</td><td class="num">${r.students}</td>${cells(r)}
+      <td class="num">${r.previous ? pct(r.previous.pass_pct) : '<span style="color:var(--muted)">—</span>'}</td>
+      <td class="num">${change(r.change)}</td></tr>`).join('')
+    : '<tr><td colspan="11" style="color:var(--muted)">No students\' results for this year yet</td></tr>';
+  const t = overall.totals;
+  document.getElementById('pfy-overall-tfoot').innerHTML = t
+    ? `<tr><td>All</td><td></td><td>Continuing</td><td class="num">${t.students}</td>${cells(t)}<td></td><td></td></tr>` : '';
+}
+
+function yearChartConfig(data) {
+  const last = data.previous_year || 'last year';
+  return {
+    type: 'bar',
+    data: {
+      labels: data.rows.map(r => r.code),
+      datasets: [
+        { label: last, data: data.rows.map(r => r.previous ? r.previous.pass_pct : null), tone: 'neutral', maxBarThickness: 14 },
+        { label: data.academic_year, data: data.rows.map(r => r.pass_pct), tone: 'blue', maxBarThickness: 14 },
+      ],
+    },
+    options: { responsive: true, indexAxis: 'y',
+               plugins: { legend: { display: true },
+                          tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.raw == null ? 'not taught' : c.formattedValue + '%'}` } } },
+               scales: { x: { beginAtZero: true, max: 100, title: { display: true, text: 'Pass %' } } } },
+  };
+}
+
+function downloadYearResults() {
+  if (!document.getElementById('pfy-year').value) { toast('Choose a year first.', 'var(--red)'); return; }
+  window.location.href = `${API}/performance/year/download/?${yearResultsQuery()}`;
+}
+
+// The chart as a picture for the report: drawn again in the light colours on
+// a white ground, with its title, whatever theme the screen is in.
+function downloadYearChart() {
+  const d = state.yearResults;
+  if (!d || !d.rows.length) { toast('Nothing to download yet.', 'var(--red)'); return; }
+  const html = document.documentElement;
+  const theme = html.getAttribute('data-theme');
+  html.setAttribute('data-theme', 'light');
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:-10000px;top:0;width:1000px;background:#fff';
+  const canvas = document.createElement('canvas');
+  canvas.width = 1000; canvas.height = Math.max(320, d.rows.length * 34 + 120);
+  box.appendChild(canvas);
+  document.body.appendChild(box);
+  const config = yearChartConfig(d);
+  config.options = { ...config.options, responsive: false, animation: false, devicePixelRatio: 2,
+                     plugins: { ...config.options.plugins,
+                                title: { display: true, text: `Pass rate by module: ${d.academic_year} against ${d.previous_year || 'last year'}${d.class_level ? ' — ' + d.class_level : ''}`,
+                                         color: '#1E293B', font: { size: 16, weight: '700' }, padding: { top: 4, bottom: 14 } } },
+                     layout: { padding: 20 } };
+  config.plugins = [{ id: 'white', beforeDraw: chart => { const c = chart.ctx; c.save(); c.fillStyle = '#ffffff';
+                      c.fillRect(0, 0, chart.width, chart.height); c.restore(); } }];
+  const chart = newChart(canvas, config);
+  const url = chart.toBase64Image('image/png', 1);
+  chart.destroy();
+  box.remove();
+  if (theme === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', theme);
+  const link = document.createElement('a');
+  link.download = `Pass-rate-by-module-${d.academic_year.replace('/', '-')}${d.class_level ? '-' + d.class_level.replace(/ /g, '-') : ''}.png`;
+  link.href = url;
+  link.click();
 }
 
 // The final result as graded (said 23 November 2026): passes and fails, the

@@ -454,3 +454,319 @@ def grade_trend(*, academic_year=None, class_level=None, module=None, serializer
         points.append({'label': _label(semester), 'academic_year': semester.academic_year.name,
                        'semester': semester.number, **_public(measure)})
     return points[-limit:]
+
+
+# ── the year's results, for the report ────────────────────────────────────────
+#
+# Two things, kept apart (said 23 November 2026): how each MODULE did — its own
+# grades, pass / supp / fail — and how the STUDENTS did overall — each one's
+# semester remark (PASS, SUPP, REPEAT, FAIL), which NACTVET decides from the
+# GPA and from failing more than half the modules.
+
+#: A module's columns, in the order the report prints them.
+YEAR_OUTCOMES = ('pass', 'supp', 'fail', 'incomplete')
+#: The students' remarks, as NACTVET words them (DISCO is its FAIL).
+OVERALL_OUTCOMES = (('PASS', 'pass'), ('SUPP', 'supp'), ('REPEAT', 'repeat'), ('DISCO', 'fail'),
+                    ('INCOMPLETE', 'incomplete'))
+
+
+def _column(row):
+    """One registration's result in the module, read from that module alone:
+
+    pass        passed — at the first sitting, after the supplementary, or at a repeat;
+    supp        a starred grade, the supplementary not yet sat (at a first sitting);
+    fail        D or F, the supplementary failed, a repeat sitting failed, or NACTVET's FAIL;
+    incomplete  no published result yet (missing, not approved, withheld, nullified, not sat)."""
+    from . import progression
+    status = row['status']
+    if status == 'PASS':
+        return 'pass'
+    if status == 'SUPP':
+        return 'fail' if row.get('attempt') == Student.REPEAT else 'supp'   # no supplementary at a repeat
+    if status in progression.FAILED_STATUSES | {'DISCONTINUED'}:
+        return 'fail'
+    return 'incomplete'
+
+
+def _year_columns(year):
+    """{enrollment id: column} for every registration of the year that holds a
+    result — one taken off part-way, or a module already passed, does not."""
+    from . import progression
+    serializer = StudentResultSerializer()
+    columns = {}
+    for semester in Semester.objects.filter(academic_year=year):
+        by_profile, by_reg_no = progression.enrollments_by_profile(semester)
+        for group in list(by_profile.values()) + list(by_reg_no.values()):
+            idle = progression.not_holding(group, serializer)
+            for enrollment in group:
+                if enrollment.id not in idle:
+                    columns[enrollment.id] = _column(progression.module_row(enrollment, serializer))
+    return columns
+
+
+def _pct(part, whole):
+    return round(part * 100 / whole, 1) if whole else None
+
+
+def _year_rows(year, class_level=None, modules=None, include_field=False):
+    """{(level order, code): row} for every module of the year — field modules
+    only when asked for — counting every registration, first sittings and
+    repeaters."""
+    columns = _year_columns(year)
+    enrollments = (Student.objects.filter(id__in=columns)
+                   .select_related('module__class_level', 'module__semester'))
+    if not include_field:
+        enrollments = enrollments.filter(module__is_field_module=False)
+    if class_level is not None:
+        enrollments = enrollments.filter(module__class_level=class_level)
+    if modules is not None:
+        enrollments = enrollments.filter(module__in=modules)
+    rows = {}
+    for enrollment in enrollments:
+        module = enrollment.module
+        key = (module.class_level.order, module.code)
+        row = rows.setdefault(key, {
+            'code': module.code, 'name': module.name, 'level': module.class_level.name,
+            'field': module.is_field_module,
+            'level_order': module.class_level.order, 'semester': module.semester.number,
+            'registered': 0, 'repeaters': 0, **{name: 0 for name in YEAR_OUTCOMES}})
+        row['registered'] += 1
+        row['repeaters'] += enrollment.attempt == Student.REPEAT
+        row[columns[enrollment.id]] += 1
+    for row in rows.values():
+        for name in YEAR_OUTCOMES:
+            row[f'{name}_pct'] = _pct(row[name], row['registered'])
+    return rows
+
+
+def _totals(rows, outcomes, base='registered'):
+    totals = {base: sum(r[base] for r in rows), **{name: sum(r[name] for r in rows) for name in outcomes}}
+    if base == 'registered':
+        totals['repeaters'] = sum(r['repeaters'] for r in rows)
+    for name in outcomes:
+        totals[f'{name}_pct'] = _pct(totals[name], totals[base])
+    return totals
+
+
+def previous_year(year):
+    return AcademicYear.objects.filter(name__lt=year.name).order_by('-name').first()
+
+
+def _overall_rows(year, class_level=None):
+    """{(semester, level order, sheet): row} — the students' semester remarks,
+    exactly as Results ▸ Results Summary gives them: the continuing sheet (the
+    class's first sittings) and the repeaters' sheet."""
+    from . import progression
+    from .models import ClassLevel
+    rows = {}
+    for semester in Semester.objects.filter(academic_year=year).order_by('number'):
+        levels = ClassLevel.objects.filter(modules__semester=semester).distinct().order_by('order')
+        if class_level is not None:
+            levels = levels.filter(id=class_level.id)
+        for level in levels:
+            for sheet in ('continuing', 'repeaters'):
+                counts = progression.results_summary(semester, level, sheet=sheet)['counts']
+                if not counts['total']:
+                    continue
+                row = {'semester': semester.number, 'level': level.name, 'level_order': level.order,
+                       'sheet': sheet, 'students': counts['total'],
+                       **{name: counts.get(remark, 0) for remark, name in OVERALL_OUTCOMES}}
+                for _remark, name in OVERALL_OUTCOMES:
+                    row[f'{name}_pct'] = _pct(row[name], row['students'])
+                rows[(semester.number, level.order, sheet)] = row
+    return rows
+
+
+def year_overall(year, before_year, class_level=None):
+    """The students' remarks for the year, each semester and level against the
+    same one the year before."""
+    names = [name for _remark, name in OVERALL_OUTCOMES]
+    rows = _overall_rows(year, class_level)
+    before = _overall_rows(before_year, class_level) if before_year else {}
+    out = []
+    for key in sorted(rows, key=lambda k: (k[0], k[1], k[2] != 'continuing')):
+        row, last = rows[key], before.get(key)
+        row['previous'] = None if last is None else {'students': last['students'],
+                                                     **{f'{n}_pct': last[f'{n}_pct'] for n in names}}
+        row['change'] = (round(row['pass_pct'] - last['pass_pct'], 1)
+                         if last and row['pass_pct'] is not None and last['pass_pct'] is not None else None)
+        out.append(row)
+    continuing = [r for r in out if r['sheet'] == 'continuing']
+    return {'rows': out, 'totals': _totals(continuing, names, base='students') if continuing else None}
+
+
+def year_report(year, *, class_level=None, modules=None, include_field=False):
+    """The year's results: each module on its own (field modules only when
+    asked for) against the same module code the year before; and, apart, the
+    students' overall remarks — not for a tutor, who sees their own modules."""
+    rows = _year_rows(year, class_level, modules, include_field)
+    before_year = previous_year(year)
+    before = _year_rows(before_year, class_level, modules, include_field) if before_year else {}
+    out = []
+    for key in sorted(rows):
+        row = rows[key]
+        last = before.get(key)
+        row['previous'] = None if last is None else {
+            'name': last['name'], 'registered': last['registered'],
+            **{f'{name}_pct': last[f'{name}_pct'] for name in YEAR_OUTCOMES},
+            # The new curriculum reuses some codes for other modules: say so
+            # rather than compare unlike with like in silence.
+            'same_name': last['name'].strip().lower() == row['name'].strip().lower(),
+        }
+        row['change'] = (round(row['pass_pct'] - last['pass_pct'], 1)
+                         if last and row['pass_pct'] is not None and last['pass_pct'] is not None else None)
+        out.append(row)
+    gone = [{'code': last['code'], 'name': last['name'], 'level': last['level'], 'pass_pct': last['pass_pct']}
+            for key, last in sorted(before.items()) if key not in rows]
+    return {
+        'academic_year': year.name,
+        'previous_year': before_year.name if before_year else None,
+        'class_level': class_level.name if class_level else None,
+        'include_field': include_field,
+        'rows': out,
+        'totals': _totals(out, YEAR_OUTCOMES),
+        'previous_totals': _totals(list(before.values()), YEAR_OUTCOMES) if before else None,
+        'not_this_year': gone,
+        'overall': None if modules is not None else year_overall(year, before_year, class_level),
+    }
+
+
+def year_report_workbook(report):
+    """The year's report as a workbook: each module's results; the students'
+    overall remarks, kept apart; and the modules' pass rates beside last
+    year's, with an Excel chart that can be pasted into the report as it is."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.chart import BarChart, Reference
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    navy = PatternFill('solid', fgColor='123F80')
+    head_font = Font(bold=True, color='FFFFFF', size=10)
+    centre = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    thin = Border(bottom=Side(style='thin', color='DCE2EA'))
+    muted = Font(size=9, color='6B7785')
+    year, before = report['academic_year'], report['previous_year']
+    scope = report['class_level'] or 'All levels'
+    last_head = f'Pass % {before}' if before else 'Pass % last year'
+
+    def pct(value):
+        return '' if value is None else value
+
+    def change(now, then):
+        return round(now - then, 1) if now is not None and then is not None else ''
+
+    def heading(sheet, title, note, header):
+        sheet.append([title])
+        sheet['A1'].font = Font(bold=True, size=13)
+        sheet.append([note])
+        sheet['A2'].font = Font(italic=True, size=9, color='6B7785')
+        sheet.append([])
+        sheet.append(header)
+        for cell in sheet[4]:
+            cell.fill, cell.font, cell.alignment = navy, head_font, centre
+
+    def widths(sheet, values):
+        for column, width in enumerate(values, start=1):
+            sheet.column_dimensions[get_column_letter(column)].width = width
+
+    book = Workbook()
+
+    # ── each module, on its own ──
+    sheet = book.active
+    sheet.title = f'Modules {year}'.replace('/', '-')
+    heading(sheet, f'Module performance {year} — {scope}',
+            'Each module read on its own grades. Every registration counted, repeaters included; field modules '
+            + ('included' if report.get('include_field') else 'left out')
+            + '. Percentages are of the students registered, so each row adds up to 100.',
+            ['Level', 'Module code', 'Module', 'Semester', 'Registered', 'of whom repeaters', 'Pass %', 'Supp %',
+             'Fail %', 'Incomplete %', last_head, 'Change (points)'])
+    for row in report['rows']:
+        last = row['previous']
+        sheet.append([row['level'], row['code'], row['name'], row['semester'], row['registered'], row['repeaters'],
+                      *[pct(row[f'{name}_pct']) for name in YEAR_OUTCOMES],
+                      pct(last['pass_pct']) if last else '', pct(row['change'])])
+        for cell in sheet[sheet.max_row]:
+            cell.border = thin
+    totals, last_totals = report['totals'], report['previous_totals']
+    sheet.append(['All', '', 'All modules', '', totals['registered'], totals['repeaters'],
+                  *[pct(totals[f'{name}_pct']) for name in YEAR_OUTCOMES],
+                  pct(last_totals['pass_pct']) if last_totals else '',
+                  change(totals['pass_pct'], last_totals['pass_pct']) if last_totals else ''])
+    for cell in sheet[sheet.max_row]:
+        cell.font = Font(bold=True)
+    sheet.append([])
+    notes = ['Pass: passed, at the first sitting, after the supplementary or at a repeat. Supp: a starred grade, the '
+             'supplementary not yet sat. Fail: D or F, the supplementary failed, a repeat sitting failed, or '
+             "NACTVET's FAIL. Incomplete: no published result yet."]
+    renamed = [row['code'] for row in report['rows'] if row['previous'] and not row['previous']['same_name']]
+    if renamed:
+        notes.append(f'Same code, another module name last year (compare with care): {", ".join(renamed)}.')
+    if report['not_this_year']:
+        notes.append('Taught last year, not this year: '
+                     + ', '.join(f'{m["code"]} {m["name"]}' for m in report['not_this_year']) + '.')
+    for note in notes:
+        sheet.append([note])
+        sheet.cell(sheet.max_row, 1).font = muted
+    widths(sheet, (14, 13, 40, 9, 11, 11, 9, 9, 9, 12, 14, 12))
+    sheet.freeze_panes = 'D5'
+
+    # ── the students, overall ──
+    overall = report.get('overall')
+    if overall is not None:
+        names = [name for _remark, name in OVERALL_OUTCOMES]
+        people = book.create_sheet(f'Overall {year}'.replace('/', '-'))
+        heading(people, f'Overall results {year} — {scope}',
+                "Each student's semester remark, as NACTVET decides it from the GPA and from failing more than half "
+                'the modules — as Results ▸ Results Summary shows it. Percentages are of the students.',
+                ['Semester', 'Level', 'Sheet', 'Students', 'Pass %', 'Supp %', 'Repeat %', 'Fail %', 'Incomplete %',
+                 last_head, 'Change (points)'])
+        for row in overall['rows']:
+            last = row['previous']
+            people.append([row['semester'], row['level'], 'Continuing' if row['sheet'] == 'continuing' else 'Repeaters',
+                           row['students'], *[pct(row[f'{name}_pct']) for name in names],
+                           pct(last['pass_pct']) if last else '', pct(row['change'])])
+            for cell in people[people.max_row]:
+                cell.border = thin
+        if overall['totals']:
+            t = overall['totals']
+            people.append(['All', '', 'Continuing', t['students'], *[pct(t[f'{name}_pct']) for name in names]])
+            for cell in people[people.max_row]:
+                cell.font = Font(bold=True)
+        people.append([])
+        people.append(['Pass: passed every module. Supp: supplementaries to sit (GPA 2.0 or more, half or fewer '
+                       'modules failed). Repeat: modules to repeat (failed, or more than half failed so no '
+                       'supplementary). Fail: discontinued (GPA below 2.0, NACTVET\'s FAIL, or a repeat failed). '
+                       'Incomplete: a result still missing.'])
+        people.cell(people.max_row, 1).font = muted
+        widths(people, (10, 14, 13, 10, 9, 9, 10, 9, 12, 14, 12))
+        people.freeze_panes = 'D5'
+
+    # ── the comparison, with its chart ──
+    compare = book.create_sheet('Comparison')
+    compare.append(['Module code', 'Module', last_head, f'Pass % {year}', 'Change (points)'])
+    for cell in compare[1]:
+        cell.fill, cell.font, cell.alignment = navy, head_font, centre
+    for row in report['rows']:
+        last = row['previous']
+        compare.append([row['code'], row['name'], last['pass_pct'] if last and last['pass_pct'] is not None else 0,
+                        row['pass_pct'] or 0, pct(row['change'])])
+    widths(compare, (13, 40, 15, 15, 14))
+    count = len(report['rows'])
+    if count:
+        chart = BarChart()
+        chart.type = 'bar'
+        chart.grouping = 'clustered'
+        chart.title = f'Module pass rate: {year} against {before or "last year"}'
+        chart.y_axis.title = 'Pass %'
+        chart.y_axis.scaling.min, chart.y_axis.scaling.max = 0, 100
+        chart.add_data(Reference(compare, min_col=3, max_col=4, min_row=1, max_row=count + 1), titles_from_data=True)
+        chart.set_categories(Reference(compare, min_col=1, min_row=2, max_row=count + 1))
+        chart.height = max(8, 0.6 * count + 3)
+        chart.width = 18
+        compare.add_chart(chart, 'G2')
+
+    output = BytesIO()
+    book.save(output)
+    return output.getvalue()

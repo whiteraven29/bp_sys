@@ -5488,6 +5488,46 @@ def performance(request):
     })
 
 
+def _year_report_for(request):
+    """The year's results, module by module, against the year before — the
+    table and the comparison for the report (said 23 November 2026). Who sees
+    what is the same as on Performance."""
+    modules = (None if can_read_exams(request.user)
+               and not getattr(request.user, 'teaching_scope_only', False)
+               else user_modules(request.user))
+    year = (AcademicYear.objects.filter(id=pk_or_none(request.query_params.get('academic_year_id'))).first()
+            or active_academic_year())
+    if year is None:
+        return None, None, None, None
+    level = ClassLevel.objects.filter(id=pk_or_none(request.query_params.get('class_level_id'))).first()
+    include_field = request.query_params.get('include_field') in ('1', 'true', 'yes')
+    return (analytics.year_report(year, class_level=level, modules=modules, include_field=include_field),
+            year, level, modules)
+
+
+@api_view(['GET'])
+@login_required
+def performance_year(request):
+    report, year, level, modules = _year_report_for(request)
+    if report is None:
+        return Response({'detail': 'Choose an academic year.'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({**report, 'scope': 'college' if modules is None else 'my-modules'})
+
+
+@api_view(['GET'])
+@login_required
+def performance_year_download(request):
+    """The same table, and the comparison with its chart, as a workbook."""
+    report, year, level, _modules = _year_report_for(request)
+    if report is None:
+        return Response({'detail': 'Choose an academic year.'}, status=status.HTTP_400_BAD_REQUEST)
+    name = f'Module-results-{year.name.replace("/", "-")}' + (f'-{level.name.replace(" ", "-")}' if level else '')
+    response = HttpResponse(analytics.year_report_workbook(report),
+                            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="{name}.xlsx"'
+    return response
+
+
 # ── INVENTORY ─────────────────────────────────────────────────────────────────
 
 class InventoryLocationViewSet(viewsets.ModelViewSet):
