@@ -274,7 +274,8 @@ sign in.
   OutstandingRepeat      a failed module still to be passed
   Postponement           request → Principal decides
   ExitRequest            finish after Level 5: portal → Principal decides
-  SuppConsentForm        the year's consent wording for supplementary students
+  SuppConsentForm        the year's consent wording for supplementary students (not Level 6:
+                         they do not continue — consent.asks_consent)
                          (Sehemu A–D; {name} {reg_no} {level}); open / closed
   SuppConsent            one student's consent: wording as agreed, the level they
                          continue to, signed copy back (when, who, Principal's answer)
@@ -490,7 +491,7 @@ are dropped once the production row counts are checked.
 | `load_curriculum [path] [--dry-run]` | the curriculum and assessment plans (default: 2022 PST, NTA 4–6); updates in place |
 | `load_teaching_calendar [path] [--dry-run]` | the almanac's teaching weeks, holidays, CAT weeks, exams, CQI dates (default 2026/27) |
 
-Tests: 1396 on master (teaching plans merged, 17 Nov 2026; 23 Nov), run as described in `ops/guides/06-release-2026-27.md`.
+Tests: 1397 on master (teaching plans merged, 17 Nov 2026; 23 Nov), run as described in `ops/guides/06-release-2026-27.md`.
 
 ## 7. The look (said 10 November 2026)
 

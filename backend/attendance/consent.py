@@ -3,7 +3,8 @@
 
 A student whose results say SUPP continues to the next level while they
 prepare for the supplementary examination, on the conditions the college's
-form sets out. They fill it in on the portal (optional), print it, sign it
+form sets out. A Level 6 student has no next level: they finish, so they are
+not asked (said 23 November 2026). They fill it in on the portal (optional), print it, sign it
 and bring it back; the Principal signs and stamps it, and the admission
 office records the signed hard copy and the Principal's answer. Nothing is
 held while it is missing: the list says who has not filled it in or brought
@@ -18,6 +19,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from . import progression
+from .grading import is_level_six
 from .models import (
     Application, Semester, SemesterRegistration, SemesterReview, StudentProfile, SuppConsent,
     SuppConsentForm,
@@ -110,6 +112,12 @@ def says_supp(review):
     return progression.decide(review.modules or [])['remark'] == progression.SUPP
 
 
+def asks_consent(review):
+    """A supplementary still to sit, by a student who goes on to another
+    level: Level 6 is the last, so its students are not asked."""
+    return says_supp(review) and not is_level_six(review.class_level)
+
+
 def supp_reviews(semester=None):
     semester = semester or closing_semester()
     if semester is None:
@@ -117,7 +125,7 @@ def supp_reviews(semester=None):
     return [review for review in SemesterReview.objects.filter(
                 semester=semester, proposed=SemesterReview.PENDING,
                 confirmed__in=['', SemesterReview.PROVISIONAL]).select_related('profile', 'class_level')
-            if says_supp(review)]
+            if asks_consent(review)]
 
 
 def supp_review_of(profile):
@@ -125,7 +133,7 @@ def supp_review_of(profile):
     if semester is None:
         return None
     review = SemesterReview.objects.filter(profile=profile, semester=semester).select_related('class_level').first()
-    return review if says_supp(review) else None
+    return review if review is not None and asks_consent(review) else None
 
 
 def next_level(profile, review, year):

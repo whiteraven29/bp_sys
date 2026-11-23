@@ -398,6 +398,9 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
    - [x] Students ▸ Supplementary consent: the list (not filled in / filled in, signed copy not back / signed copy back),
      print any copy, and **Signed copy back** with the Principal's answer (Allowed / Not allowed) — the admission office
      or the Principal (your choice); DPARC and records read. Nothing is held while it is missing (your choice)
+   - [x] Level 6 students are not asked (23 Nov, your note: they do not continue): not on the portal, not on the list
+     (`consent.asks_consent`; 1 test). A form a Level 6 student filled in before stays on record
+   - [ ] After the deploy: Students ▸ Supplementary consent lists no Level 6 student
    - [x] The wording is edited there each year (your choice); made from the 2025 form with the years moved on and left
      **closed** until the office checks the amounts and opens it
    - [x] 1271 tests; checked in the browser (opened, filled in on a phone, printed, signed copy recorded); a first-visit

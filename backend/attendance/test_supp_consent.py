@@ -118,6 +118,16 @@ class SuppConsentTests(TestCase):
             self.assertIn(expected, text)
         self.assertEqual(self.portal.get(f'/supp-consent/{record.id}/print/')['Content-Type'], 'application/pdf')
 
+    def test_a_level_6_student_is_not_asked(self):
+        # Said 23 November 2026: Level 6 is the last level, so its students do
+        # not continue and there is nothing to consent to.
+        self.open_form()
+        SemesterReview.objects.filter(profile=self.profile).update(
+            class_level=ClassLevel.objects.create(name='NTA Level 6', order=6))
+        self.assertEqual(self.mine().json(), {'shown': False})
+        self.assertEqual(self.portal.post('/api/my-supp-consent/', content_type='application/json').status_code, 400)
+        self.assertEqual(self.admission.get('/api/supp-consent/').data, [])
+
     def test_only_a_supplementary_student_is_asked(self):
         self.open_form()
         other = Client()

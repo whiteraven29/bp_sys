@@ -1199,3 +1199,11 @@ of 2022, from their weekly hours). The 2015 curriculum has 20 weeks of study a s
 holds 19 teaching weeks, so a Level 5–6 plan gets 19 of its 20. "19 weeks is right this year … I mean this semester, it is
 us who were late": the college started late this semester; 20 weeks stays the rule, and later semesters' calendars should
 hold 20 teaching weeks for Levels 5–6. No calendar per level.
+
+### Q87. No consent form for Level 6 ✅
+
+**Said (23 November 2026):** "level 6 students are not continuing so no supp form".
+
+**Built (uncommitted; no migration):** `consent.asks_consent`: a supplementary at Level 6 (`grading.is_level_six` of the
+review's level) is not shown the form, cannot fill it in, and is not on the office's list. A form already filled in stays
+on record; no record is changed.
