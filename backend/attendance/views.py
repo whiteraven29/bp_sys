@@ -3521,6 +3521,44 @@ def results_summary(request):
     return Response(summary)
 
 
+def _supp_list_for(request):
+    """The semester asked for, or the one whose supplementaries come now —
+    last year's semester 2 during semester 1, this year's semester 1 during
+    semester 2 — and the level, if one is chosen."""
+    from .consent import closing_semester
+    if not can_read_exams(request.user):
+        raise PermissionDenied('For the examination office.')
+    semester = (Semester.objects.select_related('academic_year')
+                .filter(id=pk_or_none(request.query_params.get('semester_id'))).first() or closing_semester())
+    level = ClassLevel.objects.filter(id=pk_or_none(request.query_params.get('class_level_id'))).first()
+    return semester, level
+
+
+@api_view(['GET'])
+def supp_list(request):
+    """How many students sit a supplementary, and how many are incomplete
+    (said 24 November 2026): by level, by module, and the students."""
+    semester, level = _supp_list_for(request)
+    if semester is None:
+        return Response({'detail': 'Pick a semester.'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(analytics.supp_list(semester, level))
+
+
+@api_view(['GET'])
+def supp_list_download(request):
+    """The same list as a workbook."""
+    semester, level = _supp_list_for(request)
+    if semester is None:
+        return Response({'detail': 'Pick a semester.'}, status=status.HTTP_400_BAD_REQUEST)
+    data = analytics.supp_list(semester, level)
+    name = (f'Supplementary-list-{semester.academic_year.name.replace("/", "-")}-Sem{semester.number}'
+            + (f'-{level.name.replace(" ", "-")}' if level else ''))
+    response = HttpResponse(analytics.supp_list_workbook(data),
+                            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="{name}.xlsx"'
+    return response
+
+
 def _correction_row(correction):
     enrollment = correction.result.student
     return {

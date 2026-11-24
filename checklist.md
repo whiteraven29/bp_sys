@@ -653,6 +653,14 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      only when ticked) and, apart, Overall results (the students' remarks PASS / SUPP / REPEAT / FAIL / INCOMPLETE by
      semester, level and sheet, as Results Summary, against last year); chart; Excel (Modules, Overall, Comparison
      with an Excel chart) and the chart as a picture (`analytics.year_report`, `year_overall`; 5 tests)
+   - [x] Supplementary list for the examination office (24 Nov, your request): Results ▸ Supplementary list — opens on
+     the semester whose supplementaries come now; students to sit a supplementary (and papers), incomplete (and
+     results missing), by level, by module, and the students; Excel download with three sheets; read from Results
+     Summary so the two agree (`analytics.supp_list`, `supp_list_workbook`; 4 tests)
+   - [x] Print button on the Supplementary list (24 Nov): heading with semester, level, totals and date; the tables only;
+     every print now leaves out the fade under the screen header
+   - [ ] After the deploy: Results ▸ Supplementary list (2025/2026 Semester 2) — compare a level with Results Summary;
+     press Print and check the page
    - [x] Each percentage with its number in brackets, on the page and in Excel; the comparison chart in golden
      yellow (last year) and deep red (this year), checked apart under protanopia, deuteranopia and tritanopia (23 Nov)
    - [ ] After the deploy: download 2025/2026 (the last full year) and open it in Excel; check the chart sheet

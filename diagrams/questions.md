@@ -1234,3 +1234,13 @@ Incomplete — as % of everyone registered (repeaters included; one taken off pa
 student's semester remark (PASS / SUPP / REPEAT / FAIL / INCOMPLETE) from `progression.results_summary`, continuing and
 repeaters' sheets. Last year = the same module code (a reused code is flagged), or the same semester, level and sheet.
 **Check:** a student discontinued on GPA keeps their passed modules as passes in Module performance (it reads the module).
+
+### Q90. The supplementary list for the examination officer ✅
+
+**Asked (24 November 2026):** "how does the exam officer get a simple summary of numbers of students required to sit for supp,
+including incomplete students, which can be downloaded also" — there was none (Results Summary shows one level at a time,
+not downloadable).
+
+**Built (uncommitted; no migration):** Results ▸ Supplementary list, with an Excel download. A supplementary = the semester
+remark SUPP; incomplete = a result still missing; both sheets of Results Summary. An incomplete student's starred modules
+show as "starred so far".

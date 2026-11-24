@@ -782,3 +782,130 @@ def year_report_workbook(report):
     output = BytesIO()
     book.save(output)
     return output.getvalue()
+
+
+# ── the supplementary list, for the examination office ────────────────────────
+
+def supp_list(semester, class_level=None):
+    """Who has a supplementary to sit after a semester, and who is still
+    incomplete (said 24 November 2026): the numbers by level and by module,
+    and the students — read from the Results Summary, so the two agree. A
+    supplementary is the student's semester remark SUPP (GPA 2.0 or more, half
+    or fewer modules failed); a repeat sitting has none."""
+    from . import progression
+    from .models import ClassLevel
+    names = {m.code: m.name for m in Module.objects.filter(semester=semester)}
+    levels = ClassLevel.objects.filter(modules__semester=semester).distinct().order_by('order')
+    if class_level is not None:
+        levels = levels.filter(id=class_level.id)
+    by_level, by_module, students = [], {}, []
+    for level in levels:
+        line = {'level': level.name, 'students': 0, 'supp_students': 0, 'supp_papers': 0,
+                'incomplete_students': 0, 'missing_results': 0}
+        for sheet in ('continuing', 'repeaters'):
+            data = progression.results_summary(semester, level, sheet=sheet)
+            line['students'] += data['counts']['total']
+            for student in data['students']:
+                remark = student['remark']
+                if remark not in ('SUPP', 'INCOMPLETE'):
+                    continue
+                supp = student['supp'] if remark == 'SUPP' else []
+                waiting = student['waiting'] if remark == 'INCOMPLETE' else []
+                if remark == 'SUPP':
+                    line['supp_students'] += 1
+                    line['supp_papers'] += len(supp)
+                else:
+                    line['incomplete_students'] += 1
+                    line['missing_results'] += len(waiting)
+                for code, key in [(c, 'supp') for c in supp] + [(c, 'waiting') for c in waiting]:
+                    row = by_module.setdefault((level.order, code), {
+                        'level': level.name, 'code': code, 'name': names.get(code, ''), 'supp': 0, 'waiting': 0})
+                    row[key] += 1
+                students.append({
+                    'reg_no': student['reg_no'], 'name': student['name'], 'level': level.name,
+                    'sheet': sheet, 'remark': remark, 'gpa': student.get('gpa'),
+                    'supp': supp, 'waiting': waiting,
+                    # Starred too, while a result is missing: a supplementary may follow.
+                    'starred': student['supp'] if remark == 'INCOMPLETE' else [],
+                })
+        if line['students']:
+            by_level.append(line)
+    totals = {key: sum(line[key] for line in by_level)
+              for key in ('students', 'supp_students', 'supp_papers', 'incomplete_students', 'missing_results')}
+    order = {line['level']: index for index, line in enumerate(by_level)}
+    students.sort(key=lambda s: (order.get(s['level'], 99), s['remark'] != 'SUPP', s['name']))
+    return {
+        'semester_id': semester.id,
+        'semester': f'{semester.academic_year.name} · Semester {semester.number}',
+        'class_level': class_level.name if class_level else None,
+        'by_level': by_level, 'totals': totals,
+        'by_module': [by_module[key] for key in sorted(by_module)],
+        'students': students,
+    }
+
+
+def supp_list_workbook(data):
+    """The supplementary list as a workbook: the numbers, the modules, and
+    every student with what they sit or wait for."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    navy = PatternFill('solid', fgColor='123F80')
+    head_font = Font(bold=True, color='FFFFFF', size=10)
+    centre = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    thin = Border(bottom=Side(style='thin', color='DCE2EA'))
+    scope = data['class_level'] or 'All levels'
+
+    def table(sheet, title, note, header, rows, total=None, widths=()):
+        sheet.append([title])
+        sheet['A1'].font = Font(bold=True, size=13)
+        sheet.append([note])
+        sheet['A2'].font = Font(italic=True, size=9, color='6B7785')
+        sheet.append([])
+        sheet.append(header)
+        for cell in sheet[4]:
+            cell.fill, cell.font, cell.alignment = navy, head_font, centre
+        for row in rows:
+            sheet.append(row)
+            for cell in sheet[sheet.max_row]:
+                cell.border = thin
+        if total:
+            sheet.append(total)
+            for cell in sheet[sheet.max_row]:
+                cell.font = Font(bold=True)
+        for column, width in enumerate(widths, start=1):
+            sheet.column_dimensions[get_column_letter(column)].width = width
+        sheet.freeze_panes = 'A5'
+
+    book = Workbook()
+    t = data['totals']
+    table(book.active, f'Supplementary and incomplete — {data["semester"]} — {scope}',
+          'A supplementary is the semester remark SUPP (GPA 2.0 or more, half or fewer modules failed). Incomplete: '
+          'a result still missing. Read from Results Summary, continuing and repeaters\' sheets.',
+          ['Level', 'Students', 'To sit a supplementary', 'Supplementary papers', 'Incomplete', 'Results missing'],
+          [[l['level'], l['students'], l['supp_students'], l['supp_papers'], l['incomplete_students'],
+            l['missing_results']] for l in data['by_level']],
+          total=['All', t['students'], t['supp_students'], t['supp_papers'], t['incomplete_students'],
+                 t['missing_results']],
+          widths=(16, 11, 22, 20, 12, 16))
+    book.active.title = 'Summary'
+    table(book.create_sheet('By module'), f'By module — {data["semester"]}',
+          'How many students sit each module\'s supplementary, and how many results each module still misses.',
+          ['Level', 'Module code', 'Module', 'Supplementary', 'Results missing'],
+          [[m['level'], m['code'], m['name'], m['supp'], m['waiting']] for m in data['by_module']],
+          widths=(16, 13, 40, 15, 16))
+    table(book.create_sheet('Students'), f'Students — {data["semester"]}',
+          'Each student to sit a supplementary, then each still incomplete.',
+          ['#', 'Reg. No.', 'Name', 'Level', 'Sheet', 'Remark', 'GPA', 'Supplementary in', 'Results missing',
+           'Starred so far'],
+          [[i, s['reg_no'], s['name'], s['level'], 'Continuing' if s['sheet'] == 'continuing' else 'Repeaters',
+            'Supplementary' if s['remark'] == 'SUPP' else 'Incomplete',
+            '' if s['gpa'] is None else s['gpa'], ', '.join(s['supp']), ', '.join(s['waiting']),
+            ', '.join(s['starred'])] for i, s in enumerate(data['students'], start=1)],
+          widths=(5, 20, 30, 14, 12, 14, 7, 28, 28, 22))
+    output = BytesIO()
+    book.save(output)
+    return output.getvalue()

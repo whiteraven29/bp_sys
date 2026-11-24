@@ -1326,6 +1326,9 @@
 
     /* Hide all chrome */
     header, aside, .sidebar-overlay, #toast, .modal-overlay { display: none !important; }
+    /* The fade under the screen header is not for paper (seen 24 November 2026). */
+    .app::before { display: none !important; }
+    .app { padding-top: 0 !important; }
     .btn, .form-grid, .form-grid-3, .stats-grid, .page-sub { display: none !important; }
 
     /* All pages hidden; each body class shows exactly one */
@@ -1386,6 +1389,24 @@
     body.print-final #end-exam-card { display: block !important; border: none !important;
                                       box-shadow: none !important; padding: 0 !important; }
 
+    /* ── Supplementary list print (said 24 November 2026) ── */
+    body.print-supp-list #page-results { display: block !important; }
+    body.print-supp-list #page-results > .card:not(#supp-list-card),
+    body.print-supp-list #res-module-info,
+    body.print-supp-list #supp-list-card > .card-title:first-child,
+    body.print-supp-list #supp-list-card .pfy-note { display: none !important; }
+    body.print-supp-list #supp-list-card { display: block !important; border: none !important;
+                                           box-shadow: none !important; padding: 0 !important; }
+    body.print-supp-list #supp-list-card .card-title { margin-top: 14px; color: #000 !important; }
+    body.print-supp-list #supp-list-card .badge { border: 0 !important; padding: 0 !important; background: none !important; }
+    body.print-supp-list #supp-list-card tr { break-inside: avoid; }
+    body.print-supp-list #supp-list-card .table-wrap { overflow: visible !important; border: 0 !important; box-shadow: none !important; }
+    body.print-supp-list #supp-list-card th,
+    body.print-supp-list #supp-list-card td { white-space: normal !important; }
+    body.print-supp-list .crumb-bar { display: none !important; }
+    body.print-supp-list .supl-print-meta { display: block !important; text-align: center; font-size: .78rem;
+                                            color: #333 !important; margin: -8px 0 10px; }
+
     /* ── CAT Analysis print ── */
     body.print-cat-analysis #page-results { display: block !important; }
     body.print-cat-analysis #page-results > .card:not(#cat-analysis-card),
@@ -1421,6 +1442,7 @@
     }
   }
   .print-header { display: none; }
+  .supl-print-meta { display: none; }
 </style>
 </head>
 <body class="booting">
@@ -1615,6 +1637,7 @@
         <button class="nav-sub-btn admin-only" data-results-section="authority" onclick="showResultsSection('authority', this)">Authority Grades</button>
         <button class="nav-sub-btn exam-office-only" data-results-section="earlier" onclick="showResultsSection('earlier', this)">Earlier Results</button>
         <button class="nav-sub-btn admin-only" data-results-section="summary" onclick="showResultsSection('summary', this)">Results Summary</button>
+        <button class="nav-sub-btn admin-only" data-results-section="supp" onclick="showResultsSection('supp', this)">Supplementary list</button>
         <button class="nav-sub-btn" data-roles="principal dparc exam superuser" data-results-section="corrections" onclick="showResultsSection('corrections', this)">Corrections</button>
         <button class="nav-sub-btn exam-office-only" data-results-section="windows" onclick="showResultsSection('windows', this)">Entry Windows</button>
       </div>
@@ -3432,6 +3455,33 @@
             <tbody id="sum-students"></tbody>
           </table>
         </div>
+      </div>
+
+      <!-- Said 24 November 2026: the examination officer's simple count of the
+           supplementaries and the incomplete students, to download. -->
+      <div class="card admin-only" id="supp-list-card" data-res-view="supp">
+        <div class="card-title">Supplementary list</div>
+        <div class="form-grid-3">
+          <div class="field"><label>Semester</label><select id="supl-semester" onchange="loadSuppList()"></select></div>
+          <div class="field"><label>Class level</label><select id="supl-level" onchange="loadSuppList()"></select></div>
+          <div class="field pfy-actions"><button class="btn btn-primary btn-sm" onclick="downloadSuppList()"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Download Excel</button>
+            <button class="btn btn-secondary btn-sm" onclick="printSuppList()"><i class="bi bi-printer" aria-hidden="true"></i> Print</button></div>
+        </div>
+        <div class="print-header" id="supl-print-header"></div>
+        <p class="pfy-note">It opens on the semester whose supplementaries come now. A student sits a supplementary when their semester remark is SUPP — GPA 2.0 or more and half or fewer modules failed; more than half failed is a repeat, not a supplementary. Incomplete: a result still missing. The same reading as Results Summary, continuing and repeaters' sheets together.</p>
+        <div class="stats-grid" id="supl-stats" style="margin-top:12px"></div>
+        <div class="card-title" style="font-size:.9rem;margin-top:14px;">By level</div>
+        <div class="table-wrap"><table class="pfy-table">
+          <thead><tr><th>Level</th><th class="num">Students</th><th class="num">To sit a supplementary</th><th class="num">Supplementary papers</th><th class="num">Incomplete</th><th class="num">Results missing</th></tr></thead>
+          <tbody id="supl-levels"></tbody><tfoot id="supl-levels-foot"></tfoot></table></div>
+        <div class="card-title" style="font-size:.9rem;margin-top:14px;">By module</div>
+        <div class="table-wrap"><table class="pfy-table">
+          <thead><tr><th>Module</th><th>Level</th><th class="num">Supplementary</th><th class="num">Results missing</th></tr></thead>
+          <tbody id="supl-modules"></tbody></table></div>
+        <div class="card-title" style="font-size:.9rem;margin-top:14px;">Students <span id="supl-count" style="font-size:.75rem;font-weight:400;color:var(--muted);"></span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Reg. No.</th><th>Name</th><th>Level</th><th>Remark</th><th>Supplementary in</th><th>Results missing</th></tr></thead>
+          <tbody id="supl-students"></tbody></table></div>
       </div>
 
       <div class="card" id="cat-analysis-card" data-res-view="analysis">
@@ -5481,6 +5531,7 @@ const RESULTS_SECTIONS = {
   analysis: ['CAT Analysis', 'How a class did in CAT 1 or CAT 2, module by module.'],
   authority: ['Authority Grades', "NACTVET's grades, imported by level — continuing and repeaters."],
   summary: ['Results Summary', 'A level\'s semester: GPA and remark for every student.'],
+  supp: ['Supplementary list', 'How many students sit a supplementary, and who is still incomplete — to download.'],
   earlier: ['Earlier Results', "An earlier year's NACTVET sheets the system never held — first sitting, supplementary, repeat."],
   corrections: ['Corrections', 'A grade NACTVET got wrong: the examination office proposes, DPARC or the Principal approves.'],
   windows: ['Mark Entry Windows', 'When tutors may enter marks.'],
@@ -5514,6 +5565,7 @@ function showResultsSection(section, btn) {
   if (section === 'analysis') loadCatAnalysis();
   if (section === 'earlier') openEarlierResults();
   if (section === 'corrections') loadCorrections();
+  if (section === 'supp') openSuppList();
   if (section === 'summary') {
     const sem = document.getElementById('sum-semester');
     if (!sem.options.length) {
@@ -7808,6 +7860,88 @@ async function uploadAuthorityGrades() {
     }
     if (document.getElementById('res-flt-module').value) loadResultsModule();
   } catch(e) { toast(e?.detail || 'Authority grade upload failed', 'var(--red)'); }
+}
+
+// ── the supplementary list (said 24 November 2026) ───────────────────────────
+
+async function openSuppList() {
+  const sem = document.getElementById('supl-semester');
+  if (!sem.options.length) {
+    buildSemOptions(sem);
+    buildLevelOptions(document.getElementById('supl-level'), true);
+    sem.value = '';
+  }
+  return loadSuppList();
+}
+
+function suppListQuery() {
+  const params = new URLSearchParams();
+  const sem = document.getElementById('supl-semester').value;
+  const level = document.getElementById('supl-level').value;
+  if (sem) params.set('semester_id', sem);
+  if (level) params.set('class_level_id', level);
+  return params.toString();
+}
+
+async function loadSuppList() {
+  let data;
+  try {
+    data = await api('GET', `/results/supp-list/?${suppListQuery()}`);
+  } catch (e) {
+    toast(apiErrorText(e, 'Could not load the supplementary list'), 'var(--red)');
+    return;
+  }
+  state.suppList = data;
+  // Opened without a semester: the server chose the one whose supplementaries come now.
+  const sem = document.getElementById('supl-semester');
+  if (!sem.value && [...sem.options].some(o => o.value === String(data.semester_id))) sem.value = String(data.semester_id);
+  const t = data.totals;
+  const tile = (label, value, colour, note = '') =>
+    `<div class="stat-card" style="--c:var(${colour})"><div class="label">${label}</div><div class="value">${value}</div>${note ? `<div class="sublabel">${note}</div>` : ''}</div>`;
+  document.getElementById('supl-stats').innerHTML =
+    tile('Students', t.students, '--accent', safeText(data.semester)) +
+    tile('To sit a supplementary', t.supp_students, '--yellow', `${t.supp_papers} paper${t.supp_papers === 1 ? '' : 's'}`) +
+    tile('Incomplete', t.incomplete_students, '--muted', `${t.missing_results} result${t.missing_results === 1 ? '' : 's'} missing`);
+  document.getElementById('supl-levels').innerHTML = data.by_level.length ? data.by_level.map(l => `<tr>
+      <td>${safeText(l.level)}</td><td class="num">${l.students}</td><td class="num"><strong>${l.supp_students}</strong></td>
+      <td class="num">${l.supp_papers}</td><td class="num"><strong>${l.incomplete_students}</strong></td><td class="num">${l.missing_results}</td></tr>`).join('')
+    : '<tr><td colspan="6" style="color:var(--muted)">No results for this semester</td></tr>';
+  document.getElementById('supl-levels-foot').innerHTML = data.by_level.length > 1 ? `<tr><td>All</td><td class="num">${t.students}</td>
+      <td class="num">${t.supp_students}</td><td class="num">${t.supp_papers}</td><td class="num">${t.incomplete_students}</td><td class="num">${t.missing_results}</td></tr>` : '';
+  document.getElementById('supl-modules').innerHTML = data.by_module.length ? data.by_module.map(m => `<tr>
+      <td><strong>${safeText(m.code)}</strong> <span style="color:var(--muted);font-size:.76rem">${safeText(m.name)}</span></td>
+      <td style="white-space:nowrap">${safeText(m.level)}</td><td class="num">${m.supp || '—'}</td><td class="num">${m.waiting || '—'}</td></tr>`).join('')
+    : '<tr><td colspan="4" style="color:var(--muted)">No supplementaries and nothing missing</td></tr>';
+  document.getElementById('supl-count').textContent = data.students.length ? `${data.students.length}` : '';
+  document.getElementById('supl-students').innerHTML = data.students.length ? data.students.map(s => `<tr>
+      <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(s.reg_no)}</td><td>${safeText(s.name)}</td>
+      <td style="white-space:nowrap">${safeText(s.level)}${s.sheet === 'repeaters' ? ' <span class="badge badge-gen">Repeater</span>' : ''}</td>
+      <td><span class="badge ${s.remark === 'SUPP' ? 'badge-yellow' : 'badge-gen'}">${s.remark === 'SUPP' ? 'Supplementary' : 'Incomplete'}</span></td>
+      <td>${safeText(s.supp.join(', ')) || (s.starred.length ? `<span style="color:var(--muted)" title="Starred so far; decided once every result is in">${safeText(s.starred.join(', '))} (starred so far)</span>` : '—')}</td>
+      <td>${safeText(s.waiting.join(', ')) || '—'}</td></tr>`).join('')
+    : '<tr><td colspan="6" style="color:var(--muted)">Nobody to sit a supplementary, nobody incomplete</td></tr>';
+}
+
+// One sheet of paper for the office: the list as it stands, with a heading
+// naming the semester and the level, and when it was printed.
+function printSuppList() {
+  const data = state.suppList;
+  if (!data) { toast('Nothing to print yet.', 'var(--red)'); return; }
+  const t = data.totals;
+  document.getElementById('supl-print-header').innerHTML =
+    `Supplementary and incomplete — ${safeText(data.semester)} — ${safeText(data.class_level || 'All levels')}
+     <div class="supl-print-meta">${t.supp_students} to sit a supplementary (${t.supp_papers} paper${t.supp_papers === 1 ? '' : 's'}) ·
+     ${t.incomplete_students} incomplete (${t.missing_results} result${t.missing_results === 1 ? '' : 's'} missing) · ${t.students} students ·
+     printed ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>`;
+  document.body.classList.add('print-supp-list');
+  const cleanup = () => document.body.classList.remove('print-supp-list');
+  window.addEventListener('afterprint', cleanup, { once: true });
+  window.print();
+  setTimeout(cleanup, 1000);
+}
+
+function downloadSuppList() {
+  window.location.href = `${API}/results/supp-list/download/?${suppListQuery()}`;
 }
 
 // ── results summary ───────────────────────────────────────────────────────────
