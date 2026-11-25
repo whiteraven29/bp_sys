@@ -1244,3 +1244,24 @@ not downloadable).
 **Built (uncommitted; no migration):** Results ▸ Supplementary list, with an Excel download. A supplementary = the semester
 remark SUPP; incomplete = a result still missing; both sheets of Results Summary. An incomplete student's starred modules
 show as "starred so far".
+
+### Q91. 2024/25 Semester 2: only the repeaters were loaded ✅ / to upload
+
+**Asked (25 November 2026):** "do you have the results of semester 2 2024/2025, the first sheet before supp? The system loads
+only the repeat module students (9), which gives false data in performance analysis when comparing the two years."
+
+**Found:** the 2024/25 files prepared on 25 October (`RESULTS/upload_earlier/`, `upload_past_results/`) held only the
+students on NACTVET's repeat sheet — L4 9, L5 13, L6 4 — to complete the repeaters' records. NACTVET's whole-class pages
+are in `diagrams/RESULTS SEMESTER II 2025/` (first sitting, PST4/5/6TES1: 40, 29, 35 students) and `diagrams/SUPP RESULT/`
+(supplementary, RSM2: 30, 23, 4).
+
+**Prepared (no code):** six upload files in `~/Documents/BPHACOH/RESULTS/upload_2024-25_whole_class/`. Checked: every
+student's remark and GPA, first sitting and after the supplementary, agrees with NACTVET (a pass is printed as its class:
+FIRST, UPPER SECOND …); the students already loaded have the same grades in the new files (nothing is replaced); loaded
+into a test database, Results Summary gives NACTVET's final counts — L4 PASS 26, REPEAT 9, FAIL 3, SUPP 2 (not on the
+supplementary sheet); L5 12, 13, 3, 1; L6 31 PASS, 4 REPEAT. **Your step:** upload them on the server (checklist).
+**Then (25 November 2026):** "where are the files? is it not possible for a one-time script?" — the files are in
+`/home/whiteraven/Documents/BPHACOH/RESULTS/upload_2024-25_whole_class/`; the command `load_earlier_results` loads them on
+the server (copy the folder over first: the files hold students' names and grades, so they stay out of git). And the
+"starred key" meant: tell whoever reads the list that an incomplete student already failed other modules — built as
+"Already failed, while waiting".

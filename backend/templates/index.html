@@ -1404,6 +1404,7 @@
     body.print-supp-list #supp-list-card th,
     body.print-supp-list #supp-list-card td { white-space: normal !important; }
     body.print-supp-list .crumb-bar { display: none !important; }
+    body.print-supp-list .supl-key { display: block !important; font-size: .74rem; color: #333 !important; margin-top: 10px; }
     body.print-supp-list .supl-print-meta { display: block !important; text-align: center; font-size: .78rem;
                                             color: #333 !important; margin: -8px 0 10px; }
 
@@ -1443,6 +1444,8 @@
   }
   .print-header { display: none; }
   .supl-print-meta { display: none; }
+  .supl-key { display: none; }
+  .supl-failing { color: var(--red); font-weight: 600; }
 </style>
 </head>
 <body class="booting">
@@ -3468,7 +3471,7 @@
             <button class="btn btn-secondary btn-sm" onclick="printSuppList()"><i class="bi bi-printer" aria-hidden="true"></i> Print</button></div>
         </div>
         <div class="print-header" id="supl-print-header"></div>
-        <p class="pfy-note">It opens on the semester whose supplementaries come now. A student sits a supplementary when their semester remark is SUPP — GPA 2.0 or more and half or fewer modules failed; more than half failed is a repeat, not a supplementary. Incomplete: a result still missing. The same reading as Results Summary, continuing and repeaters' sheets together.</p>
+        <p class="pfy-note">Beside each module, the grade NACTVET starred: * the semester examination failed, ** the practical paper, *** the theory paper, **** both. It opens on the semester whose supplementaries come now. A student sits a supplementary when their semester remark is SUPP — GPA 2.0 or more and half or fewer modules failed; more than half failed is a repeat, not a supplementary. Incomplete: a result still missing — <b>Already failed, while waiting</b> shows the modules such a student has failed already (starred, or D/F outright), so nobody takes them for a clean pass. The same reading as Results Summary, continuing and repeaters' sheets together.</p>
         <div class="stats-grid" id="supl-stats" style="margin-top:12px"></div>
         <div class="card-title" style="font-size:.9rem;margin-top:14px;">By level</div>
         <div class="table-wrap"><table class="pfy-table">
@@ -3480,8 +3483,9 @@
           <tbody id="supl-modules"></tbody></table></div>
         <div class="card-title" style="font-size:.9rem;margin-top:14px;">Students <span id="supl-count" style="font-size:.75rem;font-weight:400;color:var(--muted);"></span></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Reg. No.</th><th>Name</th><th>Level</th><th>Remark</th><th>Supplementary in</th><th>Results missing</th></tr></thead>
+          <thead><tr><th>Reg. No.</th><th>Name</th><th>Level</th><th>Remark</th><th>Supplementary in</th><th>Results missing</th><th>Already failed, while waiting</th></tr></thead>
           <tbody id="supl-students"></tbody></table></div>
+        <p class="supl-key">Key — the grade beside a module, as NACTVET stars it: * the semester examination failed; ** the practical paper failed; *** the theory paper failed; **** both papers failed. The paper failed is sat again at the supplementary. <b>Already failed, while waiting</b>: an incomplete student has failed these modules already (starred, or D/F outright) — whatever the missing result, they are a supplementary or a repeat.</p>
       </div>
 
       <div class="card" id="cat-analysis-card" data-res-view="analysis">
@@ -7901,7 +7905,8 @@ async function loadSuppList() {
   document.getElementById('supl-stats').innerHTML =
     tile('Students', t.students, '--accent', safeText(data.semester)) +
     tile('To sit a supplementary', t.supp_students, '--yellow', `${t.supp_papers} paper${t.supp_papers === 1 ? '' : 's'}`) +
-    tile('Incomplete', t.incomplete_students, '--muted', `${t.missing_results} result${t.missing_results === 1 ? '' : 's'} missing`);
+    tile('Incomplete', t.incomplete_students, '--muted', `${t.missing_results} result${t.missing_results === 1 ? '' : 's'} missing`
+         + (t.incomplete_failing ? ` · ${t.incomplete_failing} already failed another module` : ''));
   document.getElementById('supl-levels').innerHTML = data.by_level.length ? data.by_level.map(l => `<tr>
       <td>${safeText(l.level)}</td><td class="num">${l.students}</td><td class="num"><strong>${l.supp_students}</strong></td>
       <td class="num">${l.supp_papers}</td><td class="num"><strong>${l.incomplete_students}</strong></td><td class="num">${l.missing_results}</td></tr>`).join('')
@@ -7917,9 +7922,12 @@ async function loadSuppList() {
       <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(s.reg_no)}</td><td>${safeText(s.name)}</td>
       <td style="white-space:nowrap">${safeText(s.level)}${s.sheet === 'repeaters' ? ' <span class="badge badge-gen">Repeater</span>' : ''}</td>
       <td><span class="badge ${s.remark === 'SUPP' ? 'badge-yellow' : 'badge-gen'}">${s.remark === 'SUPP' ? 'Supplementary' : 'Incomplete'}</span></td>
-      <td>${safeText(s.supp.join(', ')) || (s.starred.length ? `<span style="color:var(--muted)" title="Starred so far; decided once every result is in">${safeText(s.starred.join(', '))} (starred so far)</span>` : '—')}</td>
-      <td>${safeText(s.waiting.join(', ')) || '—'}</td></tr>`).join('')
-    : '<tr><td colspan="6" style="color:var(--muted)">Nobody to sit a supplementary, nobody incomplete</td></tr>';
+      <td>${safeText(s.supp.map(code => s.supp_grades && s.supp_grades[code] ? `${code} (${s.supp_grades[code]})` : code).join(', ')) || '—'}</td>
+      <td>${safeText(s.waiting.join(', ')) || '—'}</td>
+      <td>${Object.keys(s.already_failed || {}).length
+        ? `<span class="supl-failing">${safeText(Object.entries(s.already_failed).map(([code, grade]) => grade ? `${code} (${grade})` : code).join(', '))}</span>`
+        : '—'}</td></tr>`).join('')
+    : '<tr><td colspan="7" style="color:var(--muted)">Nobody to sit a supplementary, nobody incomplete</td></tr>';
 }
 
 // One sheet of paper for the office: the list as it stands, with a heading

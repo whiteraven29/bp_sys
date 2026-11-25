@@ -801,7 +801,7 @@ def supp_list(semester, class_level=None):
     by_level, by_module, students = [], {}, []
     for level in levels:
         line = {'level': level.name, 'students': 0, 'supp_students': 0, 'supp_papers': 0,
-                'incomplete_students': 0, 'missing_results': 0}
+                'incomplete_students': 0, 'missing_results': 0, 'incomplete_failing': 0}
         for sheet in ('continuing', 'repeaters'):
             data = progression.results_summary(semester, level, sheet=sheet)
             line['students'] += data['counts']['total']
@@ -817,6 +817,14 @@ def supp_list(semester, class_level=None):
                 else:
                     line['incomplete_students'] += 1
                     line['missing_results'] += len(waiting)
+                grades = student.get('grades') or {}
+                # Said 25 November 2026: an incomplete student may already have
+                # failed other modules — starred or outright — whatever the
+                # missing result turns out to be; whoever reads the list is told.
+                already = ({code: grades.get(code) or '' for code in sorted(set(student['supp']) | set(student['failed']))}
+                           if remark == 'INCOMPLETE' else {})
+                if already:
+                    line['incomplete_failing'] += 1
                 for code, key in [(c, 'supp') for c in supp] + [(c, 'waiting') for c in waiting]:
                     row = by_module.setdefault((level.order, code), {
                         'level': level.name, 'code': code, 'name': names.get(code, ''), 'supp': 0, 'waiting': 0})
@@ -825,28 +833,44 @@ def supp_list(semester, class_level=None):
                     'reg_no': student['reg_no'], 'name': student['name'], 'level': level.name,
                     'sheet': sheet, 'remark': remark, 'gpa': student.get('gpa'),
                     'supp': supp, 'waiting': waiting,
-                    # Starred too, while a result is missing: a supplementary may follow.
-                    'starred': student['supp'] if remark == 'INCOMPLETE' else [],
+                    # The starred grade behind each supplementary, as NACTVET prints it.
+                    'supp_grades': {code: grades.get(code) or '' for code in supp},
+                    'already_failed': already,
                 })
         if line['students']:
             by_level.append(line)
     totals = {key: sum(line[key] for line in by_level)
-              for key in ('students', 'supp_students', 'supp_papers', 'incomplete_students', 'missing_results')}
+              for key in ('students', 'supp_students', 'supp_papers', 'incomplete_students', 'missing_results',
+                          'incomplete_failing')}
     order = {line['level']: index for index, line in enumerate(by_level)}
     students.sort(key=lambda s: (order.get(s['level'], 99), s['remark'] != 'SUPP', s['name']))
+    modules = Module.objects.filter(semester=semester).select_related('class_level').order_by('class_level__order', 'code')
+    if class_level is not None:
+        modules = modules.filter(class_level=class_level)
     return {
         'semester_id': semester.id,
         'semester': f'{semester.academic_year.name} · Semester {semester.number}',
         'class_level': class_level.name if class_level else None,
         'by_level': by_level, 'totals': totals,
+        # The key the printed and downloaded list carry: each code and its module.
+        'module_key': [{'code': m.code, 'name': m.name, 'level': m.class_level.name} for m in modules],
         'by_module': [by_module[key] for key in sorted(by_module)],
         'students': students,
     }
 
 
+#: What the stars on a grade mean, as NACTVET marks them (grading.parse_authority_grade).
+STAR_KEY = (('*', 'Failed the semester examination — a supplementary'),
+            ('**', 'Failed the practical paper of the semester examination'),
+            ('***', 'Failed the theory paper of the semester examination'),
+            ('****', 'Failed both the theory and the practical papers'))
+
+
 def supp_list_workbook(data):
-    """The supplementary list as a workbook: the numbers, the modules, and
-    every student with what they sit or wait for."""
+    """The supplementary list as a workbook (said 24 and 25 November 2026):
+    a summary box with the totals, each module's supplementaries and missing
+    results with their totals, a key to the module codes and to the stars;
+    then the modules and the students on their own sheets."""
     from io import BytesIO
 
     from openpyxl import Workbook
@@ -854,58 +878,132 @@ def supp_list_workbook(data):
     from openpyxl.utils import get_column_letter
 
     navy = PatternFill('solid', fgColor='123F80')
+    pale = PatternFill('solid', fgColor='EEF3FA')
     head_font = Font(bold=True, color='FFFFFF', size=10)
     centre = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    thin_side = Side(style='thin', color='B8C4D6')
     thin = Border(bottom=Side(style='thin', color='DCE2EA'))
+    box = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+    muted = Font(size=9, color='6B7785')
     scope = data['class_level'] or 'All levels'
+    t = data['totals']
 
-    def table(sheet, title, note, header, rows, total=None, widths=()):
+    def header(sheet, row, values):
+        for column, value in enumerate(values, start=1):
+            cell = sheet.cell(row, column, value)
+            cell.fill, cell.font, cell.alignment = navy, head_font, centre
+
+    def heading(sheet, title, note):
         sheet.append([title])
         sheet['A1'].font = Font(bold=True, size=13)
         sheet.append([note])
         sheet['A2'].font = Font(italic=True, size=9, color='6B7785')
+
+    def section(sheet, title):
         sheet.append([])
-        sheet.append(header)
-        for cell in sheet[4]:
-            cell.fill, cell.font, cell.alignment = navy, head_font, centre
-        for row in rows:
-            sheet.append(row)
-            for cell in sheet[sheet.max_row]:
-                cell.border = thin
-        if total:
-            sheet.append(total)
-            for cell in sheet[sheet.max_row]:
-                cell.font = Font(bold=True)
-        for column, width in enumerate(widths, start=1):
+        sheet.append([title])
+        sheet.cell(sheet.max_row, 1).font = Font(bold=True, size=11, color='123F80')
+
+    def widths(sheet, values):
+        for column, width in enumerate(values, start=1):
             sheet.column_dimensions[get_column_letter(column)].width = width
-        sheet.freeze_panes = 'A5'
 
     book = Workbook()
-    t = data['totals']
-    table(book.active, f'Supplementary and incomplete — {data["semester"]} — {scope}',
-          'A supplementary is the semester remark SUPP (GPA 2.0 or more, half or fewer modules failed). Incomplete: '
-          'a result still missing. Read from Results Summary, continuing and repeaters\' sheets.',
-          ['Level', 'Students', 'To sit a supplementary', 'Supplementary papers', 'Incomplete', 'Results missing'],
-          [[l['level'], l['students'], l['supp_students'], l['supp_papers'], l['incomplete_students'],
-            l['missing_results']] for l in data['by_level']],
-          total=['All', t['students'], t['supp_students'], t['supp_papers'], t['incomplete_students'],
-                 t['missing_results']],
-          widths=(16, 11, 22, 20, 12, 16))
-    book.active.title = 'Summary'
-    table(book.create_sheet('By module'), f'By module — {data["semester"]}',
-          'How many students sit each module\'s supplementary, and how many results each module still misses.',
-          ['Level', 'Module code', 'Module', 'Supplementary', 'Results missing'],
-          [[m['level'], m['code'], m['name'], m['supp'], m['waiting']] for m in data['by_module']],
-          widths=(16, 13, 40, 15, 16))
-    table(book.create_sheet('Students'), f'Students — {data["semester"]}',
-          'Each student to sit a supplementary, then each still incomplete.',
-          ['#', 'Reg. No.', 'Name', 'Level', 'Sheet', 'Remark', 'GPA', 'Supplementary in', 'Results missing',
-           'Starred so far'],
-          [[i, s['reg_no'], s['name'], s['level'], 'Continuing' if s['sheet'] == 'continuing' else 'Repeaters',
-            'Supplementary' if s['remark'] == 'SUPP' else 'Incomplete',
-            '' if s['gpa'] is None else s['gpa'], ', '.join(s['supp']), ', '.join(s['waiting']),
-            ', '.join(s['starred'])] for i, s in enumerate(data['students'], start=1)],
-          widths=(5, 20, 30, 14, 12, 14, 7, 28, 28, 22))
+    summary = book.active
+    summary.title = 'Summary'
+    heading(summary, f'Supplementary and incomplete — {data["semester"]} — {scope}',
+            'A supplementary is the semester remark SUPP (GPA 2.0 or more, half or fewer modules failed); more than half '
+            'failed is a repeat, not a supplementary. Incomplete: a result still missing. As Results ▸ Results Summary.')
+
+    # ── the summary box ──
+    section(summary, 'Summary')
+    for label, value in (('Students who will sit the supplementary examination', t['supp_students']),
+                         ('Supplementary papers to be sat', t['supp_papers']),
+                         ('Students still incomplete', t['incomplete_students']),
+                         ('… of whom already failed another module', t['incomplete_failing']),
+                         ('Results still missing', t['missing_results']),
+                         ('Students in the semester', t['students'])):
+        summary.append([label, value])
+        for cell in summary[summary.max_row][:2]:
+            cell.fill, cell.border = pale, box
+        summary.cell(summary.max_row, 1).font = Font(bold=True)
+        summary.cell(summary.max_row, 2).font = Font(bold=True, size=12)
+        summary.cell(summary.max_row, 2).alignment = Alignment(horizontal='center')
+
+    # ── by level ──
+    section(summary, 'By level')
+    summary.append([])
+    header(summary, summary.max_row, ['Level', 'Students', 'To sit a supplementary', 'Supplementary papers',
+                                      'Incomplete', 'Results missing'])
+    for line in data['by_level']:
+        summary.append([line['level'], line['students'], line['supp_students'], line['supp_papers'],
+                        line['incomplete_students'], line['missing_results']])
+        for cell in summary[summary.max_row]:
+            cell.border = thin
+    summary.append(['All', t['students'], t['supp_students'], t['supp_papers'], t['incomplete_students'],
+                    t['missing_results']])
+    for cell in summary[summary.max_row]:
+        cell.font = Font(bold=True)
+
+    # ── by module, with its totals ──
+    section(summary, 'By module')
+    summary.append([])
+    header(summary, summary.max_row, ['Module code', 'Module', 'Level', 'Supplementary', 'Results missing', 'Total'])
+    for m in data['by_module']:
+        summary.append([m['code'], m['name'], m['level'], m['supp'], m['waiting'], m['supp'] + m['waiting']])
+        for cell in summary[summary.max_row]:
+            cell.border = thin
+    supp_total = sum(m['supp'] for m in data['by_module'])
+    waiting_total = sum(m['waiting'] for m in data['by_module'])
+    summary.append(['Total', '', '', supp_total, waiting_total, supp_total + waiting_total])
+    for cell in summary[summary.max_row]:
+        cell.font = Font(bold=True)
+
+    # ── the key ──
+    section(summary, 'Key: module codes')
+    summary.append([])
+    header(summary, summary.max_row, ['Module code', 'Module', 'Level'])
+    for m in data['module_key']:
+        summary.append([m['code'], m['name'], m['level']])
+        for cell in summary[summary.max_row][:3]:
+            cell.border = thin
+    section(summary, 'Key: what the stars mean')
+    summary.append([])
+    header(summary, summary.max_row, ['Grade', 'Meaning'])
+    for stars, meaning in STAR_KEY:
+        summary.append([f'C{stars}', meaning])
+        for cell in summary[summary.max_row][:2]:
+            cell.border = thin
+    summary.append(['', 'The letter is the grade the paper earned; the stars say which paper was failed and is sat '
+                        'again. A starred grade at a repeat sitting is a fail: a repeat has no supplementary.'])
+    summary.cell(summary.max_row, 2).font = muted
+    summary.append(['', 'An incomplete student with modules under "Already failed, while waiting" has failed them '
+                        'already (starred, or D/F outright): whatever the missing result, those modules are a '
+                        'supplementary or a repeat.'])
+    summary.cell(summary.max_row, 2).font = muted
+    widths(summary, (52, 42, 16, 16, 16, 12))
+
+    # ── the students ──
+    students = book.create_sheet('Students')
+    heading(students, f'Students — {data["semester"]} — {scope}',
+            'Each student to sit a supplementary, with the starred grade of each module, then each still incomplete.')
+    students.append([])
+    header(students, 4, ['#', 'Reg. No.', 'Name', 'Level', 'Sheet', 'Remark', 'GPA', 'Supplementary in',
+                         'Results missing', 'Already failed, while waiting'])
+    for i, s in enumerate(data['students'], start=1):
+        students.append([i, s['reg_no'], s['name'], s['level'],
+                         'Continuing' if s['sheet'] == 'continuing' else 'Repeaters',
+                         'Supplementary' if s['remark'] == 'SUPP' else 'Incomplete',
+                         '' if s['gpa'] is None else s['gpa'],
+                         ', '.join(f'{code} ({grade})' if grade else code
+                                   for code, grade in s.get('supp_grades', {}).items()) or ', '.join(s['supp']),
+                         ', '.join(s['waiting']),
+                         ', '.join(f'{code} ({grade})' if grade else code for code, grade in s['already_failed'].items())])
+        for cell in students[students.max_row]:
+            cell.border = thin
+    students.freeze_panes = 'A5'
+    widths(students, (5, 20, 30, 14, 12, 14, 7, 36, 28, 36))
+
     output = BytesIO()
     book.save(output)
     return output.getvalue()
