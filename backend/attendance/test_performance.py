@@ -411,5 +411,10 @@ class YearReportTests(PerformanceTestBase):
         self.assertEqual(table[5][10].value, '0 (0)')                           # last year: O1 failed
         self.assertEqual([c.value for c in compare[2]], ['PHM101', 'Pharmaceutics', 0, 100, 100])
         self.assertEqual(len(compare._charts), 1)
-        fills = [series.graphicalProperties.solidFill.srgbClr for series in compare._charts[0].series]
-        self.assertEqual([getattr(fill, 'val', fill) for fill in fills], ['E9B11B', 'C62F2F'])   # yellow then, red now
+        # The chart as written: 3D bars for a presentation (25 November 2026), yellow
+        # last year then red this year, each value shown on its bar.
+        from zipfile import ZipFile
+        chart = ZipFile(BytesIO(reply.content)).read('xl/charts/chart1.xml').decode()
+        self.assertIn('bar3DChart', chart)
+        self.assertLess(chart.index('E9B11B'), chart.index('C62F2F'))
+        self.assertIn('<showVal val="1"/>', chart)

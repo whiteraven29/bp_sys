@@ -10809,7 +10809,7 @@ function renderYearResults(data) {
 
   if (pfyChart) { pfyChart.destroy(); pfyChart = null; }
   const wrap = document.getElementById('pfy-chart-wrap');
-  wrap.style.height = `${Math.max(240, data.rows.length * 34 + 90)}px`;
+  wrap.style.height = `${Math.max(300, data.rows.length * PFY_ROW + 110)}px`;
   if (!data.rows.length) return;
   pfyChart = newChart(document.getElementById('pfy-chart'), yearChartConfig(data));
 }
@@ -10839,21 +10839,84 @@ function renderYearOverall(data, change) {
     ? `<tr><td>All</td><td></td><td>Continuing</td><td class="num">${t.students}</td>${cells(t)}<td></td><td></td></tr>` : '';
 }
 
+// Bars for a presentation (said 25 November 2026): thick, with a light 3D
+// depth — a top and a side face in shades of the bar's own colour — and the
+// value written at the end of each bar. The depth is drawn beside the bar,
+// never added to its length, so the reading stays exact.
+const PFY_DEPTH = 7;
+const PFY_ROW = 74;          // height given to each module (two bars)
+
+function pfyShade(colour, toward, amount) {
+  return /^#[0-9a-f]{6}$/i.test(colour || '') ? chartMix(colour, toward, amount) : colour;
+}
+
+const pfyBars3d = {
+  id: 'pfyBars3d',
+  afterDatasetsDraw(chart) {
+    const ctx = chart.ctx;
+    const d = PFY_DEPTH;
+    chart.data.datasets.forEach((dataset, i) => {
+      const meta = chart.getDatasetMeta(i);
+      if (meta.hidden) return;
+      meta.data.forEach((bar, j) => {
+        if (dataset.data[j] == null) return;
+        const { x, y, base, height } = bar.getProps(['x', 'y', 'base', 'height'], true);
+        const colour = bar.options.backgroundColor;
+        const top = y - height / 2, bottom = y + height / 2;
+        ctx.save();
+        ctx.fillStyle = pfyShade(colour, '#ffffff', 0.35);              // top face
+        ctx.beginPath(); ctx.moveTo(base, top); ctx.lineTo(x, top); ctx.lineTo(x + d, top - d);
+        ctx.lineTo(base + d, top - d); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = pfyShade(colour, '#000000', 0.28);              // side face
+        ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x + d, top - d); ctx.lineTo(x + d, bottom - d);
+        ctx.lineTo(x, bottom); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      });
+    });
+  },
+};
+
+const pfyValues = {
+  id: 'pfyValues',
+  afterDatasetsDraw(chart) {
+    const ctx = chart.ctx;
+    const ink = chartInk();
+    ctx.save();
+    ctx.font = `700 12px ${Chart.defaults.font.family}`;
+    ctx.textBaseline = 'middle';
+    chart.data.datasets.forEach((dataset, i) => {
+      const meta = chart.getDatasetMeta(i);
+      if (meta.hidden) return;
+      meta.data.forEach((bar, j) => {
+        const value = dataset.data[j];
+        const { x, y } = bar.getProps(['x', 'y'], true);
+        ctx.fillStyle = value == null ? ink.muted : ink.text;
+        ctx.fillText(value == null ? 'not taught' : `${value}%`, (value == null ? bar.base : x) + PFY_DEPTH + 6, y);
+      });
+    });
+    ctx.restore();
+  },
+};
+
 function yearChartConfig(data) {
   const last = data.previous_year || 'last year';
+  const bar = { maxBarThickness: 30, barPercentage: 0.88, categoryPercentage: 0.82, borderRadius: 0 };
   return {
     type: 'bar',
     data: {
       labels: data.rows.map(r => r.code),
       datasets: [
-        { label: last, data: data.rows.map(r => r.previous ? r.previous.pass_pct : null), tone: 'then', maxBarThickness: 14 },
-        { label: data.academic_year, data: data.rows.map(r => r.pass_pct), tone: 'now', maxBarThickness: 14 },
+        { label: last, data: data.rows.map(r => r.previous ? r.previous.pass_pct : null), tone: 'then', ...bar },
+        { label: data.academic_year, data: data.rows.map(r => r.pass_pct), tone: 'now', ...bar },
       ],
     },
     options: { responsive: true, indexAxis: 'y',
-               plugins: { legend: { display: true },
+               layout: { padding: { top: PFY_DEPTH + 4, right: 64 } },
+               plugins: { legend: { display: true, labels: { font: { size: 14, weight: '700' }, boxWidth: 12, boxHeight: 12 } },
                           tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.raw == null ? 'not taught' : c.formattedValue + '%'}` } } },
-               scales: { x: { beginAtZero: true, max: 100, title: { display: true, text: 'Pass %' } } } },
+               scales: { x: { beginAtZero: true, max: 100, title: { display: true, text: 'Pass %', font: { size: 13, weight: '700' } } },
+                         y: { ticks: { font: { size: 13, weight: '700' } } } } },
+    plugins: [pfyBars3d, pfyValues],
   };
 }
 
@@ -10871,9 +10934,9 @@ function downloadYearChart() {
   const theme = html.getAttribute('data-theme');
   html.setAttribute('data-theme', 'light');
   const box = document.createElement('div');
-  box.style.cssText = 'position:fixed;left:-10000px;top:0;width:1000px;background:#fff';
+  box.style.cssText = 'position:fixed;left:-10000px;top:0;width:1200px;background:#fff';
   const canvas = document.createElement('canvas');
-  canvas.width = 1000; canvas.height = Math.max(320, d.rows.length * 34 + 120);
+  canvas.width = 1200; canvas.height = Math.max(380, d.rows.length * PFY_ROW + 160);
   box.appendChild(canvas);
   document.body.appendChild(box);
   const config = yearChartConfig(d);
@@ -10881,9 +10944,9 @@ function downloadYearChart() {
                      plugins: { ...config.options.plugins,
                                 title: { display: true, text: `Pass rate by module: ${d.academic_year} against ${d.previous_year || 'last year'}${d.class_level ? ' — ' + d.class_level : ''}`,
                                          color: '#1E293B', font: { size: 16, weight: '700' }, padding: { top: 4, bottom: 14 } } },
-                     layout: { padding: 20 } };
+                     layout: { padding: { top: 20 + PFY_DEPTH, right: 80, bottom: 20, left: 20 } } };
   config.plugins = [{ id: 'white', beforeDraw: chart => { const c = chart.ctx; c.save(); c.fillStyle = '#ffffff';
-                      c.fillRect(0, 0, chart.width, chart.height); c.restore(); } }];
+                      c.fillRect(0, 0, chart.width, chart.height); c.restore(); } }, ...config.plugins];
   const chart = newChart(canvas, config);
   const url = chart.toBase64Image('image/png', 1);
   chart.destroy();

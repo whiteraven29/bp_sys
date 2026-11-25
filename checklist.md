@@ -669,6 +669,9 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      `cd /var/www/edutrack/backend && sudo -u bphacoh venv/bin/python manage.py load_earlier_results /tmp/upload_2024-25_whole_class`
      (dry run: expect L4 PASS 26 SUPP 2 REPEAT 9 FAIL 3; L5 12 1 13 3; L6 31 0 4 0), then the same with `--apply`, then
      delete the folder from /tmp (`rm -r`). Or by hand: Results ▸ Earlier Results, first sitting then supplementary.
+   - [x] Comparison chart for presentations (25 Nov, your request): thick bars with a light 3D depth (top and side
+     faces drawn beside each bar, its length unchanged) and the value at each bar's end — page and picture; the Excel
+     chart a 3D bar chart (`BarChart3D`, values shown, narrow gaps)
    - [x] One-time command `load_earlier_results <folder> [--apply]` (25 Nov): the Earlier Results import for a folder
      of upload files; first sittings before supplementaries; dry run by default; safe twice (2 tests)
    - [x] Supplementary list: an incomplete student's modules already failed (starred or D/F) shown under "Already

@@ -640,7 +640,7 @@ def year_report_workbook(report):
     from io import BytesIO
 
     from openpyxl import Workbook
-    from openpyxl.chart import BarChart, Reference
+    from openpyxl.chart import Reference
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
@@ -762,12 +762,20 @@ def year_report_workbook(report):
     widths(compare, (13, 40, 15, 15, 14))
     count = len(report['rows'])
     if count:
-        chart = BarChart()
+        # For a presentation (said 25 November 2026): a 3D bar chart, thick
+        # bars with little gap, each value written on its bar.
+        from openpyxl.chart import BarChart3D
+        from openpyxl.chart.label import DataLabelList
+        chart = BarChart3D()
         chart.type = 'bar'
         chart.grouping = 'clustered'
+        chart.shape = 'box'
+        chart.gapWidth = 40
         chart.title = f'Module pass rate: {year} against {before or "last year"}'
         chart.y_axis.title = 'Pass %'
         chart.y_axis.scaling.min, chart.y_axis.scaling.max = 0, 100
+        chart.dataLabels = DataLabelList()
+        chart.dataLabels.showVal = True
         chart.add_data(Reference(compare, min_col=3, max_col=4, min_row=1, max_row=count + 1), titles_from_data=True)
         # The page's colours: last year golden yellow, this year deep red —
         # far apart in lightness, so they stay apart for colour-blind readers.
@@ -775,8 +783,8 @@ def year_report_workbook(report):
             series.graphicalProperties.solidFill = colour
             series.graphicalProperties.line.solidFill = colour
         chart.set_categories(Reference(compare, min_col=1, min_row=2, max_row=count + 1))
-        chart.height = max(8, 0.6 * count + 3)
-        chart.width = 18
+        chart.height = max(10, 1.2 * count + 4)
+        chart.width = 24
         compare.add_chart(chart, 'G2')
 
     output = BytesIO()
