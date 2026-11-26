@@ -671,9 +671,21 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      delete the folder from /tmp (`rm -r`). Or by hand: Results ▸ Earlier Results, first sitting then supplementary.
    - [x] NHIF (26 Nov, your request; migration 0090): the sheets show the Name on screen (not in the Continuous
      Excel); **Remove** with a reason / **Put back** for a student listed by mistake (`NhifRemoval`, the bill
-     untouched); insurance marked Has it always keeps a student off, even after paying; Finance ▸ Student accounts ▸
+     untouched); Finance ▸ Student accounts ▸
      **NHIF list** (College NHIF / Own card / Not billed, the medical fee billed / paid / waived, removals; filters
      year, level, which; Excel) from the same rule (`attendance/nhif.py`), so records and the accountant tally (3 tests)
+   - [x] A wrong insurance mark turned round from the NHIF list (26 Nov, your case: a new student without her own
+     card marked Has it, off the New sheet): *Needs the college NHIF* / *Has own card*, through Items check (1 test)
+   - [x] The money rule back (26 Nov: "Has it always wins" took off a new student and continuing students who had
+     paid — marked Has it though their card is the college's): billed and not fully waived = on the sheets, as
+     before; Own card = marked Has it and the fee waived; "Has own card" offered only while nothing is paid
+   - [x] Insurance finance's alone (26 Nov, your question about the admission step): `admissions.item_desks` gives a
+     billed-by-default item (insurance) the finance desk only; "brought later" refused for it; the NHIF list shows
+     who marked "Has it" and from which office, with *Show: Insurance marked Has it at admission* (2 tests)
+   - [ ] After the deploy: accountant — NHIF list ▸ Show: Insurance marked Has it at admission; for each whose
+     invoice had the college NHIF: *Needs the college NHIF*
+   - [ ] After the deploy: she and the continuing students are back on the sheets by themselves (they paid); check
+     NHIF list ▸ College NHIF; any marked "Has it, fee paid — on the sheet" whose card is really theirs: records Remove
    - [ ] After the deploy (applies 0090): records — remove a student who has their own card; accountant — NHIF list:
      College NHIF less "taken off" equals the rows on records' sheets (New + Continuous)
    - [x] Comparison chart for presentations (25 Nov, your request): thick bars with a light 3D depth (top and side

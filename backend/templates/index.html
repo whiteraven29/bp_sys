@@ -1899,7 +1899,7 @@
       </div>
 
       <div class="card" data-rec-section="nhif">
-        <div class="card-title">NHIF registration sheets <span class="tip" tabindex="0" role="note" aria-label="Help: NHIF" data-tip="NHIF's two sheets, filled from the records: New Students (the year's first years, at any level) and Continuous Students (continuing, with their NHIF card number). Only PST students the college insures: the medical fee billed and not waived, and insurance not marked Has it at finance or admission. One listed by mistake: Remove, with the reason — the accountant sees it on Student accounts ▸ NHIF list. The Name column is for you; the Continuous sheet's Excel has no names, as NHIF's form. A row with something missing is marked: fill it in at Find a student, then download again.">?</span></div>
+        <div class="card-title">NHIF registration sheets <span class="tip" tabindex="0" role="note" aria-label="Help: NHIF" data-tip="NHIF's two sheets, filled from the records: New Students (the year's first years, at any level) and Continuous Students (continuing, with their NHIF card number). Only PST students the college insures: the medical fee billed and not fully waived. One listed by mistake: Remove, with the reason — the accountant sees it on Student accounts ▸ NHIF list. The Name column is for you; the Continuous sheet's Excel has no names, as NHIF's form. A row with something missing is marked: fill it in at Find a student, then download again.">?</span></div>
         <div class="form-grid-3">
           <div class="field"><label>Academic year</label><select id="nhif-year" onchange="loadNhifSheet()"></select></div>
           <div class="field"><label>Sheet</label>
@@ -4217,7 +4217,7 @@
            same rule as records' sheets, so the two tally. -->
       <div class="finance-section" id="finance-section-nhif">
         <div class="card finance-only">
-          <div class="card-title">NHIF list <span class="tip" tabindex="0" role="note" aria-label="Help: NHIF list" data-tip="Every PST student registered in the year, by where they stand for NHIF. College NHIF: the medical fee billed and not waived, insurance not marked Has it — they are on records' NHIF sheets unless records took them off (shown, with the reason). Own card: insurance marked Has it. Not billed: no medical fee, or waived for another reason.">?</span></div>
+          <div class="card-title">NHIF list <span class="tip" tabindex="0" role="note" aria-label="Help: NHIF list" data-tip="Every PST student registered in the year, by where they stand for NHIF. College NHIF: the medical fee billed and not fully waived — on records' NHIF sheets unless records took them off (shown, with the reason). Own card: insurance marked Has it and the medical fee waived. Not billed: no medical fee, or waived for another reason. A student marked Has it who paid the fee stays College NHIF: if the card is really their own, records take them off.">?</span></div>
           <div class="form-grid-3">
             <div class="field"><label>Academic year</label><select id="fin-nhif-year" onchange="loadFinanceNhif()"></select></div>
             <div class="field"><label>Class level</label><select id="fin-nhif-level" onchange="loadFinanceNhif()"></select></div>
@@ -4228,12 +4228,13 @@
                 <option value="own">Own card</option>
                 <option value="none">Not billed</option>
                 <option value="removed">Taken off the sheets by records</option>
+                <option value="marked_at_admission">Insurance marked Has it at admission</option>
               </select></div>
             <div class="field pfy-actions"><button class="btn btn-primary btn-sm" onclick="downloadFinanceNhif()"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Download Excel</button></div>
           </div>
           <div class="stats-grid" id="fin-nhif-stats" style="margin-top:12px"></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Reg. No.</th><th>Name</th><th>Level</th><th>Sheet</th><th>NHIF</th><th class="num">Medical fee</th><th class="num">Paid</th><th class="num">Waived</th><th>Card No.</th><th>Note</th></tr></thead>
+            <thead><tr><th>Reg. No.</th><th>Name</th><th>Level</th><th>Sheet</th><th>NHIF</th><th class="num">Medical fee</th><th class="num">Paid</th><th class="num">Waived</th><th>Card No.</th><th>Note</th><th>Marked wrongly?</th></tr></thead>
             <tbody id="fin-nhif-tbody"></tbody></table></div>
         </div>
       </div>
@@ -9365,8 +9366,32 @@ async function loadFinanceNhif() {
       <td><span class="badge ${badge[r.place]}">${safeText(r.place_label)}</span></td>
       <td class="num">${money(r.billed)}</td><td class="num">${money(r.paid)}</td><td class="num">${money(r.waived)}</td>
       <td>${safeText(r.card_no) || '—'}</td>
-      <td style="font-size:.78rem">${r.removed_reason ? `<span style="color:var(--orange)">Taken off by records: ${safeText(r.removed_reason)}</span>` : ''}</td></tr>`).join('')
-    : '<tr><td colspan="10" style="color:var(--muted)">Nobody here</td></tr>';
+      <td style="font-size:.78rem">${r.removed_reason ? `<span style="color:var(--orange)">Taken off by records: ${safeText(r.removed_reason)}</span>` : ''}${r.marked_by
+        ? `<div style="${r.marked_by.office === 'admission' ? 'color:var(--red);font-weight:600' : 'color:var(--muted)'}">Has it marked by ${safeText(r.marked_by.name || 'someone')}${r.marked_by.office ? ` (${safeText(r.marked_by.office)})` : ''} · ${safeText(String(r.marked_by.at).slice(0, 10))}</div>` : ''}</td>
+      <td>${r.fix ? `<button class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="fixNhifMark(${r.profile_id})">${r.fix.status === 'missing' ? 'Needs the college NHIF' : 'Has own card'}</button>`
+        : r.marked_own_paid && !r.removed_reason ? '<span style="font-size:.74rem;color:var(--muted)" title="The medical fee is paid, so the college insures them. If the card is really their own, records take them off the NHIF sheet (Remove) and you settle the money paid.">Marked Has it, fee paid — on the sheet</span>' : ''}</td></tr>`).join('')
+    : '<tr><td colspan="11" style="color:var(--muted)">Nobody here</td></tr>';
+}
+
+// A wrong insurance mark, turned round from here (said 26 November 2026), as
+// on Admissions ▸ Items check: "Missing — on the bill" puts the medical fee
+// back and the college insures them (on records' sheet); "Has it" takes the
+// fee still owed off (own card, off the sheet).
+async function fixNhifMark(profileId) {
+  const row = (state.financeNhif?.rows || []).find(r => r.profile_id === profileId);
+  if (!row?.fix) return;
+  const toCollege = row.fix.status === 'missing';
+  const ask = toCollege
+    ? `${row.name} has no NHIF card of their own? Their insurance becomes "Missing — on the bill": the medical fee goes back on their bill and they go on records' NHIF ${row.sheet} sheet.`
+    : `${row.name} has their own NHIF card? Their insurance becomes "Has it": the medical fee comes off their bill and they leave records' NHIF sheet.`;
+  if (!confirm(ask)) return;
+  try {
+    await api('POST', '/item-checks/', { semester_id: row.fix.semester_id, profile_id: profileId,
+                                         requirement_id: row.fix.requirement_id, status: row.fix.status,
+                                         note: toCollege ? 'NHIF list: no own card' : 'NHIF list: own card' });
+    toast(toCollege ? `${row.name}: college NHIF, medical fee back on the bill` : `${row.name}: own card`, 'var(--green)');
+    loadFinanceNhif();
+  } catch (e) { toast(apiErrorText(e, 'Could not change the mark'), 'var(--red)'); }
 }
 
 function downloadFinanceNhif() {
@@ -15209,7 +15234,9 @@ async function renderRequirementChecklist(id) {
   // Admitted with an item waived or missing, brought afterwards (said 21
   // October 2026): the admission office records it as brought.
   const broughtLater = row => at === 'admitted' && (me.principal || me.admission)
-    && ['waived', 'missing'].includes(row.status);
+    && ['waived', 'missing'].includes(row.status)
+    // Insurance moves the medical fee: finance's alone (said 26 November 2026).
+    && (row.desks || []).includes('admission');
   try {
     const rows = await api('GET', `/applications/${id}/requirements/`);
     if (!rows.length) { box.innerHTML = ''; return; }

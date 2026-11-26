@@ -3723,10 +3723,9 @@ def nhif_sheet(request):
     """The NHIF registration sheets, filled from the records (said 20 October
     2026): "new" — the year's first years, at any level — and "continuing"
     (NHIF's "Continuous") with their card numbers. Only the students the
-    college insures (`nhif.roster`): the medical fee billed and not waived,
-    and insurance not marked "Has it"; one records took off as a mistake is
-    listed apart, to put back (said 26 November 2026). Dates DD/MM/YYYY,
-    gender Male / Female."""
+    college insures (`nhif.roster`): the medical fee billed and not fully
+    waived; one records took off as a mistake is listed apart, to put back
+    (said 26 November 2026). Dates DD/MM/YYYY, gender Male / Female."""
     from . import nhif
     user = request.user
     if not _keeps_nhif_sheets(user):
@@ -3857,6 +3856,8 @@ def finance_nhif_list(request):
         counts['removed'] += removed
         if wanted == 'removed' and not removed:
             continue
+        if wanted == 'marked_at_admission' and (entry['marked_by'] or {}).get('office') != 'admission':
+            continue
         if wanted in (nhif.COLLEGE, nhif.OWN, nhif.NONE) and entry['place'] != wanted:
             continue
         registration, fee = entry['registration'], entry['fee']
@@ -3868,6 +3869,12 @@ def finance_nhif_list(request):
             'on_sheet': entry['on_sheet'], 'card_no': profile.nhif_card_no,
             'billed': str(fee['billed']), 'waived': str(fee['waived']), 'paid': str(fee['paid']),
             'removed_reason': entry['removal'].reason if removed else '',
+            'fix': entry['fix'],
+            # Who marked insurance "Has it", and at which office (said 26 November 2026).
+            'marked_by': entry['marked_by'],
+            # Marked "Has it" yet the medical fee is the college's (paid): on the
+            # sheets; if the card is really their own, records take them off.
+            'marked_own_paid': entry['place'] == nhif.COLLEGE and entry['marked_own'],
         })
     rows.sort(key=lambda r: (r['level'], r['name']))
     return Response({'academic_year': year.name, 'academic_year_id': year.id,
@@ -4857,11 +4864,17 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         brought_later = (application.state == Application.ADMITTED
                          and can_work_desk(request.user, Application.ADMISSION))
         if brought_later:
+            if admissions.billed_by_default(requirement):
+                return Response({'detail': f'{requirement.name} moves the fee on the bill: finance marks it '
+                                           '(Student accounts ▸ NHIF list, or Admissions ▸ Items check).'},
+                                status=status.HTTP_403_FORBIDDEN)
             if str(request.data.get('status') or '') != RequirementCheck.HAS_IT:
                 return Response({'detail': 'After admission an item can only be recorded as brought (Has it).'},
                                 status=status.HTTP_400_BAD_REQUEST)
         elif application.state not in admissions.item_desks(requirement):
-            return Response({'detail': 'Billed items are checked at the finance desk.'
+            return Response({'detail': f'{requirement.name} moves the fee on the bill: finance marks it.'
+                             if admissions.billed_by_default(requirement)
+                             else 'Billed items are checked at the finance desk.'
                              if requirement.kind == AdmissionRequirement.BILLED
                              else 'This item is checked at the admission desk, before admitting.'},
                             status=status.HTTP_400_BAD_REQUEST)

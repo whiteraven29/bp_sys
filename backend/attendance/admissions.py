@@ -1040,8 +1040,23 @@ ITEM_HOLD = 'Missing: '
 RESULTS_HOLD = 'Held until results: '
 
 
+#: An item the college bills everybody for (insurance: the medical fee) is
+#: finance's alone (said 26 November 2026): "Has it" there waives money, and
+#: marked at the admission desk after the invoice it took the college NHIF off
+#: students who had it on their bill.
+FINANCE_ONLY_DESKS = (Application.FINANCE,)
+
+
+def billed_by_default(requirement):
+    from .models import ChargeType
+    return bool(requirement.kind == AdmissionRequirement.BILLED and requirement.charge_type_id
+                and requirement.charge_type.applies == ChargeType.AUTOMATIC)
+
+
 def item_desks(requirement):
-    return CHECK_DESKS if requirement.kind == AdmissionRequirement.CHECK_ONLY else ITEM_DESKS
+    if requirement.kind == AdmissionRequirement.CHECK_ONLY:
+        return CHECK_DESKS
+    return FINANCE_ONLY_DESKS if billed_by_default(requirement) else ITEM_DESKS
 
 
 def items_holding(application):

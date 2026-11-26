@@ -187,9 +187,12 @@ class NewStudentItemsAndNhifTests(OfficeClients):
                                                   actor=self.officer)
         self.assertNotIn('Uniforms', [r.name for r in admissions.requirements_for(application)])
 
-    def admit(self):
+    def admit(self, own_card_item=None):
         while self.application.is_open:
             if self.application.state == Application.FINANCE:
+                if own_card_item is not None:          # marked "Has it" at the finance desk, before paying
+                    admissions.record_requirement(self.application, own_card_item, RequirementCheck.HAS_IT,
+                                                  actor=self.officer)
                 admissions.set_residence(self.application, 'day', actor=self.officer)
                 for charge in StudentCharge.objects.filter(profile=self.direct):
                     finance.waive_charge(charge, charge.amount, 'test: let through', actor=self.officer) \
@@ -227,17 +230,18 @@ class NewStudentItemsAndNhifTests(OfficeClients):
     def finance_list(self, place=''):
         return self.accounts.get(f'/api/finance/nhif-list/?academic_year_id={self.year.id}&place={place}').data
 
-    def test_paid_then_marked_has_it_is_own_card(self):
-        # Said 26 November 2026: a student who paid the medical fee and then
-        # showed their own card is "own", whatever they paid.
+    def test_paid_and_marked_has_it_stays_on_the_sheet(self):
+        # Said 26 November 2026: the money decides, as it always did. Continuing
+        # students holding last year's college card were marked "Has it" after
+        # paying; they stay on the sheet (records take off one whose card is really theirs).
         self.admit()
         insurance = AdmissionRequirement.objects.create(name='Health insurance', charge_type=self.medical)
         RequirementCheck.objects.create(profile=self.direct, semester=self.sem1, requirement=insurance,
                                         status=RequirementCheck.HAS_IT)
-        self.assertEqual(self.sheet()['rows'], [])
-        listed = self.finance_list()
-        self.assertEqual((listed['counts']['own'], listed['counts']['on_sheet']), (1, 0))
-        self.assertEqual(listed['rows'][0]['paid'], '60000.00')
+        self.assertEqual([r['name'] for r in self.sheet()['rows']], ['Grace Direct Entry'])
+        row = self.finance_list()['rows'][0]
+        self.assertEqual((row['place'], row['marked_own_paid'], row['fix']), ('college', True, None))
+        self.assertEqual(row['paid'], '60000.00')
 
     def test_records_take_one_off_with_a_reason_and_put_them_back(self):
         self.admit()
@@ -257,6 +261,65 @@ class NewStudentItemsAndNhifTests(OfficeClients):
         self.assertEqual(StudentCharge.objects.get(profile=self.direct, charge_type=self.medical).waived_amount, 0)
         self.records.post('/api/nhif-sheet/put-back/', body, format='json')
         self.assertEqual(len(self.sheet()['rows']), 1)
+
+    def test_a_wrong_has_it_is_turned_round_from_the_nhif_list(self):
+        # Said 26 November 2026: a new student without her own card, marked
+        # "Has it" at the finance desk, has no medical fee and is off the New
+        # sheet. The accountant turns the mark round from the NHIF list.
+        insurance = AdmissionRequirement.objects.create(name='Health insurance', charge_type=self.medical)
+        self.admit(own_card_item=insurance)
+        self.assertEqual(self.sheet()['rows'], [])
+        row = self.finance_list()['rows'][0]
+        self.assertEqual((row['place'], row['fix']['status']), ('own', 'missing'))
+        # The button: "Needs the college NHIF".
+        mark = {'semester_id': row['fix']['semester_id'], 'profile_id': self.direct.id,
+                'requirement_id': row['fix']['requirement_id']}
+        self.assertEqual(self.accounts.post('/api/item-checks/', {**mark, 'status': 'missing'},
+                                            format='json').status_code, 200)
+        self.assertEqual([r['name'] for r in self.sheet()['rows']], ['Grace Direct Entry'])
+        charge = StudentCharge.objects.get(profile=self.direct, charge_type=self.medical)
+        self.assertEqual(charge.waived_amount, 0)                        # the fee is the college's again
+        # And back: "Has own card", offered while nothing of the fee is paid.
+        row = self.finance_list()['rows'][0]
+        self.assertEqual((row['place'], row['fix']['status']), ('college', 'has_it'))
+        self.accounts.post('/api/item-checks/', {'semester_id': row['fix']['semester_id'], 'profile_id': self.direct.id,
+                                                 'requirement_id': row['fix']['requirement_id'],
+                                                 'status': 'has_it'}, format='json')
+        self.assertEqual(self.sheet()['rows'], [])
+        self.assertEqual(self.finance_list()['counts']['own'], 1)
+
+    def test_insurance_is_finance_s_alone(self):
+        # Said 26 November 2026: marked "Has it" at the admission desk after the
+        # invoice, insurance took the college NHIF off students who had it on their bill.
+        insurance = AdmissionRequirement.objects.create(name='Health insurance', charge_type=self.medical)
+        self.assertEqual(admissions.item_desks(insurance), (Application.FINANCE,))
+        url = f'/api/applications/{self.application.id}/requirements/'
+        while self.application.state != Application.ADMISSION:
+            if self.application.state == Application.FINANCE:
+                admissions.set_residence(self.application, 'day', actor=self.officer)
+                for charge in StudentCharge.objects.filter(profile=self.direct):
+                    finance.waive_charge(charge, charge.amount, 'test: let through', actor=self.officer) \
+                        if charge.charge_type != self.medical else None
+                finance.record_payment(self.direct, Decimal('60000'), date.today(), recorded_by=self.officer,
+                                       bank_reference='NHIF-T2')
+            admissions.complete_step(self.application, actor=self.officer)
+        at_desk = self.admission.post(url, {'requirement_id': insurance.id, 'status': 'has_it'}, format='json')
+        self.assertEqual(at_desk.status_code, 400)
+        self.assertIn('finance marks it', at_desk.data['detail'])
+        admissions.complete_step(self.application, actor=self.officer)              # admitted
+        later = self.admission.post(url, {'requirement_id': insurance.id, 'status': 'has_it'}, format='json')
+        self.assertEqual(later.status_code, 403)
+        self.assertFalse(RequirementCheck.objects.filter(profile=self.direct, requirement=insurance).exists())
+
+    def test_the_nhif_list_says_who_marked_has_it(self):
+        from django.contrib.auth import get_user_model
+        self.admit()
+        insurance = AdmissionRequirement.objects.create(name='Health insurance', charge_type=self.medical)
+        RequirementCheck.objects.create(profile=self.direct, semester=self.sem1, requirement=insurance,
+                                        status=RequirementCheck.HAS_IT,
+                                        checked_by=get_user_model().objects.get(username='admission9'))
+        rows = self.finance_list('marked_at_admission')['rows']
+        self.assertEqual([(r['name'], r['marked_by']['office']) for r in rows], [('Grace Direct Entry', 'admission')])
 
     def test_the_finance_list_tallies_with_the_sheet(self):
         self.admit()

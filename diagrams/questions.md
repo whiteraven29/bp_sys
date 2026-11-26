@@ -1275,3 +1275,24 @@ button, and a Finance NHIF list with year, level and own/college filters, "so re
 
 **Built (uncommitted; migration 0090):** `attendance/nhif.py` (one rule for both: College NHIF / Own card / Not billed;
 "Has it" wins over money), `NhifRemoval` (Remove with a reason, Put back), Student accounts ▸ NHIF list. Release guide 06.
+
+**Then (26 November 2026):** "after the update one student is new and does not have her own, she needs the college one, is
+marked has her own, but before the update she was on the list for new ones — how do we fix this, and later when someone is
+wrongly marked?" — she had paid the medical fee, so before the update the "Has it" mark only waived nothing and she stayed;
+now "Has it" decides. Fix: her insurance to *Missing — on the bill* (Items check now, or the NHIF list's *Needs the college
+NHIF* after the deploy). Built: the NHIF list's *Marked wrongly?* buttons, both ways.
+
+**Then:** "and not just one, also some students from the continuing list have been removed from the records' list, and at
+finance they show they have their own" — the same cause, from my change: "Has it" had been made to decide, and finance
+marks continuing students holding last year's college card "Has it" after they pay. **Corrected:** the money decides again
+(billed and not fully waived = on the sheets), so they are back with no data changed; Own card = marked Has it with the fee
+waived. "So now finance is the one to put them back if there are mistakes later": finance undoes a mark (the fee, from the
+NHIF list); records undo their own removal (Put back).
+
+**Then:** "what about the last step at admission? does it mark NHIF — maybe it is the one that marked them as having their
+own? even those marked as having their own had the invoice generated with it, which means college NHIF; so all bills
+generated with NHIF not removed are the college's." — Yes: a billed item could be marked at the admission desk too (and
+"brought later" after admitting), and insurance's "Has it" waives the unpaid medical fee — after the invoice. **Built:**
+insurance at the finance desk only; who marked each "Has it" (and from which office) on the NHIF list, with a filter for
+the admission office's marks, for finance to turn round. The money rule already counts a fee left on the bill as the
+college's.
