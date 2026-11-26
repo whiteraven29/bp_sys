@@ -554,19 +554,22 @@ def full_statement(profile):
     """Every year the student was billed, every payment since they started —
     the statement the accountant signs when they finish."""
     years = []
+    apart = kept_apart_ids()
     charges = list(with_balances(StudentCharge.objects.filter(profile=profile)
                                  .select_related('charge_type', 'academic_year')
                                  .order_by('academic_year__name', 'due_date', 'id')))
     for charge in charges:
         charge.owed = charge_balance(charge)
         charge.paid_amount = money(charge.payable - charge.owed)
+        charge.apart = charge.charge_type_id in apart        # listed, but not in the year's total
         if not years or years[-1]['year'] != charge.academic_year:
             years.append({'year': charge.academic_year, 'charges': []})
         years[-1]['charges'].append(charge)
     for entry in years:
-        entry['billed'] = money(sum((c.amount for c in entry['charges']), ZERO))
-        entry['waived'] = money(sum((c.waived_amount for c in entry['charges']), ZERO))
-        entry['paid'] = money(sum((c.payable - charge_balance(c) for c in entry['charges']), ZERO))
+        counted = [c for c in entry['charges'] if not c.apart]
+        entry['billed'] = money(sum((c.amount for c in counted), ZERO))
+        entry['waived'] = money(sum((c.waived_amount for c in counted), ZERO))
+        entry['paid'] = money(sum((c.payable - charge_balance(c) for c in counted), ZERO))
         entry['balance'] = money(entry['billed'] - entry['waived'] - entry['paid'])
     payments = list(Payment.objects.filter(profile=profile).exclude(channel=Payment.CREDIT)
                     .select_related('recorded_by', 'invoice')
@@ -579,7 +582,7 @@ def full_statement(profile):
                             + f': {money(a.amount):,.2f}' for a in payment.allocations.all()]
         payment.on_account = money(payment.amount - sum((a.amount for a in payment.allocations.all()), ZERO))
     totals = balance_for(profile)
-    return {'years': years, 'payments': payments, 'totals': totals,
+    return {'years': years, 'payments': payments, 'totals': totals, 'apart': apart_balance(profile),
             'received': money(sum((p.amount for p in payments), ZERO))}
 
 
@@ -1163,10 +1166,37 @@ def overpayments():
     return sorted(rows.values(), key=lambda r: (-r['excess'], r['name']))
 
 
+def kept_apart_ids():
+    """The TPH book's charge types (said 27 November 2026): recorded and
+    payable, but no part of what a student owes in total. Billing it records
+    that the student has no book of their own, so the college buys one and
+    collects the money apart."""
+    from .models import AdmissionRequirement
+    return set(AdmissionRequirement.objects.filter(name__icontains='tph', charge_type__isnull=False)
+               .values_list('charge_type_id', flat=True))
+
+
+def kept_apart():
+    return Q(charge_type_id__in=kept_apart_ids())
+
+
+def apart_balance(profile, academic_year=None):
+    """The TPH book alone: billed, waived, paid and still owed."""
+    charges = StudentCharge.objects.filter(kept_apart(), profile=profile)
+    if academic_year is not None:
+        charges = charges.filter(academic_year=academic_year)
+    billed = charges.aggregate(t=Sum('amount'))['t'] or ZERO
+    waived = charges.aggregate(t=Sum('waived_amount'))['t'] or ZERO
+    paid = PaymentAllocation.objects.filter(charge__in=charges).aggregate(t=Sum('amount'))['t'] or ZERO
+    return {'billed': money(billed), 'waived': money(waived), 'paid': money(paid),
+            'balance': money(billed - waived - paid)}
+
+
 def balance_for(profile, academic_year=None):
     """What this person owes in total. One number for one human being — not one
-    per module, which is what the old model produced."""
-    charges = StudentCharge.objects.filter(profile=profile)
+    per module, which is what the old model produced. The TPH book is not in
+    it (`kept_apart`): see apart_balance."""
+    charges = StudentCharge.objects.filter(profile=profile).exclude(kept_apart())
     if academic_year is not None:
         charges = charges.filter(academic_year=academic_year)
 
@@ -1187,7 +1217,9 @@ def balances_for(pairs):
     pairs = set(pairs)
     profile_ids, year_ids = {p for p, _ in pairs}, {y for _, y in pairs}
     owed = {pair: ZERO for pair in pairs}
+    apart = kept_apart_ids()
     for row in (StudentCharge.objects.filter(profile_id__in=profile_ids, academic_year_id__in=year_ids)
+                .exclude(charge_type_id__in=apart)
                 .order_by().values('profile_id', 'academic_year_id')
                 .annotate(billed=Sum('amount'), waived=Sum('waived_amount'))):
         pair = (row['profile_id'], row['academic_year_id'])
@@ -1195,6 +1227,7 @@ def balances_for(pairs):
             owed[pair] += (row['billed'] or ZERO) - (row['waived'] or ZERO)
     for row in (PaymentAllocation.objects
                 .filter(charge__profile_id__in=profile_ids, charge__academic_year_id__in=year_ids)
+                .exclude(charge__charge_type_id__in=apart)
                 .order_by().values('charge__profile_id', 'charge__academic_year_id')
                 .annotate(paid=Sum('amount'))):
         pair = (row['charge__profile_id'], row['charge__academic_year_id'])
@@ -2021,8 +2054,11 @@ def balance_map(profiles, academic_year=None):
     if not profile_ids:
         return {}
 
-    charges = StudentCharge.objects.filter(profile_id__in=profile_ids)
-    allocations = PaymentAllocation.objects.filter(charge__profile_id__in=profile_ids)
+    # The TPH book is no part of what a student owes (`kept_apart`).
+    apart = kept_apart_ids()
+    charges = StudentCharge.objects.filter(profile_id__in=profile_ids).exclude(charge_type_id__in=apart)
+    allocations = (PaymentAllocation.objects.filter(charge__profile_id__in=profile_ids)
+                   .exclude(charge__charge_type_id__in=apart))
     if academic_year is not None:
         charges = charges.filter(academic_year=academic_year)
         allocations = allocations.filter(charge__academic_year=academic_year)
@@ -2134,9 +2170,12 @@ def executive_summary(academic_year, *, department_id=None, programme_id=None):
     from django.db.models.functions import TruncMonth
     from .models import StudentStanding
 
-    charges = StudentCharge.objects.filter(academic_year=academic_year)
+    # The TPH book is no part of what students owe (`kept_apart`): its money is
+    # collected apart, so the college's figures leave it out too.
+    apart = kept_apart_ids()
+    charges = StudentCharge.objects.filter(academic_year=academic_year).exclude(charge_type_id__in=apart)
     allocations = (PaymentAllocation.objects.filter(charge__academic_year=academic_year)
-                   .exclude(payment__channel=Payment.CREDIT))
+                   .exclude(payment__channel=Payment.CREDIT).exclude(charge__charge_type_id__in=apart))
     if department_id or programme_id:
         scope = profiles_in_scope(set(charges.values_list('profile_id', flat=True)),
                                   department_id=department_id, programme_id=programme_id)

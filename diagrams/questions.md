@@ -1296,3 +1296,15 @@ generated with NHIF not removed are the college's." — Yes: a billed item could
 insurance at the finance desk only; who marked each "Has it" (and from which office) on the NHIF list, with a filter for
 the admission office's marks, for finance to turn round. The money rule already counts a fee left on the bill as the
 college's.
+
+### Q93. The TPH book and the other items ✅ / setup
+
+**Asked (27 November 2026):** "does TPH count in a student's year bill?" — yes then — "no, TPH is a separate thing so should
+not be in the total owing: putting it in the system was just to record that these students have no book of their own, so
+the college buys for them and they pay the college, and we keep a record". Scope chosen: TPH book only. Then: "clinical coat
+should be by default in the bill — marked Has it by finance only, then removed from the bill; rim paper and calculator just
+block the final admission unless waived — they are just other items to check".
+
+**Built (uncommitted; no migration):** the TPH book kept apart from every total, shown on its own line. **Setup, no code:**
+the clinical coat as the uniform already works (automatic, once, Has it at finance takes it off — finance only since 26
+Nov); rim paper and calculator as *Checked only* items (missing holds admission; Has it or Waive releases). Release guide 06.

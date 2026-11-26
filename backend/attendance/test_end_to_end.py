@@ -166,8 +166,10 @@ class FirstYearEndToEndTests(TestCase):
         self.ok(self.accounts.post(f'/api/applications/{app_id}/requirements/',
                                    {'requirement_id': items['TPH Book'], 'status': 'missing'}, format='json'))
         balance = finance.balance_for(self.profile, self.year)
-        # 2,495,000 + hostel 400,000 + TPH 35,000 − own insurance 60,000.
-        self.assertEqual(balance['billed'] - balance['waived'], Decimal('2870000.00'))
+        # 2,495,000 + hostel 400,000 − own insurance 60,000. The TPH book (35,000) is
+        # billed but kept apart from the total owing (said 27 November 2026).
+        self.assertEqual(balance['billed'] - balance['waived'], Decimal('2835000.00'))
+        self.assertEqual(finance.apart_balance(self.profile, self.year)['balance'], Decimal('35000.00'))
         not_paid = self.accounts.post(f'/api/applications/{app_id}/complete/', {}, format='json')
         self.assertIn('Not paid', not_paid.data['detail'])
 

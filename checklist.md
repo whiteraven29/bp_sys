@@ -688,6 +688,13 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      NHIF list ▸ College NHIF; any marked "Has it, fee paid — on the sheet" whose card is really theirs: records Remove
    - [ ] After the deploy (applies 0090): records — remove a student who has their own card; accountant — NHIF list:
      College NHIF less "taken off" equals the rows on records' sheets (New + Continuous)
+   - [x] TPH book kept apart (27 Nov, your request: "TPH is a separate thing, should not be in the total owing"):
+     `finance.kept_apart()` — items named TPH — left out of `balance_for`, `balances_for`, `balance_map`, the
+     executive summary and the statement's year totals; `apart_balance` shown on its own line on the statement, its
+     print and the portal; still invoiced and payable (2 tests)
+   - [ ] Setup in the app, your item rules (27 Nov): Clinical coat → automatic, once, fee structure at each level a
+     new student joins, Required item billed, new students only; Rim paper and Calculator → Required items *Checked
+     only*; TPH book → billed, charge type *on request* (release guide 06)
    - [x] Comparison chart for presentations (25 Nov, your request): thick bars with a light 3D depth (top and side
      faces drawn beside each bar, its length unchanged) and the value at each bar's end — page and picture; the Excel
      chart a 3D bar chart (`BarChart3D`, values shown, narrow gaps)

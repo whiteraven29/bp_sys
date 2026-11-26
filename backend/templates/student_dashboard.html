@@ -1354,6 +1354,7 @@
           {% if finance_waived %}<article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-hand-thumbs-up"></i></div></div><strong>{{ finance_waived|floatformat:"2g" }}</strong><p>Waived</p></article>{% endif %}
           <article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-exclamation-circle"></i></div></div><strong>{{ finance_balance|floatformat:"2g" }}</strong><p>Outstanding</p></article>
           {% if finance_on_account %}<article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-piggy-bank"></i></div></div><strong>{{ finance_on_account|floatformat:"2g" }}</strong><p>Paid ahead — used on your next bill</p></article>{% endif %}
+          {% if finance_apart and finance_apart.billed %}<article class="stat-card"><div class="stat-top"><div class="stat-icon"><i class="bi bi-book"></i></div></div><strong>{{ finance_apart.balance|floatformat:"2g" }}</strong><p>TPH book — paid apart from your fees</p></article>{% endif %}
         </div>
         <section class="panel">
           <div class="panel-head"><h2>Semester pass</h2><span>Your pass to classes and exams</span></div>

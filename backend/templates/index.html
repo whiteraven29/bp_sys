@@ -12275,6 +12275,7 @@ async function openStatement(profileId) {
         <div class="stat-card" style="--c:var(--green)"><div class="label">Paid</div><div class="value">${money(s.totals.paid)}</div></div>
         <div class="stat-card" style="--c:var(--red)"><div class="label">Outstanding</div><div class="value">${money(s.totals.balance)}</div></div>
         ${Number(s.on_account) > 0 ? `<div class="stat-card" style="--c:var(--green)"><div class="label">Paid ahead (on account)</div><div class="value">${money(s.on_account)}</div></div>` : ''}
+        ${s.apart && Number(s.apart.billed) > 0 ? `<div class="stat-card" style="--c:var(--muted)" title="The TPH book is recorded and paid for apart: it is not in Billed or Outstanding."><div class="label">TPH book — apart, still owed</div><div class="value">${money(s.apart.balance)}</div><div class="sublabel">billed ${money(s.apart.billed)} · paid ${money(s.apart.paid)}</div></div>` : ''}
       </div>
 
       <div class="card-title" style="margin-top:16px">Clearance</div>

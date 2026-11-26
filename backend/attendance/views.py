@@ -1522,6 +1522,8 @@ def student_dashboard(request):
         'fee_next': (list(fee_reminders_due) or list(fee_reminders_later) or [None])[0],
         'academic_year_closes_on': ledger_year.closes_on if ledger_year else None,
         'finance_waived': ledger_totals['waived'],
+        # The TPH book, apart from the total (said 27 November 2026).
+        'finance_apart': finance.apart_balance(ledger_profile, ledger_year) if ledger_profile else None,
         'finance_required': finance_required,
         'finance_paid': finance_paid,
         'finance_balance': finance_balance,
@@ -9401,6 +9403,7 @@ def _statement_payload(profile, year, semester):
         .prefetch_related('lines__charge__charge_type', 'payments')
     )
     totals = finance.balance_for(profile, year)
+    apart = finance.apart_balance(profile, year)          # the TPH book, not in the total
     # The payments an invoice can be raised for — tuition fee, direct costs,
     # and each other fee on its own (supplementary, special exam, a repeat
     # module, the TPH book…) — each only when the student is billed for it.
@@ -9425,6 +9428,7 @@ def _statement_payload(profile, year, semester):
         },
         'academic_year': {'id': year.id, 'name': year.name} if year else None,
         'totals': {k: str(v) for k, v in totals.items()},
+        'apart': {k: str(v) for k, v in apart.items()},
         # Paid beyond the bill: used when the next bill is raised (said 20 October 2026).
         'on_account': str(finance.on_account_total(profile)),
         'charges': StudentChargeSerializer(charges, many=True).data,

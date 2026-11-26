@@ -66,7 +66,7 @@
       {% for charge in entry.charges %}
       <tr>
         <td>{% if forloop.first %}{{ entry.year.name }}{% endif %}</td>
-        <td>{{ charge.charge_type.name }}{% if charge.installment_number %}, instalment {{ charge.installment_number }}{% endif %}{% if charge.waived_reason %} <span class="note">({{ charge.waived_reason }})</span>{% endif %}</td>
+        <td>{{ charge.charge_type.name }}{% if charge.installment_number %}, instalment {{ charge.installment_number }}{% endif %}{% if charge.apart %} <span class="note">(apart — not in the year's total)</span>{% endif %}{% if charge.waived_reason %} <span class="note">({{ charge.waived_reason }})</span>{% endif %}</td>
         <td>{{ charge.due_date|date:"d-m-Y" }}</td>
         <td class="num">{{ charge.amount|floatformat:"2g" }}</td>
         <td class="num">{{ charge.waived_amount|floatformat:"2g" }}</td>
@@ -147,6 +147,7 @@
     <div><span>Waived</span><span>{{ statement.totals.waived|floatformat:"2g" }}</span></div>
     <div><span>Received</span><span>{{ statement.received|floatformat:"2g" }}</span></div>
     <div class="due"><span>{% if statement.totals.balance < 0 %}In credit{% else %}Owed{% endif %}</span><span>{{ sheet.balance_abs|floatformat:"2g" }}</span></div>
+    {% if statement.apart.billed %}<div><span>TPH book, apart from the total — still owed</span><span>{{ statement.apart.balance|floatformat:"2g" }}</span></div>{% endif %}
   </div>
 
   <div class="signs">
