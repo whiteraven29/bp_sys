@@ -221,6 +221,50 @@ class NewStudentItemsAndNhifTests(OfficeClients):
     def test_only_the_record_offices_build_it(self):
         self.assertEqual(self.accounts.get('/api/nhif-sheet/').status_code, 403)
 
+    def sheet(self):
+        return self.records.get(f'/api/nhif-sheet/?academic_year_id={self.year.id}&sheet=new').data
+
+    def finance_list(self, place=''):
+        return self.accounts.get(f'/api/finance/nhif-list/?academic_year_id={self.year.id}&place={place}').data
+
+    def test_paid_then_marked_has_it_is_own_card(self):
+        # Said 26 November 2026: a student who paid the medical fee and then
+        # showed their own card is "own", whatever they paid.
+        self.admit()
+        insurance = AdmissionRequirement.objects.create(name='Health insurance', charge_type=self.medical)
+        RequirementCheck.objects.create(profile=self.direct, semester=self.sem1, requirement=insurance,
+                                        status=RequirementCheck.HAS_IT)
+        self.assertEqual(self.sheet()['rows'], [])
+        listed = self.finance_list()
+        self.assertEqual((listed['counts']['own'], listed['counts']['on_sheet']), (1, 0))
+        self.assertEqual(listed['rows'][0]['paid'], '60000.00')
+
+    def test_records_take_one_off_with_a_reason_and_put_them_back(self):
+        self.admit()
+        body = {'profile_id': self.direct.id, 'academic_year_id': self.year.id}
+        self.assertEqual(self.records.post('/api/nhif-sheet/remove/', body, format='json').status_code, 400)
+        self.assertEqual(self.accounts.post('/api/nhif-sheet/remove/', {**body, 'reason': 'x'},
+                                            format='json').status_code, 403)
+        done = self.records.post('/api/nhif-sheet/remove/', {**body, 'reason': 'Own card NHIF 123'}, format='json')
+        self.assertEqual(done.status_code, 201)
+        data = self.sheet()
+        self.assertEqual(data['rows'], [])
+        self.assertEqual([(r['name'], r['reason']) for r in data['removed']], [('Grace Direct Entry', 'Own card NHIF 123')])
+        # The accountant sees it, and the two tally: the college still bills it, records took it off.
+        listed = self.finance_list('removed')
+        self.assertEqual((listed['counts']['college'], listed['counts']['on_sheet'], listed['counts']['removed']), (1, 0, 1))
+        self.assertEqual(listed['rows'][0]['removed_reason'], 'Own card NHIF 123')
+        self.assertEqual(StudentCharge.objects.get(profile=self.direct, charge_type=self.medical).waived_amount, 0)
+        self.records.post('/api/nhif-sheet/put-back/', body, format='json')
+        self.assertEqual(len(self.sheet()['rows']), 1)
+
+    def test_the_finance_list_tallies_with_the_sheet(self):
+        self.admit()
+        listed = self.finance_list()
+        self.assertEqual((listed['counts']['students'], listed['counts']['college'], listed['counts']['on_sheet']), (1, 1, 1))
+        self.assertEqual(len(self.sheet()['rows']), listed['counts']['on_sheet'])
+        self.assertEqual(self.finance_list('own')['rows'], [])
+
 
 class JoiningYearTests(OfficeClients):
     def capture(self, **extra):

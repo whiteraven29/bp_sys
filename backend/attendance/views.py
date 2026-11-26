@@ -3707,49 +3707,49 @@ def _nhif_date(day):
     return day.strftime('%d/%m/%Y') if day else ''
 
 
+def _keeps_nhif_sheets(user):
+    return (is_records_officer(user) or is_admission_officer(user) or is_principal(user)
+            or is_dparc(user) or is_break_glass(user))
+
+
+def _nhif_year(source):
+    return (AcademicYear.objects.filter(id=pk_or_none(source.get('academic_year_id'))).first()
+            or active_academic_year())
+
+
 @api_view(['GET'])
 @login_required
 def nhif_sheet(request):
     """The NHIF registration sheets, filled from the records (said 20 October
     2026): "new" — the year's first years, at any level — and "continuing"
-    (NHIF's "Continuous") with their card numbers. Only PST students who pay
-    the college's medical fee: one who brought their own NHIF card has the
-    fee waived and is left out. Dates DD/MM/YYYY, gender Male / Female."""
+    (NHIF's "Continuous") with their card numbers. Only the students the
+    college insures (`nhif.roster`): the medical fee billed and not waived,
+    and insurance not marked "Has it"; one records took off as a mistake is
+    listed apart, to put back (said 26 November 2026). Dates DD/MM/YYYY,
+    gender Male / Female."""
+    from . import nhif
     user = request.user
-    if not (is_records_officer(user) or is_admission_officer(user) or is_principal(user)
-            or is_dparc(user) or is_break_glass(user)):
+    if not _keeps_nhif_sheets(user):
         raise PermissionDenied('For records, admission, the Principal and DPARC.')
-    year = (AcademicYear.objects.filter(id=pk_or_none(request.query_params.get('academic_year_id'))).first()
-            or active_academic_year())
+    year = _nhif_year(request.query_params)
     if year is None:
         return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
     sheet = 'continuing' if request.query_params.get('sheet') == 'continuing' else 'new'
-
-    registrations = (SemesterRegistration.objects
-                     .filter(semester__academic_year=year, programme__structure=Programme.SEMESTER)
-                     .exclude(status=SemesterRegistration.CANCELLED)
-                     .select_related('profile', 'programme__department', 'class_level')
-                     .order_by('created_at'))
-    first = {}
-    for registration in registrations:
-        first.setdefault(registration.profile_id, registration)      # their first semester of the year
-
-    medical = Q(charge_type__name__icontains='medical') | Q(charge_type__name__icontains='insurance') \
-        | Q(charge_type__name__icontains='nhif')
-    paying = set()
-    for charge in StudentCharge.objects.filter(medical, academic_year=year, profile_id__in=first):
-        if charge.amount - (charge.waived_amount or 0) > 0:
-            paying.add(charge.profile_id)
+    roster = nhif.roster(year)
 
     level_span = {}
-    rows = []
-    for profile_id, registration in first.items():
-        if profile_id not in paying:
-            continue
-        is_new = registration.kind == SemesterRegistration.NEW
-        if (sheet == 'new') != is_new:
+    rows, removed = [], []
+    for profile_id, entry in roster.items():
+        registration = entry['registration']
+        if entry['place'] != nhif.COLLEGE or (sheet == 'new') != entry['new']:
             continue
         profile, programme = registration.profile, registration.programme
+        if entry['removal'] is not None:
+            removal = entry['removal']
+            removed.append({'profile_id': profile_id, 'name': profile.name, 'reg_no': profile.nactvet_reg_no,
+                            'reason': removal.reason, 'by': full_name_for(removal.removed_by) if removal.removed_by_id else '',
+                            'at': removal.removed_at})
+            continue
         if programme.id not in level_span:
             orders = sorted(programme.levels.values_list('order', flat=True)) or [registration.class_level.order]
             level_span[programme.id] = orders
@@ -3778,11 +3778,100 @@ def nhif_sheet(request):
         rows.append({'profile_id': profile_id, 'name': profile.name, 'reg_no': profile.nactvet_reg_no,
                      'row': row, 'missing': [key for key, value in row.items() if value in ('', None)]})
     rows.sort(key=lambda r: (r['row'].get('YearOfStudy') or 0, r['name']))
+    removed.sort(key=lambda r: r['name'])
     columns = (['FormFourIndexNo', 'FirstName', 'MiddleName', 'LastName', 'DateOfBirth', 'MaritalStatus', 'Gender',
                 'AdmissionDate', 'MobileNo', 'CourseName', 'CollegeFaculty', 'YearOfStudy', 'CourseDuration',
                 'NationalID', 'AdmissionNo'] if sheet == 'new'
                else ['FormFourIndexNo', 'MobileNo', 'CardNo', 'NationalID', 'YearOfStudy'])
-    return Response({'academic_year': year.name, 'sheet': sheet, 'columns': columns, 'rows': rows})
+    return Response({'academic_year': year.name, 'academic_year_id': year.id, 'sheet': sheet, 'columns': columns,
+                     'rows': rows, 'removed': removed})
+
+
+@api_view(['POST'])
+@login_required
+def nhif_remove(request):
+    """Take a student off the year's NHIF sheets: they appeared by mistake
+    (said 26 November 2026). A reason is required; the bill is not touched."""
+    from .models import NhifRemoval
+    if not _keeps_nhif_sheets(request.user):
+        raise PermissionDenied('For records, admission, the Principal and DPARC.')
+    year = _nhif_year(request.data)
+    profile = StudentProfile.objects.filter(id=pk_or_none(request.data.get('profile_id'))).first()
+    reason = str(request.data.get('reason') or '').strip()
+    if year is None or profile is None:
+        return Response({'detail': 'Which student, which year?'}, status=status.HTTP_400_BAD_REQUEST)
+    if not reason:
+        return Response({'detail': 'Say why they come off (e.g. has own NHIF card No. …).'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    removal, made = NhifRemoval.objects.get_or_create(
+        profile=profile, academic_year=year, put_back_at__isnull=True,
+        defaults={'reason': reason[:300], 'removed_by': request.user})
+    security_log.info('%s took %s off the NHIF sheets for %s: %s', request.user.username,
+                      profile.nactvet_reg_no, year.name, reason[:300])
+    return Response({'id': removal.id, 'made': made}, status=status.HTTP_201_CREATED if made else status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@login_required
+def nhif_put_back(request):
+    """Undo a removal: the student goes back on the sheet if the college insures them."""
+    from .models import NhifRemoval
+    if not _keeps_nhif_sheets(request.user):
+        raise PermissionDenied('For records, admission, the Principal and DPARC.')
+    year = _nhif_year(request.data)
+    removal = NhifRemoval.objects.filter(profile_id=pk_or_none(request.data.get('profile_id')),
+                                         academic_year=year, put_back_at__isnull=True).first()
+    if removal is None:
+        return Response({'detail': 'Not taken off this year.'}, status=status.HTTP_404_NOT_FOUND)
+    removal.put_back_by, removal.put_back_at = request.user, timezone.now()
+    removal.save(update_fields=['put_back_by', 'put_back_at'])
+    security_log.info('%s put %s back on the NHIF sheets for %s', request.user.username,
+                      removal.profile.nactvet_reg_no, year.name)
+    return Response({'id': removal.id})
+
+
+@api_view(['GET'])
+@login_required
+def finance_nhif_list(request):
+    """Student accounts ▸ NHIF list (said 26 November 2026): every PST student
+    of the year with where they stand for NHIF — the college insures them, own
+    card, or not billed — and the medical fee, read from the same rule as the
+    records' NHIF sheets, so the two tally."""
+    from . import nhif
+    from .roles import is_dpfpa
+    user = request.user
+    if not (can_manage_finance(user) or is_dpfpa(user) or is_principal(user) or _keeps_nhif_sheets(user)):
+        raise PermissionDenied('For the accountant, DPFPA, the Principal and records.')
+    year = _nhif_year(request.query_params)
+    if year is None:
+        return Response({'detail': 'No academic year is active.'}, status=status.HTTP_400_BAD_REQUEST)
+    level = ClassLevel.objects.filter(id=pk_or_none(request.query_params.get('class_level_id'))).first()
+    wanted = request.query_params.get('place') or ''
+    roster = nhif.roster(year, level)
+    counts = {'students': len(roster), nhif.COLLEGE: 0, nhif.OWN: 0, nhif.NONE: 0, 'on_sheet': 0, 'removed': 0}
+    rows = []
+    for profile_id, entry in roster.items():
+        counts[entry['place']] += 1
+        counts['on_sheet'] += entry['on_sheet']
+        removed = entry['removal'] is not None and entry['place'] == nhif.COLLEGE
+        counts['removed'] += removed
+        if wanted == 'removed' and not removed:
+            continue
+        if wanted in (nhif.COLLEGE, nhif.OWN, nhif.NONE) and entry['place'] != wanted:
+            continue
+        registration, fee = entry['registration'], entry['fee']
+        profile = registration.profile
+        rows.append({
+            'profile_id': profile_id, 'reg_no': profile.nactvet_reg_no, 'name': profile.name,
+            'level': registration.class_level.name, 'sheet': 'New' if entry['new'] else 'Continuing',
+            'place': entry['place'], 'place_label': nhif.LABELS[entry['place']],
+            'on_sheet': entry['on_sheet'], 'card_no': profile.nhif_card_no,
+            'billed': str(fee['billed']), 'waived': str(fee['waived']), 'paid': str(fee['paid']),
+            'removed_reason': entry['removal'].reason if removed else '',
+        })
+    rows.sort(key=lambda r: (r['level'], r['name']))
+    return Response({'academic_year': year.name, 'academic_year_id': year.id,
+                     'class_level': level.name if level else None, 'counts': counts, 'rows': rows})
 
 
 def can_record_status(user, status):

@@ -2900,6 +2900,33 @@ class ResultWithholding(models.Model):
         return f'{self.profile_id} · {self.semester_id} · {"released" if self.released_at else "withheld"}'
 
 
+class NhifRemoval(models.Model):
+    """A student taken off the year's NHIF sheets by records, having appeared
+    by mistake — they have their own card though the medical fee shows as
+    the college's (said 26 November 2026). The bill is not touched: the
+    accountant sees the removal on Student accounts ▸ NHIF list. Putting them
+    back keeps the row, so who removed whom, when and why stays on record."""
+    profile = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='nhif_removals')
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name='nhif_removals')
+    reason = models.CharField(max_length=300)
+    removed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    removed_at = models.DateTimeField(auto_now_add=True)
+    put_back_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    put_back_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-removed_at']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'academic_year'], condition=models.Q(put_back_at__isnull=True),
+                                    name='one_open_nhif_removal_per_year'),
+        ]
+
+    def __str__(self):
+        return f'{self.profile_id} · {self.academic_year_id} · {"put back" if self.put_back_at else "removed"}'
+
+
 class ExitRequest(models.Model):
     """A student asking to finish after Level 5 with that level's award (said
     18 October 2026): asked from the portal, decided by the Principal. Approved,

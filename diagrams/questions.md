@@ -1265,3 +1265,13 @@ supplementary sheet); L5 12, 13, 3, 1; L6 31 PASS, 4 REPEAT. **Your step:** uplo
 the server (copy the folder over first: the files hold students' names and grades, so they stay out of git). And the
 "starred key" meant: tell whoever reads the list that an incomplete student already failed other modules — built as
 "Already failed, while waiting".
+
+### Q92. NHIF: students with their own card on the list; the accountant's view ✅
+
+**Asked (26 November 2026):** how students reach the NHIF sheet; "so at finance if insurance is marked has it they don't go
+to the list?" — yes, unless they had paid the medical fee before (only the unpaid part was waived) — then "some students
+have appeared on the NHIF list but they have theirs": a Name column on the Continuous sheet (not in its Excel), a Remove
+button, and a Finance NHIF list with year, level and own/college filters, "so records and accountant have data which tally".
+
+**Built (uncommitted; migration 0090):** `attendance/nhif.py` (one rule for both: College NHIF / Own card / Not billed;
+"Has it" wins over money), `NhifRemoval` (Remove with a reason, Put back), Student accounts ▸ NHIF list. Release guide 06.

@@ -1707,6 +1707,7 @@
         <button class="nav-sub-btn" data-finance-section="overrides" onclick="showFinanceSection('overrides', this)">Waivers &amp; Overrides</button>
         <button class="nav-sub-btn" data-finance-section="timetopay" onclick="showFinanceSection('timetopay', this)">Time to pay</button>
         <button class="nav-sub-btn" data-finance-section="hostel" onclick="showFinanceSection('hostel', this)">Hostel</button>
+        <button class="nav-sub-btn" data-finance-section="nhif" onclick="showFinanceSection('nhif', this)">NHIF list</button>
       </div>
     </div>
     <div class="nav-group finance-only" id="finance-expenses-nav-group">
@@ -1898,7 +1899,7 @@
       </div>
 
       <div class="card" data-rec-section="nhif">
-        <div class="card-title">NHIF registration sheets <span class="tip" tabindex="0" role="note" aria-label="Help: NHIF" data-tip="NHIF's two sheets, filled from the records: New Students (the year's first years, at any level) and Continuous Students (continuing, with their NHIF card number). Only PST students who pay the college's medical fee — one who brought their own NHIF card has it waived and is left out. A row with something missing is marked: fill it in at Find a student, then download again.">?</span></div>
+        <div class="card-title">NHIF registration sheets <span class="tip" tabindex="0" role="note" aria-label="Help: NHIF" data-tip="NHIF's two sheets, filled from the records: New Students (the year's first years, at any level) and Continuous Students (continuing, with their NHIF card number). Only PST students the college insures: the medical fee billed and not waived, and insurance not marked Has it at finance or admission. One listed by mistake: Remove, with the reason — the accountant sees it on Student accounts ▸ NHIF list. The Name column is for you; the Continuous sheet's Excel has no names, as NHIF's form. A row with something missing is marked: fill it in at Find a student, then download again.">?</span></div>
         <div class="form-grid-3">
           <div class="field"><label>Academic year</label><select id="nhif-year" onchange="loadNhifSheet()"></select></div>
           <div class="field"><label>Sheet</label>
@@ -1910,6 +1911,7 @@
         </div>
         <div id="nhif-note" style="margin-bottom:10px;"></div>
         <div class="table-wrap"><table class="compact"><thead id="nhif-thead"></thead><tbody id="nhif-tbody"></tbody></table></div>
+        <div id="nhif-removed" style="margin-top:14px"></div>
       </div>
 
       <div class="card" data-rec-section="ids">
@@ -4208,6 +4210,31 @@
             <div class="field"><label>Description</label><input id="ec-description"></div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="saveExpenseCategory(event)">Add category</button>
+        </div>
+      </div>
+
+      <!-- Said 26 November 2026: the accountant's view of NHIF, read from the
+           same rule as records' sheets, so the two tally. -->
+      <div class="finance-section" id="finance-section-nhif">
+        <div class="card finance-only">
+          <div class="card-title">NHIF list <span class="tip" tabindex="0" role="note" aria-label="Help: NHIF list" data-tip="Every PST student registered in the year, by where they stand for NHIF. College NHIF: the medical fee billed and not waived, insurance not marked Has it — they are on records' NHIF sheets unless records took them off (shown, with the reason). Own card: insurance marked Has it. Not billed: no medical fee, or waived for another reason.">?</span></div>
+          <div class="form-grid-3">
+            <div class="field"><label>Academic year</label><select id="fin-nhif-year" onchange="loadFinanceNhif()"></select></div>
+            <div class="field"><label>Class level</label><select id="fin-nhif-level" onchange="loadFinanceNhif()"></select></div>
+            <div class="field"><label>Show</label>
+              <select id="fin-nhif-place" onchange="loadFinanceNhif()">
+                <option value="">Everyone</option>
+                <option value="college">College NHIF</option>
+                <option value="own">Own card</option>
+                <option value="none">Not billed</option>
+                <option value="removed">Taken off the sheets by records</option>
+              </select></div>
+            <div class="field pfy-actions"><button class="btn btn-primary btn-sm" onclick="downloadFinanceNhif()"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Download Excel</button></div>
+          </div>
+          <div class="stats-grid" id="fin-nhif-stats" style="margin-top:12px"></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Reg. No.</th><th>Name</th><th>Level</th><th>Sheet</th><th>NHIF</th><th class="num">Medical fee</th><th class="num">Paid</th><th class="num">Waived</th><th>Card No.</th><th>Note</th></tr></thead>
+            <tbody id="fin-nhif-tbody"></tbody></table></div>
         </div>
       </div>
 
@@ -9237,7 +9264,7 @@ function financeNavGroupFor(section = state.financeSection || 'overview') {
   if (['accounts', 'charge-types', 'fee-structure', 'payment-schedule', 'course-fees'].includes(section)) return document.getElementById('finance-setup-nav-group');
   if (['expenses', 'expense-budget'].includes(section)) return document.getElementById('finance-expenses-nav-group');
   if (['record', 'history', 'collections', 'overpayments'].includes(section)) return document.getElementById('finance-payments-nav-group');
-  if (['students', 'extra-charge', 'overrides', 'timetopay', 'hostel'].includes(section)) return document.getElementById('finance-students-nav-group');
+  if (['students', 'extra-charge', 'overrides', 'timetopay', 'hostel', 'nhif'].includes(section)) return document.getElementById('finance-students-nav-group');
   return null;
 }
 
@@ -9257,6 +9284,7 @@ const FINANCE_COPY = {
   expenses:        ['Expense Register', 'Record what the college spends; the Principal or DPFPA approves; then record the payment.'],
   'expense-budget': ['Categories & Budget', 'What the college spends on, and how much it plans to spend on each this year.'],
   hostel:          ['Hostel', 'Students asking for a hostel place, and who lives where.'],
+  nhif:            ['NHIF list', 'Who the college insures, who has their own card, and the medical fee — the same as records\' NHIF sheets.'],
   record:          ['Record a Payment', 'Look up the reference on the slip, then record what arrived.'],
   history:         ['Payment History', 'Every payment recorded, and the reversals that corrected them.'],
   collections:     ['Collections & EFD', 'What came in over a period, to reconcile against the EFD machine.'],
@@ -9283,6 +9311,7 @@ function showFinanceSection(section, btn) {
   // showPage copied the title before it changed: the breadcrumb said the screen before.
   const crumb = document.getElementById('crumb-page'); if (crumb) crumb.textContent = title;
   if (state.financeSection === 'timetopay') loadTimeToPay('fin');
+  if (state.financeSection === 'nhif') openFinanceNhif();
 }
 
 function toggleFinanceMenu(event, area = 'payments') {
@@ -9295,6 +9324,62 @@ function toggleFinanceMenu(event, area = 'payments') {
     showFinanceSection(section, group.querySelector(`[data-finance-section="${section}"]`));
   }
   event.stopPropagation();
+}
+
+// ── NHIF list (said 26 November 2026) ─────────────────────────────────────────
+
+async function openFinanceNhif() {
+  const year = document.getElementById('fin-nhif-year');
+  if (!year.options.length) {
+    if (!state.academicYears) {
+      try { const years = await api('GET', '/academic-years/'); state.academicYears = years.results ?? years; } catch (e) { state.academicYears = []; }
+    }
+    year.innerHTML = (state.academicYears || []).map(y => `<option value="${y.id}" ${y.is_active ? 'selected' : ''}>${safeText(y.name)}</option>`).join('');
+    buildLevelOptions(document.getElementById('fin-nhif-level'), true);
+  }
+  return loadFinanceNhif();
+}
+
+async function loadFinanceNhif() {
+  const params = new URLSearchParams({ academic_year_id: document.getElementById('fin-nhif-year').value,
+                                       place: document.getElementById('fin-nhif-place').value });
+  const level = document.getElementById('fin-nhif-level').value;
+  if (level) params.set('class_level_id', level);
+  let data;
+  try { data = await api('GET', `/finance/nhif-list/?${params}`); }
+  catch (e) { toast(apiErrorText(e, 'Could not load the NHIF list'), 'var(--red)'); return; }
+  state.financeNhif = data;
+  const c = data.counts;
+  const tile = (label, value, colour, note = '') =>
+    `<div class="stat-card" style="--c:var(${colour})"><div class="label">${label}</div><div class="value">${value}</div>${note ? `<div class="sublabel">${note}</div>` : ''}</div>`;
+  document.getElementById('fin-nhif-stats').innerHTML =
+    tile('Students', c.students, '--accent', safeText(data.academic_year)) +
+    tile('College NHIF', c.college, '--blue', `${c.on_sheet} on records' sheets${c.removed ? ` · ${c.removed} taken off` : ''}`) +
+    tile('Own card', c.own, '--green') +
+    tile('Not billed', c.none, '--muted');
+  const money = v => Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  const badge = { college: 'badge-blue', own: 'badge-green', none: 'badge-gen' };
+  document.getElementById('fin-nhif-tbody').innerHTML = data.rows.length ? data.rows.map(r => `<tr>
+      <td style="font-family:var(--font-mono);font-size:.78rem">${safeText(r.reg_no)}</td><td>${safeText(r.name)}</td>
+      <td style="white-space:nowrap">${safeText(r.level)}</td><td>${safeText(r.sheet)}</td>
+      <td><span class="badge ${badge[r.place]}">${safeText(r.place_label)}</span></td>
+      <td class="num">${money(r.billed)}</td><td class="num">${money(r.paid)}</td><td class="num">${money(r.waived)}</td>
+      <td>${safeText(r.card_no) || '—'}</td>
+      <td style="font-size:.78rem">${r.removed_reason ? `<span style="color:var(--orange)">Taken off by records: ${safeText(r.removed_reason)}</span>` : ''}</td></tr>`).join('')
+    : '<tr><td colspan="10" style="color:var(--muted)">Nobody here</td></tr>';
+}
+
+function downloadFinanceNhif() {
+  const data = state.financeNhif;
+  if (!data) return;
+  const rows = data.rows.map(r => ({ 'Reg. No.': r.reg_no, Name: r.name, Level: r.level, Sheet: r.sheet, NHIF: r.place_label,
+    'On records\' sheet': r.on_sheet ? 'Yes' : 'No', 'Medical fee': Number(r.billed), Paid: Number(r.paid), Waived: Number(r.waived),
+    'Card No.': r.card_no, Note: r.removed_reason ? `Taken off by records: ${r.removed_reason}` : '' }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [20, 30, 14, 12, 14, 16, 12, 12, 12, 16, 40].map(wch => ({ wch }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'NHIF list');
+  XLSX.writeFile(wb, `NHIF_list_${data.academic_year.replace('/', '-')}${data.class_level ? '_' + data.class_level.replace(/ /g, '-') : ''}.xlsx`);
 }
 
 // ── shared lookups ────────────────────────────────────────────────────────────
@@ -13694,13 +13779,46 @@ async function loadNhifSheet() {
   try {
     const data = await api('GET', `/nhif-sheet/?academic_year_id=${yearSelect.value}&sheet=${document.getElementById('nhif-sheet').value}`);
     state.nhifSheet = data;
-    document.getElementById('nhif-thead').innerHTML = `<tr>${data.columns.map(c => `<th>${safeText(c)}</th>`).join('')}</tr>`;
+    // The Name column and the Remove button are for the office: the Excel
+    // keeps NHIF's own columns (no names on the Continuous sheet).
+    document.getElementById('nhif-thead').innerHTML = `<tr><th>Name</th>${data.columns.map(c => `<th>${safeText(c)}</th>`).join('')}<th></th></tr>`;
     document.getElementById('nhif-tbody').innerHTML = data.rows.length ? data.rows.map(r => `<tr>
-        ${data.columns.map(c => r.missing.includes(c) ? '<td style="background:var(--yellow-soft, #fff4d6)">—</td>' : `<td>${safeText(r.row[c])}</td>`).join('')}</tr>`).join('')
-      : `<tr><td colspan="${data.columns.length}"><div class="empty">Nobody on this sheet for ${safeText(data.academic_year)}</div></td></tr>`;
+        <td style="white-space:nowrap"><strong>${safeText(r.name)}</strong><div style="font-size:.7rem;color:var(--muted)">${safeText(r.reg_no)}</div></td>
+        ${data.columns.map(c => r.missing.includes(c) ? '<td style="background:var(--yellow-soft, #fff4d6)">—</td>' : `<td>${safeText(r.row[c])}</td>`).join('')}
+        <td><button class="btn btn-ghost btn-sm" onclick="removeFromNhif(${r.profile_id}, '${safeText(r.name).replace(/'/g, '&#39;')}')" title="Listed by mistake — take them off">Remove</button></td></tr>`).join('')
+      : `<tr><td colspan="${data.columns.length + 2}"><div class="empty">Nobody on this sheet for ${safeText(data.academic_year)}</div></td></tr>`;
+    const removed = data.removed || [];
+    document.getElementById('nhif-removed').innerHTML = removed.length ? `
+      <div class="card-title" style="font-size:.9rem">Taken off this sheet <span style="font-size:.75rem;font-weight:400;color:var(--muted)">${removed.length}</span></div>
+      <div class="table-wrap"><table class="compact"><thead><tr><th>Name</th><th>Reason</th><th>By</th><th></th></tr></thead><tbody>
+      ${removed.map(r => `<tr><td><strong>${safeText(r.name)}</strong><div style="font-size:.7rem;color:var(--muted)">${safeText(r.reg_no)}</div></td>
+        <td>${safeText(r.reason)}</td><td style="font-size:.78rem">${safeText(r.by)} · ${safeText(String(r.at).slice(0, 10))}</td>
+        <td><button class="btn btn-secondary btn-sm" onclick="putBackOnNhif(${r.profile_id})">Put back</button></td></tr>`).join('')}
+      </tbody></table></div>` : '';
     const gaps = data.rows.filter(r => r.missing.length).length;
     document.getElementById('nhif-note').innerHTML = `<div class="missing-note" style="border-left-color:${gaps ? 'var(--orange)' : 'var(--green)'}">${data.rows.length} student(s)${gaps ? ` · ${gaps} with something missing (marked) — fill it in at Find a student` : ' · nothing missing'}.</div>`;
   } catch (e) { toast(apiErrorText(e, 'Could not build the sheet'), 'var(--red)'); }
+}
+
+// Listed by mistake (said 26 November 2026): off the sheet, with a reason.
+// The bill is not touched; the accountant sees it on Student accounts ▸ NHIF list.
+async function removeFromNhif(profileId, name) {
+  const reason = prompt(`Take ${name} off the NHIF sheets for ${state.nhifSheet?.academic_year || 'this year'}? Say why (e.g. own NHIF card No. …):`);
+  if (reason === null) return;
+  if (!reason.trim()) { toast('Say why they come off.', 'var(--red)'); return; }
+  try {
+    await api('POST', '/nhif-sheet/remove/', { profile_id: profileId, academic_year_id: state.nhifSheet.academic_year_id, reason });
+    toast(`${name} taken off the NHIF sheets`, 'var(--green)');
+    loadNhifSheet();
+  } catch (e) { toast(apiErrorText(e, 'Could not take them off'), 'var(--red)'); }
+}
+
+async function putBackOnNhif(profileId) {
+  try {
+    await api('POST', '/nhif-sheet/put-back/', { profile_id: profileId, academic_year_id: state.nhifSheet.academic_year_id });
+    toast('Put back on the NHIF sheets', 'var(--green)');
+    loadNhifSheet();
+  } catch (e) { toast(apiErrorText(e, 'Could not put them back'), 'var(--red)'); }
 }
 
 function downloadNhifSheet() {

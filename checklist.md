@@ -669,6 +669,13 @@ Tests: `cd backend && PSYCOPG_IMPL=python PYTHONPATH=backend/venv/lib/python3.13
      `cd /var/www/edutrack/backend && sudo -u bphacoh venv/bin/python manage.py load_earlier_results /tmp/upload_2024-25_whole_class`
      (dry run: expect L4 PASS 26 SUPP 2 REPEAT 9 FAIL 3; L5 12 1 13 3; L6 31 0 4 0), then the same with `--apply`, then
      delete the folder from /tmp (`rm -r`). Or by hand: Results ▸ Earlier Results, first sitting then supplementary.
+   - [x] NHIF (26 Nov, your request; migration 0090): the sheets show the Name on screen (not in the Continuous
+     Excel); **Remove** with a reason / **Put back** for a student listed by mistake (`NhifRemoval`, the bill
+     untouched); insurance marked Has it always keeps a student off, even after paying; Finance ▸ Student accounts ▸
+     **NHIF list** (College NHIF / Own card / Not billed, the medical fee billed / paid / waived, removals; filters
+     year, level, which; Excel) from the same rule (`attendance/nhif.py`), so records and the accountant tally (3 tests)
+   - [ ] After the deploy (applies 0090): records — remove a student who has their own card; accountant — NHIF list:
+     College NHIF less "taken off" equals the rows on records' sheets (New + Continuous)
    - [x] Comparison chart for presentations (25 Nov, your request): thick bars with a light 3D depth (top and side
      faces drawn beside each bar, its length unchanged) and the value at each bar's end — page and picture; the Excel
      chart a 3D bar chart (`BarChart3D`, values shown, narrow gaps)
